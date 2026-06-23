@@ -191,13 +191,14 @@ a:hover {
 .conv-row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   width: 100%;
   text-align: left;
-  padding: var(--space-3) var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   color: var(--color-text-primary);
   position: relative;
+  margin-bottom: var(--space-1);
 }
 .conv-row:hover {
   background: var(--color-surface-2);
@@ -236,6 +237,10 @@ a:hover {
 .conv-row__menu {
   opacity: 0;
   flex: 0 0 auto;
+}
+.conv-row .conv-row__menu {
+  width: var(--size-avatar-sm);
+  height: var(--size-avatar-sm);
 }
 .conv-row:hover .conv-row__menu,
 .conv-row:focus-within .conv-row__menu {
