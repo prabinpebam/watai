@@ -6,6 +6,10 @@ dist/
 *.tsbuildinfo
 .vite/
 
+# tsc -b emit for the node-side config (not source)
+vite.config.js
+vite.config.d.ts
+
 # Editor / OS
 .DS_Store
 Thumbs.db
