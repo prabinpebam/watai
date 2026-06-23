@@ -131,7 +131,9 @@ a:hover {
   display: flex;
   flex-direction: column;
   height: 100%;
-  transition: width var(--motion-base) var(--ease-standard);
+  overflow: hidden;
+  transition: flex-basis var(--motion-base) var(--ease-standard),
+    width var(--motion-base) var(--ease-standard);
 }
 .sidebar--collapsed {
   flex-basis: var(--size-sidebar-collapsed);
