@@ -42,7 +42,9 @@ export function DevMenu() {
               <button
                 className="menu__item"
                 onClick={async () => {
-                  await seedMockDataIfEmpty(true);
+                  await repo.deleteAll();
+                  localStorage.removeItem('watai.seeded');
+                  await seedMockDataIfEmpty();
                   bump();
                   pushToast('Demo data reseeded');
                   setOpen(false);
