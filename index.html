@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e0e10" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Watai — chat and talk with AI using your own Azure OpenAI endpoint." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>Watai</title>
+    <script>
+      // Apply persisted theme before paint to avoid a flash.
+      (function () {
+        try {
+          var raw = localStorage.getItem('watai.ui');
+          var theme = raw ? (JSON.parse(raw).state || {}).theme : 'system';
+          var scale = raw ? (JSON.parse(raw).state || {}).textScale : 1;
+          var dark =
+            theme === 'dark' ||
+            (theme !== 'light' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+          if (scale) document.documentElement.style.fontSize = 16 * Number(scale) + 'px';
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>

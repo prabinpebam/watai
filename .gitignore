@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build caches (the production build in /docs IS committed for GitHub Pages)
+dist/
+*.tsbuildinfo
+.vite/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.local
