@@ -45,7 +45,7 @@ export function SearchView({ onClose }: { onClose?: () => void }) {
       <div className="page__inner" style={{ paddingTop: 'var(--space-5)' }}>
         <div className="row" style={{ marginBottom: 'var(--space-5)' }}>
           <div className="search-bar grow">
-            <Icon name="search" size={18} className="muted" />
+            <Icon name="search" size={20} className="muted" />
             <input
               ref={inputRef}
               value={query}
