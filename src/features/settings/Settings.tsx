@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useSettings } from './useSettings';
 import { Button, Field, IconButton, Segmented, Switch, TextAreaField } from '../../design/ui';
 import { Icon } from '../../design/icons';
+import { Logo } from '../../design/Logo';
 import { ConfirmDialog } from '../../design/overlays';
 import { useUi } from '../../state/store';
 import { repo } from '../../data';
@@ -453,7 +454,7 @@ function AboutSection({ onBack }: { onBack: () => void }) {
   return (
     <Section title="About" onBack={onBack}>
       <div className="col" style={{ alignItems: 'center', textAlign: 'center', gap: 'var(--space-4)', padding: 'var(--space-7) 0' }}>
-        <img src="./favicon.svg" alt="" width={64} height={64} />
+        <Logo size={64} />
         <div>
           <div style={{ fontSize: 'var(--text-title-2-size)', fontWeight: 600 }}>Watai</div>
           <div className="muted">Version 0.1.0</div>

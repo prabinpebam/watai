@@ -8,9 +8,10 @@ import { probe } from '../../ai/capabilities';
 import { useUi } from '../../state/store';
 import { DEFAULT_SETTINGS, type ApiConfig } from '../../lib/types';
 import { repo } from '../../data';
+import { Logo as BrandLogo } from '../../design/Logo';
 
 function Logo() {
-  return <img className="onboard__logo" src="./favicon.svg" alt="" width={72} height={72} />;
+  return <BrandLogo className="onboard__logo" size={72} />;
 }
 
 function Steps({ index, count }: { index: number; count: number }) {

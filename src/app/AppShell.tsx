@@ -6,6 +6,7 @@ import { repo } from '../data';
 import { HistoryList } from '../features/history/HistoryList';
 import { Button, IconButton } from '../design/ui';
 import { Icon } from '../design/icons';
+import { Logo } from '../design/Logo';
 
 function activeThreadId(pathname: string): string | undefined {
   const m = pathname.match(/^\/c\/(.+)$/);
@@ -38,7 +39,7 @@ function SidebarContent({
       {!hideBrand && (
         <div className="sidebar__top">
           <div className="sidebar__brand">
-            <img src="./favicon.svg" alt="" width={28} height={28} />
+            <Logo size={26} />
             {!collapsed && <span>Watai</span>}
           </div>
         </div>
@@ -122,7 +123,7 @@ export function AppShell() {
           <aside className="drawer">
             <div className="sidebar__top">
               <div className="sidebar__brand">
-                <img src="./favicon.svg" alt="" width={28} height={28} />
+                <Logo size={26} />
                 <span>Watai</span>
               </div>
               <IconButton name="close" label="Close menu" onClick={() => toggleDrawer(false)} />
