@@ -137,16 +137,18 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
             <IconButton name={copied ? 'check' : 'copy'} label="Copy" size={18} onClick={copy} />
             <IconButton name="refresh" label="Regenerate" size={18} onClick={onRegenerate} />
             <IconButton
-              name={feedback === 'up' ? 'thumbs-up-solid' : 'thumbs-up'}
+              name="thumbs-up"
               label="Good response"
               size={18}
+              filled={feedback === 'up'}
               className={feedback === 'up' ? 'icon-btn--active' : ''}
               onClick={() => vote('up')}
             />
             <IconButton
-              name={feedback === 'down' ? 'thumbs-down-solid' : 'thumbs-down'}
+              name="thumbs-down"
               label="Bad response"
               size={18}
+              filled={feedback === 'down'}
               className={feedback === 'down' ? 'icon-btn--active' : ''}
               onClick={() => vote('down')}
             />
@@ -154,6 +156,7 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
               name="speaker"
               label={speaking ? 'Stop reading' : 'Read aloud'}
               size={18}
+              filled={speaking}
               className={speaking ? 'icon-btn--active' : ''}
               onClick={readAloud}
             />

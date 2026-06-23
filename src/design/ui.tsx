@@ -41,15 +41,16 @@ interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: number;
   variant?: 'default' | 'accent' | 'muted';
   big?: boolean;
+  filled?: boolean;
 }
 
-export function IconButton({ name, label, size = 22, variant = 'default', big, className = '', ...rest }: IconButtonProps) {
+export function IconButton({ name, label, size = 22, variant = 'default', big, filled, className = '', ...rest }: IconButtonProps) {
   const cls = ['icon-btn', variant === 'accent' && 'icon-btn--accent', variant === 'muted' && 'icon-btn--muted', big && 'icon-btn--lg', className]
     .filter(Boolean)
     .join(' ');
   return (
     <button className={cls} aria-label={label} title={label} {...rest}>
-      <Icon name={name} size={size} />
+      <Icon name={name} size={size} filled={filled} />
     </button>
   );
 }

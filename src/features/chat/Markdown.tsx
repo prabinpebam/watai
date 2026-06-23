@@ -4,9 +4,8 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import 'katex/dist/katex.min.css';
-import { Icon, langGlyph } from '../../design/icons';
+import { Icon } from '../../design/icons';
 import { Lightbox } from './Lightbox';
 
 function extractText(node: ReactNode): string {
@@ -27,7 +26,6 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   const codeProps = codeEl?.props ?? {};
   const className: string = codeProps.className || '';
   const lang = /language-([\w-]+)/.exec(className)?.[1];
-  const glyph = langGlyph(lang);
 
   const copy = () => {
     navigator.clipboard.writeText(extractText(codeProps.children)).then(() => {
@@ -40,7 +38,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
     <div className="code-block">
       <div className="code-block__bar">
         <span className="code-block__lang">
-          {glyph ? <FontAwesomeIcon icon={glyph} /> : <Icon name="code" size={13} />}
+          <Icon name="code" size={13} />
           {lang || 'text'}
         </span>
         <div className="code-block__actions">
