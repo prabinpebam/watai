@@ -153,8 +153,17 @@ lines scroll-x; "Copied" feedback.
   ("You're offline" / "Connect your AI to start"), send hidden.
 - **Editing-from sub-state:** when editing a prior user message (fork), the composer shows
   an "Editing message" hint chip with Cancel; sending creates a branch.
+- **Keyboard-aware (mobile):** the composer stays pinned **above** the on-screen keyboard
+  using `interactive-widget=resizes-content` + the `visualViewport`/`--keyboard-inset`
+  strategy; on focus, the field + latest message scroll into view; no layout jump when the
+  browser address bar shows/hides. The field font-size is ≥ 16px to prevent iOS focus-zoom.
+  (See [09-responsive-and-platform.md](09-responsive-and-platform.md) §4.)
+- **Desktop input (drag-drop + paste):** dragging image files over the chat/composer shows
+  a "Drop to attach" overlay and attaches valid images on drop; pasting an image from the
+  clipboard attaches it. Same validation as the picker (V-10).
 - **Acceptance:** morph logic exact; Enter/Shift+Enter correct on desktop; drafts persist;
-  dictation and attachments integrate; disabled states explain themselves.
+  dictation and attachments integrate; disabled states explain themselves; composer stays
+  above the mobile keyboard; desktop drag-drop/paste attach images.
 
 ---
 

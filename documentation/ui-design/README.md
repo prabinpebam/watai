@@ -84,6 +84,7 @@ adapter for the Azure adapter later touches no UI code.
 | [06-interaction-motion-accessibility.md](06-interaction-motion-accessibility.md) | Gestures, transitions, motion choreography, scroll/focus, keyboard map, ARIA, contrast, reduced motion. |
 | [07-content-and-assets.md](07-content-and-assets.md) | All UI strings/microcopy and the full icon/logo/illustration asset inventory. |
 | [08-frontend-architecture.md](08-frontend-architecture.md) | Folder structure, routing, state shape, TypeScript types, AI client contracts, mock/local data layer, env/config. |
+| [09-responsive-and-platform.md](09-responsive-and-platform.md) | **Mobile + desktop web behavior:** breakpoints, input-capability adaptation (hover vs touch), on-screen keyboard, dynamic viewport, drag-and-drop, resizable sidebar, layout-transformation matrix, test matrix. |
 
 Read in order on first pass.
 
@@ -225,6 +226,13 @@ pinned in landscape. Composer and app bar identical to compact.
 8. **Copy:** all visible text comes from the string table
    ([07-content-and-assets.md](07-content-and-assets.md)); no hardcoded strings in
    components.
+9. **Adaptive, not just responsive:** every surface renders its correct form for the
+   viewport **and input capability** (touch vs mouse vs keyboard); the composer stays
+   above the on-screen keyboard; layout is correct at every width 320–2560 in both
+   orientations. Authoritative rules in
+   [09-responsive-and-platform.md](09-responsive-and-platform.md).
+10. **No hover-only affordance:** anything revealed on hover (desktop) has a touch and
+    keyboard equivalent (long-press / always-visible / context-menu key).
 
 ---
 
@@ -241,6 +249,18 @@ acceptance criteria in the screen docs.
 - [ ] All text scales with the OS/text-size setting without clipping.
 - [ ] Keyboard-only navigation reaches every control; focus ring always visible.
 - [ ] `prefers-reduced-motion` removes non-essential motion.
+
+**Cross-platform (mobile + desktop)** — full grid in [09](09-responsive-and-platform.md) §13
+
+- [ ] Chat usable with the on-screen keyboard open (iOS Safari + Android Chrome): composer
+      pinned above the keyboard, latest message visible, no jump on address-bar toggle.
+- [ ] History is an overlay drawer (edge-swipe works) on mobile and a persistent, resizable
+      sidebar on desktop — from one component.
+- [ ] Sheets become anchored menus/dialogs on desktop; full-screen modals become centered
+      dialogs; image viewer + voice mode adapt.
+- [ ] No hover-only action: every desktop hover/right-click action has a touch + keyboard path.
+- [ ] Desktop drag-and-drop and clipboard paste attach images; mobile picker covers touch.
+- [ ] Correct, non-overlapping layout at 320→2560px in portrait and landscape; XL text size.
 
 **Onboarding & settings**
 

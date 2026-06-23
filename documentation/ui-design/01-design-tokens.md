@@ -316,6 +316,22 @@ opacity-only fades (≤ `--motion-fast`); no translate/scale. Full choreography 
 Container query fallback: components also respond to their own width where supported, so
 the chat column adapts inside the expanded pane.
 
+**Viewport-height units:** full-height surfaces use `100dvh` with `min-height: 100svh`
+fallback; never bare `100vh` (it ignores mobile browser chrome + keyboard). The app shell
+height is driven by `--app-height` (set from `visualViewport`) and exposes
+`--keyboard-inset` so the composer rides above the on-screen keyboard.
+
+**Input-capability queries:** adapt affordances (not just size) to the pointer/hover
+capability:
+
+```css
+@media (hover: hover) and (pointer: fine)   { /* mouse: hover affordances, denser */ }
+@media (hover: none)  and (pointer: coarse) { /* touch: 44px targets, no hover     */ }
+```
+
+Full responsive/adaptive rules, keyboard handling, and the test matrix are in
+[09-responsive-and-platform.md](09-responsive-and-platform.md).
+
 ---
 
 ## 12. Opacity & misc
