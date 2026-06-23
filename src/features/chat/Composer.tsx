@@ -118,9 +118,11 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
           />
         )}
         {streaming ? (
-          <IconButton name="stop" label="Stop generating" variant="accent" onClick={onStop} />
+          <IconButton key="stop" className="composer__primary" name="stop" label="Stop generating" variant="accent" onClick={onStop} />
         ) : (
           <IconButton
+            key="send"
+            className="composer__primary"
             name="arrow-up"
             label="Send"
             variant="accent"

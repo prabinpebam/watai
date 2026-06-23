@@ -14,7 +14,7 @@ const SUGGESTIONS = [
   { title: 'Draft a message', sub: 'A friendly out-of-office note', prompt: 'Draft a friendly out-of-office email for next week.' },
 ];
 
-export function ChatView({ threadId }: { threadId: string }) {
+export function ChatView({ threadId, onScrolledChange }: { threadId: string; onScrolledChange?: (v: boolean) => void }) {
   const { messages, loading, send, regenerate, stop } = useChat(threadId);
   const draft = useUi((s) => s.composerDrafts[threadId] ?? '');
   const setDraft = useUi((s) => s.setDraft);
@@ -44,6 +44,7 @@ export function ChatView({ threadId }: { threadId: string }) {
     if (!el) return;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     setAtBottom(distance < 80);
+    onScrolledChange?.(el.scrollTop > 4);
   };
 
   return (

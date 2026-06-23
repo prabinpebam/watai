@@ -24,6 +24,7 @@ export function ChatScreen({ isNew }: ChatScreenProps) {
   const generatedId = useRef<string>(newId());
   const threadId = isNew ? generatedId.current : params.threadId!;
   const [title, setTitle] = useState(isNew ? 'New chat' : '');
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     if (!isNew) {
@@ -35,7 +36,7 @@ export function ChatScreen({ isNew }: ChatScreenProps) {
 
   return (
     <>
-      <div className="appbar">
+      <div className={`appbar ${scrolled ? 'appbar--scrolled' : ''}`}>
         {expanded ? (
           <IconButton
             name="sidebar"
@@ -49,7 +50,7 @@ export function ChatScreen({ isNew }: ChatScreenProps) {
         <IconButton name="pen-square" label="New chat" onClick={() => navigate('/new')} />
         <IconButton name="speaker" label="Voice mode" onClick={() => navigate(`/voice/${threadId}`)} />
       </div>
-      <ChatView key={threadId} threadId={threadId} />
+      <ChatView key={threadId} threadId={threadId} onScrolledChange={setScrolled} />
     </>
   );
 }

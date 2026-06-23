@@ -203,6 +203,7 @@ a:hover {
   position: relative;
   margin-bottom: var(--space-1);
   cursor: pointer;
+  transition: background var(--motion-fast), color var(--motion-fast);
 }
 .conv-row:hover {
   background: var(--color-surface-2);
@@ -270,6 +271,8 @@ a:hover {
   z-index: var(--z-appbar);
   background: color-mix(in srgb, var(--color-bg) 88%, transparent);
   backdrop-filter: blur(var(--blur-appbar));
+  transition: border-color var(--motion-base) var(--ease-standard),
+    background var(--motion-base) var(--ease-standard);
 }
 .appbar--scrolled {
   border-bottom-color: var(--color-border);
@@ -795,10 +798,16 @@ a:hover {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-1);
-  transition: background var(--motion-fast);
+  transition: background var(--motion-fast), border-color var(--motion-fast),
+    transform var(--motion-fast) var(--ease-standard);
 }
 .suggestion:hover {
   background: var(--color-surface-2);
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+.suggestion:active {
+  transform: translateY(0) scale(0.99);
 }
 .suggestion__title {
   font-weight: 600;
@@ -813,4 +822,56 @@ a:hover {
   .suggestions {
     grid-template-columns: 1fr;
   }
+}
+
+/* ============================ Entrance motion ============================ */
+/* New message groups rise + fade in (runs once on mount). */
+.msg-group {
+  animation: msg-in var(--motion-base) var(--ease-standard);
+}
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Jump-to-latest pill keeps its translateX centering while entering. */
+.jump-pill {
+  animation: jump-in var(--motion-base) var(--ease-decelerate);
+}
+@keyframes jump-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Non-chat views fade in on mount. */
+.page {
+  animation: fade-in var(--motion-fast) var(--ease-standard);
+}
+
+/* Greeting/empty state with a gentle staggered suggestion reveal. */
+.empty {
+  animation: fade-in var(--motion-base) var(--ease-standard);
+}
+.empty .suggestion {
+  animation: msg-in var(--motion-base) var(--ease-standard) backwards;
+}
+.empty .suggestion:nth-child(1) {
+  animation-delay: 40ms;
+}
+.empty .suggestion:nth-child(2) {
+  animation-delay: 80ms;
+}
+.empty .suggestion:nth-child(3) {
+  animation-delay: 120ms;
+}
+.empty .suggestion:nth-child(4) {
+  animation-delay: 160ms;
 }
