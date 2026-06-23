@@ -5,10 +5,13 @@ chat model (`gpt-5.4`), transcription (`gpt-4o-transcribe`), image generation
 (`gpt-image-2`), and the voice-output gap (TTS / Realtime). All model names are treated
 as **deployment names** the user configures (D10), not hard-coded model strings.
 
-> Exact request/response fields and capabilities vary by the configured `api-version`.
-> Treat the shapes here as the integration contract and **verify each against the
-> target `api-version` during the Phase 1 spike**. Where a capability is uncertain
-> (editing, realtime, streaming transcription), the app degrades gracefully.
+> This spec is aligned to the user's real Azure endpoint (see
+> [azure-api-detail/azure-api-detail.md](azure-api-detail/azure-api-detail.md)), which
+> exposes the **OpenAI-compatible `/openai/v1` surface**: `Authorization: Bearer <key>`,
+> the **model name in the request body** (not in the URL path), and **no `api-version`
+> query parameter**. The base URL is **user-configurable and never hardcoded**. Where a
+> capability is uncertain (image editing, realtime, streaming transcription), the app
+> capability-detects and degrades gracefully.
 
 Cross-references: [02-architecture.md](02-architecture.md) ·
 [01-product-spec.md](01-product-spec.md) · [04-data-model.md](04-data-model.md).
@@ -19,30 +22,37 @@ Cross-references: [02-architecture.md](02-architecture.md) ·
 
 ### 1.1 Endpoint shape
 
-Azure OpenAI requests target the user's resource and a named deployment:
+All requests target the user's configured base URL (the `/openai/v1` surface) and carry
+the **model name in the body**. The base URL is provided by the user and never
+hardcoded:
 
 ```
-https://<resource>.openai.azure.com/openai/deployments/<deployment>/<operation>?api-version=<version>
+<base-url>/chat/completions          // e.g. https://<resource>.services.ai.azure.com/openai/v1/chat/completions
+<base-url>/responses
+<base-url>/audio/transcriptions
+<base-url>/audio/speech              // voice output — pending D4
+<base-url>/images/generations
+<base-url>/images/edits
 ```
 
-- `<resource>` and the API key come from the user's BYO config (see
-  [04-data-model.md](04-data-model.md) `ApiConfig`).
-- `<deployment>` is the per-capability deployment name (chat / transcribe / image / tts).
-- `<operation>` is e.g. `chat/completions`, `audio/transcriptions`,
-  `images/generations`, `audio/speech`, or `responses` depending on the API surface and
-  version.
+- `<base-url>` (e.g. `https://<resource>.services.ai.azure.com/openai/v1`) and the API
+  key come from the user's BYO config (see [04-data-model.md](04-data-model.md)
+  `ApiConfig`).
+- The **model** (`gpt-5.4`, `gpt-4o-transcribe`, `gpt-image-2`, and a TTS model) is sent
+  in the request body / form field — not in the URL path.
 
 ### 1.2 Authentication
 
-- Header `api-key: <user key>` (BYO model), **or** an Azure AD bearer token if the user
-  configures identity-based access (advanced; default is `api-key`).
+- Header `Authorization: Bearer <user key>` (the `/openai/v1` surface uses bearer
+  tokens, matching the OpenAI client convention). A Microsoft Entra token may be used
+  instead for identity-based access (advanced); the default is the user's API key.
 - The key is read from client storage at call time and never logged (see security in
   [02-architecture.md](02-architecture.md) §6).
 
 ### 1.3 Common headers
 
-- `Content-Type: application/json` (or `multipart/form-data` for audio upload).
-- Optional `x-ms-client-request-id` (a generated GUID) for traceability/correlation.
+- `Authorization: Bearer <key>` on every request.
+- `Content-Type: application/json` (or `multipart/form-data` for audio/image upload).
 
 ### 1.4 HTTP layer (client)
 
@@ -59,10 +69,9 @@ A single shared layer wraps every capability client:
 ```ts
 // Illustrative interface — not final code.
 interface AoaiClientConfig {
-  endpoint: string;          // https://<resource>.openai.azure.com
-  apiVersion: string;
+  baseUrl: string;           // user-provided, e.g. https://<resource>.services.ai.azure.com/openai/v1
   apiKey: () => string;      // lazy read from secure store; never cached in logs
-  deployments: {
+  models: {
     chat: string;            // gpt-5.4
     transcribe: string;      // gpt-4o-transcribe
     image: string;           // gpt-image-2
@@ -80,29 +89,31 @@ Powers text conversations (and the text turn inside voice mode).
 
 ### 2.1 API surface choice
 
-Two surfaces may be available depending on `api-version`:
+Both surfaces are available on the `/openai/v1` endpoint (confirmed in the API detail
+file):
 
-- **Chat Completions** (`/chat/completions`) — broadly supported, simple message array.
-- **Responses API** (`/responses`) — newer, better for tool use, structured output, and
-  multi-step state.
+- **Chat Completions** (`<base-url>/chat/completions`) — simple message array; default.
+- **Responses API** (`<base-url>/responses`) — newer, better for tool use, structured
+  output, and multi-step state; uses an `input` field and returns `response.output[...]`.
 
 **Decision:** abstract chat behind an internal `ChatClient` interface and start with
-**Chat Completions** for breadth; allow switching to the Responses API via config if the
-target version supports it and we need its features. Feature code never depends on the
-raw surface.
+**Chat Completions** for breadth; allow switching to the Responses API via config when
+its features are needed. Feature code never depends on the raw surface.
 
 ### 2.2 Request (Chat Completions shape)
 
 ```jsonc
-POST /openai/deployments/gpt-5.4/chat/completions?api-version=<version>
+POST <base-url>/chat/completions
+Authorization: Bearer <key>
 {
+  "model": "gpt-5.4",
   "messages": [
     { "role": "system", "content": "<system / developer instructions>" },
     { "role": "user", "content": "<text>" }
     // vision: content may be an array of text + image_url parts
   ],
-  "temperature": 0.7,
-  "max_tokens": 2048,
+  "max_completion_tokens": 4096,
+  "reasoning_effort": "medium",   // gpt-5.4 is a reasoning model: minimal | low | medium | high
   "stream": true,
   "tools": [ /* optional function/tool defs */ ],
   "response_format": { "type": "text" }   // or json_schema / json_object when needed
@@ -116,9 +127,11 @@ POST /openai/deployments/gpt-5.4/chat/completions?api-version=<version>
   user content becomes a parts array (text + `image_url` with base64 data URLs or SAS
   URLs). If the deployment lacks vision, the composer warns and strips the attachment
   (see attachments in product spec §5.11).
-- **Parameters:** temperature, max tokens, and (where supported) top_p, penalties,
-  stop sequences, seed — surfaced in Settings → Models as advanced defaults and
-  per-message overrides on Regenerate.
+- **Parameters:** `max_completion_tokens` and `reasoning_effort`
+  (`minimal | low | medium | high`) are the primary controls for `gpt-5.4` (a reasoning
+  model). `temperature` / `top_p` may be unsupported on reasoning models — the client
+  capability-detects and only sends what the model accepts. Surfaced in Settings →
+  Models as advanced defaults with per-message overrides on Regenerate.
 - **Tools / JSON mode:** wired in the client for future features (e.g. structured image
   prompts); not user-exposed in v1 beyond internal use.
 
@@ -170,13 +183,16 @@ Powers composer **dictation** and the listening leg of **voice mode**.
 ### 3.2 Request
 
 ```
-POST /openai/deployments/gpt-4o-transcribe/audio/transcriptions?api-version=<version>
+POST <base-url>/audio/transcriptions
+Authorization: Bearer <key>
 Content-Type: multipart/form-data
 
+model=gpt-4o-transcribe         // model in the form body
 file=<audio blob>
-response_format=json            // or text; verbose/segments if supported by version
+response_format=json            // or text; verbose/segments if supported
 language=<optional ISO code>    // omit to auto-detect
 prompt=<optional biasing text>  // domain terms, names, formatting hints
+temperature=0                   // optional
 ```
 
 - **Streaming/partial transcription:** if the configured version supports streaming
@@ -206,14 +222,17 @@ Powers inline image creation, the viewer, variations, and (if supported) edits.
 ### 4.1 Generate
 
 ```jsonc
-POST /openai/deployments/gpt-image-2/images/generations?api-version=<version>
+POST <base-url>/images/generations
+Authorization: Bearer <key>
 {
+  "model": "gpt-image-2",
   "prompt": "<text prompt>",
   "size": "1024x1024",          // and other supported sizes / aspect ratios
   "n": 1,                        // batch count (UI may cap)
-  "quality": "high",            // if supported by version
-  "response_format": "b64_json" // or "url"; see 4.4
+  "output_format": "png",       // png | jpeg | webp
+  "output_compression": 100      // 0–100 (for lossy formats)
 }
+// Response: { "data": [ { "b64_json": "<base64 image>" } ] }
 ```
 
 - Triggered by an explicit "create an image" intent or a user request the chat layer
@@ -225,8 +244,10 @@ POST /openai/deployments/gpt-image-2/images/generations?api-version=<version>
 If `gpt-image-2` supports editing on the target version:
 
 ```
-POST /openai/deployments/gpt-image-2/images/edits?api-version=<version>
+POST <base-url>/images/edits
+Authorization: Bearer <key>
 Content-Type: multipart/form-data
+model=gpt-image-2
 image=<source>            // and optional mask=<png with transparency> for inpainting
 prompt=<edit instruction>
 size=...
@@ -239,9 +260,10 @@ size=...
 
 ### 4.3 Display & storage
 
-- `b64_json` → render directly, then upload to Blob Storage (via SAS) for persistence and
-  cross-device access; store the prompt + parameters as provenance (data model §image).
-- `url` responses (if short-lived) → fetch and persist promptly before expiry.
+- The generation endpoint returns `data[0].b64_json`; render it directly (data URL),
+  then persist to Blob Storage (via SAS) for cross-device access, storing the prompt +
+  parameters as provenance (data model §image).
+- Discard the base64 from memory after upload to bound memory use.
 - The viewer shows prompt/size/timestamp and supports save/share/regenerate/variations.
 
 ### 4.4 `response_format` decision
@@ -266,8 +288,9 @@ reply. "Talk with AI" implies voice output. Two paths:
 ### 5.1 Path 1 — Text-to-speech (read-aloud + simple voice mode)
 
 ```jsonc
-POST /openai/deployments/<tts-deployment>/audio/speech?api-version=<version>
-{ "input": "<assistant text>", "voice": "<voice id>", "format": "mp3" }
+POST <base-url>/audio/speech
+Authorization: Bearer <key>
+{ "model": "<tts-model>", "input": "<assistant text>", "voice": "<voice id>", "response_format": "mp3" }
 ```
 
 - Add a TTS deployment (e.g. a `gpt-4o-mini-tts`-class model). The chat reply text is

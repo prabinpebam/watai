@@ -22,9 +22,12 @@ exhaustive, buildable plan.
 | [03-api-integration.md](03-api-integration.md) | Azure OpenAI integration for chat, transcription, image generation, and voice output. |
 | [04-data-model.md](04-data-model.md) | Entities, Cosmos DB schema, Blob layout, local cache, sync strategy, data lifecycle. |
 | [05-execution-plan.md](05-execution-plan.md) | Phased roadmap, milestones, testing strategy, CI/CD, risks, decisions log, DoD. |
+| [ui-design/](ui-design/README.md) | **Implementation-ready UI design spec** (frontend-first): tokens, components, every screen/state, interaction/motion/a11y, copy/assets, and frontend architecture. |
+| [azure-api-detail/azure-api-detail.md](azure-api-detail/azure-api-detail.md) | Source-of-truth Azure `/openai/v1` request examples the API spec is aligned to. |
 
 > Read the docs in order on first pass. After that, each doc is self-contained and
-> cross-links the others where concerns overlap.
+> cross-links the others where concerns overlap. The [ui-design/](ui-design/README.md)
+> set is the build-ready frontend specification; start at its README.
 
 ---
 
