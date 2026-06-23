@@ -199,6 +199,7 @@ a:hover {
   color: var(--color-text-primary);
   position: relative;
   margin-bottom: var(--space-1);
+  cursor: pointer;
 }
 .conv-row:hover {
   background: var(--color-surface-2);
