@@ -6,10 +6,11 @@ param env = 'dev'
 // Function App uses Flex Consumption (FC1) — bypasses the consumption (Y1) VM-quota
 // wall that blocked this subscription in every region tested.
 param deployFunctionApp = true
-// Admin account object-ids (oid claim) — both of the admin's CIAM identities
-// (local email account + federated). oid is in every token, so admin is recognized
-// even when the email claim is absent (e.g. federated account with empty `mail`).
-param adminOids = 'd7755720-6b73-4ece-af70-a95b22a7e547,cbc85566-d323-4a82-bfed-404ac0d770a3'
+// Admin account object-id (oid claim). Only the local email/password account
+// (d7755720) can sign into the app via the user flow, so it is the sole app admin.
+// The federated guest (cbc85566) is the CIAM tenant administrator, not an app
+// user, so it is deliberately NOT listed here.
+param adminOids = 'd7755720-6b73-4ece-af70-a95b22a7e547'
 // Entra External ID (CIAM) token validation. Without these the API fails closed
 // with 401 on every authenticated request. Values come from the CIAM tenant's
 // OIDC metadata (issuer, jwks_uri) and the API app (client) id (audience).
