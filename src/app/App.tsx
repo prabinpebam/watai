@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { ChatScreen } from '../features/chat/ChatScreen';
@@ -10,9 +10,13 @@ import { VoiceMode } from '../features/voice/VoiceMode';
 import { IconButton, Spinner } from '../design/ui';
 import { useIsExpanded } from '../lib/hooks';
 import { useUi } from '../state/store';
-import { repo, seedMockDataIfEmpty, syncNow } from '../data';
+import { repo, seedMockDataIfEmpty, purgeDemoData, syncNow } from '../data';
 import { hasValidConfig } from '../data/secureStore';
 import { getSession } from '../lib/session';
+
+// Dev-only chat component gallery. The dynamic import sits in a branch that is statically
+// false in production, so the chunk is tree-shaken out of the prod bundle entirely.
+const ChatGallery = import.meta.env.DEV ? lazy(() => import('../mocks/ChatGallery')) : null;
 
 /** Top bar with a menu (compact) or sidebar toggle (expanded) for non-chat screens. */
 function ScreenBar({ title }: { title: string }) {
@@ -89,10 +93,15 @@ function Protected({ children }: { children: ReactNode }) {
 }
 
 export function App() {
-  // Seed demo data once so the UI is reviewable immediately — dev builds only, so real
-  // users never get placeholder threads (which would otherwise sync to their cloud store).
+  // Dev builds seed demo data so the UI is reviewable immediately. Production instead PURGES
+  // any demo threads a prior build may have seeded into a returning user's browser, so real
+  // users always start from an empty state (their own non-seed chats are untouched).
   useEffect(() => {
-    if (import.meta.env.DEV) seedMockDataIfEmpty().catch(() => undefined);
+    if (import.meta.env.DEV) {
+      seedMockDataIfEmpty().catch(() => undefined);
+    } else {
+      purgeDemoData().catch(() => undefined);
+    }
   }, []);
 
   // Background cloud sync: a no-op unless Settings.data.sync is on and a user is signed in.
@@ -144,6 +153,23 @@ export function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/settings/:section" element={<Settings />} />
       </Route>
+
+      {ChatGallery && (
+        <Route
+          path="/dev/gallery"
+          element={
+            <Suspense
+              fallback={
+                <div className="center-screen">
+                  <Spinner large />
+                </div>
+              }
+            >
+              <ChatGallery />
+            </Suspense>
+          }
+        />
+      )}
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

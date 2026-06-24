@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { useUi } from '../state/store';
 import { Icon } from '../design/icons';
 import { Switch, Button } from '../design/ui';
@@ -8,6 +9,7 @@ import { seedMockDataIfEmpty, repo } from '../data';
 /** Lightweight dev menu: mock AI toggle, reseed demo data, theme jump. Dev builds only. */
 export function DevMenu() {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   const mockAi = useUi((s) => s.mockAi);
   const setMockAi = useUi((s) => s.setMockAi);
   const setTheme = useUi((s) => s.setTheme);
@@ -63,6 +65,16 @@ export function DevMenu() {
                 }}
               >
                 <Icon name="trash" size={18} /> Clear local data
+              </button>
+              <div className="menu__sep" />
+              <button
+                className="menu__item"
+                onClick={() => {
+                  setOpen(false);
+                  navigate('/dev/gallery');
+                }}
+              >
+                <Icon name="image" size={18} /> Chat component gallery
               </button>
               <div className="menu__sep" />
               <div style={{ padding: 8 }}>

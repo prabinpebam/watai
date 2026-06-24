@@ -170,6 +170,25 @@ export class LocalRepository implements SyncLocalStore {
     return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   }
 
+  /** Remove dev-seeded demo threads (stable `seed-` ids) and their messages directly from
+   *  the local store. Production calls this to clear placeholder chats left in a returning
+   *  user's browser by an earlier build. Real user data (non-`seed-` ids) is never touched. */
+  async purgeSeedThreads(): Promise<number> {
+    const database = await db();
+    const all = (await database.getAll('threads')) as Thread[];
+    const seeds = all.filter((t) => typeof t.id === 'string' && t.id.startsWith('seed-'));
+    for (const t of seeds) {
+      const msgs = await this.listMessages(t.id);
+      if (msgs.length) {
+        const tx = database.transaction('messages', 'readwrite');
+        await Promise.all(msgs.map((msg) => tx.store.delete(msg.id)));
+        await tx.done;
+      }
+      await database.delete('threads', t.id);
+    }
+    return seeds.length;
+  }
+
   async deleteAll(): Promise<void> {
     const database = await db();
     await database.clear('threads');

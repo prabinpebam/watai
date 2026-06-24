@@ -25,6 +25,13 @@ export function backfillSync(): Promise<void> {
   return sync.backfill();
 }
 
+/** Remove demo threads (stable `seed-` ids) + their messages from the local store. Production
+ *  calls this on startup so users who visited an earlier (demo-seeded) build don't keep
+ *  placeholder chats; real user data is never touched. */
+export async function purgeDemoData(): Promise<void> {
+  await local.purgeSeedThreads();
+}
+
 const SEED_FLAG = 'watai.seeded';
 
 /** Populate the local store with demo threads once, so the UI is reviewable without a key. */
