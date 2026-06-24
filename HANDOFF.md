@@ -402,6 +402,10 @@ All require `Authorization: Bearer <token>`. The server derives `userId` from th
   add speculative features/abstractions.
 - **Never delete sections** a user marks "DO NOT EDIT OR DELETE".
 - **Don't manufacture new problems** after work is verified done against its success criteria.
+- **Demo/mock is dev-only.** The `DevMenu` (bug-FAB: Mock AI toggle, reseed/clear demo data, theme)
+  renders only in `import.meta.env.DEV`; demo seeding is dev-only + lazy-loaded (tree-shaken from prod);
+  `mockAi` is forced off on rehydration in production. Production has no demo data, dev menu, or mock
+  controls. Use `npm run dev` for the dev mode; never re-expose mock controls in the production UI.
 - Commit style in this repo: Conventional Commits (`feat(api): …`, etc.), multi-line bodies.
 
 ---
