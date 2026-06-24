@@ -58,6 +58,8 @@ const ICONS: Record<string, string> = {
   type: 'text_fields',
   bug: 'bug_report',
   logout: 'logout',
+  mail: 'mail',
+  'user-add': 'person_add',
   // Files & previews
   file: 'description',
   'file-pdf': 'picture_as_pdf',

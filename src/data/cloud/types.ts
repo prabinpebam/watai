@@ -81,6 +81,20 @@ export interface SasResult {
   expiresAt: string;
 }
 
+/** The caller's access status (from GET /me). */
+export interface MeInfo {
+  email: string | null;
+  isAdmin: boolean;
+  isInvited: boolean;
+}
+
+/** An allowlisted invite (admin view). */
+export interface InviteRecord {
+  email: string;
+  invitedBy: string;
+  createdAt: string;
+}
+
 export function threadFromRecord(r: ThreadRecord): Thread {
   return {
     id: r.id,

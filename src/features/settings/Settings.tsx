@@ -6,8 +6,10 @@ import { Icon } from '../../design/icons';
 import { Logo } from '../../design/Logo';
 import { ConfirmDialog } from '../../design/overlays';
 import { useUi } from '../../state/store';
-import { repo } from '../../data';
+import { repo, cloudApi } from '../../data';
 import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
+import { useMe } from '../../auth/access';
+import type { InviteRecord } from '../../data/cloud/types';
 import {
   getApiConfig,
   saveApiConfig,
@@ -58,6 +60,8 @@ export function Settings() {
       return <AppearanceSection onBack={back} />;
     case 'data':
       return <DataSection onBack={back} />;
+    case 'invites':
+      return <InvitesSection onBack={back} />;
     case 'about':
       return <AboutSection onBack={back} />;
     default:
@@ -78,6 +82,7 @@ function useCloudAccountName(): string | null {
 
 function SettingsHub({ onOpen, onClose }: { onOpen: (id: string) => void; onClose: () => void }) {
   const account = useCloudAccountName();
+  const me = useMe();
   return (
     <>
       <Header title="Settings" onBack={onClose} />
@@ -108,6 +113,18 @@ function SettingsHub({ onOpen, onClose }: { onOpen: (id: string) => void; onClos
                 <Icon name="chevron-right" size={18} className="muted" />
               </button>
             ))}
+            {me?.isAdmin && (
+              <button key="invites" className="setting-row" onClick={() => onOpen('invites')}>
+                <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+                  <Icon name="user-add" size={18} />
+                </span>
+                <div className="setting-row__body">
+                  <div className="setting-row__title">Invites</div>
+                  <div className="setting-row__sub">Manage who can sign in</div>
+                </div>
+                <Icon name="chevron-right" size={18} className="muted" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -480,6 +497,142 @@ function DataSection({ onBack }: { onBack: () => void }) {
           onClose={() => setConfirm(false)}
         />
       )}
+    </Section>
+  );
+}
+
+function InvitesSection({ onBack }: { onBack: () => void }) {
+  const pushToast = useUi((s) => s.pushToast);
+  const [invites, setInvites] = useState<InviteRecord[] | null>(null);
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = () => {
+    cloudApi
+      .listInvites()
+      .then(setInvites)
+      .catch(() => setInvites([]));
+  };
+  useEffect(refresh, []);
+
+  // The public sign-in page. Invitees open this, then sign in with their invited email.
+  const SIGNUP_URL = 'https://prabinpebam.github.io/watai/';
+  const mailtoFor = (to: string) => {
+    const subject = encodeURIComponent('You are invited to Watai');
+    const body = encodeURIComponent(
+      `Hi,\n\nYou have been invited to Watai. Open the link below and sign in with this email address (${to}):\n\n${SIGNUP_URL}\n\nSee you there.`,
+    );
+    return `mailto:${to}?subject=${subject}&body=${body}`;
+  };
+
+  const add = async () => {
+    const value = email.trim().toLowerCase();
+    if (!value) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await cloudApi.createInvite(value);
+      setEmail('');
+      refresh();
+      pushToast('Invite added', 'success');
+      // Open the admin's own mail client to actually send the invite.
+      window.location.href = mailtoFor(value);
+    } catch {
+      setError('Could not add that invite. Check the email address and try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (to: string) => {
+    setBusy(true);
+    try {
+      await cloudApi.deleteInvite(to);
+      refresh();
+      pushToast('Invite removed');
+    } catch {
+      pushToast('Could not remove invite', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Invites" onBack={onBack}>
+      <p className="muted" style={{ marginBottom: 'var(--space-5)' }}>
+        Watai is invite-only. Add someone&apos;s email to let them sign in, then send them the
+        invite from your mail app.
+      </p>
+
+      <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
+        <div className="col" style={{ gap: 'var(--space-4)' }}>
+          <Field
+            label="Invite by email"
+            type="email"
+            inputMode="email"
+            placeholder="name@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void add();
+              }
+            }}
+            autoCapitalize="off"
+            autoComplete="off"
+            spellCheck={false}
+            error={error ?? undefined}
+          />
+          <div>
+            <Button icon="user-add" loading={busy} disabled={!email.trim()} onClick={() => void add()}>
+              Add &amp; send invite
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-card" style={{ marginTop: 'var(--space-6)' }}>
+        {invites === null ? (
+          <div className="setting-row">
+            <div className="setting-row__body">
+              <div className="setting-row__sub">Loading…</div>
+            </div>
+          </div>
+        ) : invites.length === 0 ? (
+          <div className="setting-row">
+            <div className="setting-row__body">
+              <div className="setting-row__sub">No invites yet.</div>
+            </div>
+          </div>
+        ) : (
+          invites.map((inv) => (
+            <div key={inv.email} className="setting-row">
+              <div className="setting-row__body">
+                <div className="setting-row__title">{inv.email}</div>
+                <div className="setting-row__sub">
+                  Invited {new Date(inv.createdAt).toLocaleDateString()}
+                </div>
+              </div>
+              <a
+                className="icon-btn"
+                href={mailtoFor(inv.email)}
+                aria-label={`Send invite email to ${inv.email}`}
+                title="Send invite email"
+              >
+                <Icon name="mail" size={20} />
+              </a>
+              <IconButton
+                name="trash"
+                label={`Remove ${inv.email}`}
+                disabled={busy}
+                onClick={() => void remove(inv.email)}
+              />
+            </div>
+          ))
+        )}
+      </div>
     </Section>
   );
 }

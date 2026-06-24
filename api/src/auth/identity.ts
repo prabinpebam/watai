@@ -4,11 +4,15 @@ import { AppError } from '../domain/errors';
 export interface Claims {
   sub?: string;
   oid?: string;
+  email?: string;
+  preferred_username?: string;
+  emails?: string[];
   [key: string]: unknown;
 }
 
 export interface Identity {
   userId: string;
+  email?: string;
 }
 
 /**
@@ -21,5 +25,16 @@ export function identityFromClaims(claims: Claims): Identity {
   if (!userId) {
     throw new AppError('unauthorized', 'Token is missing a subject claim.');
   }
-  return { userId };
+  const email = emailFromClaims(claims);
+  return email ? { userId, email } : { userId };
+}
+
+/** Extract the caller's email from common Entra/CIAM claim shapes (lowercased). */
+export function emailFromClaims(claims: Claims): string | undefined {
+  const raw =
+    claims.email ??
+    claims.preferred_username ??
+    (Array.isArray(claims.emails) ? claims.emails[0] : undefined);
+  const email = typeof raw === 'string' ? raw.trim().toLowerCase() : undefined;
+  return email || undefined;
 }

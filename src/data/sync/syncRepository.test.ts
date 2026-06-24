@@ -263,6 +263,16 @@ class FakeCloud implements CloudApi {
       expiresAt: this.now(),
     };
   }
+  async getMe() {
+    return { email: 'u@example.com', isAdmin: false, isInvited: true };
+  }
+  async listInvites() {
+    return [];
+  }
+  async createInvite(email: string) {
+    return { email, invitedBy: 'admin@example.com', createdAt: this.now() };
+  }
+  async deleteInvite() {}
 }
 
 function setup(sync = true) {

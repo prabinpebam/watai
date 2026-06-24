@@ -6,6 +6,8 @@ import { apiBaseUrl } from './env';
 import type {
   AppendMessageBody,
   CreateThreadBody,
+  InviteRecord,
+  MeInfo,
   MessageRecord,
   SasRequestBody,
   SasResult,
@@ -166,6 +168,24 @@ export class WataiApiClient implements CloudApi {
   requestSas(body: SasRequestBody): Promise<SasResult> {
     return this.request('POST', '/assets/sas', body);
   }
+
+  // --- access / invites ---
+  getMe(): Promise<MeInfo> {
+    return this.request('GET', '/me');
+  }
+
+  async listInvites(): Promise<InviteRecord[]> {
+    const out = await this.request<{ invites: InviteRecord[] }>('GET', '/invites');
+    return out.invites;
+  }
+
+  createInvite(email: string): Promise<InviteRecord> {
+    return this.request('POST', '/invites', { email });
+  }
+
+  deleteInvite(email: string): Promise<void> {
+    return this.request('DELETE', `/invites/${encodeURIComponent(email)}`);
+  }
 }
 
 function statusToCode(status: number): CloudErrorCode {
@@ -203,4 +223,8 @@ export interface CloudApi {
   getSettings(): Promise<Settings>;
   patchSettings(patch: Partial<Settings>): Promise<Settings>;
   requestSas(body: SasRequestBody): Promise<SasResult>;
+  getMe(): Promise<MeInfo>;
+  listInvites(): Promise<InviteRecord[]>;
+  createInvite(email: string): Promise<InviteRecord>;
+  deleteInvite(email: string): Promise<void>;
 }

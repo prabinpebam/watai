@@ -7,12 +7,13 @@ import { ImagesView } from '../features/images/ImagesView';
 import { Settings } from '../features/settings/Settings';
 import { Onboarding } from '../features/onboarding/Onboarding';
 import { VoiceMode } from '../features/voice/VoiceMode';
-import { IconButton, Spinner } from '../design/ui';
+import { IconButton, Spinner, Button } from '../design/ui';
 import { useIsExpanded } from '../lib/hooks';
 import { useUi } from '../state/store';
 import { repo, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync } from '../data';
 import { hasValidConfig } from '../data/secureStore';
-import { isSignedIn } from '../auth/cloudAuth';
+import { isSignedIn, signOut } from '../auth/cloudAuth';
+import { loadMe, cachedMe } from '../auth/access';
 
 // Dev-only chat component gallery. The dynamic import sits in a branch that is statically
 // false in production, so the chunk is tree-shaken out of the prod bundle entirely.
@@ -55,7 +56,7 @@ function RootRedirect() {
   );
 }
 
-type SetupState = 'loading' | 'no-session' | 'no-config' | 'ready';
+type SetupState = 'loading' | 'no-session' | 'no-access' | 'no-config' | 'ready';
 
 function useSetupState(): SetupState {
   const [state, setState] = useState<SetupState>('loading');
@@ -70,6 +71,15 @@ function useSetupState(): SetupState {
         if (live) setState('no-session');
         return;
       }
+      if (!devMock) {
+        // Invite-only: a definitive "not invited" blocks the UI. Transient API/network errors
+        // fall through (the backend still enforces access on every call).
+        const me = await loadMe();
+        if (me && !me.isInvited) {
+          if (live) setState('no-access');
+          return;
+        }
+      }
       const ok = devMock || (await hasValidConfig());
       if (live) setState(ok ? 'ready' : 'no-config');
     })();
@@ -78,6 +88,27 @@ function useSetupState(): SetupState {
     };
   }, [mockAi, location.pathname]);
   return state;
+}
+
+/** Signed in, but the account isn't on the invite allowlist. */
+function NotInvited() {
+  const email = cachedMe()?.email;
+  return (
+    <div className="center-screen">
+      <div className="onboard" style={{ maxWidth: 440 }}>
+        <h1 className="onboard__title">You're not on the invite list</h1>
+        <p className="onboard__sub">
+          Watai is invite-only. Ask the admin to invite{email ? ` ${email}` : ' your email'}, then
+          sign in again.
+        </p>
+        <div className="onboard__actions">
+          <Button variant="outline" icon="logout" full onClick={() => signOut()}>
+            Sign out
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Protected({ children }: { children: ReactNode }) {
@@ -90,6 +121,7 @@ function Protected({ children }: { children: ReactNode }) {
     );
   }
   if (state === 'no-session') return <Navigate to="/onboarding/welcome" replace />;
+  if (state === 'no-access') return <NotInvited />;
   if (state === 'no-config') return <Navigate to="/onboarding/key" replace />;
   return <>{children}</>;
 }

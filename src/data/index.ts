@@ -15,6 +15,9 @@ const sync = new SyncRepository(local, cloud, idbKvStore());
 // Single Repository instance for the whole app (the swap seam).
 export const repo: Repository = sync;
 
+/** Cloud API client for non-repository calls (access status + admin invite management). */
+export const cloudApi = cloud;
+
 /** Push local changes + pull remote deltas (no-op unless sync is on and signed in). */
 export function syncNow(): Promise<void> {
   return sync.sync();

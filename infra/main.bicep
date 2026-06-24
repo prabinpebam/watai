@@ -21,6 +21,9 @@ param allowedOrigins array = [
 @description('Deploy the Function App. Requires consumption-plan VM quota in the region.')
 param deployFunctionApp bool = true
 
+@description('Email of the admin who can manage invites and is always allowed access.')
+param adminEmail string = 'prabinpebam@gmail.com'
+
 var suffix = uniqueString(resourceGroup().id)
 var tags = {
   app: 'watai'
@@ -36,6 +39,7 @@ var cosmosContainers = [
   { name: 'assets', pk: '/userId' }
   { name: 'memory', pk: '/userId' }
   { name: 'usage', pk: '/userId' }
+  { name: 'invites', pk: '/pk' }
 ]
 
 // Built-in role definition ids.
@@ -207,6 +211,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
         { name: 'STORAGE_ACCOUNT', value: storage.name }
         { name: 'MEDIA_CONTAINER', value: 'media' }
         { name: 'KEY_VAULT_URI', value: keyVault.properties.vaultUri }
+        { name: 'ADMIN_EMAIL', value: adminEmail }
       ]
     }
   }

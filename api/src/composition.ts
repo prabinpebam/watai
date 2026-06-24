@@ -2,25 +2,32 @@ import { randomUUID } from 'node:crypto';
 import { CosmosThreadStore } from './adapters/cosmos/threadStore';
 import { CosmosMessageStore } from './adapters/cosmos/messageStore';
 import { CosmosSettingsStore } from './adapters/cosmos/settingsStore';
+import { CosmosInviteStore } from './adapters/cosmos/inviteStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
 import { entraVerifierFromEnv } from './adapters/auth/entraTokenVerifier';
 import { ThreadService } from './application/threadService';
 import { MessageService } from './application/messageService';
 import { SettingsService } from './application/settingsService';
 import { AssetService } from './application/assetService';
+import { AccessService } from './application/accessService';
 import { createThreadsController } from './http/threadsController';
 import { createMessagesController } from './http/messagesController';
 import { createSettingsController } from './http/settingsController';
 import { createAssetsController } from './http/assetsController';
+import { createMeController } from './http/meController';
+import { createInvitesController } from './http/invitesController';
 import { AppError } from './domain/errors';
 import type { TokenVerifier } from './ports/tokenVerifier';
 
 export interface ApiContainer {
   verifier: TokenVerifier;
+  access: AccessService;
   threads: ReturnType<typeof createThreadsController>;
   messages: ReturnType<typeof createMessagesController>;
   settings: ReturnType<typeof createSettingsController>;
   assets: ReturnType<typeof createAssetsController>;
+  me: ReturnType<typeof createMeController>;
+  invites: ReturnType<typeof createInvitesController>;
 }
 
 /**
@@ -48,14 +55,19 @@ export function container(): ApiContainer {
   const threadStore = new CosmosThreadStore();
   const messageStore = new CosmosMessageStore();
   const settingsStore = new CosmosSettingsStore();
+  const inviteStore = new CosmosInviteStore();
   const minter = new AzureSasMinter();
+  const access = new AccessService(inviteStore, process.env.ADMIN_EMAIL ?? '');
 
   cached = {
     verifier: buildVerifier(),
+    access,
     threads: createThreadsController(new ThreadService(threadStore, clock)),
     messages: createMessagesController(new MessageService(threadStore, messageStore, clock)),
     settings: createSettingsController(new SettingsService(settingsStore)),
     assets: createAssetsController(new AssetService(threadStore, minter)),
+    me: createMeController(access),
+    invites: createInvitesController(inviteStore, clock),
   };
   return cached;
 }
