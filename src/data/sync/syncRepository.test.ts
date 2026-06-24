@@ -6,6 +6,7 @@ import type { SearchHit, SyncLocalStore } from '../repository';
 import {
   DEFAULT_SETTINGS,
   type Id,
+  type ImageRef,
   type MemoryItem,
   type Message,
   type Settings,
@@ -15,6 +16,8 @@ import type {
   AppendMessageBody,
   CreateThreadBody,
   MessageRecord,
+  SasRequestBody,
+  SasResult,
   ThreadRecord,
   UpdateThreadBody,
 } from '../cloud/types';
@@ -23,6 +26,7 @@ import type {
 class FakeLocal implements SyncLocalStore {
   threads = new Map<Id, Thread>();
   messages = new Map<Id, Message>();
+  blobs = new Map<string, Blob>();
   settings: Settings;
   private clock = 0;
 
@@ -97,8 +101,18 @@ class FakeLocal implements SyncLocalStore {
   async saveSettings(s: Settings): Promise<void> {
     this.settings = s;
   }
-  async putBlob(): Promise<void> {}
-  async getBlobUrl(): Promise<string> {
+  async putBlob(key: string, blob: Blob): Promise<void> {
+    this.blobs.set(key, blob);
+  }
+  async getBlob(key: string): Promise<Blob | null> {
+    return this.blobs.get(key) ?? null;
+  }
+  async getBlobUrl(key: string): Promise<string> {
+    return this.blobs.has(key) ? `blob:fake/${key}` : '';
+  }
+  async resolveImageUrl(image: ImageRef): Promise<string> {
+    if (image.localBlobKey && this.blobs.has(image.localBlobKey)) return `blob:fake/${image.localBlobKey}`;
+    if (image.blobPath && /^(data:|blob:|https?:)/.test(image.blobPath)) return image.blobPath;
     return '';
   }
   async listMemory(): Promise<MemoryItem[]> {
@@ -227,6 +241,7 @@ class FakeCloud implements CloudApi {
       deletedAt: null,
       ...(body.model ? { model: body.model } : {}),
       ...(body.parentId ? { parentId: body.parentId } : {}),
+      ...(body.images?.length ? { images: body.images } : {}),
     };
     this.messages.set(id, rec);
     return rec;
@@ -240,14 +255,30 @@ class FakeCloud implements CloudApi {
     this.serverSettings = patch as Settings;
     return this.serverSettings;
   }
+  async requestSas(body: SasRequestBody): Promise<SasResult> {
+    this.calls.push(`requestSas:${body.op}:${body.threadId}:${body.assetId}`);
+    return {
+      blobPath: `u/${body.threadId}/${body.assetId}.png`,
+      url: `https://blob.test/${body.threadId}/${body.assetId}?${body.op}`,
+      expiresAt: this.now(),
+    };
+  }
 }
 
 function setup(sync = true) {
   const local = new FakeLocal(sync);
   const cloud = new FakeCloud();
   const kv = memoryKvStore();
-  const repo = new SyncRepository(local, cloud, kv);
-  return { local, cloud, kv, repo };
+  const uploaded = new Map<string, Blob>();
+  const fetchImpl = (async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    if (init?.method === 'PUT') {
+      uploaded.set(String(url), init.body as Blob);
+      return new Response(null, { status: 201 });
+    }
+    return new Response(new Blob(['IMG']), { status: 200 });
+  }) as typeof fetch;
+  const repo = new SyncRepository(local, cloud, kv, fetchImpl);
+  return { local, cloud, kv, repo, uploaded };
 }
 
 const msg = (over: Partial<Message> & { id: string; threadId: string }): Message => ({
@@ -424,5 +455,106 @@ describe('SyncRepository — deleteAll', () => {
 
     expect(await kv.get('sync.queue')).toBeUndefined();
     expect(await kv.get('sync.cursor.threads')).toBeUndefined();
+  });
+});
+
+describe('SyncRepository — image cloud storage', () => {
+  const imageMsg = (over: Partial<Message> = {}): Message =>
+    msg({
+      id: 'm1',
+      threadId: 't1',
+      role: 'assistant',
+      content: '',
+      images: [
+        {
+          id: 'img1',
+          localBlobKey: 'imgkey',
+          prompt: 'a cat',
+          size: '1024x1024',
+          outputFormat: 'png',
+          createdAt: '2026-01-01T00:00:30Z',
+        },
+      ],
+      ...over,
+    });
+
+  it('uploads a message’s local images to Blob Storage on push and syncs their blobPath', async () => {
+    const { local, cloud, repo, uploaded } = setup(true);
+    await repo.createThread({ id: 't1', title: 'A' });
+    await local.putBlob('imgkey', new Blob(['IMG']));
+    await repo.appendMessage(imageMsg());
+
+    await repo.push();
+
+    // The blob was PUT to a write SAS URL.
+    expect(uploaded.size).toBe(1);
+    expect(cloud.calls).toContain('requestSas:write:t1:img1');
+    // The synced message carries the image WITH a cloud blobPath.
+    expect(cloud.messages.get('m1')?.images?.[0]).toMatchObject({
+      id: 'img1',
+      blobPath: 'u/t1/img1.png',
+    });
+    // blobPath is persisted locally so a later push won't re-upload.
+    const localMsg = (await local.listMessages('t1')).find((m) => m.id === 'm1');
+    expect(localMsg?.images?.[0].blobPath).toBe('u/t1/img1.png');
+  });
+
+  it('does not re-upload an image that already has a blobPath', async () => {
+    const { local, cloud, repo, uploaded } = setup(true);
+    await repo.createThread({ id: 't1', title: 'A' });
+    await repo.appendMessage(
+      imageMsg({
+        images: [
+          {
+            id: 'img1',
+            blobPath: 'u/t1/img1.png',
+            prompt: 'a cat',
+            size: '1024x1024',
+            outputFormat: 'png',
+            createdAt: '2026-01-01T00:00:30Z',
+          },
+        ],
+      }),
+    );
+
+    await repo.push();
+
+    expect(uploaded.size).toBe(0);
+    expect(cloud.calls).not.toContain('requestSas:write:t1:img1');
+    expect(cloud.messages.get('m1')?.images?.[0].blobPath).toBe('u/t1/img1.png');
+  });
+
+  it('resolveImageUrl fetches and caches a cloud image when only blobPath is known', async () => {
+    const { local, cloud, repo } = setup(true);
+    const url = await repo.resolveImageUrl({
+      id: 'img9',
+      blobPath: 'u/t1/img9.png',
+      prompt: '',
+      size: '1024x1024',
+      outputFormat: 'png',
+      createdAt: 'now',
+    });
+
+    expect(cloud.calls).toContain('requestSas:read:t1:img9');
+    expect(url).toBeTruthy();
+    // The downloaded bytes were cached locally for offline reuse.
+    expect(await local.getBlob('cloud-img9')).not.toBeNull();
+  });
+
+  it('resolveImageUrl prefers the local cache and never hits the cloud', async () => {
+    const { local, cloud, repo } = setup(true);
+    await local.putBlob('imgkey', new Blob(['IMG']));
+    const url = await repo.resolveImageUrl({
+      id: 'img1',
+      localBlobKey: 'imgkey',
+      blobPath: 'u/t1/img1.png',
+      prompt: '',
+      size: '1024x1024',
+      outputFormat: 'png',
+      createdAt: 'now',
+    });
+
+    expect(url).toBe('blob:fake/imgkey');
+    expect(cloud.calls).not.toContain('requestSas:read:t1:img1');
   });
 });

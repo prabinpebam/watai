@@ -283,8 +283,9 @@ Self-service customer sign-up/sign-in now works for the PWA. **§8 is fully comp
 - **Background sync scheduler** (`src/app/App.tsx`): `syncNow()` on mount, on `window` focus, and every 30s — all no-ops while sync is off or signed out (MSAL only loads when sync is actually used).
 
 ### REMAINING for §9
-- **Deferred (by design):** asset (blob) upload via SAS, and message edit/delete sync, stay local-only for now (no server endpoints).
-- **Live verification:** keep sanity-checking the MSAL sign-in popup + a real sync round-trip on the deployed site.
+- **Generated images now sync to Azure Blob Storage (2026-06-24).** On push, `SyncRepository.buildAppendBody` uploads each local-only image to the `media` container via a **write SAS** (`POST /api/assets/sas` → `WataiApiClient.requestSas`), sets its `blobPath`, and the synced message carries `images[]` metadata (backend `parseAppendMessage` + `MessageRecord` extended to accept optional images + image-only messages). Other devices pull the message and fetch each image via a **read SAS** in `SyncRepository.resolveImageUrl`, caching the bytes in local IndexedDB for offline reuse. Images stored in IndexedDB locally (not the 5 MB `localStorage`); Azure is the durable, cross-device store.
+- **Deferred (by design):** user-attachment (non-generated) blob upload and message edit/delete sync stay local-only for now.
+- **Live verification:** keep sanity-checking the MSAL sign-in popup + a real sync round-trip (incl. an image) on the deployed site.
 
 > **Frontend DEPLOYED (2026-06-24):** `npm run build` → committed `docs/` → live at
 > https://prabinpebam.github.io/watai/. MSAL is code-split into its own chunk (loads only when sync

@@ -4,7 +4,7 @@
 // All of this is gated on Settings.data.sync, so with sync off it is a pure
 // passthrough to the local store. The token provider is injected via the CloudApi,
 // so this whole engine is unit-testable without MSAL.
-import type { Id, Message, MemoryItem, Settings, Thread } from '../../lib/types';
+import type { Id, ImageRef, Message, MemoryItem, Settings, Thread } from '../../lib/types';
 import type { Repository, SearchHit, SyncLocalStore } from '../repository';
 import { CloudError, type CloudApi } from '../cloud/apiClient';
 import {
@@ -45,6 +45,7 @@ export class SyncRepository implements Repository {
     private readonly local: SyncLocalStore,
     private readonly cloud: CloudApi,
     private readonly kv: KvStore,
+    private readonly fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
   ) {}
 
   // ---- reads: always local ----
@@ -59,6 +60,37 @@ export class SyncRepository implements Repository {
   }
   getBlobUrl(key: string): Promise<string> {
     return this.local.getBlobUrl(key);
+  }
+
+  /** Resolve an image URL: prefer the local cache; otherwise download from Blob Storage
+   *  via a read SAS and cache it locally (so other devices and reloads work offline after). */
+  async resolveImageUrl(image: ImageRef): Promise<string> {
+    if (image.localBlobKey) {
+      const url = await this.local.getBlobUrl(image.localBlobKey);
+      if (url) return url;
+    }
+    if (image.blobPath && /^(data:|blob:|https?:)/.test(image.blobPath)) return image.blobPath;
+    if (image.blobPath && (await this.syncEnabled())) {
+      const parsed = parseBlobPath(image.blobPath);
+      if (!parsed) return '';
+      try {
+        const sas = await this.cloud.requestSas({
+          threadId: parsed.threadId,
+          assetId: parsed.assetId,
+          op: 'read',
+          contentType: parsed.contentType,
+        });
+        const res = await this.fetchImpl(sas.url);
+        if (!res.ok) return '';
+        const blob = await res.blob();
+        const key = image.localBlobKey ?? `cloud-${image.id}`;
+        await this.local.putBlob(key, blob);
+        return this.local.getBlobUrl(key);
+      } catch {
+        return '';
+      }
+    }
+    return '';
   }
   getSettings(): Promise<Settings> {
     return this.local.getSettings();
@@ -132,6 +164,9 @@ export class SyncRepository implements Repository {
   }
   putBlob(key: string, blob: Blob): Promise<void> {
     return this.local.putBlob(key, blob);
+  }
+  getBlob(key: string): Promise<Blob | null> {
+    return this.local.getBlob(key);
   }
   addMemory(m: MemoryItem): Promise<void> {
     return this.local.addMemory(m);
@@ -230,7 +265,10 @@ export class SyncRepository implements Repository {
         await this.cloud.deleteThread(op.id);
         return;
       case 'message.append':
-        await this.cloud.appendMessage(op.threadId, op.body);
+        await this.cloud.appendMessage(
+          op.threadId,
+          await this.buildAppendBody(op.threadId, op.id, op.body),
+        );
         return;
       case 'settings.save':
         await this.cloud.patchSettings(await this.local.getSettings());
@@ -264,6 +302,30 @@ export class SyncRepository implements Repository {
       if (rec.createdAt > maxCreated) maxCreated = rec.createdAt;
     }
     if (maxCreated && maxCreated !== cursor) await this.kv.set(key, maxCreated);
+  }
+
+  /** On push, upload any local-only images of this message to Blob Storage (write SAS),
+   *  persist their blobPath, and return the append body including them. */
+  private async buildAppendBody(
+    threadId: Id,
+    id: Id,
+    fallback: AppendMessageBody,
+  ): Promise<AppendMessageBody> {
+    const message = (await this.local.listMessages(threadId)).find((m) => m.id === id);
+    if (!message || !message.images?.length) return fallback;
+    let changed = false;
+    for (const img of message.images) {
+      if (img.blobPath || !img.localBlobKey) continue;
+      const blob = await this.local.getBlob(img.localBlobKey);
+      if (!blob) continue;
+      const contentType = imageContentType(img.outputFormat);
+      const sas = await this.cloud.requestSas({ threadId, assetId: img.id, op: 'write', contentType });
+      await uploadBlobToSas(this.fetchImpl, sas.url, blob, contentType);
+      img.blobPath = sas.blobPath;
+      changed = true;
+    }
+    if (changed) await this.local.updateMessage(id, { images: message.images });
+    return appendBodyFromMessage(message);
   }
 
   private loadQueue(): Promise<SyncOp[]> {
@@ -309,5 +371,44 @@ export class SyncRepository implements Repository {
     });
     if (!unsynced) kept.push({ kind: 'thread.delete', id });
     await this.saveQueue(kept);
+  }
+}
+
+function imageContentType(fmt: string): string {
+  return fmt === 'jpeg' ? 'image/jpeg' : fmt === 'webp' ? 'image/webp' : 'image/png';
+}
+
+/** Derive the threadId, assetId, and content type from a `{userId}/{threadId}/{assetId}.{ext}` blob path. */
+function parseBlobPath(blobPath: string): { threadId: string; assetId: string; contentType: string } | null {
+  const parts = blobPath.split('/').filter(Boolean);
+  if (parts.length < 3) return null;
+  const file = parts[parts.length - 1];
+  const threadId = parts[parts.length - 2];
+  const dot = file.lastIndexOf('.');
+  const assetId = dot >= 0 ? file.slice(0, dot) : file;
+  const ext = (dot >= 0 ? file.slice(dot + 1) : 'png').toLowerCase();
+  const contentType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
+  return { threadId, assetId, contentType };
+}
+
+/** PUT raw bytes to a blob SAS URL. Failures are flagged retryable so the sync queue keeps the op. */
+async function uploadBlobToSas(
+  fetchImpl: typeof fetch,
+  url: string,
+  blob: Blob,
+  contentType: string,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetchImpl(url, {
+      method: 'PUT',
+      headers: { 'x-ms-blob-type': 'BlockBlob', 'Content-Type': contentType },
+      body: blob,
+    });
+  } catch (err) {
+    throw new CloudError('network', err instanceof Error ? err.message : 'Blob upload failed.', 0);
+  }
+  if (!res.ok) {
+    throw new CloudError('network', `Blob upload failed (${res.status}).`, res.status);
   }
 }

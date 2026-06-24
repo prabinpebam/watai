@@ -211,8 +211,26 @@ export function AttachmentList({ attachments }: { attachments?: Attachment[] }) 
   );
 }
 
+/** Resolve a generated image's URL via the repository (local cache, else cloud read SAS). */
+function useResolvedImage(image: ImageRef): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    repo
+      .resolveImageUrl(image)
+      .then((u) => {
+        if (live) setUrl(u || null);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [image.id, image.blobPath, image.localBlobKey]);
+  return url;
+}
+
 function GeneratedImage({ image }: { image: ImageRef }) {
-  const url = useObjectUrl(image.blobPath, image.localBlobKey);
+  const url = useResolvedImage(image);
   const [open, setOpen] = useState(false);
   if (!url) return <div className="image-card image-card--loading skeleton" style={{ height: 220 }} />;
   return (

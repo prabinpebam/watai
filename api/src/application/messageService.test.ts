@@ -58,6 +58,24 @@ describe('MessageService.append', () => {
     expect(await code(() => ctx.messages.append('userB', thread.id, { role: 'user', content: 'sneak' }))).toBe('not_found');
     expect((await ctx.threads.get('userA', thread.id)).messageCount).toBe(0);
   });
+
+  it('persists image refs and previews image-only messages as "Image"', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const img = {
+      id: 'img_1',
+      blobPath: 'userA/' + thread.id + '/img_1.png',
+      prompt: 'a fox',
+      size: '1024x1536',
+      outputFormat: 'png' as const,
+      createdAt: '2026-01-01T00:00:00Z',
+    };
+    const msg = await ctx.messages.append('userA', thread.id, { role: 'assistant', content: '', images: [img] });
+    expect(msg.images).toEqual([img]);
+
+    const stored = await ctx.messageStore.get(thread.id, msg.id);
+    expect(stored?.images).toEqual([img]);
+    expect((await ctx.threads.get('userA', thread.id)).lastMessagePreview).toBe('Image');
+  });
 });
 
 describe('MessageService.list', () => {

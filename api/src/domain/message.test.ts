@@ -34,4 +34,39 @@ describe('parseAppendMessage', () => {
       'validation',
     );
   });
+
+  it('accepts an image-only assistant message (empty text + images)', () => {
+    const img = {
+      id: 'img_1',
+      blobPath: 'user/thread/img_1.png',
+      prompt: 'a cat',
+      size: '1024x1024',
+      outputFormat: 'png' as const,
+      createdAt: '2026-01-01T00:00:00Z',
+    };
+    expect(parseAppendMessage({ role: 'assistant', content: '', images: [img] })).toMatchObject({
+      role: 'assistant',
+      content: '',
+      images: [img],
+    });
+  });
+
+  it('rejects a fully empty message (no text and no images)', () => {
+    expect(code(() => parseAppendMessage({ role: 'assistant', content: '   ' }))).toBe('validation');
+    expect(code(() => parseAppendMessage({ role: 'assistant', content: '', images: [] }))).toBe(
+      'validation',
+    );
+  });
+
+  it('rejects malformed image refs (strict, required blobPath)', () => {
+    expect(
+      code(() =>
+        parseAppendMessage({
+          role: 'assistant',
+          content: 'x',
+          images: [{ id: 'i', size: '1024x1024', outputFormat: 'png', createdAt: 'now' }],
+        }),
+      ),
+    ).toBe('validation');
+  });
 });

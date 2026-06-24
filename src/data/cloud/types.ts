@@ -20,6 +20,16 @@ export interface ThreadRecord {
 
 export type ServerMessageStatus = 'complete' | 'interrupted' | 'error';
 
+/** Cloud image metadata (bytes live in Blob Storage at `blobPath`). */
+export interface ImageRecord {
+  id: string;
+  blobPath: string;
+  prompt: string;
+  size: string;
+  outputFormat: 'png' | 'jpeg' | 'webp';
+  createdAt: string;
+}
+
 export interface MessageRecord {
   id: string;
   threadId: string;
@@ -28,6 +38,7 @@ export interface MessageRecord {
   content: string;
   model?: string;
   parentId?: string;
+  images?: ImageRecord[];
   status: ServerMessageStatus;
   createdAt: string;
   deletedAt: string | null;
@@ -53,6 +64,21 @@ export interface AppendMessageBody {
   content: string;
   model?: string;
   parentId?: string;
+  images?: ImageRecord[];
+}
+
+/** Request a scoped, short-lived SAS URL for an asset blob. */
+export interface SasRequestBody {
+  threadId: string;
+  assetId: string;
+  op: 'read' | 'write';
+  contentType: string;
+}
+
+export interface SasResult {
+  blobPath: string;
+  url: string;
+  expiresAt: string;
 }
 
 export function threadFromRecord(r: ThreadRecord): Thread {
@@ -89,15 +115,40 @@ export function messageFromRecord(r: MessageRecord): Message {
     createdAt: r.createdAt,
     ...(r.model !== undefined ? { model: r.model } : {}),
     ...(r.parentId !== undefined ? { parentId: r.parentId } : {}),
+    ...(r.images?.length
+      ? {
+          images: r.images.map((i) => ({
+            id: i.id,
+            blobPath: i.blobPath,
+            prompt: i.prompt,
+            size: i.size,
+            outputFormat: i.outputFormat,
+            createdAt: i.createdAt,
+          })),
+        }
+      : {}),
   };
 }
 
 export function appendBodyFromMessage(m: Message): AppendMessageBody {
+  // Only images already uploaded to Blob Storage (blobPath set) are synced; local-only
+  // images are uploaded first by the sync engine, which then re-derives this body.
+  const uploaded: ImageRecord[] = (m.images ?? [])
+    .filter((i): i is typeof i & { blobPath: string } => !!i.blobPath)
+    .map((i) => ({
+      id: i.id,
+      blobPath: i.blobPath,
+      prompt: i.prompt,
+      size: i.size,
+      outputFormat: i.outputFormat,
+      createdAt: i.createdAt,
+    }));
   return {
     id: m.id,
     role: m.role,
     content: m.content,
     ...(m.model !== undefined ? { model: m.model } : {}),
     ...(m.parentId != null ? { parentId: m.parentId } : {}),
+    ...(uploaded.length ? { images: uploaded } : {}),
   };
 }

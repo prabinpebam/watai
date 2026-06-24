@@ -40,6 +40,7 @@ export class MessageService {
       content: input.content,
       ...(input.model ? { model: input.model } : {}),
       ...(input.parentId ? { parentId: input.parentId } : {}),
+      ...(input.images && input.images.length ? { images: input.images } : {}),
       status: 'complete',
       createdAt: ts,
       deletedAt: null,
@@ -48,7 +49,7 @@ export class MessageService {
     await this.threadStore.put({
       ...thread,
       messageCount: thread.messageCount + 1,
-      lastMessagePreview: input.content.slice(0, 140),
+      lastMessagePreview: (input.content.trim() || (input.images?.length ? 'Image' : '')).slice(0, 140),
       updatedAt: ts,
     });
     return record;

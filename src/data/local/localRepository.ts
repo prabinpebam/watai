@@ -1,7 +1,7 @@
 import { db, kvGet, kvSet } from '../db';
 import type { SearchHit, SyncLocalStore } from '../repository';
 import { newId } from '../../lib/ids';
-import { DEFAULT_SETTINGS, type Id, type Message, type Settings, type Thread, type MemoryItem } from '../../lib/types';
+import { DEFAULT_SETTINGS, type Id, type ImageRef, type Message, type Settings, type Thread, type MemoryItem } from '../../lib/types';
 
 const SETTINGS_KEY = 'settings';
 const MEMORY_KEY = 'memory';
@@ -109,6 +109,21 @@ export class LocalRepository implements SyncLocalStore {
     const url = URL.createObjectURL(blob);
     blobUrlCache.set(key, url);
     return url;
+  }
+
+  async getBlob(key: string): Promise<Blob | null> {
+    return ((await (await db()).get('blobs', key)) as Blob) ?? null;
+  }
+
+  /** Local-only resolution: use the cached blob, or a direct-URL blobPath. A cloud
+   *  storage path can't be resolved here (the SyncRepository overrides this). */
+  async resolveImageUrl(image: ImageRef): Promise<string> {
+    if (image.localBlobKey) {
+      const url = await this.getBlobUrl(image.localBlobKey);
+      if (url) return url;
+    }
+    if (image.blobPath && /^(data:|blob:|https?:)/.test(image.blobPath)) return image.blobPath;
+    return '';
   }
 
   async getSettings(): Promise<Settings> {

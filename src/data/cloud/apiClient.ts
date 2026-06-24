@@ -7,6 +7,8 @@ import type {
   AppendMessageBody,
   CreateThreadBody,
   MessageRecord,
+  SasRequestBody,
+  SasResult,
   ThreadRecord,
   UpdateThreadBody,
 } from './types';
@@ -152,6 +154,11 @@ export class WataiApiClient implements CloudApi {
   patchSettings(patch: Partial<Settings>): Promise<Settings> {
     return this.request('PATCH', '/settings', patch);
   }
+
+  // --- assets ---
+  requestSas(body: SasRequestBody): Promise<SasResult> {
+    return this.request('POST', '/assets/sas', body);
+  }
 }
 
 function statusToCode(status: number): CloudErrorCode {
@@ -188,4 +195,5 @@ export interface CloudApi {
   appendMessage(threadId: string, body: AppendMessageBody): Promise<MessageRecord>;
   getSettings(): Promise<Settings>;
   patchSettings(patch: Partial<Settings>): Promise<Settings>;
+  requestSas(body: SasRequestBody): Promise<SasResult>;
 }
