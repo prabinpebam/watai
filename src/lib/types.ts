@@ -154,5 +154,5 @@ export const DEFAULT_SETTINGS: Settings = {
     language: 'en',
   },
   voice: { engine: 'tts', rate: 1, vad: 0.5, autoSend: true, captions: true },
-  data: { sync: false, temporaryDefault: false, retention: 'forever' },
+  data: { sync: true, temporaryDefault: false, retention: 'forever' },
 };

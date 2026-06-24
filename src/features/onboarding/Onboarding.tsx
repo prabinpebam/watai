@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { Button, Field, Segmented, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
-import { startSession } from '../../lib/session';
+import { signInRedirect } from '../../auth/cloudAuth';
 import { normalizeBaseUrl, saveApiConfig, saveApiKey } from '../../data/secureStore';
 import { probeModel, MODEL_LABELS, type ModelKey, type ProbeResult } from '../../ai/capabilities';
 import { useUi } from '../../state/store';
@@ -67,37 +67,49 @@ function Feature({ icon, title, sub }: { icon: string; title: string; sub: strin
 
 function Auth() {
   const navigate = useNavigate();
-  const [name, setName] = useState('');
+  const setMockAi = useUi((s) => s.setMockAi);
+  const [busy, setBusy] = useState(false);
+  const signin = async () => {
+    setBusy(true);
+    try {
+      await signInRedirect(); // navigates away to the sign-in page; returns to the app
+    } catch {
+      setBusy(false);
+    }
+  };
   return (
     <div className="onboard">
       <Logo />
       <div>
-        <h1 className="onboard__title">Create your local profile</h1>
-        <p className="onboard__sub">Accounts and cloud sync arrive later. For now everything stays on this device.</p>
+        <h1 className="onboard__title">Sign in to Watai</h1>
+        <p className="onboard__sub">
+          Sign in with your account to securely sync your chats and images across all your devices.
+        </p>
       </div>
-      <div className="onboard__form">
-        <Field
-          label="Display name"
-          placeholder="Your name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+      <div className="col" style={{ width: '100%', textAlign: 'left', gap: 12 }}>
+        <Feature icon="database" title="Synced everywhere" sub="Your conversations and images follow you to every device." />
+        <Feature icon="shield" title="Private by design" sub="Your Azure OpenAI key never leaves your device." />
       </div>
       <div className="onboard__actions">
         <Button variant="ghost" onClick={() => navigate('/onboarding/welcome')}>
           Back
         </Button>
-        <Button
-          variant="primary"
-          full
-          onClick={() => {
-            startSession(name);
-            navigate('/onboarding/key');
-          }}
-        >
-          Continue
+        <Button variant="primary" full size="lg" loading={busy} onClick={signin}>
+          Sign in
         </Button>
       </div>
+      {import.meta.env.DEV && (
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setMockAi(true);
+            startMockProfile();
+            navigate('/');
+          }}
+        >
+          Continue in demo mode (dev)
+        </Button>
+      )}
     </div>
   );
 }

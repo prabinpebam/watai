@@ -1,7 +1,7 @@
-// Entra External ID (CIAM) auth for the cloud sync plane. MSAL is loaded lazily
-// (dynamic import) and only initialised on first use, so it never affects startup
-// or the local-only experience. The token provider is silent-only: it returns null
-// when the user isn't signed in, and `signIn()` is the explicit interactive action.
+// Entra External ID (CIAM) auth for Watai. The app is cloud-account-only: sign-in is
+// mandatory and uses the redirect flow (reliable on mobile). MSAL is loaded lazily and
+// processes any returning redirect on first use, so the active account is ready before
+// the app's auth gate reads it.
 import type { AccountInfo, IPublicClientApplication } from '@azure/msal-browser';
 
 const TENANT_ID = 'f009d35a-019c-4374-8987-2509caf7f66f';
@@ -33,10 +33,15 @@ async function getPca(): Promise<IPublicClientApplication> {
           authority: AUTHORITY,
           knownAuthorities: [KNOWN_AUTHORITY],
           redirectUri: redirectUri(),
+          postLogoutRedirectUri: redirectUri(),
         },
         cache: { cacheLocation: 'localStorage' },
       });
       await pca.initialize();
+      // Complete a returning sign-in redirect (no-op on a normal load). The app's HashRouter
+      // owns routing, so MSAL must not navigate or it fights the router over the URL hash.
+      const result = await pca.handleRedirectPromise({ navigateToLoginRequestUrl: false });
+      if (result?.account) pca.setActiveAccount(result.account);
       return pca;
     })();
   }
@@ -45,6 +50,12 @@ async function getPca(): Promise<IPublicClientApplication> {
 
 function activeAccount(pca: IPublicClientApplication): AccountInfo | null {
   return pca.getActiveAccount() ?? pca.getAllAccounts()[0] ?? null;
+}
+
+/** Initialise MSAL and complete any returning sign-in redirect. Must run BEFORE the
+ *  HashRouter mounts so the auth response in the URL hash is consumed first. */
+export async function initAuth(): Promise<void> {
+  await getPca();
 }
 
 /** Token provider for the API client: silent-only, resolves to null when signed out. */
@@ -68,10 +79,17 @@ export async function signIn(): Promise<AccountInfo | null> {
   return res.account ?? null;
 }
 
+/** Interactive sign-in / sign-up via redirect (reliable on mobile). Navigates away; the
+ *  app reloads at the redirect URI and `getPca()` completes it. */
+export async function signInRedirect(): Promise<void> {
+  const pca = await getPca();
+  await pca.loginRedirect({ scopes: [API_SCOPE] });
+}
+
 export async function signOut(): Promise<void> {
   const pca = await getPca();
   const account = activeAccount(pca);
-  await pca.logoutPopup({ account: account ?? undefined });
+  await pca.logoutRedirect({ account: account ?? undefined });
 }
 
 export async function getSignedInAccount(): Promise<AccountInfo | null> {

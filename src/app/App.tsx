@@ -10,9 +10,9 @@ import { VoiceMode } from '../features/voice/VoiceMode';
 import { IconButton, Spinner } from '../design/ui';
 import { useIsExpanded } from '../lib/hooks';
 import { useUi } from '../state/store';
-import { repo, seedMockDataIfEmpty, purgeDemoData, syncNow } from '../data';
+import { repo, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync } from '../data';
 import { hasValidConfig } from '../data/secureStore';
-import { getSession } from '../lib/session';
+import { isSignedIn } from '../auth/cloudAuth';
 
 // Dev-only chat component gallery. The dynamic import sits in a branch that is statically
 // false in production, so the chunk is tree-shaken out of the prod bundle entirely.
@@ -64,11 +64,13 @@ function useSetupState(): SetupState {
   useEffect(() => {
     let live = true;
     (async () => {
-      if (!getSession()) {
+      // Cloud-account-only: a signed-in Entra account is required (dev mock mode aside).
+      const devMock = import.meta.env.DEV && mockAi;
+      if (!devMock && !(await isSignedIn())) {
         if (live) setState('no-session');
         return;
       }
-      const ok = (import.meta.env.DEV && mockAi) || (await hasValidConfig());
+      const ok = devMock || (await hasValidConfig());
       if (live) setState(ok ? 'ready' : 'no-config');
     })();
     return () => {
@@ -115,6 +117,18 @@ export function App() {
       window.removeEventListener('focus', onFocus);
       window.clearInterval(id);
     };
+  }, []);
+
+  // One-time backfill: push any pre-existing local data to the cloud on the first
+  // signed-in load (e.g. data created before signing in, or in a prior build).
+  useEffect(() => {
+    (async () => {
+      if (import.meta.env.DEV && useUi.getState().mockAi) return;
+      if (!(await isSignedIn())) return;
+      if (localStorage.getItem('watai.backfilled')) return;
+      await backfillSync().catch(() => undefined);
+      localStorage.setItem('watai.backfilled', '1');
+    })();
   }, []);
 
   return (

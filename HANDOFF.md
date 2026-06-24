@@ -47,7 +47,9 @@
 ## 1. What is Watai
 
 A ChatGPT-iOS-style PWA powered by the user's **own Azure OpenAI endpoint (bring-your-own key)**.
-Local-first (IndexedDB) with **optional cloud sync** through a custom persistence API.
+**Cloud-account-only (2026-06-24):** Entra (CIAM) sign-in is **mandatory**, cloud sync is **always on**,
+and the signed-in account is the identity. Local IndexedDB is only a transparent **offline cache** (not
+a separate "local account"). The local name/session model was removed.
 
 **Two-plane architecture (critical security invariant):**
 - **AI plane:** the browser calls the user's Azure OpenAI endpoint **directly** with the user's BYO key. The key lives only in the browser (IndexedDB `secureStore`). It **never** touches our backend or any secret store.
@@ -59,7 +61,7 @@ Local-first (IndexedDB) with **optional cloud sync** through a custom persistenc
 
 | Area | Status |
 |---|---|
-| Frontend (React PWA) | Complete, deployed to GitHub Pages. Local-first + optional cloud sync. |
+| Frontend (React PWA) | Complete, deployed to GitHub Pages. Cloud-account-only: mandatory Entra sign-in, always-on sync, local IndexedDB cache. |
 | Backend domain/application/ports | Complete, TDD. |
 | In-memory adapters (test doubles) | Complete. |
 | Cosmos adapters (threads/messages/settings) | Complete + integration-tested vs real Cosmos. |
