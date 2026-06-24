@@ -119,15 +119,23 @@ export function App() {
     };
   }, []);
 
-  // One-time backfill: push any pre-existing local data to the cloud on the first
-  // signed-in load (e.g. data created before signing in, or in a prior build).
+  // Cloud-account-only: ensure sync is on for the signed-in user (migrating any stale
+  // sync=false saved before cloud-only), backfill pre-existing local data once, then sync.
   useEffect(() => {
     (async () => {
       if (import.meta.env.DEV && useUi.getState().mockAi) return;
       if (!(await isSignedIn())) return;
-      if (localStorage.getItem('watai.backfilled')) return;
-      await backfillSync().catch(() => undefined);
-      localStorage.setItem('watai.backfilled', '1');
+      const settings = await repo.getSettings();
+      if (!settings.data.sync) {
+        await repo.saveSettings({ ...settings, data: { ...settings.data, sync: true } });
+        // Sync was off before, so existing local data was never queued — force a re-backfill.
+        localStorage.removeItem('watai.backfilled');
+      }
+      if (!localStorage.getItem('watai.backfilled')) {
+        await backfillSync().catch(() => undefined);
+        localStorage.setItem('watai.backfilled', '1');
+      }
+      await syncNow().catch(() => undefined);
     })();
   }, []);
 

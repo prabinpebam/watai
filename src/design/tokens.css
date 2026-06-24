@@ -165,7 +165,8 @@
   --blur-appbar: 8px;
   --blur-scrim: 2px;
 
-  /* Runtime layout vars (set from JS visualViewport) */
+  /* Layout vars. dvh tracks mobile browser chrome; the OS/browser handles the
+     on-screen keyboard natively (no JS viewport juggling). */
   --app-height: 100dvh;
   --keyboard-inset: 0px;
 }

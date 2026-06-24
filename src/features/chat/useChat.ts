@@ -264,24 +264,38 @@ async function maybeTitle(
   const thread = await repo.getThread(threadId);
   if (!thread || (thread.title && thread.title !== 'New chat')) return;
   const firstUser = history.find((m) => m.role === 'user')?.content ?? '';
+  const fallback = firstUser.slice(0, 40) || 'New chat';
   if (mockAi) {
-    await repo.updateThread(threadId, { title: firstUser.slice(0, 40) || 'New chat' });
+    await repo.updateThread(threadId, { title: fallback });
     return;
   }
   try {
-    const title = await completeChat({
+    // Reasoning models (e.g. gpt-5.4) spend the token budget on hidden reasoning, so use
+    // minimal effort and a generous cap — a tiny cap returns an empty completion (no title).
+    const raw = await completeChat({
       model,
-      maxCompletionTokens: 16,
+      maxCompletionTokens: 1000,
+      reasoningEffort: 'minimal',
       messages: [
         {
+          role: 'system',
+          content:
+            'You write a concise, specific 3-6 word title for a chat conversation. ' +
+            'Output ONLY the title text — no quotes, no trailing punctuation, no preamble.',
+        },
+        {
           role: 'user',
-          content: `Give a short 3-5 word title (no quotes) for this conversation:\n\nUser: ${firstUser}\nAssistant: ${answer.slice(0, 200)}`,
+          content: `Title this conversation:\n\nUser: ${firstUser.slice(0, 600)}\n\nAssistant: ${answer.slice(0, 600)}`,
         },
       ],
     });
-    const clean = title.replace(/^["']|["']$/g, '').slice(0, 60).trim();
-    if (clean) await repo.updateThread(threadId, { title: clean });
+    const clean = raw
+      .replace(/^["'\s]+|["'\s.]+$/g, '')
+      .split('\n')[0]
+      .slice(0, 60)
+      .trim();
+    await repo.updateThread(threadId, { title: clean || fallback });
   } catch {
-    await repo.updateThread(threadId, { title: firstUser.slice(0, 40) || 'New chat' });
+    await repo.updateThread(threadId, { title: fallback });
   }
 }

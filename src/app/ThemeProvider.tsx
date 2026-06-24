@@ -40,29 +40,5 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.style.setProperty('--motion-scale', reduce ? '0' : '1');
   }, [reduceMotion]);
 
-  // Live viewport height + keyboard inset (mobile-safe)
-  useEffect(() => {
-    const vv = window.visualViewport;
-    const update = () => {
-      const root = document.documentElement;
-      if (vv) {
-        root.style.setProperty('--app-height', `${vv.height}px`);
-        const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-        root.style.setProperty('--keyboard-inset', `${inset}px`);
-      } else {
-        root.style.setProperty('--app-height', '100dvh');
-      }
-    };
-    update();
-    vv?.addEventListener('resize', update);
-    vv?.addEventListener('scroll', update);
-    window.addEventListener('resize', update);
-    return () => {
-      vv?.removeEventListener('resize', update);
-      vv?.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
-    };
-  }, []);
-
   return <>{children}</>;
 }
