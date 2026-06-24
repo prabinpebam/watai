@@ -12,6 +12,14 @@ export const FULL_CAPABILITY: CapabilityMatrix = {
   tts: true,
 };
 
+/**
+ * Reasoning ("thinking") models spend completion-token budget on hidden reasoning
+ * before producing any visible output, so a tiny cap makes the probe fail with
+ * "max_tokens or model output limit was reached". The cap is only an upper bound —
+ * a one-word "ping" reply costs little regardless — so we give generous headroom.
+ */
+const PROBE_MAX_COMPLETION_TOKENS = 2000;
+
 /** Lightweight probe: a tiny chat call confirms auth + chat model wiring. */
 export async function probe(config: ApiConfig): Promise<{ ok: boolean; status?: number; detail?: string }> {
   try {
@@ -20,7 +28,7 @@ export async function probe(config: ApiConfig): Promise<{ ok: boolean; status?: 
       body: {
         model: config.models.chat,
         messages: [{ role: 'user', content: 'ping' }],
-        max_completion_tokens: 1,
+        max_completion_tokens: PROBE_MAX_COMPLETION_TOKENS,
       },
       timeoutMs: 20000,
     });
