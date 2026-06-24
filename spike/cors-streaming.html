@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Watai — CORS &amp; streaming spike (ADR-003)</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { max-width: 760px; margin: 32px auto; padding: 0 16px; line-height: 1.5; }
+      h1 { font-size: 1.25rem; }
+      p.note { color: #666; font-size: 0.9rem; }
+      label { display: block; font-weight: 600; margin: 14px 0 4px; }
+      input { width: 100%; padding: 8px 10px; font: inherit; box-sizing: border-box; }
+      button { margin-top: 16px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
+      .row { display: grid; grid-template-columns: 160px 1fr; gap: 8px 12px; align-items: center; margin: 6px 0; }
+      .row b { font-weight: 600; }
+      .pass { color: #16a34a; font-weight: 700; }
+      .fail { color: #dc2626; font-weight: 700; }
+      .warn { color: #d97706; font-weight: 700; }
+      pre { background: rgba(127,127,127,0.12); padding: 12px; border-radius: 8px; overflow: auto; white-space: pre-wrap; }
+      #out { margin-top: 20px; }
+    </style>
+  </head>
+  <body>
+    <h1>Watai — direct browser → Azure OpenAI spike</h1>
+    <p class="note">
+      Verifies the two Phase-1 unknowns from ADR-003: (a) the browser is allowed to call
+      your Azure OpenAI endpoint directly (CORS), and (b) Server-Sent-Events streaming
+      parses incrementally. Everything runs locally — your key is only sent to your own
+      endpoint and is never stored or logged. For a faithful test of the production origin,
+      serve this from the same origin as the app (e.g. copy into <code>public/spike/</code>
+      and open the Pages URL), or run <code>npx serve spike</code> and open it over http://localhost.
+    </p>
+
+    <label for="base">Base URL (exactly what you put in Settings)</label>
+    <input id="base" placeholder="https://your-resource.services.ai.azure.com/openai/v1" />
+
+    <label for="key">API key</label>
+    <input id="key" type="password" placeholder="paste key (stays in this tab)" autocomplete="off" />
+
+    <label for="model">Chat model / deployment</label>
+    <input id="model" placeholder="gpt-5.4" value="gpt-5.4" />
+
+    <button id="run">Run probe</button>
+
+    <div id="out"></div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const out = $('out');
+
+      function line(label, value, cls) {
+        const v = cls ? `<span class="${cls}">${value}</span>` : value;
+        return `<div class="row"><b>${label}</b><span>${v}</span></div>`;
+      }
+
+      $('run').addEventListener('click', async () => {
+        const base = $('base').value.trim().replace(/\/+$/, '');
+        const key = $('key').value.trim();
+        const model = $('model').value.trim() || 'gpt-5.4';
+        if (!base || !key) {
+          out.innerHTML = '<p class="fail">Enter a base URL and key first.</p>';
+          return;
+        }
+        const url = `${base}/chat/completions`;
+        out.innerHTML = `<p>Probing <code>${url}</code> …</p>`;
+
+        const body = {
+          model,
+          messages: [{ role: 'user', content: 'Reply with exactly: hello from azure' }],
+          max_completion_tokens: 32,
+          stream: true,
+        };
+
+        const started = performance.now();
+        let res;
+        try {
+          res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${key}`,
+              'Content-Type': 'application/json',
+              Accept: 'text/event-stream',
+            },
+            body: JSON.stringify(body),
+          });
+        } catch (err) {
+          // A thrown TypeError here is almost always a CORS/network block: the browser
+          // refused to expose the response. This selects Option B1 (proxy) in ADR-003.
+          out.innerHTML =
+            line('CORS', 'FAIL — request blocked before a response was readable', 'fail') +
+            line('Meaning', 'Direct browser calls are not permitted → a proxy (Option B1) is required.') +
+            line('Error', String(err)) +
+            '<pre>' + (err && err.stack ? err.stack : String(err)) + '</pre>';
+          return;
+        }
+
+        // Any readable Response (even 401/404) proves CORS is permitted.
+        let html = line('CORS', 'PASS — response was readable from the browser', 'pass');
+        html += line('HTTP status', `${res.status} ${res.statusText}`, res.ok ? 'pass' : 'warn');
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          html += line('Note', 'CORS works; this is an auth/deployment error, not a CORS failure.', 'warn');
+          html += '<pre>' + text.slice(0, 800) + '</pre>';
+          out.innerHTML = html;
+          return;
+        }
+
+        // Read the SSE stream and measure incrementality.
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let chunks = 0;
+        let ttfb = null;
+        let assembled = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (ttfb === null) ttfb = Math.round(performance.now() - started);
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const raw of lines) {
+            const l = raw.trim();
+            if (!l.startsWith('data:')) continue;
+            const data = l.slice(5).trim();
+            if (data === '[DONE]' || !data) continue;
+            chunks++;
+            try {
+              const json = JSON.parse(data);
+              const delta = json?.choices?.[0]?.delta?.content;
+              if (delta) assembled += delta;
+            } catch { /* ignore non-JSON keepalives */ }
+          }
+        }
+
+        const streaming = chunks >= 2;
+        html += line('Streaming', streaming ? `PASS — ${chunks} incremental chunks` : `BUFFERED — only ${chunks} chunk`, streaming ? 'pass' : 'warn');
+        html += line('Time to first chunk', ttfb === null ? 'n/a' : `${ttfb} ms`);
+        html += line('Assembled text', assembled ? `“${assembled}”` : '(empty)');
+        html += line('Verdict', streaming ? 'Option A (direct) is viable.' : 'CORS ok but streaming buffered — verify proxy/CDN; consider Container Apps.', streaming ? 'pass' : 'warn');
+        out.innerHTML = html;
+      });
+    </script>
+  </body>
+</html>
