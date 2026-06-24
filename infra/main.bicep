@@ -131,6 +131,13 @@ resource mediaContainer 'Microsoft.Storage/storageAccounts/blobServices/containe
   properties: { publicAccess: 'None' }
 }
 
+// Flex Consumption stores its deployment package here.
+resource deploymentsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'deployments'
+  properties: { publicAccess: 'None' }
+}
+
 // ---------------------------------------------------------------- Key Vault
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: 'kv-${namePrefix}-${suffix}'
@@ -145,11 +152,11 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-// ---------------------------------------------------------------- Function App (consumption, Linux/Node 20)
+// ---------------------------------------------------------------- Function App (Flex Consumption, Node 20)
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = if (deployFunctionApp) {
   name: 'plan-${namePrefix}-${env}'
   location: location
-  sku: { name: 'Y1', tier: 'Dynamic' }
+  sku: { name: 'FC1', tier: 'FlexConsumption' }
   kind: 'functionapp'
   properties: { reserved: true }
   tags: tags
@@ -164,19 +171,36 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
+    functionAppConfig: {
+      deployment: {
+        storage: {
+          type: 'blobContainer'
+          value: '${storage.properties.primaryEndpoints.blob}deployments'
+          authentication: {
+            type: 'StorageAccountConnectionString'
+            storageAccountConnectionStringName: 'DEPLOYMENT_STORAGE_CONNECTION_STRING'
+          }
+        }
+      }
+      scaleAndConcurrency: {
+        maximumInstanceCount: 40
+        instanceMemoryMB: 2048
+      }
+      runtime: {
+        name: 'node'
+        version: '20'
+      }
+    }
     siteConfig: {
-      linuxFxVersion: 'Node|20'
-      ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      ftpsState: 'Disabled'
       cors: {
         allowedOrigins: allowedOrigins
         supportCredentials: false
       }
       appSettings: [
         { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}' }
-        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
-        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
-        { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~20' }
+        { name: 'DEPLOYMENT_STORAGE_CONNECTION_STRING', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'COSMOS_ENDPOINT', value: cosmos.properties.documentEndpoint }
         { name: 'COSMOS_DATABASE', value: 'watai' }
