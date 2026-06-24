@@ -162,13 +162,15 @@ export function App() {
       if (!settings.data.sync) {
         await repo.saveSettings({ ...settings, data: { ...settings.data, sync: true } });
         // Sync was off before, so existing local data was never queued — force a re-backfill.
-        localStorage.removeItem('watai.backfilled');
+        localStorage.removeItem('watai.backfilled.v2');
       }
-      if (!localStorage.getItem('watai.backfilled')) {
-        await backfillSync().catch(() => undefined);
-        localStorage.setItem('watai.backfilled', '1');
+      // v2: earlier builds dropped queued ops on a 403 (not-invited) before invite access
+      // was sorted out, so existing chats never reached the cloud. Re-enqueue everything once.
+      if (!localStorage.getItem('watai.backfilled.v2')) {
+        await backfillSync().catch((e) => console.warn('[sync] backfill failed', e));
+        localStorage.setItem('watai.backfilled.v2', '1');
       }
-      await syncNow().catch(() => undefined);
+      await syncNow().catch((e) => console.warn('[sync] initial sync failed', e));
     })();
   }, []);
 

@@ -144,6 +144,11 @@ describe('WataiApiClient', () => {
     expect(new CloudError('rate_limited', 'x', 429).retryable).toBe(true);
   });
 
+  it('treats auth/access errors as retryable so ops are not dropped (invite access is dynamic)', () => {
+    expect(new CloudError('unauthorized', 'x', 401).retryable).toBe(true);
+    expect(new CloudError('forbidden', 'x', 403).retryable).toBe(true);
+  });
+
   it('encodes path ids and builds the messages query', async () => {
     const { fetchImpl, calls } = stubFetch([{ status: 200, body: { messages: [] } }]);
     const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });

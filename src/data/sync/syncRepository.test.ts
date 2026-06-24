@@ -391,6 +391,16 @@ describe('SyncRepository — push', () => {
     expect(await perm.kv.get('sync.queue')).toEqual([]);
   });
 
+  it('keeps an op when access is forbidden (invite may be granted later), never dropping data', async () => {
+    const denied = setup(true);
+    await denied.repo.createThread({ title: 'A' });
+    denied.cloud.createThread = async () => {
+      throw new CloudError('forbidden', 'not invited', 403);
+    };
+    await denied.repo.push();
+    expect((await denied.kv.get<unknown[]>('sync.queue'))!).toHaveLength(1);
+  });
+
   it('pushes settings changes', async () => {
     const { repo, cloud } = setup(true);
     const s: Settings = {

@@ -38,13 +38,15 @@ export class CloudError extends Error {
     this.name = 'CloudError';
   }
   /** Transient errors are worth retrying later; permanent ones (4xx) should drop.
-   *  `unauthorized` is transient for a signed-in user (silent token refresh / re-auth),
-   *  so keep the op rather than dropping it and losing data. */
+   *  `unauthorized` (token refresh / re-auth) and `forbidden` (invite-only access that
+   *  may be granted later) are transient for a signed-in user, so keep the op rather than
+   *  dropping it and losing the user's data. */
   get retryable(): boolean {
     return (
       this.code === 'network' ||
       this.code === 'rate_limited' ||
       this.code === 'unauthorized' ||
+      this.code === 'forbidden' ||
       this.status >= 500
     );
   }
