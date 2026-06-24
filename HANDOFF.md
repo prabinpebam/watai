@@ -3,8 +3,8 @@
 > **Purpose:** Let an agent on another machine pick up this project seamlessly.
 > Everything needed to resume is in this file. Read **§0 START HERE** first.
 >
-> - **Last commit at handoff:** `b2c57c1` on branch `master` (working tree clean, all pushed).
-> - **Handoff written:** 2026-06-24
+> - **Last commit at handoff:** `PENDING_STAMP` on branch `master` (working tree clean, all pushed).
+> - **Handoff written:** 2026-06-24 (updated — AI endpoint routing + agentic chat slice; see §13).
 > - **Repo:** https://github.com/prabinpebam/watai (public)
 > - **Live frontend:** https://prabinpebam.github.io/watai/ (GitHub Pages, served from `master` `/docs`)
 > - **Live API:** https://func-watai-cbroocyg3omrk.azurewebsites.net/api/health
@@ -31,10 +31,16 @@
    The data-plane role grants for integration tests are bound to that **oid**, so you must be that user.
 4. **Verify everything still works:**
    ```powershell
-   cd api; npm test; cd ..        # expect 90 passed, 10 skipped
+   npm test                       # FRONTEND: expect 74 passed
+   cd api; npm test; cd ..        # BACKEND: expect 94 passed, integration skipped
    curl https://func-watai-cbroocyg3omrk.azurewebsites.net/api/health   # expect 200 {"ok":true,...}
    ```
-5. **Resume work.** §8 done (auth live + proven). §9 cloud sync is **done and deployed** — the engine, MSAL auth, and the Settings sync UI are **live on GitHub Pages**, and the backend is deployed (idempotent client-id create + tombstone delete-sync). Remaining: the by-design deferrals (asset/blob upload, message edit/delete sync — no server endpoints) plus ongoing live verification. See §9.
+5. **Resume work.** §8 done (auth live + proven). §9 cloud sync is **done and deployed**. The
+   **newest work is §13** — AI endpoint routing (two-host) is done + deployed, and a first **agentic
+   chat slice** (tool-calling → in-chat image generation) is **built and all tests pass but is NOT
+   yet live-verified or deployed**. The live Pages bundle is still the §9 build. **Resume by
+   live-verifying the agentic path in `npm run dev` (steps in §13.4), then build → commit `docs/` →
+   push to deploy.**
 
 ---
 
@@ -53,7 +59,7 @@ Local-first (IndexedDB) with **optional cloud sync** through a custom persistenc
 
 | Area | Status |
 |---|---|
-| Frontend (React PWA) | Complete, deployed to GitHub Pages. Local-only (IndexedDB). |
+| Frontend (React PWA) | Complete, deployed to GitHub Pages. Local-first + optional cloud sync. |
 | Backend domain/application/ports | Complete, TDD. |
 | In-memory adapters (test doubles) | Complete. |
 | Cosmos adapters (threads/messages/settings) | Complete + integration-tested vs real Cosmos. |
@@ -63,8 +69,10 @@ Local-first (IndexedDB) with **optional cloud sync** through a custom persistenc
 | Azure infra (Cosmos/Storage/KV/Insights/Function App) | Provisioned (Bicep) in `rg-watai-dev` (East US 2). |
 | **Entra External ID (CIAM) tenant** | **DONE** — tenant + SPA app + API scope + user flow created; auth proven. See §8. |
 | **Frontend cloud Repository + sync engine** | **DONE + deployed** (engine + MSAL + UI live on Pages; backend deployed). See §9. |
+| **AI endpoint routing (two-host) + per-model FRE test + dev-only mock** | **DONE + deployed.** Foundry `v1` + classic `cognitiveservices` routing; bare resource name accepted; transcription fix. See §13.1–13.3. |
+| **Agentic chat slice (tool-calling → in-chat image gen)** | **BUILT, tests green — NOT yet live-verified/deployed.** Capability-gated; classic chat is the fallback. See §13.4. |
 
-**Tests:** Backend = **90 offline + 13 integration** (10 Cosmos/Storage + 3 separate). Frontend = ~26 (ids, sse, error taxonomy).
+**Tests:** Backend = **94 offline + integration** (Cosmos/Storage skipped without env). Frontend = **74** (ids, sse, error taxonomy, http/url routing, responses client, orchestrator).
 
 ---
 
@@ -412,10 +420,105 @@ All require `Authorization: Bearer <token>`. The server derives `userId` from th
 
 ## 12. Suggested resume prompt for the new agent
 
-> "Read HANDOFF.md. We're mid-way through provisioning Entra External ID (§8) to turn on auth for
-> the deployed Watai API, then we build the frontend cloud Repository + sync engine (§9). Here are
-> my Entra values: tenant ID = …, primary domain = …, SPA client ID = …, API audience = …. Set the
-> AUTH_* app settings, prove `/api/threads` works with a token, then start the cloud Repository."
+> "Read HANDOFF.md. §8 (Entra auth) and §9 (cloud sync) are done + deployed. The newest work is §13:
+> AI endpoint routing is live, and an agentic chat slice (tool-calling → in-chat image generation) is
+> built with all tests passing but **not yet live-verified or deployed**. Pick up at §13.4: I'll enter
+> my Azure OpenAI endpoint + key in Settings, then we live-verify (a) plain chat still streams and
+> (b) 'generate an image of a cat' renders inline; if good, build → commit `docs/` → push to deploy."
 
-If the user does **not** yet have Entra values, continue building §9's sync engine against a fake
-token provider (auth-independent) and finish Entra wiring when the values arrive.
+---
+
+## 13. AI endpoint routing + agentic chat slice (2026-06-24 — newest work)
+
+> **TL;DR for resuming:** The AI client now routes to the user's Azure OpenAI resource across **two
+> hosts** (Foundry `v1` + classic `cognitiveservices`), accepts a bare resource name, and a first
+> **agentic chat slice** (tool-calling → in-chat image generation) is **built, typechecks, and all 74
+> frontend tests pass**, but is **NOT yet live-verified or deployed**. The live GitHub Pages bundle is
+> still the §9 build (no agentic, no new composer focus ring). **Resume by live-verifying the agentic
+> path in `npm run dev` (§13.4), then build → commit `docs/` → push to deploy.**
+
+### 13.1 AI client / endpoint routing (committed + DEPLOYED, live)
+All in `src/ai/`. The user's resource is **bring-your-own** (entered in the app Settings UI; the key
+lives only in `secureStore`, never committed/synced).
+- **`http.ts`** — `aiFetch(req, config)`. `AiRequest` has optional `url?` (full override) and
+  `headers?`. Two host helpers:
+  - `v1Url(baseUrl, path)` — normalizes any input to the **Foundry v1 surface**
+    `https://<resource>.services.ai.azure.com/openai/v1{path}` (chat, image, tts, responses).
+    Non-Foundry hosts pass through as-is.
+  - `transcriptionUrl(baseUrl, deployment)` — transcription is **not** on `v1`; it swaps the host to
+    `…cognitiveservices.azure.com/openai/deployments/{deployment}/audio/transcriptions` with
+    `?api-version=2025-03-01-preview` (`TRANSCRIBE_API_VERSION`). Fixed the live
+    "deployment does not exist" error.
+- **`secureStore.ts` `normalizeBaseUrl`** — accepts a full URL **or a bare resource name**
+  (`/^[a-z0-9][a-z0-9-]*$/i` → `https://<name>.services.ai.azure.com/openai/v1`).
+- **Why two hosts:** the same Azure OpenAI resource serves chat/image/tts/responses on the Foundry
+  `services.ai.azure.com/openai/v1` surface, but classic transcription only on
+  `cognitiveservices.azure.com/.../deployments/{name}/...`. Both now work from one resource entry.
+
+### 13.2 Per-model First-Run-Experience test (committed + DEPLOYED, live)
+- **`src/ai/capabilities.ts`** — per-capability probes `probeChat` / `probeTranscribe` / `probeImage`
+  / `probeTts`, plus `probeModel(key, config)` and `MODEL_LABELS` / `ModelKey` / `ProbeResult`.
+  Onboarding tests **each model individually** and shows a green check per model.
+  - `probeTranscribe` builds a tiny 440 Hz WAV (`probeWav()`) and hits `transcriptionUrl()`.
+  - **Token-limit gotcha:** probes use `PROBE_MAX_COMPLETION_TOKENS = 2000` — reasoning models fail a
+    `max_completion_tokens: 1` probe (budget spent on hidden reasoning → empty completion).
+- The onboarding UI (`src/features/onboarding/`) renders per-model status rows from these probes.
+
+### 13.3 Dev-only demo/mock mode (committed + DEPLOYED, live)
+Mock AI + seeded demo data + the Dev menu are **DEV-ONLY**, gated on `import.meta.env.DEV`:
+`src/mocks/DevMenu.tsx` returns null in prod; `src/state/store.ts` `onRehydrateStorage` **forces
+`mockAi=false` in prod** (rescues users previously stuck in mock). Production ships clean — no demo
+threads, no dev menu, no mock controls.
+
+### 13.4 Agentic chat slice (BUILT, tests green — NOT yet live-verified / deployed)
+Goal (user request): *"based on what we discussed, generate an image of a cat"* — context-aware image
+generation **inline in normal chat**, on the plain Azure OpenAI endpoint, via client-side function
+calling over the **Responses API**. Design notes in `documentation/agentic/` (01–07).
+- **`src/ai/responses.ts`** (committed `a4c2205`) — typed Responses API client. `streamResponses(p)`
+  POSTs `/responses` via `aiFetch`; `parseResponsesStream` + `normalizeResponsesEvent` map SSE to a
+  union (`created` / `text` / `functionCall` / `image` / `completed` / `error`); `toInputMessages`
+  builds `{type:'message',role,content:[{type:'input_text',text}]}`. **7 tests.**
+- **`src/ai/orchestrator.ts`** (committed `a4c2205`) — `runAgent(params)` tool-calling loop: chains
+  `previousResponseId`, budget `maxIterations = 6`, executes client function calls, emits `AgentEvent`
+  (`text` / `image{b64,partial,prompt?,size?}` / `tool` / `done` / `error`). `streamFn` is injectable
+  for tests. **5 tests.**
+- **`src/ai/tools.ts`** (committed `a4c2205`) — `generate_image` function tool (`CHAT_TOOLS`) +
+  `executeTool(name,args)` → calls `generateImage({prompt,size})` (image.ts, the user's `gpt-image-2`
+  deployment), returns `{output, image:{b64,prompt,size}}`.
+- **`src/ai/capabilities.ts`** (committed with this handoff push) — `probeResponses(config)` +
+  module-cached `agenticAvailable(config)` (+ `resetAgenticCache()`): one lazy `/responses` probe per
+  session decides whether the endpoint supports agentic.
+- **`src/features/chat/useChat.ts`** (committed with this handoff push) — `runAssistant` now
+  **branches**: if `!mockAi && config && await agenticAvailable(config)` → `runAgent({model, turns,
+  tools, execute, signal})`, accumulating text and, on each non-partial `image` event, `repo.putBlob`
+  + pushing an `ImageRef` into the assistant message's `images[]` (the bubble already renders
+  `<GeneratedImages images={message.images} />` in `Message.tsx`). Otherwise the **classic
+  `streamChat` path is unchanged** (fallback). Finalize persists when `!err && (acc || images)`.
+- **Capability gate = safety:** when `/responses` is unavailable the probe returns false and chat uses
+  the classic path verbatim, so this slice is purely additive.
+
+#### How to resume / live-verify (do this first on the new device)
+1. In Settings, enter the AI endpoint + BYO key. Resource: `ai-project-deployments-resource` (the bare
+   name is accepted). Deployments in it: chat `gpt-5.4`, image `gpt-image-2`, transcribe
+   `gpt-4o-transcribe`, tts `gpt-4o-mini-tts`. **The key is NOT stored in this repo — re-enter it.**
+2. `npm run dev`, then in chat verify **both**:
+   - **(a) plain chat still streams** (agentic routes normal text through `/responses`; confirm no
+     regression), and
+   - **(b)** *"based on what we discussed, generate an image of a cat"* renders an image inline.
+3. If both pass → `npm run build` (outputs `docs/`), commit `docs/`, `git push` to deploy to Pages.
+   If plain chat misbehaves under `/responses`, either fix the event mapping in `responses.ts` or move
+   agentic behind an explicit composer toggle instead of auto-default.
+
+#### Known limitations / open decisions
+- Agentic makes **all** chat go through `/responses` when the probe says it's available (classic
+  fallback otherwise). Not yet live-tested against the real endpoint from this side.
+- No `reasoning_effort` / `max_output_tokens` passed to `/responses` yet (model defaults).
+- `generate_image` works on a plain endpoint via client function calling. **Web search / file search**
+  are future Foundry-**project** features (Profile 2), not in this slice.
+- Image provenance (the engineered prompt) is captured minimally.
+
+### 13.5 Composer focus ring (committed with this handoff push)
+`src/design/global.css` — per user request, the blue focus ring moved off the textarea onto the
+**whole composer input area**: `.composer--focus` gets the `0 0 0 4px var(--color-focus-ring)` ring +
+box-shadow transition; `.composer__textarea:focus/:focus-visible` set `box-shadow:none`. Not in the
+live bundle until the next `docs/` rebuild.
