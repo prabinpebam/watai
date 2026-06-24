@@ -17,6 +17,7 @@
     "@azure/cosmos": "^4.9.3",
     "@azure/functions": "^4.16.1",
     "@azure/identity": "^4.13.1",
+    "@azure/storage-blob": "^12.32.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
