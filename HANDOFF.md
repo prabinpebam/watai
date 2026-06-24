@@ -34,7 +34,7 @@
    cd api; npm test; cd ..        # expect 90 passed, 10 skipped
    curl https://func-watai-cbroocyg3omrk.azurewebsites.net/api/health   # expect 200 {"ok":true,...}
    ```
-5. **Resume work.** The active task is **§8 Entra External ID provisioning** (in flight, needs a user-interactive step), which unblocks **§9 Frontend cloud Repository + sync engine** (the last todo). If the user already created the Entra tenant, jump to §8 "When the user returns with values".
+5. **Resume work.** §8 Entra External ID provisioning is **fully DONE** — the CIAM tenant, SPA app, API scope, and sign-up/sign-in user flow exist; the `AUTH_*` settings are live and auth is **proven** end-to-end (valid CIAM token → 200, no token → 401). The active task is now **§9 Frontend cloud Repository + sync engine** (the last todo).
 
 ---
 
@@ -59,9 +59,9 @@ Local-first (IndexedDB) with **optional cloud sync** through a custom persistenc
 | Cosmos adapters (threads/messages/settings) | Complete + integration-tested vs real Cosmos. |
 | Azure Blob SAS minter (user-delegation) | Complete + integration-tested vs real Storage. |
 | Auth: Entra JWT verifier + bearer helper | Complete (offline tests, real RS256). |
-| Data endpoints wired behind JWT | Complete + **deployed**. Fail closed (401) until Entra configured. |
+| Data endpoints wired behind JWT | Complete + **deployed**. **Auth ON** (AUTH_* set): valid CIAM token → 200, no token → 401 (proven 2026-06-24). |
 | Azure infra (Cosmos/Storage/KV/Insights/Function App) | Provisioned (Bicep) in `rg-watai-dev` (East US 2). |
-| **Entra External ID (CIAM) tenant** | **IN FLIGHT** — see §8. Needs interactive tenant creation. |
+| **Entra External ID (CIAM) tenant** | **DONE** — tenant + SPA app + API scope + user flow created; auth proven. See §8. |
 | **Frontend cloud Repository + sync engine** | **NOT STARTED** — the last todo. See §9. |
 
 **Tests:** Backend = **90 offline + 13 integration** (10 Cosmos/Storage + 3 separate). Frontend = ~26 (ids, sse, error taxonomy).
@@ -179,7 +179,7 @@ GET/POST              /api/threads/{threadId}/messages
 GET/PATCH             /api/settings
 POST                  /api/assets/sas
 ```
-**Auth gate:** `composition.ts buildVerifier()` returns a **deny-all** verifier until the app settings `AUTH_ISSUER` + `AUTH_AUDIENCE` + `AUTH_JWKS_URI` are set, so every data route returns **401 (fail closed)**. Verified live: health 200; threads/settings/assets 401 without a token. **No code change** is needed to switch real auth on — only those 3 app settings (§8).
+**Auth gate:** `composition.ts buildVerifier()` returns a **deny-all** verifier unless the app settings `AUTH_ISSUER` + `AUTH_AUDIENCE` + `AUTH_JWKS_URI` are all set. They are now **set** (§8), so the real `EntraTokenVerifier` is active: a **valid CIAM token → 200**, **no/invalid token → 401**. Verified live 2026-06-24. To revert to fail-closed, remove any of the 3 settings.
 
 ---
 
@@ -197,45 +197,62 @@ POST                  /api/assets/sas
 
 ---
 
-## 8. IN FLIGHT — Entra External ID (CIAM) provisioning  ← ACTIVE TASK
+## 8. DONE — Entra External ID (CIAM) provisioning + auth turned ON (2026-06-24)
 
-**Why:** to turn on real auth so the deployed API accepts tokens (today every data route is 401). The user explicitly chose to provision Entra External ID now (CIAM = customer sign-up/sign-in for the consumer PWA).
+**Why:** to turn on real auth so the deployed API accepts tokens. **Auth is now live and proven.**
+The CIAM tenant, SPA app registration, and API scope were created **entirely via Azure CLI + Microsoft
+Graph REST** (the old "ARM quickstart retired / must use portal" note was wrong — `Microsoft.AzureActiveDirectory/ciamDirectories` ARM works).
 
-### Done so far
-- Registered resource provider `Microsoft.AzureActiveDirectory` (state: **Registered**).
-- Confirmed the signed-in account is **Global Administrator** of the personal tenant → it can create tenants (no extra "Tenant Creator" role needed).
-- Recommended the VS Code extension **`ms-azuretools.ms-entra`** ("Microsoft Entra External ID") — it can create the external tenant + a sample SPA app + a sign-up/sign-in user flow in-IDE.
+### Provisioned values (live)
+| Thing | Value |
+|---|---|
+| External tenant ID | `f009d35a-019c-4374-8987-2509caf7f66f` |
+| Primary domain | `wataiexternal.onmicrosoft.com` (authority host `wataiexternal.ciamlogin.com`) |
+| CIAM ARM resource | `Microsoft.AzureActiveDirectory/ciamDirectories/wataiexternal.onmicrosoft.com` in `rg-watai-dev` |
+| SPA app (client) ID | `d26b2bca-8003-4f2a-a3ec-1d36ca706c45` (displayName "Watai PWA", objectId `ad7e16b4-c5a2-4efc-99d3-a1e383a4f3ce`) |
+| App ID URI | `api://d26b2bca-8003-4f2a-a3ec-1d36ca706c45` |
+| Exposed scope | `access_as_user` (id `6a14b573-7641-437b-ba54-9c7059ad25a7`), `requestedAccessTokenVersion=2`, SPA pre-authorized |
+| MSAL scope string (for §9) | `api://d26b2bca-8003-4f2a-a3ec-1d36ca706c45/access_as_user` |
+| SPA redirect URIs | `https://prabinpebam.github.io/watai/`, `http://localhost:5173` (also `isFallbackPublicClient=true` for device/ROPC) |
 
-### USER-INTERACTIVE step (cannot be done headlessly from CLI; ARM quickstart is retired)
-The user creates the external tenant via the VS Code extension **or** the Entra admin center
-(entra.microsoft.com → Entra ID → Overview → Manage tenants → Create → **External**). Tenant
-creation can take up to ~30 min. Then create a **SPA app registration** (PKCE/public client;
-redirect URIs `https://prabinpebam.github.io/watai/` and `http://localhost:5173`) and a
-**sign-up/sign-in user flow**, and expose/assign an API scope.
+### The 3 app settings now LIVE on `func-watai-cbroocyg3omrk` (turned auth on)
+```
+AUTH_ISSUER   = https://f009d35a-019c-4374-8987-2509caf7f66f.ciamlogin.com/f009d35a-019c-4374-8987-2509caf7f66f/v2.0
+AUTH_AUDIENCE = d26b2bca-8003-4f2a-a3ec-1d36ca706c45
+AUTH_JWKS_URI = https://wataiexternal.ciamlogin.com/f009d35a-019c-4374-8987-2509caf7f66f/discovery/v2.0/keys
+```
+(Issuer/JWKS read verbatim from `https://wataiexternal.ciamlogin.com/<tid>/v2.0/.well-known/openid-configuration`.
+Note the **issuer uses the tenant-GUID subdomain**, while the JWKS uses the `wataiexternal` subdomain — both verbatim from metadata.)
 
-### Values to collect back from the user
-1. **External tenant ID** (GUID)
-2. **Primary domain** (e.g. `wataiexternal.onmicrosoft.com` → subdomain `wataiexternal`)
-3. **SPA app (client) ID** (GUID)
-4. **API audience** — the value that appears in the token `aud` (the API app's Application ID URI like `api://<guid>` or the client ID)
+### Proven end-to-end (2026-06-24)
+- No token → `GET /api/threads` **401** (fail closed). ✓
+- Valid CIAM token → `GET /api/threads` **200** `{"threads":[]}`; `POST` **201** (userId from token `oid`, IDOR-safe); persisted in Cosmos; `DELETE` **204**. ✓
+- Token claims confirmed: `aud=d26b2bca-…`, `iss=https://f009d35a-…/v2.0`, `ver=2.0`, `scp=access_as_user` — all match the 3 settings.
 
-### When the user returns with values (AUTOMATABLE — agent does this)
-1. **Read the real issuer + JWKS from the OIDC metadata** (don't guess the format):
-   ```powershell
-   # For External ID/CIAM the authority host is <subdomain>.ciamlogin.com
-   curl "https://<subdomain>.ciamlogin.com/<tenantId>/v2.0/.well-known/openid-configuration"
-   # copy `issuer` -> AUTH_ISSUER and `jwks_uri` -> AUTH_JWKS_URI verbatim
-   ```
-2. **Set the 3 app settings on the Function App:**
-   ```powershell
-   az functionapp config appsettings set -g rg-watai-dev -n func-watai-cbroocyg3omrk --settings `
-     AUTH_ISSUER="<issuer>" AUTH_AUDIENCE="<audience>" AUTH_JWKS_URI="<jwks_uri>"
-   ```
-   (No redeploy needed; the app reads env at first request. Flex may take a moment to recycle.)
-3. **Prove it end-to-end:** acquire a token (interactive user sign-in via the SPA, or a dev token),
-   then `GET /api/threads` with `Authorization: Bearer <token>` → expect **non-401** (200 with the
-   user's threads). Without a token it must still be 401.
-4. Update §6 auth gate note + memory once green.
+### How a dev token was minted (reuse for §9 testing)
+A throwaway **test user** exists in the CIAM tenant: `watai-tester@wataiexternal.onmicrosoft.com`
+(oid `fa7c0a65-ea73-42a9-9226-1d7f3cf00cb3`). Its password was set via Graph and **not** persisted
+anywhere (reset it via Graph `PATCH /users/{id}` `passwordProfile` when needed). Token via **ROPC**
+(works because `isFallbackPublicClient=true`):
+```powershell
+$b = @{ grant_type="password"; client_id="d26b2bca-8003-4f2a-a3ec-1d36ca706c45";
+  scope="api://d26b2bca-8003-4f2a-a3ec-1d36ca706c45/access_as_user openid profile offline_access";
+  username="watai-tester@wataiexternal.onmicrosoft.com"; password="<reset-it>" }
+$at = (Invoke-RestMethod -Method Post -ContentType "application/x-www-form-urlencoded" `
+  -Uri "https://wataiexternal.ciamlogin.com/f009d35a-019c-4374-8987-2509caf7f66f/oauth2/v2.0/token" -Body $b).access_token
+```
+**Managing the CIAM tenant from CLI:** `az account get-access-token --tenant f009d35a-019c-4374-8987-2509caf7f66f --resource-type ms-graph`
+returns a Graph token non-interactively (the creator admin has access). Use it with `Invoke-RestMethod`
+against `graph.microsoft.com`. **Caveat:** the az CLI client token can manage `applications`/`users`
+but **lacks** `IdentityProvider`/`EventListener` permissions → cannot create user flows (see leftover).
+
+### Sign-up/sign-in user flow — DONE (2026-06-24, via Azure CLI Graph token)
+The az CLI Graph token **does** have `EventListener.ReadWrite.All` (only IdentityProvider *read* was missing), so no interactive `Connect-MgGraph` was needed.
+- User flow **"Watai Sign up and sign in"** (id `df122f68-3241-464d-b04a-c84f689ff5de`), type `externalUsersSelfServiceSignUpEventsFlow`, `isSignUpAllowed=true`, identity provider `EmailPassword-OAUTH` (email+password local accounts), collects `email`+`displayName`.
+- Linked to the SPA app `d26b2bca-…`.
+- **Gotcha:** app registrations created via Graph have **no service principal**; linking an app to a user flow fails with "application id … is invalid" until you `POST /servicePrincipals { "appId": "…" }` (SP id `68ef937d-…`). Then `POST /beta/identity/authenticationEventsFlows/{id}/conditions/applications/includeApplications { "appId": "…" }`.
+
+Self-service customer sign-up/sign-in now works for the PWA. **§8 is fully complete.**
 
 > Note: `EntraTokenVerifier` accepts **RS256** only and enforces iss/aud/exp. `AUTH_AUDIENCE` must
 > equal the token's `aud`. If you see 401 with a real token, decode it (jwt.ms) and reconcile
