@@ -3,7 +3,7 @@
 > **Purpose:** Let an agent on another machine pick up this project seamlessly.
 > Everything needed to resume is in this file. Read **§0 START HERE** first.
 >
-> - **Last commit at handoff:** `PENDING_STAMP` on branch `master` (working tree clean, all pushed).
+> - **Last commit at handoff:** `0b0ac00` on branch `master` (working tree clean, all pushed).
 > - **Handoff written:** 2026-06-24 (updated — AI endpoint routing + agentic chat slice; see §13).
 > - **Repo:** https://github.com/prabinpebam/watai (public)
 > - **Live frontend:** https://prabinpebam.github.io/watai/ (GitHub Pages, served from `master` `/docs`)
