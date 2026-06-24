@@ -49,6 +49,15 @@ export class ThreadService {
     return this.store.list(userId, opts);
   }
 
+  /**
+   * Delta pull for the sync engine: every change (including archived rows and
+   * soft-deleted tombstones) with `updatedAt` strictly after the cursor. Clients
+   * apply these last-write-wins and drop tombstoned threads locally.
+   */
+  async listChanges(userId: string, since?: string): Promise<ThreadRecord[]> {
+    return this.store.list(userId, { includeArchived: true, includeDeleted: true, since });
+  }
+
   async update(userId: string, id: string, patch: UpdateThreadInput): Promise<ThreadRecord> {
     const current = await this.get(userId, id);
     const next: ThreadRecord = {

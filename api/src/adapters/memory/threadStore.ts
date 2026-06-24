@@ -21,7 +21,7 @@ export class InMemoryThreadStore implements ThreadStore {
       .filter(
         (r) =>
           r.userId === userId &&
-          !r.deletedAt &&
+          (opts?.includeDeleted || !r.deletedAt) &&
           (opts?.includeArchived || !r.archived) &&
           (!since || r.updatedAt > since),
       )

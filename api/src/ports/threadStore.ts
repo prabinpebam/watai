@@ -15,6 +15,8 @@ export interface ThreadRecord {
 
 export interface ListOptions {
   includeArchived?: boolean;
+  /** Include soft-deleted tombstones (used by sync delta pulls, not normal lists). */
+  includeDeleted?: boolean;
   /** Delta cursor: return only rows with `updatedAt` strictly greater than this. */
   since?: string;
 }
