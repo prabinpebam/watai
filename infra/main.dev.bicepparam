@@ -1,6 +1,6 @@
 using './main.bicep'
 
-param location = 'eastus'
+param location = 'eastus2'
 param namePrefix = 'watai'
 param env = 'dev'
 // Function App needs consumption-plan VM quota (request it, or use a region/Flex plan).

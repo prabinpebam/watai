@@ -194,6 +194,7 @@ resource blobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (dep
   scope: storage
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleStorageBlobDataContributor)
+    #disable-next-line BCP318
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
@@ -204,6 +205,7 @@ resource kvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deplo
   scope: keyVault
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
+    #disable-next-line BCP318
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
@@ -214,6 +216,7 @@ resource cosmosDataRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignment
   name: guid(cosmos.id, 'func', cosmosBuiltInDataContributor)
   properties: {
     roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${cosmosBuiltInDataContributor}'
+    #disable-next-line BCP318
     principalId: functionApp.identity.principalId
     scope: cosmos.id
   }
@@ -225,5 +228,7 @@ output cosmosDatabase string = 'watai'
 output storageAccount string = storage.name
 output mediaContainer string = 'media'
 output keyVaultUri string = keyVault.properties.vaultUri
+#disable-next-line BCP318
 output functionAppName string = deployFunctionApp ? functionApp.name : ''
+#disable-next-line BCP318
 output functionAppHostname string = deployFunctionApp ? functionApp.properties.defaultHostName : ''
