@@ -139,6 +139,22 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storage
   name: 'default'
+  properties: {
+    // Browser uploads/downloads media directly to blob via SAS, so the blob
+    // service (not just the Function App) must allow the site origin. Without
+    // this, the preflight fails and image sync is blocked by CORS.
+    cors: {
+      corsRules: [
+        {
+          allowedOrigins: allowedOrigins
+          allowedMethods: [ 'GET', 'PUT', 'HEAD', 'OPTIONS', 'POST' ]
+          allowedHeaders: [ '*' ]
+          exposedHeaders: [ '*' ]
+          maxAgeInSeconds: 3600
+        }
+      ]
+    }
+  }
 }
 
 resource mediaContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
