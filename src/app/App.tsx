@@ -10,7 +10,7 @@ import { VoiceMode } from '../features/voice/VoiceMode';
 import { IconButton, Spinner } from '../design/ui';
 import { useIsExpanded } from '../lib/hooks';
 import { useUi } from '../state/store';
-import { repo, seedMockDataIfEmpty } from '../data';
+import { repo, seedMockDataIfEmpty, syncNow } from '../data';
 import { hasValidConfig } from '../data/secureStore';
 import { getSession } from '../lib/session';
 
@@ -92,6 +92,19 @@ export function App() {
   // Seed demo data once so the UI is reviewable immediately.
   useEffect(() => {
     seedMockDataIfEmpty().catch(() => undefined);
+  }, []);
+
+  // Background cloud sync: a no-op unless Settings.data.sync is on and a user is signed in.
+  useEffect(() => {
+    const tick = () => void syncNow().catch(() => undefined);
+    tick();
+    const onFocus = () => tick();
+    window.addEventListener('focus', onFocus);
+    const id = window.setInterval(tick, 30_000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.clearInterval(id);
+    };
   }, []);
 
   return (

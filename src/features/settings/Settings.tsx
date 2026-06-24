@@ -6,7 +6,8 @@ import { Icon } from '../../design/icons';
 import { Logo } from '../../design/Logo';
 import { ConfirmDialog } from '../../design/overlays';
 import { useUi } from '../../state/store';
-import { repo } from '../../data';
+import { repo, syncNow, backfillSync } from '../../data';
+import { signIn, signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import {
   getApiConfig,
   saveApiConfig,
@@ -16,7 +17,7 @@ import {
   normalizeBaseUrl,
 } from '../../data/secureStore';
 import { endSession, getSession } from '../../lib/session';
-import type { ApiConfig, TextScale } from '../../lib/types';
+import type { ApiConfig, Settings as SettingsModel, TextScale } from '../../lib/types';
 
 const SECTIONS = [
   { id: 'account', label: 'Account', icon: 'user', sub: 'Profile and session' },
@@ -380,8 +381,106 @@ function AppearanceSection({ onBack }: { onBack: () => void }) {
   );
 }
 
+function CloudSyncCard({
+  settings,
+  setSettings,
+  loaded,
+}: {
+  settings: SettingsModel;
+  setSettings: (next: SettingsModel) => Promise<void> | void;
+  loaded: boolean;
+}) {
+  const pushToast = useUi((s) => s.pushToast);
+  const [accountName, setAccountName] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (loaded && settings.data.sync) {
+      getSignedInAccount()
+        .then((a) => setAccountName(a?.username ?? null))
+        .catch(() => undefined);
+    }
+  }, [loaded, settings.data.sync]);
+
+  const enable = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      let acc = await getSignedInAccount();
+      if (!acc) acc = await signIn();
+      if (!acc) {
+        pushToast('Sign-in is needed to sync', 'error');
+        return;
+      }
+      setAccountName(acc.username);
+      await setSettings({ ...settings, data: { ...settings.data, sync: true } });
+      await backfillSync();
+      await syncNow();
+      pushToast('Cloud sync enabled', 'success');
+    } catch {
+      pushToast('Could not enable cloud sync', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disable = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await setSettings({ ...settings, data: { ...settings.data, sync: false } });
+      pushToast('Cloud sync paused');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signOutCloud = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await signOut();
+      setAccountName(null);
+      await setSettings({ ...settings, data: { ...settings.data, sync: false } });
+    } catch {
+      /* popup closed — ignore */
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="settings-card">
+      <div className="setting-row">
+        <div className="setting-row__body">
+          <div className="setting-row__title">Sync to cloud</div>
+          <div className="setting-row__sub">
+            {accountName
+              ? `Signed in as ${accountName}`
+              : 'Back up chats to your account and sync across your devices.'}
+          </div>
+        </div>
+        <Switch
+          checked={settings.data.sync}
+          onChange={(v) => (v ? enable() : disable())}
+          label="Cloud sync"
+        />
+      </div>
+      {accountName && (
+        <button className="setting-row" onClick={signOutCloud} disabled={busy}>
+          <div className="setting-row__body">
+            <div className="setting-row__title">Sign out of cloud</div>
+            <div className="setting-row__sub">Stops syncing. Local data stays on this device.</div>
+          </div>
+          <Icon name="logout" size={18} className="muted" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function DataSection({ onBack }: { onBack: () => void }) {
-  const { settings, setSettings } = useSettings();
+  const { settings, setSettings, loaded } = useSettings();
   const pushToast = useUi((s) => s.pushToast);
   const bump = useUi((s) => s.bumpThreads);
   const navigate = useNavigate();
@@ -400,6 +499,7 @@ function DataSection({ onBack }: { onBack: () => void }) {
 
   return (
     <Section title="Data controls" onBack={onBack}>
+      <CloudSyncCard settings={settings} setSettings={setSettings} loaded={loaded} />
       <div className="settings-card">
         <div className="setting-row">
           <div className="setting-row__body">
