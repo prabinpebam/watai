@@ -96,10 +96,11 @@ function NotInvited() {
   return (
     <div className="center-screen">
       <div className="onboard" style={{ maxWidth: 440 }}>
-        <h1 className="onboard__title">You're not on the invite list</h1>
+        <h1 className="onboard__title">Thanks for your interest in Watai</h1>
         <p className="onboard__sub">
-          Watai is invite-only. Ask the admin to invite{email ? ` ${email}` : ' your email'}, then
-          sign in again.
+          Watai is invite-only for now, so this account doesn&apos;t have access yet.
+          {email ? ` Ask the admin to invite ${email}, ` : ' Ask the admin for an invite, '}
+          then sign in again to get started.
         </p>
         <div className="onboard__actions">
           <Button variant="outline" icon="logout" full onClick={() => signOut()}>
