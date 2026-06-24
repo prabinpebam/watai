@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
-import { Button, Field, Segmented } from '../../design/ui';
+import { Button, Field, Segmented, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { startSession } from '../../lib/session';
 import { normalizeBaseUrl, saveApiConfig, saveApiKey } from '../../data/secureStore';
-import { probe } from '../../ai/capabilities';
+import { probeModel, MODEL_LABELS, type ModelKey, type ProbeResult } from '../../ai/capabilities';
 import { useUi } from '../../state/store';
 import { DEFAULT_SETTINGS, type ApiConfig } from '../../lib/types';
 import { repo } from '../../data';
@@ -102,6 +102,36 @@ function Auth() {
   );
 }
 
+type ModelTestStatus = 'idle' | 'testing' | ProbeResult;
+const MODEL_KEYS: ModelKey[] = ['chat', 'transcribe', 'image', 'tts'];
+
+function ModelStatusIcon({ status }: { status: ModelTestStatus }) {
+  if (status === 'testing') return <Spinner />;
+  if (status === 'idle')
+    return (
+      <span className="muted" aria-hidden>
+        —
+      </span>
+    );
+  return status.ok ? (
+    <Icon name="check" size={20} style={{ color: 'var(--color-success)' }} />
+  ) : (
+    <Icon name="alert" size={20} style={{ color: 'var(--color-danger)' }} />
+  );
+}
+
+function shortError(detail?: string): string {
+  if (!detail) return 'Failed';
+  let msg = detail;
+  try {
+    const parsed = JSON.parse(detail) as { error?: { message?: string } };
+    if (parsed?.error?.message) msg = parsed.error.message;
+  } catch {
+    /* not JSON — use the raw text */
+  }
+  return msg.length > 140 ? `${msg.slice(0, 137)}…` : msg;
+}
+
 function KeyWizard() {
   const navigate = useNavigate();
   const setMockAi = useUi((s) => s.setMockAi);
@@ -114,7 +144,12 @@ function KeyWizard() {
   const [tts, setTts] = useState('gpt-4o-mini-tts');
   const [effort, setEffort] = useState<'minimal' | 'low' | 'medium' | 'high'>('medium');
   const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; detail?: string } | null>(null);
+  const [statuses, setStatuses] = useState<Record<ModelKey, ModelTestStatus>>({
+    chat: 'idle',
+    transcribe: 'idle',
+    image: 'idle',
+    tts: 'idle',
+  });
 
   const buildConfig = (): ApiConfig => ({
     baseUrl: normalizeBaseUrl(baseUrl),
@@ -133,11 +168,16 @@ function KeyWizard() {
 
   const runTest = async () => {
     setTesting(true);
-    setResult(null);
-    await saveApiConfig(buildConfig());
+    const cfg = buildConfig();
+    await saveApiConfig(cfg);
     await saveApiKey(apiKey.trim());
-    const r = await probe(buildConfig());
-    setResult({ ok: r.ok, detail: r.detail });
+    setStatuses({ chat: 'testing', transcribe: 'testing', image: 'testing', tts: 'testing' });
+    await Promise.all(
+      MODEL_KEYS.map(async (key) => {
+        const r = await probeModel(key, cfg);
+        setStatuses((s) => ({ ...s, [key]: r }));
+      }),
+    );
     setTesting(false);
   };
 
@@ -146,6 +186,9 @@ function KeyWizard() {
     startMockProfile();
     navigate('/onboarding/mic');
   };
+
+  const modelNames: Record<ModelKey, string> = { chat, transcribe: transcribeModel, image, tts };
+  const allTested = MODEL_KEYS.every((k) => typeof statuses[k] === 'object');
 
   return (
     <div className="onboard">
@@ -179,9 +222,11 @@ function KeyWizard() {
             />
           </div>
           <div className="onboard__actions">
-            <Button variant="ghost" onClick={skipWithMock}>
-              Explore in demo mode
-            </Button>
+            {import.meta.env.DEV && (
+              <Button variant="ghost" onClick={skipWithMock}>
+                Explore in demo mode
+              </Button>
+            )}
             <Button variant="primary" full disabled={!baseUrl || !apiKey} onClick={() => setStep(1)}>
               Next
             </Button>
@@ -232,24 +277,41 @@ function KeyWizard() {
       {step === 2 && (
         <>
           <div>
-            <h1 className="onboard__title">Test the connection</h1>
-            <p className="onboard__sub">We'll send a tiny request to confirm your key and chat model.</p>
+            <h1 className="onboard__title">Test your models</h1>
+            <p className="onboard__sub">
+              We send one tiny request per model to confirm each deployment is reachable.
+            </p>
           </div>
           <div className="onboard__form">
-            {result && (
-              <div className={`alert ${result.ok ? '' : 'alert--danger'}`}>
-                <span className="alert__icon">
-                  <Icon name={result.ok ? 'check' : 'alert'} size={18} />
-                </span>
-                <span>
-                  {result.ok
-                    ? 'Connection successful. You are ready to chat.'
-                    : `Couldn't connect. ${result.detail ?? 'Check your URL and key.'}`}
-                </span>
-              </div>
-            )}
-            <Button variant="secondary" full loading={testing} onClick={runTest}>
-              {testing ? 'Testing…' : 'Test connection'}
+            <div className="settings-card">
+              {MODEL_KEYS.map((key) => {
+                const st = statuses[key];
+                const errored = typeof st === 'object' && !st.ok;
+                return (
+                  <div className="setting-row" key={key}>
+                    <div className="setting-row__body">
+                      <div className="setting-row__title">{MODEL_LABELS[key]}</div>
+                      <div
+                        className="setting-row__sub"
+                        style={errored ? { color: 'var(--color-danger)' } : undefined}
+                        title={errored ? shortError((st as ProbeResult).detail) : undefined}
+                      >
+                        {errored ? shortError((st as ProbeResult).detail) : modelNames[key] || 'Not set'}
+                      </div>
+                    </div>
+                    <ModelStatusIcon status={st} />
+                  </div>
+                );
+              })}
+            </div>
+            <Button
+              variant="secondary"
+              full
+              loading={testing}
+              disabled={!baseUrl || !apiKey}
+              onClick={runTest}
+            >
+              {testing ? 'Testing…' : allTested ? 'Re-test all models' : 'Test all models'}
             </Button>
           </div>
           <div className="onboard__actions">
