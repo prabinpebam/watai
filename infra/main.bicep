@@ -24,6 +24,9 @@ param deployFunctionApp bool = true
 @description('Email of the admin who can manage invites and is always allowed access.')
 param adminEmail string = 'prabinpebam@gmail.com'
 
+@description('Comma-separated token object-ids (oid) that are always treated as admin. Robust against missing email claims on federated/external accounts.')
+param adminOids string = ''
+
 var suffix = uniqueString(resourceGroup().id)
 var tags = {
   app: 'watai'
@@ -212,6 +215,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
         { name: 'MEDIA_CONTAINER', value: 'media' }
         { name: 'KEY_VAULT_URI', value: keyVault.properties.vaultUri }
         { name: 'ADMIN_EMAIL', value: adminEmail }
+        { name: 'ADMIN_OID', value: adminOids }
       ]
     }
   }

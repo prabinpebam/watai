@@ -57,7 +57,11 @@ export function container(): ApiContainer {
   const settingsStore = new CosmosSettingsStore();
   const inviteStore = new CosmosInviteStore();
   const minter = new AzureSasMinter();
-  const access = new AccessService(inviteStore, process.env.ADMIN_EMAIL ?? '');
+  const access = new AccessService(
+    inviteStore,
+    process.env.ADMIN_EMAIL ?? '',
+    (process.env.ADMIN_OID ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  );
 
   cached = {
     verifier: buildVerifier(),

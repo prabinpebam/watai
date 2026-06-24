@@ -15,8 +15,8 @@ export function createMeController(access: AccessService) {
         const email = emailFromClaims(req.claims);
         return {
           email: email ?? null,
-          isAdmin: access.isAdmin(email),
-          isInvited: await access.isInvited(email),
+          isAdmin: access.isAdmin(req.claims),
+          isInvited: await access.isInvited(req.claims),
         };
       }),
   };
