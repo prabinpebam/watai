@@ -27,6 +27,15 @@ param adminEmail string = 'prabinpebam@gmail.com'
 @description('Comma-separated token object-ids (oid) that are always treated as admin. Robust against missing email claims on federated/external accounts.')
 param adminOids string = ''
 
+@description('Expected JWT issuer (iss) of access tokens from Entra External ID (CIAM). The token verifier fails closed (401) if this is unset.')
+param authIssuer string = ''
+
+@description('Expected JWT audience (aud) of access tokens — the API/SPA app (client) id.')
+param authAudience string = ''
+
+@description('JWKS (signing keys) URI used to validate access token signatures.')
+param authJwksUri string = ''
+
 var suffix = uniqueString(resourceGroup().id)
 var tags = {
   app: 'watai'
@@ -216,6 +225,9 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
         { name: 'KEY_VAULT_URI', value: keyVault.properties.vaultUri }
         { name: 'ADMIN_EMAIL', value: adminEmail }
         { name: 'ADMIN_OID', value: adminOids }
+        { name: 'AUTH_ISSUER', value: authIssuer }
+        { name: 'AUTH_AUDIENCE', value: authAudience }
+        { name: 'AUTH_JWKS_URI', value: authJwksUri }
       ]
     }
   }
