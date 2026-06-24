@@ -4,7 +4,7 @@ import { Icon } from '../../design/icons';
 import { IconButton } from '../../design/ui';
 import { Lightbox } from './Lightbox';
 import { formatBytes } from '../../lib/format';
-import type { Attachment, ImageRef } from '../../lib/types';
+import type { Attachment, ImageRef, PendingImage } from '../../lib/types';
 
 function isDirectUrl(s?: string): s is string {
   return !!s && /^(data:|blob:|https?:)/.test(s);
@@ -234,13 +234,41 @@ function GeneratedImage({ image }: { image: ImageRef }) {
   );
 }
 
-export function GeneratedImages({ images }: { images?: ImageRef[] }) {
-  if (!images || images.length === 0) return null;
+export function GeneratedImages({ images, pending }: { images?: ImageRef[]; pending?: PendingImage[] }) {
+  const imageCount = images?.length ?? 0;
+  const pendingCount = pending?.length ?? 0;
+  if (imageCount + pendingCount === 0) return null;
   return (
-    <div className={`gen-images ${images.length > 1 ? 'gen-images--grid' : ''}`}>
-      {images.map((img) => (
+    <div className={`gen-images ${imageCount + pendingCount > 1 ? 'gen-images--grid' : ''}`}>
+      {images?.map((img) => (
         <GeneratedImage key={img.id} image={img} />
       ))}
+      {pending?.map((p) => (
+        <ImagePlaceholder key={p.id} size={p.size} />
+      ))}
+    </div>
+  );
+}
+
+/** Parse a `WxH` size string into [w, h], defaulting to a square. */
+function parseAspect(size: string): [number, number] {
+  const m = /^(\d+)\s*[x\u00d7]\s*(\d+)$/.exec(size.trim());
+  return m ? [Number(m[1]), Number(m[2])] : [1, 1];
+}
+
+/** Animated gradient placeholder shown while an image generates; matches the target aspect ratio. */
+function ImagePlaceholder({ size }: { size: string }) {
+  const [w, h] = parseAspect(size);
+  return (
+    <div className="image-card image-card--generating">
+      <div
+        className="image-placeholder"
+        style={{ aspectRatio: `${w} / ${h}` }}
+        role="img"
+        aria-label="Generating image"
+      >
+        <span className="image-placeholder__label">Generating image…</span>
+      </div>
     </div>
   );
 }

@@ -156,6 +156,30 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: 'generating',
+    title: 'Assistant — generating image (animated placeholder)',
+    hint: 'Subtle animated gradient sized to the requested aspect ratio; swapped for the image when ready. Shown for square, portrait, and landscape.',
+    body: (
+      <>
+        <AssistantMessage
+          message={msg({ role: 'assistant', content: 'Sure — generating that now.', status: 'streaming', pendingImages: [{ id: 'p-sq', size: '1024x1024' }] })}
+          streaming
+          onRegenerate={noop}
+        />
+        <AssistantMessage
+          message={msg({ role: 'assistant', content: '', status: 'streaming', pendingImages: [{ id: 'p-port', size: '1024x1536' }] })}
+          streaming
+          onRegenerate={noop}
+        />
+        <AssistantMessage
+          message={msg({ role: 'assistant', content: '', status: 'streaming', pendingImages: [{ id: 'p-land', size: '1536x1024' }] })}
+          streaming
+          onRegenerate={noop}
+        />
+      </>
+    ),
+  },
+  {
     id: 'errors',
     title: 'Assistant — error states',
     hint: 'The danger alert for a few representative AiError codes.',

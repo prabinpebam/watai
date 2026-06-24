@@ -45,6 +45,13 @@ export interface ImageRef {
   createdAt: string;
 }
 
+/** Transient placeholder for an image being generated. Render-only — never persisted or synced. */
+export interface PendingImage {
+  id: Id;
+  /** Requested image size as `WxH` (e.g. `1024x1536`), used to size the placeholder. */
+  size: string;
+}
+
 export interface Message {
   id: Id;
   threadId: Id;
@@ -55,6 +62,7 @@ export interface Message {
   status: MessageStatus;
   attachments?: Attachment[];
   images?: ImageRef[];
+  pendingImages?: PendingImage[];
   usage?: { promptTokens?: number; completionTokens?: number };
   error?: AiError;
   createdAt: string;

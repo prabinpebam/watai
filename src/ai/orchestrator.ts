@@ -27,8 +27,15 @@ export type ToolExecute = (name: string, args: Record<string, unknown>) => Promi
 
 export type AgentEvent =
   | { type: 'text'; delta: string }
-  | { type: 'image'; b64: string; partial: boolean; prompt?: string; size?: string }
-  | { type: 'tool'; name: string; status: 'running' | 'done' | 'error'; detail?: string }
+  | { type: 'image'; b64: string; partial: boolean; prompt?: string; size?: string; callId?: string }
+  | {
+      type: 'tool';
+      name: string;
+      status: 'running' | 'done' | 'error';
+      detail?: string;
+      callId?: string;
+      args?: Record<string, unknown>;
+    }
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -75,10 +82,19 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
         case 'image':
           yield { type: 'image', b64: ev.b64, partial: ev.partial };
           break;
-        case 'functionCall':
+        case 'functionCall': {
           pending.push(ev);
-          yield { type: 'tool', name: ev.name, status: 'running' };
+          // Surface the call id + parsed arguments so the UI can show an aspect-ratio-correct
+          // placeholder for in-flight image generation before the result arrives.
+          let toolArgs: Record<string, unknown> = {};
+          try {
+            toolArgs = ev.arguments ? (JSON.parse(ev.arguments) as Record<string, unknown>) : {};
+          } catch {
+            /* malformed args -> empty object */
+          }
+          yield { type: 'tool', name: ev.name, status: 'running', callId: ev.callId, args: toolArgs };
           break;
+        }
         case 'error':
           yield { type: 'error', message: ev.message };
           return;
@@ -108,16 +124,17 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
             type: 'image',
             b64: result.image.b64,
             partial: false,
+            callId: call.callId,
             ...(result.image.prompt !== undefined ? { prompt: result.image.prompt } : {}),
             ...(result.image.size !== undefined ? { size: result.image.size } : {}),
           };
         }
         outputs.push({ type: 'function_call_output', call_id: call.callId, output: result.output });
-        yield { type: 'tool', name: call.name, status: 'done' };
+        yield { type: 'tool', name: call.name, status: 'done', callId: call.callId };
       } catch (e) {
         const detail = e instanceof Error ? e.message : 'Tool failed.';
         outputs.push({ type: 'function_call_output', call_id: call.callId, output: `Error: ${detail}` });
-        yield { type: 'tool', name: call.name, status: 'error', detail };
+        yield { type: 'tool', name: call.name, status: 'error', detail, callId: call.callId };
       }
     }
 

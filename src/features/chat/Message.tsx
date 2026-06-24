@@ -101,7 +101,7 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
           <span className="assistant__name">Watai</span>
         </div>
 
-        <GeneratedImages images={message.images} />
+        <GeneratedImages images={message.images} pending={message.pendingImages} />
 
         {message.content ? (
           <div className={isStreamingThis ? 'typing-caret' : ''}>

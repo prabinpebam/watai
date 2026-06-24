@@ -66,14 +66,35 @@ describe('runAgent', () => {
     );
 
     expect(calls).toEqual([{ name: 'generate_image', args: { prompt: 'a cat' } }]);
-    expect(events).toContainEqual({ type: 'image', b64: 'IMGB64', partial: false });
-    expect(events).toContainEqual({ type: 'tool', name: 'generate_image', status: 'running' });
-    expect(events).toContainEqual({ type: 'tool', name: 'generate_image', status: 'done' });
+    expect(events).toContainEqual({ type: 'image', b64: 'IMGB64', partial: false, callId: 'c1' });
+    expect(events).toContainEqual({
+      type: 'tool',
+      name: 'generate_image',
+      status: 'running',
+      callId: 'c1',
+      args: { prompt: 'a cat' },
+    });
+    expect(events).toContainEqual({ type: 'tool', name: 'generate_image', status: 'done', callId: 'c1' });
     expect(events.filter((e) => e.type === 'text')).toEqual([
       { type: 'text', delta: 'Drawing…' },
       { type: 'text', delta: 'Here it is.' },
     ]);
     expect(events[events.length - 1]).toEqual({ type: 'done' });
+  });
+
+  it('passes the requested image size through the running tool event (for the UI placeholder)', async () => {
+    const streamFn = fakeStream([
+      [
+        { type: 'functionCall', callId: 'c9', name: 'generate_image', arguments: '{"prompt":"a fox","size":"1024x1536"}' },
+        { type: 'completed' },
+      ],
+      [{ type: 'completed' }],
+    ]);
+    const events = await collect(
+      runAgent({ model: 'm', turns: [], tools: [], execute: async () => ({ output: 'ok' }), streamFn }),
+    );
+    const running = events.find((e) => e.type === 'tool' && e.status === 'running');
+    expect(running).toMatchObject({ name: 'generate_image', callId: 'c9', args: { size: '1024x1536' } });
   });
 
   it('reports a tool error but keeps the run going', async () => {
@@ -90,7 +111,7 @@ describe('runAgent', () => {
     const events = await collect(
       runAgent({ model: 'm', turns: [], tools: [], execute, streamFn }),
     );
-    expect(events).toContainEqual({ type: 'tool', name: 'boom', status: 'error', detail: 'kaboom' });
+    expect(events).toContainEqual({ type: 'tool', name: 'boom', status: 'error', detail: 'kaboom', callId: 'c1' });
     expect(events[events.length - 1]).toEqual({ type: 'done' });
   });
 

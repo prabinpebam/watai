@@ -924,6 +924,78 @@
   min-height: 200px;
 }
 
+/* Image-generation placeholder: a subtle animated gradient sized to the target aspect
+   ratio, swapped for the real image when it arrives. */
+.image-card--generating {
+  max-width: 420px;
+}
+.image-placeholder {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(
+    115deg,
+    var(--color-surface-2) 0%,
+    color-mix(in srgb, var(--color-primary) 22%, var(--color-surface-2)) 30%,
+    color-mix(in srgb, var(--color-accent) 20%, var(--color-surface-2)) 55%,
+    var(--color-surface-2) 100%
+  );
+  background-size: 220% 220%;
+  animation: image-gen-pan 3.4s ease-in-out infinite;
+}
+.image-placeholder::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    color-mix(in srgb, white 10%, transparent) 50%,
+    transparent 65%
+  );
+  transform: translateX(-100%);
+  animation: image-gen-sweep 2.4s ease-in-out infinite;
+}
+.image-placeholder__label {
+  position: relative;
+  z-index: 1;
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-bg) 55%, transparent);
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  backdrop-filter: blur(2px);
+}
+@keyframes image-gen-pan {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+@keyframes image-gen-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  60%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .image-placeholder,
+  .image-placeholder::after {
+    animation: none;
+  }
+}
+
 /* ============================ Misc layout helpers ============================ */
 .row {
   display: flex;

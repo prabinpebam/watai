@@ -77,6 +77,16 @@ export function useChat(threadId: string, temporary = false) {
       let err: AiError | undefined;
       let usage: Message['usage'];
       const genImages: ImageRef[] = [];
+      // Transient placeholders for images currently being generated (never persisted).
+      const pendingImages: { id: string; callId?: string; size: string }[] = [];
+      const applyMedia = () =>
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, images: [...genImages], pendingImages: pendingImages.map((p) => ({ id: p.id, size: p.size })) }
+              : m,
+          ),
+        );
 
       // Agentic path (tools, incl. context-aware image generation) when the endpoint
       // serves the Responses API; otherwise the classic single-shot chat path.
@@ -106,6 +116,20 @@ export function useChat(threadId: string, temporary = false) {
               setMessages((prev) =>
                 prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m)),
               );
+            } else if (ev.type === 'tool' && ev.name === 'generate_image') {
+              // Show an aspect-ratio-correct animated placeholder while the image renders,
+              // then drop it when the real image arrives (matched by callId).
+              if (ev.status === 'running') {
+                const size = typeof ev.args?.size === 'string' ? ev.args.size : '1024x1024';
+                pendingImages.push({ id: newId(), callId: ev.callId, size });
+                applyMedia();
+              } else if (ev.status === 'error') {
+                const i = ev.callId
+                  ? pendingImages.findIndex((p) => p.callId === ev.callId)
+                  : pendingImages.length - 1;
+                if (i >= 0) pendingImages.splice(i, 1);
+                applyMedia();
+              }
             } else if (ev.type === 'image' && !ev.partial) {
               const imgId = newId();
               const key = `img-${imgId}`;
@@ -118,9 +142,13 @@ export function useChat(threadId: string, temporary = false) {
                 outputFormat: 'png',
                 createdAt: new Date().toISOString(),
               });
-              setMessages((prev) =>
-                prev.map((m) => (m.id === assistantId ? { ...m, images: [...genImages] } : m)),
-              );
+              const i = ev.callId
+                ? pendingImages.findIndex((p) => p.callId === ev.callId)
+                : pendingImages.length
+                  ? 0
+                  : -1;
+              if (i >= 0) pendingImages.splice(i, 1);
+              applyMedia();
             } else if (ev.type === 'error') {
               err = { code: 'server_error', message: ev.message };
             }
