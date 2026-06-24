@@ -21,9 +21,13 @@ export class ThreadService {
     if (input.temporary) {
       throw new AppError('validation', 'Temporary threads are local-only and are not synced.');
     }
+    if (input.id) {
+      const existing = await this.store.get(userId, input.id);
+      if (existing) return existing; // idempotent create — client-supplied ids make sync retries safe
+    }
     const ts = this.clock.now();
     const record: ThreadRecord = {
-      id: this.clock.newId(),
+      id: input.id ?? this.clock.newId(),
       userId,
       title: input.title,
       pinned: false,

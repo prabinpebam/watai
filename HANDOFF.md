@@ -34,7 +34,7 @@
    cd api; npm test; cd ..        # expect 90 passed, 10 skipped
    curl https://func-watai-cbroocyg3omrk.azurewebsites.net/api/health   # expect 200 {"ok":true,...}
    ```
-5. **Resume work.** §8 Entra External ID provisioning is **fully DONE** — the CIAM tenant, SPA app, API scope, and sign-up/sign-in user flow exist; the `AUTH_*` settings are live and auth is **proven** end-to-end (valid CIAM token → 200, no token → 401). The active task is now **§9 Frontend cloud Repository + sync engine** (the last todo).
+5. **Resume work.** §8 Entra External ID provisioning is **fully DONE** (auth live + proven). §9 (cloud Repository + sync engine) is **largely done**: the cloud API client, local-first `SyncRepository`, and MSAL auth are built, unit-tested, wired at the seam, and the backend now supports client-supplied idempotent thread ids (deployed + verified). What remains for §9 is **UI wiring** — a sign-in/out control, the Settings sync toggle, and a sync scheduler. See §9.
 
 ---
 
@@ -62,7 +62,7 @@ Local-first (IndexedDB) with **optional cloud sync** through a custom persistenc
 | Data endpoints wired behind JWT | Complete + **deployed**. **Auth ON** (AUTH_* set): valid CIAM token → 200, no token → 401 (proven 2026-06-24). |
 | Azure infra (Cosmos/Storage/KV/Insights/Function App) | Provisioned (Bicep) in `rg-watai-dev` (East US 2). |
 | **Entra External ID (CIAM) tenant** | **DONE** — tenant + SPA app + API scope + user flow created; auth proven. See §8. |
-| **Frontend cloud Repository + sync engine** | **NOT STARTED** — the last todo. See §9. |
+| **Frontend cloud Repository + sync engine** | **Engine DONE + tested** (cloud client + local-first SyncRepository + MSAL, wired at the seam; backend client-id create deployed). UI wiring remains. See §9. |
 
 **Tests:** Backend = **90 offline + 13 integration** (10 Cosmos/Storage + 3 separate). Frontend = ~26 (ids, sse, error taxonomy).
 
@@ -260,9 +260,24 @@ Self-service customer sign-up/sign-in now works for the PWA. **§8 is fully comp
 
 ---
 
-## 9. NEXT TASK — Frontend cloud Repository + sync engine (the last todo)
+## 9. IN PROGRESS — Frontend cloud Repository + sync engine
 
-The frontend is currently **local-only** (IndexedDB). Goal: a cloud-backed `Repository` + a sync
+### DONE so far (2026-06-24) — engine built, tested, wired; backend deployed
+- **`src/data/cloud/`** — `env.ts` (`apiBaseUrl()` from `VITE_WATAI_API_BASE`, default = deployed Function App), `types.ts` (wire `ThreadRecord`/`MessageRecord` + boundary mappers; strips `userId`/`deletedAt`, drops UI-ephemeral message fields), `apiClient.ts` (`WataiApiClient` + `CloudApi` interface; injectable token provider + `fetchImpl`; `CloudError` with `retryable`). **14 tests.**
+- **`src/data/sync/`** — `kvStore.ts` (`KvStore` port; `idbKvStore()` over the IDB `kv` store + `memoryKvStore()` for tests), `syncRepository.ts` (`SyncRepository implements Repository`: local-first reads/writes, op queue, `push()` drain with retry/drop, `pull()` thread+message deltas with last-write-wins by `updatedAt`, cursors in `kv`, gated on `Settings.data.sync`, temporary threads never pushed, `backfill()` + `sync()`). **13 tests.**
+- **`src/auth/cloudAuth.ts`** — MSAL (`@azure/msal-browser`, lazy dynamic import). Silent `getCloudToken()` (null when signed out), `signIn()`/`signOut()` (popup), using the §8 SPA app `d26b2bca-…`, authority `https://wataiexternal.ciamlogin.com/<tid>`, scope `api://d26b2bca-…/access_as_user`. Config overridable via `VITE_WATAI_CLIENT_ID`/`_AUTHORITY`/`_API_SCOPE` (`src/vite-env.d.ts`).
+- **Seam wired** — `src/data/index.ts` now exports `repo = new SyncRepository(new LocalRepository(), new WataiApiClient({ getToken: getCloudToken }), idbKvStore())` plus `syncNow()` and `backfillSync()`. With sync **off** (default) it is a transparent local passthrough, so existing behaviour is unchanged.
+- **Backend change (deployed)** — `POST /api/threads` now accepts an optional client `id` and is **idempotent** (mirrors message append), so local ULIDs stay consistent with the cloud. `api/src/domain/thread.ts` + `threadService.ts` + tests (backend now **94** tests). Deployed via `func azure functionapp publish func-watai-cbroocyg3omrk --build remote`. Verified live: `POST {id,title}` twice → `201` same id, original title kept; `DELETE` → `204`.
+  - **Deploy gotcha:** a fresh clone has no `api/local.settings.json` (gitignored + funcignored), so `func publish` errors with "Worker runtime cannot be 'None'". Recreate it with `{ "IsEncrypted": false, "Values": { "FUNCTIONS_WORKER_RUNTIME": "node", "AzureWebJobsStorage": "" } }`.
+
+### REMAINING for §9 (UI wiring — not done)
+- A **sign-in/out control** (e.g. in Settings) calling `cloudAuth.signIn()`/`signOut()`; show the signed-in account.
+- The **Settings → Data → sync toggle**: when enabled, prompt sign-in if needed, then call `backfillSync()` + `syncNow()`; persist via `repo.saveSettings`.
+- A **sync scheduler**: call `syncNow()` on app focus / an interval / after mutation bursts (debounced). All are no-ops when sync is off or signed out.
+- **Known gaps to revisit:** the deployed `GET /threads` list excludes tombstones (no `includeDeleted` over HTTP), so cross-device **deletes don't propagate on pull** yet (push-side delete works) — expose `listChanges`/`includeDeleted` to fix. Asset (blob) upload via SAS, and message edit/delete sync, are deferred (no server endpoints) and stay local-only for now.
+
+### Reference — original design notes
+The frontend was **local-only** (IndexedDB). Goal: a cloud-backed `Repository` + a sync
 engine so data syncs to the deployed API for the signed-in user. This depends on §8 (need auth to
 call the API), but the **sync logic itself is auth-independent and can be built/tested now** with a
 mockable token provider.

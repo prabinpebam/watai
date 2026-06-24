@@ -1,5 +1,5 @@
 import { db, kvGet, kvSet } from '../db';
-import type { Repository, SearchHit } from '../repository';
+import type { SearchHit, SyncLocalStore } from '../repository';
 import { newId } from '../../lib/ids';
 import { DEFAULT_SETTINGS, type Id, type Message, type Settings, type Thread, type MemoryItem } from '../../lib/types';
 
@@ -11,7 +11,7 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-export class LocalRepository implements Repository {
+export class LocalRepository implements SyncLocalStore {
   async listThreads(opts?: { includeArchived?: boolean }): Promise<Thread[]> {
     const all = (await (await db()).getAll('threads')) as Thread[];
     return all
@@ -91,6 +91,11 @@ export class LocalRepository implements Repository {
 
   async deleteMessage(id: Id): Promise<void> {
     await (await db()).delete('messages', id);
+  }
+
+  /** Sync-only: insert/replace a server message verbatim, without bumping the thread. */
+  async putMessageRaw(message: Message): Promise<void> {
+    await (await db()).put('messages', message);
   }
 
   async putBlob(key: string, blob: Blob): Promise<void> {

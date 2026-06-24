@@ -46,6 +46,19 @@ describe('ThreadService.create', () => {
       'validation',
     );
   });
+
+  it('uses a client-supplied id when provided', async () => {
+    const t = await ctx.svc.create('userA', { id: 'thr_client', title: 'A', temporary: false });
+    expect(t.id).toBe('thr_client');
+  });
+
+  it('is idempotent for a repeated client id (no duplicate, returns the original)', async () => {
+    const first = await ctx.svc.create('userA', { id: 'thr_dup', title: 'First', temporary: false });
+    const again = await ctx.svc.create('userA', { id: 'thr_dup', title: 'Second', temporary: false });
+    expect(again).toEqual(first);
+    expect(again.title).toBe('First');
+    expect((await ctx.svc.list('userA')).length).toBe(1);
+  });
 });
 
 describe('ThreadService.get / list ownership', () => {

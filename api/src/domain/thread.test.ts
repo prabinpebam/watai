@@ -23,6 +23,19 @@ describe('parseCreateThread', () => {
     });
   });
 
+  it('accepts an optional client-supplied id', () => {
+    expect(parseCreateThread({ id: 'thr_abc', title: 'Trip' })).toEqual({
+      id: 'thr_abc',
+      title: 'Trip',
+      temporary: false,
+    });
+  });
+
+  it('rejects an empty or oversized id', () => {
+    expect(code(() => parseCreateThread({ id: '', title: 'ok' }))).toBe('validation');
+    expect(code(() => parseCreateThread({ id: 'x'.repeat(65), title: 'ok' }))).toBe('validation');
+  });
+
   it('rejects empty and oversized titles', () => {
     expect(code(() => parseCreateThread({ title: '' }))).toBe('validation');
     expect(code(() => parseCreateThread({ title: 'x'.repeat(201) }))).toBe('validation');

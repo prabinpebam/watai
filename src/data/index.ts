@@ -1,10 +1,30 @@
 import { LocalRepository } from './local/localRepository';
 import type { Repository } from './repository';
 import { buildSeed } from '../mocks/seed';
+import { WataiApiClient } from './cloud/apiClient';
+import { SyncRepository } from './sync/syncRepository';
+import { idbKvStore } from './sync/kvStore';
+import { getCloudToken } from '../auth/cloudAuth';
 
-// Single Repository instance for the whole app (the swap seam). The Azure adapter
-// would implement the same interface later with zero UI changes.
-export const repo: Repository = new LocalRepository();
+// Local store is the source of truth for the UI; the sync engine wraps it and
+// mirrors changes to the cloud only when Settings.data.sync is on AND a user is
+// signed in. With sync off it is a transparent passthrough to the local store.
+const local = new LocalRepository();
+const cloud = new WataiApiClient({ getToken: getCloudToken });
+const sync = new SyncRepository(local, cloud, idbKvStore());
+
+// Single Repository instance for the whole app (the swap seam).
+export const repo: Repository = sync;
+
+/** Push local changes + pull remote deltas (no-op unless sync is on and signed in). */
+export function syncNow(): Promise<void> {
+  return sync.sync();
+}
+
+/** Enqueue all existing local data for upload — call once when the user turns sync on. */
+export function backfillSync(): Promise<void> {
+  return sync.backfill();
+}
 
 const SEED_FLAG = 'watai.seeded';
 

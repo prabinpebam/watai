@@ -5,6 +5,7 @@ const title = z.string().min(1).max(200);
 
 const createSchema = z
   .object({
+    id: z.string().min(1).max(64).optional(),
     title: title.default('New chat'),
     temporary: z.boolean().default(false),
   })

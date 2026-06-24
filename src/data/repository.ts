@@ -32,3 +32,12 @@ export interface Repository {
   exportAll(): Promise<Blob>;
   deleteAll(): Promise<void>;
 }
+
+/**
+ * Extra capability the sync engine needs from the local store: write a server
+ * record verbatim without the create/append side effects (no id minting, no
+ * thread message-count bump), so pulled changes don't double-count or clobber.
+ */
+export interface SyncLocalStore extends Repository {
+  putMessageRaw(message: Message): Promise<void>;
+}
