@@ -34,7 +34,7 @@
    cd api; npm test; cd ..        # expect 90 passed, 10 skipped
    curl https://func-watai-cbroocyg3omrk.azurewebsites.net/api/health   # expect 200 {"ok":true,...}
    ```
-5. **Resume work.** §8 Entra External ID provisioning is **fully DONE** (auth live + proven). §9 (cloud Repository + sync engine) is **code-complete**: the cloud API client, local-first `SyncRepository`, MSAL auth, and the Settings UI (sync toggle + sign-in) and a background sync scheduler are all built, tested, and pushed; the backend supports client-supplied idempotent thread ids (deployed + verified). What remains is the **frontend production build/deploy** (`npm run build` → commit `docs/`) plus a real-browser sanity check. See §9.
+5. **Resume work.** §8 done (auth live + proven). §9 cloud sync is **done and deployed** — the engine, MSAL auth, and the Settings sync UI are **live on GitHub Pages**, and the backend is deployed (idempotent client-id create + tombstone delete-sync). Remaining: the by-design deferrals (asset/blob upload, message edit/delete sync — no server endpoints) plus ongoing live verification. See §9.
 
 ---
 
@@ -62,7 +62,7 @@ Local-first (IndexedDB) with **optional cloud sync** through a custom persistenc
 | Data endpoints wired behind JWT | Complete + **deployed**. **Auth ON** (AUTH_* set): valid CIAM token → 200, no token → 401 (proven 2026-06-24). |
 | Azure infra (Cosmos/Storage/KV/Insights/Function App) | Provisioned (Bicep) in `rg-watai-dev` (East US 2). |
 | **Entra External ID (CIAM) tenant** | **DONE** — tenant + SPA app + API scope + user flow created; auth proven. See §8. |
-| **Frontend cloud Repository + sync engine** | **Code-complete** (engine + MSAL + UI wired; backend deployed). Not yet built into `docs/` / deployed to Pages. See §9. |
+| **Frontend cloud Repository + sync engine** | **DONE + deployed** (engine + MSAL + UI live on Pages; backend deployed). See §9. |
 
 **Tests:** Backend = **90 offline + 13 integration** (10 Cosmos/Storage + 3 separate). Frontend = ~26 (ids, sse, error taxonomy).
 
@@ -275,8 +275,15 @@ Self-service customer sign-up/sign-in now works for the PWA. **§8 is fully comp
 - **Background sync scheduler** (`src/app/App.tsx`): `syncNow()` on mount, on `window` focus, and every 30s — all no-ops while sync is off or signed out (MSAL only loads when sync is actually used).
 
 ### REMAINING for §9
-- **Frontend deploy:** the UI sync feature is in source + pushed but **not yet built into `docs/`**, so it isn't live on GitHub Pages. Run `npm run build` and commit `docs/` to publish — plus a real-browser sanity check of the MSAL popup + a sync round-trip.
 - **Deferred (by design):** asset (blob) upload via SAS, and message edit/delete sync, stay local-only for now (no server endpoints).
+- **Live verification:** keep sanity-checking the MSAL sign-in popup + a real sync round-trip on the deployed site.
+
+> **Frontend DEPLOYED (2026-06-24):** `npm run build` → committed `docs/` → live at
+> https://prabinpebam.github.io/watai/. MSAL is code-split into its own chunk (loads only when sync
+> is enabled). Verified: new bundle asset + `/api/health` both 200; CORS preflight from the Pages
+> origin returns `204` + `Access-Control-Allow-Origin: https://prabinpebam.github.io`. Security pass:
+> BYO key stays in `secureStore` (never synced; backend settings schema is strict), CORS locked to
+> Pages + localhost (no wildcard, no credentials), JWT-gated API, sync opt-in/off by default.
 
 > **Cross-device delete propagation — FIXED (2026-06-24).** `GET /threads?includeDeleted=true&since=`
 > now returns soft-deleted tombstones; `SyncRepository.pull` requests `includeDeleted` and drops any
