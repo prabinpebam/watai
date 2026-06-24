@@ -12,6 +12,8 @@ export type AiPath =
 
 export interface AiRequest {
   path: AiPath;
+  /** Absolute URL override (used for the classic transcription path); bypasses baseUrl + path. */
+  url?: string;
   body?: unknown;
   form?: FormData;
   stream?: boolean;
@@ -29,6 +31,22 @@ export async function loadConfig(): Promise<{ config: ApiConfig; key: string }> 
     throw aiError('unauthorized', 'No API key configured. Add one in Settings.');
   }
   return { config, key };
+}
+
+// Azure transcription isn't exposed on the new /openai/v1 surface for AI Foundry
+// resources, so it uses the classic deployment-scoped path on the cognitiveservices
+// host (the resource's own portal sample). Everything else stays on /openai/v1.
+export const TRANSCRIBE_API_VERSION = '2025-03-01-preview';
+
+export function transcriptionUrl(baseUrl: string, deployment: string): string {
+  let host: string;
+  try {
+    host = new URL(baseUrl).host;
+  } catch {
+    host = baseUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  }
+  host = host.replace('.services.ai.azure.com', '.cognitiveservices.azure.com');
+  return `https://${host}/openai/deployments/${encodeURIComponent(deployment)}/audio/transcriptions?api-version=${TRANSCRIBE_API_VERSION}`;
 }
 
 function withTimeout(signal: AbortSignal | undefined, timeoutMs: number): {
@@ -51,10 +69,10 @@ function withTimeout(signal: AbortSignal | undefined, timeoutMs: number): {
   };
 }
 
-/** Shared fetch: Bearer auth, model goes in the caller's body. No api-version, no path deployment. */
+/** Shared fetch: Bearer auth. Uses baseUrl + path on /openai/v1, or an absolute `url` override. */
 export async function aiFetch(req: AiRequest): Promise<Response> {
   const { config, key } = await loadConfig();
-  const url = config.baseUrl.replace(/\/+$/, '') + req.path;
+  const url = req.url ?? config.baseUrl.replace(/\/+$/, '') + req.path;
   const { signal, cleanup } = withTimeout(req.signal, req.timeoutMs ?? 120000);
 
   const headers: Record<string, string> = { Authorization: `Bearer ${key}` };

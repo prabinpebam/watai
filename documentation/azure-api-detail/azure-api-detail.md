@@ -104,3 +104,12 @@ response = client.responses.create(
 print(f"answer: {response.output[0]}")
 ```
 
+```curl
+curl -X POST "https://ai-project-deployments-resource.cognitiveservices.azure.com/openai/deployments/gpt-4o-transcribe/audio/transcriptions?api-version=2025-03-01-preview" \
+  -H "Content-Type: multipart/form-data" \
+  -H "Authorization: Bearer $AZURE_API_KEY" \
+  -d '{
+     "model": "gpt-4o-transcribe",
+     "file": "@path/to/file/audio.mp3"
+    }'
+```

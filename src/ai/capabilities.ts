@@ -1,4 +1,4 @@
-import { aiFetch } from './http';
+import { aiFetch, transcriptionUrl } from './http';
 import type { ApiConfig, CapabilityMatrix } from '../lib/types';
 
 export const FULL_CAPABILITY: CapabilityMatrix = {
@@ -67,14 +67,19 @@ export async function probeChat(config: ApiConfig): Promise<ProbeResult> {
   }
 }
 
-/** Transcription: send a tiny silent WAV; an empty transcript still returns 200. */
+/** Transcription: classic deployment path + a tiny tone clip; an empty transcript still returns 200. */
 export async function probeTranscribe(config: ApiConfig): Promise<ProbeResult> {
   try {
     const form = new FormData();
     form.append('model', config.models.transcribe);
-    form.append('file', silentWav(), 'probe.wav');
+    form.append('file', probeWav(), 'probe.wav');
     form.append('response_format', 'json');
-    const res = await aiFetch({ path: '/audio/transcriptions', form, timeoutMs: 30000 });
+    const res = await aiFetch({
+      path: '/audio/transcriptions',
+      url: transcriptionUrl(config.baseUrl, config.models.transcribe),
+      form,
+      timeoutMs: 30000,
+    });
     if (!res.ok) return { ok: false, status: res.status, detail: await detailFrom(res) };
     await res.body?.cancel();
     return { ok: true, status: res.status };
@@ -139,8 +144,12 @@ export function probeModel(key: ModelKey, config: ApiConfig): Promise<ProbeResul
   }
 }
 
-/** A minimal valid silent mono 16-bit PCM WAV for the transcription probe. */
-function silentWav(durationSec = 0.5, sampleRate = 16000): Blob {
+/**
+ * A small mono 16-bit PCM WAV containing a short tone for the transcription probe.
+ * It carries real (non-silent) signal so transcription models that reject empty or
+ * zero-energy audio still accept it — the transcript text is irrelevant, we only need a 200.
+ */
+function probeWav(durationSec = 1, sampleRate = 16000): Blob {
   const numSamples = Math.floor(durationSec * sampleRate);
   const dataSize = numSamples * 2;
   const buffer = new ArrayBuffer(44 + dataSize);
@@ -161,5 +170,10 @@ function silentWav(durationSec = 0.5, sampleRate = 16000): Blob {
   view.setUint16(34, 16, true); // bitsPerSample
   writeStr(36, 'data');
   view.setUint32(40, dataSize, true);
+  const amplitude = 0.25 * 0x7fff;
+  for (let i = 0; i < numSamples; i++) {
+    const sample = Math.round(amplitude * Math.sin((2 * Math.PI * 440 * i) / sampleRate));
+    view.setInt16(44 + i * 2, sample, true);
+  }
   return new Blob([buffer], { type: 'audio/wav' });
 }

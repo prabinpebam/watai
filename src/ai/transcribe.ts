@@ -1,4 +1,4 @@
-import { aiFetch, loadConfig } from './http';
+import { aiFetch, loadConfig, transcriptionUrl } from './http';
 import { normalizeHttpError } from './errors';
 
 export interface TranscribeParams {
@@ -19,7 +19,12 @@ export async function transcribe(p: TranscribeParams): Promise<{ text: string }>
   if (p.language) form.append('language', p.language);
   if (p.prompt) form.append('prompt', p.prompt);
 
-  const res = await aiFetch({ path: '/audio/transcriptions', form, signal: p.signal });
+  const res = await aiFetch({
+    path: '/audio/transcriptions',
+    url: transcriptionUrl(config.baseUrl, config.models.transcribe),
+    form,
+    signal: p.signal,
+  });
   if (!res.ok) throw await normalizeHttpError(res, 'transcribe');
   const json = await res.json();
   return { text: json.text ?? '' };
