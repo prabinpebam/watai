@@ -24,6 +24,7 @@ exhaustive, buildable plan.
 | [05-execution-plan.md](05-execution-plan.md) | Phased roadmap, milestones, testing strategy, CI/CD, risks, decisions log, DoD. |
 | [ui-design/](ui-design/README.md) | **Implementation-ready UI design spec** (frontend-first): tokens, components, every screen/state, interaction/motion/a11y, copy/assets, and frontend architecture. |
 | [azure-api-detail/azure-api-detail.md](azure-api-detail/azure-api-detail.md) | Source-of-truth Azure `/openai/v1` request examples the API spec is aligned to. |
+| [agentic/](agentic/README.md) | **Agentic capabilities spec** (post-v1 epic): Foundry Agent Service + Responses API integration for tool calling, web search, Deep Research, and intent-aware image generation. |
 
 > Read the docs in order on first pass. After that, each doc is self-contained and
 > cross-links the others where concerns overlap. The [ui-design/](ui-design/README.md)
