@@ -147,6 +147,24 @@ export async function probeResponses(config: ApiConfig): Promise<ProbeResult> {
   }
 }
 
+let responsesSupport: boolean | null = null;
+
+/** Clear the cached agentic-support flag (call when the endpoint config changes). */
+export function resetAgenticCache(): void {
+  responsesSupport = null;
+}
+
+/**
+ * Cached per session: does the configured endpoint support the Responses API (and thus
+ * agentic chat + tools)? Probed once on first use; classic chat is the fallback.
+ */
+export async function agenticAvailable(config: ApiConfig): Promise<boolean> {
+  if (responsesSupport === null) {
+    responsesSupport = (await probeResponses(config)).ok;
+  }
+  return responsesSupport;
+}
+
 export function probeModel(key: ModelKey, config: ApiConfig): Promise<ProbeResult> {
   switch (key) {
     case 'chat':

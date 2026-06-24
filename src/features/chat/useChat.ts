@@ -5,8 +5,12 @@ import { newId } from '../../lib/ids';
 import { streamChat, completeChat, type ChatMessage } from '../../ai/chat';
 import { mockStreamChat } from '../../ai/mockAi';
 import { isAiError } from '../../ai/errors';
+import { agenticAvailable } from '../../ai/capabilities';
+import { runAgent, type Turn } from '../../ai/orchestrator';
+import { CHAT_TOOLS, executeTool } from '../../ai/tools';
+import { b64ToBlob } from '../../ai/image';
 import { useUi } from '../../state/store';
-import type { AiError, Message } from '../../lib/types';
+import type { AiError, ImageRef, Message } from '../../lib/types';
 
 export const DEFAULT_CHAT_MODEL = 'gpt-5.4';
 
@@ -68,30 +72,80 @@ export function useChat(threadId: string, temporary = false) {
 
       const ctrl = new AbortController();
       abortRef.current = ctrl;
-      const stream = mockAi
-        ? mockStreamChat({ messages: chatMessages, model, signal: ctrl.signal })
-        : streamChat({
-            messages: chatMessages,
-            model,
-            reasoningEffort: config?.chatDefaults.reasoningEffort,
-            maxCompletionTokens: config?.chatDefaults.maxCompletionTokens,
-            signal: ctrl.signal,
-          });
 
       let acc = '';
       let err: AiError | undefined;
       let usage: Message['usage'];
+      const genImages: ImageRef[] = [];
+
+      // Agentic path (tools, incl. context-aware image generation) when the endpoint
+      // serves the Responses API; otherwise the classic single-shot chat path.
+      let useAgentic = false;
+      if (!mockAi && config) {
+        useAgentic = await agenticAvailable(config);
+      }
+
       try {
-        for await (const ev of stream) {
-          if (ev.type === 'delta' && ev.textDelta) {
-            acc += ev.textDelta;
-            setMessages((prev) =>
-              prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m)),
-            );
-          } else if (ev.type === 'done') {
-            usage = ev.usage;
-          } else if (ev.type === 'error') {
-            err = ev.error;
+        if (useAgentic) {
+          const turns: Turn[] = [];
+          if (sysParts.length) turns.push({ role: 'system', text: sysParts.join('\n\n') });
+          for (const m of history) {
+            if (m.role === 'user' || m.role === 'assistant') {
+              turns.push({ role: m.role, text: m.content });
+            }
+          }
+          for await (const ev of runAgent({
+            model,
+            turns,
+            tools: CHAT_TOOLS,
+            execute: executeTool,
+            signal: ctrl.signal,
+          })) {
+            if (ev.type === 'text') {
+              acc += ev.delta;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m)),
+              );
+            } else if (ev.type === 'image' && !ev.partial) {
+              const imgId = newId();
+              const key = `img-${imgId}`;
+              await repo.putBlob(key, b64ToBlob(ev.b64));
+              genImages.push({
+                id: imgId,
+                localBlobKey: key,
+                prompt: ev.prompt ?? '',
+                size: ev.size ?? '1024x1024',
+                outputFormat: 'png',
+                createdAt: new Date().toISOString(),
+              });
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantId ? { ...m, images: [...genImages] } : m)),
+              );
+            } else if (ev.type === 'error') {
+              err = { code: 'server_error', message: ev.message };
+            }
+          }
+        } else {
+          const stream = mockAi
+            ? mockStreamChat({ messages: chatMessages, model, signal: ctrl.signal })
+            : streamChat({
+                messages: chatMessages,
+                model,
+                reasoningEffort: config?.chatDefaults.reasoningEffort,
+                maxCompletionTokens: config?.chatDefaults.maxCompletionTokens,
+                signal: ctrl.signal,
+              });
+          for await (const ev of stream) {
+            if (ev.type === 'delta' && ev.textDelta) {
+              acc += ev.textDelta;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m)),
+              );
+            } else if (ev.type === 'done') {
+              usage = ev.usage;
+            } else if (ev.type === 'error') {
+              err = ev.error;
+            }
           }
         }
       } catch (e) {
@@ -110,12 +164,13 @@ export function useChat(threadId: string, temporary = false) {
         status: finalStatus,
         usage,
         error: err,
+        ...(genImages.length ? { images: genImages } : {}),
       };
       setMessages((prev) => prev.map((m) => (m.id === assistantId ? final : m)));
       setStream({ status: err ? 'error' : 'idle' });
       abortRef.current = null;
 
-      if (!err && acc) {
+      if (!err && (acc || genImages.length)) {
         await repo.appendMessage(final);
         await maybeTitle(threadId, history, acc, mockAi, model);
       } else if (err) {
