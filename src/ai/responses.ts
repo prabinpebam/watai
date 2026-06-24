@@ -19,7 +19,7 @@ export type ResponsesInputItem =
   | {
       type: 'message';
       role: 'system' | 'user' | 'assistant';
-      content: Array<{ type: 'input_text'; text: string }>;
+      content: Array<{ type: 'input_text' | 'output_text'; text: string }>;
     }
   | { type: 'function_call_output'; call_id: string; output: string };
 
@@ -141,6 +141,10 @@ export function toInputMessages(
   return turns.map((t) => ({
     type: 'message',
     role: t.role,
-    content: [{ type: 'input_text', text: t.text }],
+    // Prior assistant turns are model OUTPUT and must use `output_text`; user/system
+    // turns are inputs and use `input_text`. Tagging an assistant turn as `input_text`
+    // makes the Responses API reject the whole request (400) the moment history
+    // contains an assistant message — i.e. every turn after the first.
+    content: [{ type: t.role === 'assistant' ? 'output_text' : 'input_text', text: t.text }],
   }));
 }

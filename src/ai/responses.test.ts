@@ -123,15 +123,19 @@ describe('parseResponsesStream', () => {
 });
 
 describe('toInputMessages', () => {
-  it('wraps role/text turns into Responses input items', () => {
+  it('uses input_text for user/system turns and output_text for assistant turns', () => {
     expect(
       toInputMessages([
         { role: 'system', text: 'be brief' },
         { role: 'user', text: 'hi' },
+        { role: 'assistant', text: 'hello' },
+        { role: 'user', text: 'more' },
       ]),
     ).toEqual([
       { type: 'message', role: 'system', content: [{ type: 'input_text', text: 'be brief' }] },
       { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'hello' }] },
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'more' }] },
     ]);
   });
 });
