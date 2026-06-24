@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AppError } from './errors';
+import { parseOrThrow } from './validate';
 
 const title = z.string().min(1).max(200);
 
@@ -22,18 +22,10 @@ const updateSchema = z
 export type CreateThreadInput = z.infer<typeof createSchema>;
 export type UpdateThreadInput = z.infer<typeof updateSchema>;
 
-function parse<S extends z.ZodTypeAny>(schema: S, input: unknown): z.infer<S> {
-  const result = schema.safeParse(input);
-  if (!result.success) {
-    throw new AppError('validation', 'Invalid request body.', result.error.flatten());
-  }
-  return result.data;
-}
-
 export function parseCreateThread(input: unknown): CreateThreadInput {
-  return parse(createSchema, input);
+  return parseOrThrow(createSchema, input);
 }
 
 export function parseUpdateThread(input: unknown): UpdateThreadInput {
-  return parse(updateSchema, input);
+  return parseOrThrow(updateSchema, input);
 }

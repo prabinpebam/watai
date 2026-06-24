@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AppError } from './errors';
+import { parseOrThrow } from './validate';
 
 export type Role = 'user' | 'assistant' | 'system';
 export type MessageStatus = 'complete' | 'interrupted' | 'error';
@@ -17,9 +17,5 @@ const appendSchema = z
 export type AppendMessageInput = z.infer<typeof appendSchema>;
 
 export function parseAppendMessage(input: unknown): AppendMessageInput {
-  const result = appendSchema.safeParse(input);
-  if (!result.success) {
-    throw new AppError('validation', 'Invalid message.', result.error.flatten());
-  }
-  return result.data;
+  return parseOrThrow(appendSchema, input, 'Invalid message.');
 }

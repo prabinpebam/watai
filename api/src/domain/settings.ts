@@ -1,0 +1,77 @@
+import { z } from 'zod';
+import { parseOrThrow } from './validate';
+
+const themeEnum = z.enum(['system', 'light', 'dark']);
+const textScale = z.union([z.literal(0.9), z.literal(1.0), z.literal(1.1), z.literal(1.25)]);
+const density = z.enum(['comfortable', 'compact']);
+const reduceMotion = z.union([z.boolean(), z.literal('system')]);
+const retention = z.enum(['forever', '30d', '90d']);
+const engine = z.enum(['tts', 'realtime']);
+
+const personalizationBase = z.object({
+  aboutYou: z.string().max(2000).optional(),
+  howRespond: z.string().max(2000).optional(),
+  memoryEnabled: z.boolean(),
+});
+const appearanceBase = z.object({
+  theme: themeEnum,
+  textScale,
+  density,
+  reduceMotion,
+  language: z.string().min(2).max(10),
+});
+const voiceBase = z.object({
+  engine,
+  voiceId: z.string().max(50).optional(),
+  rate: z.number().min(0.5).max(2),
+  vad: z.number().min(0).max(1),
+  autoSend: z.boolean(),
+  captions: z.boolean(),
+});
+const dataBase = z.object({
+  sync: z.boolean(),
+  temporaryDefault: z.boolean(),
+  retention,
+});
+
+const settingsSchema = z
+  .object({
+    personalization: personalizationBase.strict(),
+    appearance: appearanceBase.strict(),
+    voice: voiceBase.strict(),
+    data: dataBase.strict(),
+  })
+  .strict();
+
+const patchSchema = z
+  .object({
+    personalization: personalizationBase.partial().strict().optional(),
+    appearance: appearanceBase.partial().strict().optional(),
+    voice: voiceBase.partial().strict().optional(),
+    data: dataBase.partial().strict().optional(),
+  })
+  .strict();
+
+export type Settings = z.infer<typeof settingsSchema>;
+export type SettingsPatch = z.infer<typeof patchSchema>;
+
+export const DEFAULT_SETTINGS: Settings = {
+  personalization: { memoryEnabled: true },
+  appearance: { theme: 'system', textScale: 1.0, density: 'comfortable', reduceMotion: 'system', language: 'en' },
+  voice: { engine: 'tts', rate: 1, vad: 0.5, autoSend: true, captions: true },
+  data: { sync: false, temporaryDefault: false, retention: 'forever' },
+};
+
+export function parseSettingsPatch(input: unknown): SettingsPatch {
+  return parseOrThrow(patchSchema, input, 'Invalid settings.');
+}
+
+/** Shallow-merge each section of a patch over the current settings. */
+export function mergeSettings(current: Settings, patch: SettingsPatch): Settings {
+  return {
+    personalization: { ...current.personalization, ...patch.personalization },
+    appearance: { ...current.appearance, ...patch.appearance },
+    voice: { ...current.voice, ...patch.voice },
+    data: { ...current.data, ...patch.data },
+  };
+}
