@@ -156,9 +156,15 @@ class FakeCloud implements CloudApi {
     });
   }
 
-  async listThreads(opts?: { includeArchived?: boolean; since?: string }): Promise<ThreadRecord[]> {
+  async listThreads(opts?: {
+    includeArchived?: boolean;
+    includeDeleted?: boolean;
+    since?: string;
+  }): Promise<ThreadRecord[]> {
     this.calls.push('listThreads');
-    return [...this.threads.values()].filter((t) => !opts?.since || t.updatedAt > opts.since);
+    return [...this.threads.values()].filter(
+      (t) => (opts?.includeDeleted || !t.deletedAt) && (!opts?.since || t.updatedAt > opts.since),
+    );
   }
   async getThread(id: string): Promise<ThreadRecord> {
     const t = this.threads.get(id);
@@ -395,6 +401,16 @@ describe('SyncRepository — pull', () => {
     expect(msgs.find((m) => m.id === 'sm1')?.content).toBe('LOCAL');
     expect(msgs.find((m) => m.id === 'sm2')?.content).toBe('two');
     expect(await kv.get('sync.cursor.messages.t1')).toBe('2026-02-01T00:00:02Z');
+  });
+
+  it('removes a local thread when the server returns a tombstone', async () => {
+    const { repo, local, cloud } = setup(true);
+    await local.createThread({ id: 'g', title: 'Gone', updatedAt: '2026-02-01T00:00:01Z' });
+    cloud.seedThread({ id: 'g', updatedAt: '2026-03-01T00:00:00Z', deletedAt: '2026-03-01T00:00:00Z' });
+
+    await repo.pull();
+
+    expect(await local.getThread('g')).toBeNull();
   });
 });
 

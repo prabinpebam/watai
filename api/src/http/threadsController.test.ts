@@ -63,4 +63,19 @@ describe('threadsController', () => {
     expect(removed.status).toBe(204);
     expect(removed.body).toBeUndefined();
   });
+
+  it('GET with includeDeleted=true returns soft-deleted tombstones (for sync pull)', async () => {
+    const created = await ctrl.create({ claims: { sub: 'userA' }, body: { title: 'A' } });
+    const id = (created.body as any).id;
+    await ctrl.remove({ claims: { sub: 'userA' }, params: { id } });
+
+    const without = await ctrl.list({ claims: { sub: 'userA' } });
+    expect((without.body as any).threads).toHaveLength(0);
+
+    const withDeleted = await ctrl.list({ claims: { sub: 'userA' }, query: { includeDeleted: 'true' } });
+    const threads = (withDeleted.body as any).threads;
+    expect(threads).toHaveLength(1);
+    expect(threads[0].id).toBe(id);
+    expect(threads[0].deletedAt).not.toBeNull();
+  });
 });

@@ -69,6 +69,15 @@ describe('WataiApiClient', () => {
     expect(calls[0].url).toBe('https://api.test/api/threads');
   });
 
+  it('includes includeDeleted in the query when requested', async () => {
+    const { fetchImpl, calls } = stubFetch([{ status: 200, body: { threads: [] } }]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    await client.listThreads({ includeArchived: true, includeDeleted: true });
+
+    expect(calls[0].url).toBe('https://api.test/api/threads?includeArchived=true&includeDeleted=true');
+  });
+
   it('throws unauthorized without ever calling fetch when there is no token', async () => {
     const { fetchImpl } = stubFetch([]);
     const client = new WataiApiClient({ baseUrl, getToken: async () => null, fetchImpl });

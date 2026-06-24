@@ -199,7 +199,11 @@ export class SyncRepository implements Repository {
   async pull(): Promise<void> {
     if (!(await this.syncEnabled())) return;
     const cursor = await this.kv.get<string>(THREAD_CURSOR_KEY);
-    const records = await this.cloud.listThreads({ includeArchived: true, since: cursor });
+    const records = await this.cloud.listThreads({
+      includeArchived: true,
+      includeDeleted: true,
+      since: cursor,
+    });
     let maxUpdated = cursor ?? '';
     for (const rec of records) {
       await this.mergeThread(rec);

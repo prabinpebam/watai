@@ -17,6 +17,7 @@ export function createThreadsController(threads: ThreadService) {
         return {
           threads: await threads.list(userId, {
             includeArchived: req.query?.includeArchived === 'true',
+            includeDeleted: req.query?.includeDeleted === 'true',
             since: req.query?.since,
           }),
         };

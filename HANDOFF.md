@@ -276,7 +276,12 @@ Self-service customer sign-up/sign-in now works for the PWA. **§8 is fully comp
 
 ### REMAINING for §9
 - **Frontend deploy:** the UI sync feature is in source + pushed but **not yet built into `docs/`**, so it isn't live on GitHub Pages. Run `npm run build` and commit `docs/` to publish — plus a real-browser sanity check of the MSAL popup + a sync round-trip.
-- **Known gaps to revisit:** the deployed `GET /threads` excludes tombstones (no `includeDeleted` over HTTP), so cross-device **deletes don't propagate on pull** yet (push-side delete works) — expose `listChanges`/`includeDeleted` to fix. Asset (blob) upload via SAS, and message edit/delete sync, are deferred (no server endpoints) and stay local-only for now.
+- **Deferred (by design):** asset (blob) upload via SAS, and message edit/delete sync, stay local-only for now (no server endpoints).
+
+> **Cross-device delete propagation — FIXED (2026-06-24).** `GET /threads?includeDeleted=true&since=`
+> now returns soft-deleted tombstones; `SyncRepository.pull` requests `includeDeleted` and drops any
+> tombstoned thread locally (**server-delete-wins**, not strict LWW, on the delete path). Deployed +
+> verified live (tombstone visible only with the flag; `deletedAt` set; hidden from the normal list).
 
 ### Reference — original design notes
 The frontend was **local-only** (IndexedDB). Goal: a cloud-backed `Repository` + a sync

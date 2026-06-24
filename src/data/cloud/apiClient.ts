@@ -94,9 +94,14 @@ export class WataiApiClient implements CloudApi {
   }
 
   // --- threads ---
-  async listThreads(opts?: { includeArchived?: boolean; since?: string }): Promise<ThreadRecord[]> {
+  async listThreads(opts?: {
+    includeArchived?: boolean;
+    includeDeleted?: boolean;
+    since?: string;
+  }): Promise<ThreadRecord[]> {
     const q = new URLSearchParams();
     if (opts?.includeArchived) q.set('includeArchived', 'true');
+    if (opts?.includeDeleted) q.set('includeDeleted', 'true');
     if (opts?.since) q.set('since', opts.since);
     const qs = q.toString();
     const out = await this.request<{ threads: ThreadRecord[] }>('GET', `/threads${qs ? `?${qs}` : ''}`);
@@ -170,7 +175,11 @@ function statusToCode(status: number): CloudErrorCode {
 
 /** The subset of the API the sync engine depends on (lets tests inject a fake). */
 export interface CloudApi {
-  listThreads(opts?: { includeArchived?: boolean; since?: string }): Promise<ThreadRecord[]>;
+  listThreads(opts?: {
+    includeArchived?: boolean;
+    includeDeleted?: boolean;
+    since?: string;
+  }): Promise<ThreadRecord[]>;
   getThread(id: string): Promise<ThreadRecord>;
   createThread(body: CreateThreadBody): Promise<ThreadRecord>;
   updateThread(id: string, body: UpdateThreadBody): Promise<ThreadRecord>;
