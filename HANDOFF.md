@@ -4,7 +4,7 @@
 > Everything needed to resume is in this file. Read **§0 START HERE** first.
 >
 > - **Last commit at handoff:** `0b0ac00` on branch `master` (working tree clean, all pushed).
-> - **Handoff written:** 2026-06-24 (updated — AI endpoint routing + agentic chat slice; see §13).
+> - **Handoff written:** 2026-06-24 (updated — AI endpoint routing + agentic chat slice **deployed + live-verified** on GitHub Pages; multi-turn `output_text` fix shipped; see §13).
 > - **Repo:** https://github.com/prabinpebam/watai (public)
 > - **Live frontend:** https://prabinpebam.github.io/watai/ (GitHub Pages, served from `master` `/docs`)
 > - **Live API:** https://func-watai-cbroocyg3omrk.azurewebsites.net/api/health
@@ -35,12 +35,12 @@
    cd api; npm test; cd ..        # BACKEND: expect 94 passed, integration skipped
    curl https://func-watai-cbroocyg3omrk.azurewebsites.net/api/health   # expect 200 {"ok":true,...}
    ```
-5. **Resume work.** §8 done (auth live + proven). §9 cloud sync is **done and deployed**. The
-   **newest work is §13** — AI endpoint routing (two-host) is done + deployed, and a first **agentic
-   chat slice** (tool-calling → in-chat image generation) is **built and all tests pass but is NOT
-   yet live-verified or deployed**. The live Pages bundle is still the §9 build. **Resume by
-   live-verifying the agentic path in `npm run dev` (steps in §13.4), then build → commit `docs/` →
-   push to deploy.**
+5. **Resume work.** §8 done (auth live + proven). §9 cloud sync is **done and deployed**. §13 (AI
+   endpoint routing + the **agentic chat slice**: tool-calling → in-chat image generation) is now
+   **deployed and live-verified** on GitHub Pages (2026-06-24, bundle `index-B9fcA9O8.js`). A
+   multi-turn bug found during verification (assistant turns must use `output_text` on the Responses
+   API) was fixed. Next is the remaining §9 polish (asset/SAS upload, message edit/delete sync) — see
+   §9 "REMAINING".
 
 ---
 
@@ -70,7 +70,7 @@ Local-first (IndexedDB) with **optional cloud sync** through a custom persistenc
 | **Entra External ID (CIAM) tenant** | **DONE** — tenant + SPA app + API scope + user flow created; auth proven. See §8. |
 | **Frontend cloud Repository + sync engine** | **DONE + deployed** (engine + MSAL + UI live on Pages; backend deployed). See §9. |
 | **AI endpoint routing (two-host) + per-model FRE test + dev-only mock** | **DONE + deployed.** Foundry `v1` + classic `cognitiveservices` routing; bare resource name accepted; transcription fix. See §13.1–13.3. |
-| **Agentic chat slice (tool-calling → in-chat image gen)** | **BUILT, tests green — NOT yet live-verified/deployed.** Capability-gated; classic chat is the fallback. See §13.4. |
+| **Agentic chat slice (tool-calling → in-chat image gen)** | **DONE + deployed + live-verified (2026-06-24).** Capability-gated; classic chat is the fallback. Multi-turn `output_text` bug fixed. See §13.4. |
 
 **Tests:** Backend = **94 offline + integration** (Cosmos/Storage skipped without env). Frontend = **74** (ids, sse, error taxonomy, http/url routing, responses client, orchestrator).
 
@@ -420,22 +420,20 @@ All require `Authorization: Bearer <token>`. The server derives `userId` from th
 
 ## 12. Suggested resume prompt for the new agent
 
-> "Read HANDOFF.md. §8 (Entra auth) and §9 (cloud sync) are done + deployed. The newest work is §13:
-> AI endpoint routing is live, and an agentic chat slice (tool-calling → in-chat image generation) is
-> built with all tests passing but **not yet live-verified or deployed**. Pick up at §13.4: I'll enter
-> my Azure OpenAI endpoint + key in Settings, then we live-verify (a) plain chat still streams and
-> (b) 'generate an image of a cat' renders inline; if good, build → commit `docs/` → push to deploy."
+> "Read HANDOFF.md. §8 (auth), §9 (cloud sync), and §13 (AI endpoint routing + the agentic chat
+> slice: tool-calling → in-chat image generation) are all **done, deployed, and live-verified** on
+> GitHub Pages. Remaining work is §9 'REMAINING' (asset/SAS upload + message edit/delete sync). Tell
+> me which to pick up."
 
 ---
 
 ## 13. AI endpoint routing + agentic chat slice (2026-06-24 — newest work)
 
-> **TL;DR for resuming:** The AI client now routes to the user's Azure OpenAI resource across **two
-> hosts** (Foundry `v1` + classic `cognitiveservices`), accepts a bare resource name, and a first
-> **agentic chat slice** (tool-calling → in-chat image generation) is **built, typechecks, and all 74
-> frontend tests pass**, but is **NOT yet live-verified or deployed**. The live GitHub Pages bundle is
-> still the §9 build (no agentic, no new composer focus ring). **Resume by live-verifying the agentic
-> path in `npm run dev` (§13.4), then build → commit `docs/` → push to deploy.**
+> **TL;DR:** The AI client routes to the user's Azure OpenAI resource across **two hosts** (Foundry
+> `v1` + classic `cognitiveservices`), accepts a bare resource name, and the **agentic chat slice**
+> (tool-calling → in-chat image generation) is **deployed and live-verified** on GitHub Pages
+> (2026-06-24, bundle `index-B9fcA9O8.js`). A multi-turn bug (assistant turns must use `output_text`
+> on the Responses API) was found during verification and fixed. The composer focus ring is also live.
 
 ### 13.1 AI client / endpoint routing (committed + DEPLOYED, live)
 All in `src/ai/`. The user's resource is **bring-your-own** (entered in the app Settings UI; the key
@@ -470,7 +468,7 @@ Mock AI + seeded demo data + the Dev menu are **DEV-ONLY**, gated on `import.met
 `mockAi=false` in prod** (rescues users previously stuck in mock). Production ships clean — no demo
 threads, no dev menu, no mock controls.
 
-### 13.4 Agentic chat slice (BUILT, tests green — NOT yet live-verified / deployed)
+### 13.4 Agentic chat slice (DONE + deployed + live-verified 2026-06-24)
 Goal (user request): *"based on what we discussed, generate an image of a cat"* — context-aware image
 generation **inline in normal chat**, on the plain Azure OpenAI endpoint, via client-side function
 calling over the **Responses API**. Design notes in `documentation/agentic/` (01–07).
@@ -497,28 +495,28 @@ calling over the **Responses API**. Design notes in `documentation/agentic/` (01
 - **Capability gate = safety:** when `/responses` is unavailable the probe returns false and chat uses
   the classic path verbatim, so this slice is purely additive.
 
-#### How to resume / live-verify (do this first on the new device)
-1. In Settings, enter the AI endpoint + BYO key. Resource: `ai-project-deployments-resource` (the bare
-   name is accepted). Deployments in it: chat `gpt-5.4`, image `gpt-image-2`, transcribe
-   `gpt-4o-transcribe`, tts `gpt-4o-mini-tts`. **The key is NOT stored in this repo — re-enter it.**
-2. `npm run dev`, then in chat verify **both**:
-   - **(a) plain chat still streams** (agentic routes normal text through `/responses`; confirm no
-     regression), and
-   - **(b)** *"based on what we discussed, generate an image of a cat"* renders an image inline.
-3. If both pass → `npm run build` (outputs `docs/`), commit `docs/`, `git push` to deploy to Pages.
-   If plain chat misbehaves under `/responses`, either fix the event mapping in `responses.ts` or move
-   agentic behind an explicit composer toggle instead of auto-default.
+#### Live-verified + deployed (2026-06-24)
+- Endpoint setup (re-enter on any device — the key is NOT in this repo): resource
+  `ai-project-deployments-resource` (bare name accepted). Deployments: chat `gpt-5.4`, image
+  `gpt-image-2`, transcribe `gpt-4o-transcribe`, tts `gpt-4o-mini-tts`.
+- Verified live on GitHub Pages: plain chat streams through `/responses` with no regression, and
+  *"generate an image of a cat"* renders inline.
+- **Multi-turn fix (important):** `toInputMessages` originally tagged every turn `input_text`; the
+  Responses API rejects an **assistant** message with `input_text` (needs `output_text`), so turn 2
+  failed with 400 "The request was invalid". Fixed: assistant→`output_text`, user/system→`input_text`
+  (`src/ai/responses.ts`); the `toInputMessages` test is now non-degenerate (includes an assistant
+  turn). Deployed in bundle `index-B9fcA9O8.js`.
 
 #### Known limitations / open decisions
 - Agentic makes **all** chat go through `/responses` when the probe says it's available (classic
-  fallback otherwise). Not yet live-tested against the real endpoint from this side.
+  fallback otherwise). Live-tested against the real endpoint (2026-06-24).
 - No `reasoning_effort` / `max_output_tokens` passed to `/responses` yet (model defaults).
 - `generate_image` works on a plain endpoint via client function calling. **Web search / file search**
   are future Foundry-**project** features (Profile 2), not in this slice.
 - Image provenance (the engineered prompt) is captured minimally.
 
-### 13.5 Composer focus ring (committed with this handoff push)
+### 13.5 Composer focus ring (deployed 2026-06-24)
 `src/design/global.css` — per user request, the blue focus ring moved off the textarea onto the
 **whole composer input area**: `.composer--focus` gets the `0 0 0 4px var(--color-focus-ring)` ring +
-box-shadow transition; `.composer__textarea:focus/:focus-visible` set `box-shadow:none`. Not in the
-live bundle until the next `docs/` rebuild.
+box-shadow transition; `.composer__textarea:focus/:focus-visible` set `box-shadow:none`. Live in
+bundle `index-B9fcA9O8.js`.
