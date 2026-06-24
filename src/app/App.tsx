@@ -64,7 +64,7 @@ function useSetupState(): SetupState {
         if (live) setState('no-session');
         return;
       }
-      const ok = mockAi || (await hasValidConfig());
+      const ok = (import.meta.env.DEV && mockAi) || (await hasValidConfig());
       if (live) setState(ok ? 'ready' : 'no-config');
     })();
     return () => {
@@ -89,9 +89,10 @@ function Protected({ children }: { children: ReactNode }) {
 }
 
 export function App() {
-  // Seed demo data once so the UI is reviewable immediately.
+  // Seed demo data once so the UI is reviewable immediately — dev builds only, so real
+  // users never get placeholder threads (which would otherwise sync to their cloud store).
   useEffect(() => {
-    seedMockDataIfEmpty().catch(() => undefined);
+    if (import.meta.env.DEV) seedMockDataIfEmpty().catch(() => undefined);
   }, []);
 
   // Background cloud sync: a no-op unless Settings.data.sync is on and a user is signed in.

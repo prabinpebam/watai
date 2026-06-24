@@ -99,6 +99,11 @@ export const useUi = create<UiState>()(
         activeModelByThread: s.activeModelByThread,
         mockAi: s.mockAi,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Mock AI is a dev-only affordance; never let a persisted value leak into production
+        // (covers users who toggled the old in-app demo switch before it was removed).
+        if (state && !import.meta.env.DEV) state.mockAi = false;
+      },
     },
   ),
 );

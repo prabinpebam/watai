@@ -160,8 +160,6 @@ function AccountSection({ onBack }: { onBack: () => void }) {
 
 function ModelsSection({ onBack }: { onBack: () => void }) {
   const pushToast = useUi((s) => s.pushToast);
-  const setMockAi = useUi((s) => s.setMockAi);
-  const mockAi = useUi((s) => s.mockAi);
   const [config, setConfig] = useState<ApiConfig | null>(null);
   const [key, setKey] = useState('');
 
@@ -215,16 +213,6 @@ function ModelsSection({ onBack }: { onBack: () => void }) {
               ]}
             />
           </div>
-        </div>
-      </div>
-
-      <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Demo (mock) mode</div>
-            <div className="setting-row__sub">Simulate responses without spending tokens.</div>
-          </div>
-          <Switch checked={mockAi} onChange={setMockAi} label="Demo mode" />
         </div>
       </div>
 
@@ -550,7 +538,6 @@ function DataSection({ onBack }: { onBack: () => void }) {
 }
 
 function AboutSection({ onBack }: { onBack: () => void }) {
-  const setMockAi = useUi((s) => s.setMockAi);
   return (
     <Section title="About" onBack={onBack}>
       <div className="col" style={{ alignItems: 'center', textAlign: 'center', gap: 'var(--space-4)', padding: 'var(--space-7) 0' }}>
@@ -562,14 +549,6 @@ function AboutSection({ onBack }: { onBack: () => void }) {
         <p className="muted" style={{ maxWidth: '40ch' }}>
           A privacy-first AI client. Your endpoint, your key, your data — running entirely in your browser.
         </p>
-      </div>
-      <div className="settings-card">
-        <button className="setting-row" onClick={() => setMockAi(false)}>
-          <div className="setting-row__body">
-            <div className="setting-row__title">Use real endpoint</div>
-          </div>
-          <Icon name="link" size={18} className="muted" />
-        </button>
       </div>
     </Section>
   );

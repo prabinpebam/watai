@@ -1,6 +1,5 @@
 import { LocalRepository } from './local/localRepository';
 import type { Repository } from './repository';
-import { buildSeed } from '../mocks/seed';
 import { WataiApiClient } from './cloud/apiClient';
 import { SyncRepository } from './sync/syncRepository';
 import { idbKvStore } from './sync/kvStore';
@@ -36,6 +35,8 @@ export async function seedMockDataIfEmpty(force = false): Promise<void> {
     localStorage.setItem(SEED_FLAG, '1');
     return;
   }
+  // Demo content is loaded lazily so it stays out of the production bundle entirely.
+  const { buildSeed } = await import('../mocks/seed');
   for (const { thread, messages } of buildSeed()) {
     await repo.createThread(thread);
     for (const m of messages) {

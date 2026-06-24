@@ -15,7 +15,7 @@ createRoot(document.getElementById('root')!).render(
       <ThemeProvider>
         <App />
         <ToastHost />
-        <DevMenu />
+        {import.meta.env.DEV && <DevMenu />}
       </ThemeProvider>
     </HashRouter>
   </StrictMode>,
