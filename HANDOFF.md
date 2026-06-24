@@ -34,7 +34,7 @@
    cd api; npm test; cd ..        # expect 90 passed, 10 skipped
    curl https://func-watai-cbroocyg3omrk.azurewebsites.net/api/health   # expect 200 {"ok":true,...}
    ```
-5. **Resume work.** §8 Entra External ID provisioning is **fully DONE** (auth live + proven). §9 (cloud Repository + sync engine) is **largely done**: the cloud API client, local-first `SyncRepository`, and MSAL auth are built, unit-tested, wired at the seam, and the backend now supports client-supplied idempotent thread ids (deployed + verified). What remains for §9 is **UI wiring** — a sign-in/out control, the Settings sync toggle, and a sync scheduler. See §9.
+5. **Resume work.** §8 Entra External ID provisioning is **fully DONE** (auth live + proven). §9 (cloud Repository + sync engine) is **code-complete**: the cloud API client, local-first `SyncRepository`, MSAL auth, and the Settings UI (sync toggle + sign-in) and a background sync scheduler are all built, tested, and pushed; the backend supports client-supplied idempotent thread ids (deployed + verified). What remains is the **frontend production build/deploy** (`npm run build` → commit `docs/`) plus a real-browser sanity check. See §9.
 
 ---
 
@@ -62,7 +62,7 @@ Local-first (IndexedDB) with **optional cloud sync** through a custom persistenc
 | Data endpoints wired behind JWT | Complete + **deployed**. **Auth ON** (AUTH_* set): valid CIAM token → 200, no token → 401 (proven 2026-06-24). |
 | Azure infra (Cosmos/Storage/KV/Insights/Function App) | Provisioned (Bicep) in `rg-watai-dev` (East US 2). |
 | **Entra External ID (CIAM) tenant** | **DONE** — tenant + SPA app + API scope + user flow created; auth proven. See §8. |
-| **Frontend cloud Repository + sync engine** | **Engine DONE + tested** (cloud client + local-first SyncRepository + MSAL, wired at the seam; backend client-id create deployed). UI wiring remains. See §9. |
+| **Frontend cloud Repository + sync engine** | **Code-complete** (engine + MSAL + UI wired; backend deployed). Not yet built into `docs/` / deployed to Pages. See §9. |
 
 **Tests:** Backend = **90 offline + 13 integration** (10 Cosmos/Storage + 3 separate). Frontend = ~26 (ids, sse, error taxonomy).
 
@@ -270,11 +270,13 @@ Self-service customer sign-up/sign-in now works for the PWA. **§8 is fully comp
 - **Backend change (deployed)** — `POST /api/threads` now accepts an optional client `id` and is **idempotent** (mirrors message append), so local ULIDs stay consistent with the cloud. `api/src/domain/thread.ts` + `threadService.ts` + tests (backend now **94** tests). Deployed via `func azure functionapp publish func-watai-cbroocyg3omrk --build remote`. Verified live: `POST {id,title}` twice → `201` same id, original title kept; `DELETE` → `204`.
   - **Deploy gotcha:** a fresh clone has no `api/local.settings.json` (gitignored + funcignored), so `func publish` errors with "Worker runtime cannot be 'None'". Recreate it with `{ "IsEncrypted": false, "Values": { "FUNCTIONS_WORKER_RUNTIME": "node", "AzureWebJobsStorage": "" } }`.
 
-### REMAINING for §9 (UI wiring — not done)
-- A **sign-in/out control** (e.g. in Settings) calling `cloudAuth.signIn()`/`signOut()`; show the signed-in account.
-- The **Settings → Data → sync toggle**: when enabled, prompt sign-in if needed, then call `backfillSync()` + `syncNow()`; persist via `repo.saveSettings`.
-- A **sync scheduler**: call `syncNow()` on app focus / an interval / after mutation bursts (debounced). All are no-ops when sync is off or signed out.
-- **Known gaps to revisit:** the deployed `GET /threads` list excludes tombstones (no `includeDeleted` over HTTP), so cross-device **deletes don't propagate on pull** yet (push-side delete works) — expose `listChanges`/`includeDeleted` to fix. Asset (blob) upload via SAS, and message edit/delete sync, are deferred (no server endpoints) and stay local-only for now.
+### UI wiring — DONE (2026-06-24)
+- **Settings → Data controls → "Sync to cloud" card** (`CloudSyncCard` in `src/features/settings/Settings.tsx`): Entra sign-in/out + a toggle. Enabling signs in (silent if possible, else popup), flips `Settings.data.sync`, then runs `backfillSync()` + `syncNow()`. Shows the signed-in account; sign-out pauses sync.
+- **Background sync scheduler** (`src/app/App.tsx`): `syncNow()` on mount, on `window` focus, and every 30s — all no-ops while sync is off or signed out (MSAL only loads when sync is actually used).
+
+### REMAINING for §9
+- **Frontend deploy:** the UI sync feature is in source + pushed but **not yet built into `docs/`**, so it isn't live on GitHub Pages. Run `npm run build` and commit `docs/` to publish — plus a real-browser sanity check of the MSAL popup + a sync round-trip.
+- **Known gaps to revisit:** the deployed `GET /threads` excludes tombstones (no `includeDeleted` over HTTP), so cross-device **deletes don't propagate on pull** yet (push-side delete works) — expose `listChanges`/`includeDeleted` to fix. Asset (blob) upload via SAS, and message edit/delete sync, are deferred (no server endpoints) and stay local-only for now.
 
 ### Reference — original design notes
 The frontend was **local-only** (IndexedDB). Goal: a cloud-backed `Repository` + a sync
