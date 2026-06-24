@@ -1,5 +1,5 @@
 
-
+Don't hardcode this. Make it generic so that I can provide my own api url
 
 ```curl
 curl -X POST "https://ai-project-deployments-resource.services.ai.azure.com/openai/v1/chat/completions" \
