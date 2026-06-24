@@ -49,6 +49,27 @@ export function transcriptionUrl(baseUrl: string, deployment: string): string {
   return `https://${host}/openai/deployments/${encodeURIComponent(deployment)}/audio/transcriptions?api-version=${TRANSCRIBE_API_VERSION}`;
 }
 
+/**
+ * The v1 inference API (chat, images, audio/speech, responses) is served on the
+ * services.ai.azure.com host for AI Foundry resources. Normalize whichever Foundry
+ * host the user pasted to that host + /openai/v1 so all of those endpoints resolve
+ * even if they entered the cognitiveservices host. Non-Foundry hosts (e.g. classic
+ * *.openai.azure.com) are used as entered.
+ */
+export function v1Url(baseUrl: string, path: string): string {
+  let host: string;
+  try {
+    host = new URL(baseUrl).host;
+  } catch {
+    return baseUrl.replace(/\/+$/, '') + path;
+  }
+  if (!/\.(services\.ai|cognitiveservices)\.azure\.com$/i.test(host)) {
+    return baseUrl.replace(/\/+$/, '') + path;
+  }
+  host = host.replace('.cognitiveservices.azure.com', '.services.ai.azure.com');
+  return `https://${host}/openai/v1${path}`;
+}
+
 function withTimeout(signal: AbortSignal | undefined, timeoutMs: number): {
   signal: AbortSignal;
   cleanup: () => void;
@@ -69,10 +90,10 @@ function withTimeout(signal: AbortSignal | undefined, timeoutMs: number): {
   };
 }
 
-/** Shared fetch: Bearer auth. Uses baseUrl + path on /openai/v1, or an absolute `url` override. */
+/** Shared fetch: Bearer auth. Uses the v1 host + path, or an absolute `url` override. */
 export async function aiFetch(req: AiRequest): Promise<Response> {
   const { config, key } = await loadConfig();
-  const url = req.url ?? config.baseUrl.replace(/\/+$/, '') + req.path;
+  const url = req.url ?? v1Url(config.baseUrl, req.path);
   const { signal, cleanup } = withTimeout(req.signal, req.timeoutMs ?? 120000);
 
   const headers: Record<string, string> = { Authorization: `Bearer ${key}` };

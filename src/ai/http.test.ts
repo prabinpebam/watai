@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseSse } from './http';
+import { parseSse, v1Url, transcriptionUrl } from './http';
+import { normalizeBaseUrl } from '../data/secureStore';
 
 function sseResponse(chunks: string[]): Response {
   const enc = new TextEncoder();
@@ -49,5 +50,52 @@ describe('parseSse', () => {
     ctrl.abort();
     const res = sseResponse(['data: {"a":1}\n']);
     expect(await collect(parseSse(res, ctrl.signal))).toEqual([]);
+  });
+});
+
+describe('endpoint URL construction', () => {
+  it('v1Url keeps the services.ai host and adds /openai/v1', () => {
+    expect(v1Url('https://r.services.ai.azure.com/openai/v1', '/chat/completions')).toBe(
+      'https://r.services.ai.azure.com/openai/v1/chat/completions',
+    );
+  });
+
+  it('v1Url swaps a cognitiveservices host to services.ai', () => {
+    expect(v1Url('https://r.cognitiveservices.azure.com', '/images/generations')).toBe(
+      'https://r.services.ai.azure.com/openai/v1/images/generations',
+    );
+  });
+
+  it('v1Url leaves non-Foundry hosts as entered', () => {
+    expect(v1Url('https://r.openai.azure.com', '/chat/completions')).toBe(
+      'https://r.openai.azure.com/chat/completions',
+    );
+  });
+
+  it('transcriptionUrl uses the classic cognitiveservices deployment path', () => {
+    expect(transcriptionUrl('https://r.services.ai.azure.com/openai/v1', 'gpt-4o-transcribe')).toBe(
+      'https://r.cognitiveservices.azure.com/openai/deployments/gpt-4o-transcribe/audio/transcriptions?api-version=2025-03-01-preview',
+    );
+  });
+
+  it('transcriptionUrl stays on cognitiveservices when already there', () => {
+    expect(transcriptionUrl('https://r.cognitiveservices.azure.com', 'gpt-4o-transcribe')).toBe(
+      'https://r.cognitiveservices.azure.com/openai/deployments/gpt-4o-transcribe/audio/transcriptions?api-version=2025-03-01-preview',
+    );
+  });
+
+  it('normalizeBaseUrl expands a bare resource name to the v1 base', () => {
+    expect(normalizeBaseUrl('ai-project-deployments-resource')).toBe(
+      'https://ai-project-deployments-resource.services.ai.azure.com/openai/v1',
+    );
+  });
+
+  it('normalizeBaseUrl adds /openai/v1 to a services.ai URL and leaves cognitiveservices alone', () => {
+    expect(normalizeBaseUrl('https://r.services.ai.azure.com')).toBe(
+      'https://r.services.ai.azure.com/openai/v1',
+    );
+    expect(normalizeBaseUrl('https://r.cognitiveservices.azure.com')).toBe(
+      'https://r.cognitiveservices.azure.com',
+    );
   });
 });

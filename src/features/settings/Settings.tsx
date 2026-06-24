@@ -185,7 +185,8 @@ function ModelsSection({ onBack }: { onBack: () => void }) {
       <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
         <div className="col" style={{ gap: 'var(--space-5)' }}>
           <Field
-            label="Base URL"
+            label="Resource name or base URL"
+            hint="Azure AI Foundry resource name or a full base URL."
             value={config.baseUrl}
             onChange={(e) => update({ baseUrl: e.target.value })}
             autoCapitalize="off"

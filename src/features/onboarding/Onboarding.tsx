@@ -204,8 +204,9 @@ function KeyWizard() {
           </div>
           <div className="onboard__form">
             <Field
-              label="Base URL"
-              placeholder="https://your-resource.services.ai.azure.com/openai/v1"
+              label="Resource name or base URL"
+              placeholder="ai-project-deployments-resource"
+              hint="Your Azure AI Foundry resource name — we build the endpoints. A full base URL also works."
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               autoCapitalize="off"
