@@ -131,6 +131,22 @@ export async function probeTts(config: ApiConfig): Promise<ProbeResult> {
   }
 }
 
+/** Detect whether the endpoint serves the Responses API (gates agentic chat + tools). */
+export async function probeResponses(config: ApiConfig): Promise<ProbeResult> {
+  try {
+    const res = await aiFetch({
+      path: '/responses',
+      body: { model: config.models.chat, input: 'ping', max_output_tokens: 1000 },
+      timeoutMs: 30000,
+    });
+    if (!res.ok) return { ok: false, status: res.status, detail: await detailFrom(res) };
+    await res.body?.cancel();
+    return { ok: true, status: res.status };
+  } catch (e) {
+    return failed(e);
+  }
+}
+
 export function probeModel(key: ModelKey, config: ApiConfig): Promise<ProbeResult> {
   switch (key) {
     case 'chat':

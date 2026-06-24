@@ -19,6 +19,8 @@ export interface AiRequest {
   stream?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /** Extra request headers (e.g. the image-generation deployment header for the Responses API). */
+  headers?: Record<string, string>;
 }
 
 export async function loadConfig(): Promise<{ config: ApiConfig; key: string }> {
@@ -96,7 +98,7 @@ export async function aiFetch(req: AiRequest): Promise<Response> {
   const url = req.url ?? v1Url(config.baseUrl, req.path);
   const { signal, cleanup } = withTimeout(req.signal, req.timeoutMs ?? 120000);
 
-  const headers: Record<string, string> = { Authorization: `Bearer ${key}` };
+  const headers: Record<string, string> = { Authorization: `Bearer ${key}`, ...req.headers };
   let payload: BodyInit | undefined;
   if (req.form) {
     payload = req.form; // browser sets multipart boundary

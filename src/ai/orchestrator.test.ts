@@ -1,0 +1,126 @@
+import { describe, it, expect } from 'vitest';
+import { runAgent, type AgentEvent } from './orchestrator';
+import type { ResponsesEvent, ResponsesParams } from './responses';
+
+/** A fake Responses stream that replays one scripted event list per iteration. */
+function fakeStream(scripts: ResponsesEvent[][]) {
+  let i = 0;
+  return async function* (_p: ResponsesParams): AsyncGenerator<ResponsesEvent> {
+    void _p;
+    const script = scripts[i++] ?? [{ type: 'completed' }];
+    for (const ev of script) yield ev;
+  };
+}
+
+async function collect(gen: AsyncGenerator<AgentEvent>): Promise<AgentEvent[]> {
+  const out: AgentEvent[] = [];
+  for await (const v of gen) out.push(v);
+  return out;
+}
+
+const noopExecute = async () => ({ output: '' });
+
+describe('runAgent', () => {
+  it('streams a plain text answer and finishes', async () => {
+    const streamFn = fakeStream([
+      [
+        { type: 'created', responseId: 'r1' },
+        { type: 'text', delta: 'Hello' },
+        { type: 'completed' },
+      ],
+    ]);
+    const events = await collect(
+      runAgent({ model: 'm', turns: [{ role: 'user', text: 'hi' }], tools: [], execute: noopExecute, streamFn }),
+    );
+    expect(events).toEqual([{ type: 'text', delta: 'Hello' }, { type: 'done' }]);
+  });
+
+  it('executes a function call, renders its image, and continues the run', async () => {
+    const streamFn = fakeStream([
+      [
+        { type: 'created', responseId: 'r1' },
+        { type: 'text', delta: 'Drawing…' },
+        { type: 'functionCall', callId: 'c1', name: 'generate_image', arguments: '{"prompt":"a cat"}' },
+        { type: 'completed' },
+      ],
+      [
+        { type: 'created', responseId: 'r2' },
+        { type: 'text', delta: 'Here it is.' },
+        { type: 'completed' },
+      ],
+    ]);
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const execute = async (name: string, args: Record<string, unknown>) => {
+      calls.push({ name, args });
+      return { output: 'Image shown to the user.', image: { b64: 'IMGB64' } };
+    };
+
+    const events = await collect(
+      runAgent({
+        model: 'm',
+        turns: [{ role: 'user', text: 'draw a cat' }],
+        tools: [],
+        execute,
+        streamFn,
+      }),
+    );
+
+    expect(calls).toEqual([{ name: 'generate_image', args: { prompt: 'a cat' } }]);
+    expect(events).toContainEqual({ type: 'image', b64: 'IMGB64', partial: false });
+    expect(events).toContainEqual({ type: 'tool', name: 'generate_image', status: 'running' });
+    expect(events).toContainEqual({ type: 'tool', name: 'generate_image', status: 'done' });
+    expect(events.filter((e) => e.type === 'text')).toEqual([
+      { type: 'text', delta: 'Drawing…' },
+      { type: 'text', delta: 'Here it is.' },
+    ]);
+    expect(events[events.length - 1]).toEqual({ type: 'done' });
+  });
+
+  it('reports a tool error but keeps the run going', async () => {
+    const streamFn = fakeStream([
+      [
+        { type: 'functionCall', callId: 'c1', name: 'boom', arguments: '{}' },
+        { type: 'completed' },
+      ],
+      [{ type: 'text', delta: 'recovered' }, { type: 'completed' }],
+    ]);
+    const execute = async () => {
+      throw new Error('kaboom');
+    };
+    const events = await collect(
+      runAgent({ model: 'm', turns: [], tools: [], execute, streamFn }),
+    );
+    expect(events).toContainEqual({ type: 'tool', name: 'boom', status: 'error', detail: 'kaboom' });
+    expect(events[events.length - 1]).toEqual({ type: 'done' });
+  });
+
+  it('surfaces a stream error and stops', async () => {
+    const streamFn = fakeStream([[{ type: 'error', message: 'boom' }]]);
+    const events = await collect(
+      runAgent({ model: 'm', turns: [], tools: [], execute: noopExecute, streamFn }),
+    );
+    expect(events).toEqual([{ type: 'error', message: 'boom' }]);
+  });
+
+  it('stops with a budget error if tools never resolve', async () => {
+    const streamFn = (_p: ResponsesParams) =>
+      (async function* (): AsyncGenerator<ResponsesEvent> {
+        yield { type: 'functionCall', callId: 'c', name: 'loop', arguments: '{}' };
+        yield { type: 'completed' };
+      })();
+    const events = await collect(
+      runAgent({
+        model: 'm',
+        turns: [],
+        tools: [],
+        execute: async () => ({ output: 'ok' }),
+        maxIterations: 2,
+        streamFn,
+      }),
+    );
+    expect(events[events.length - 1]).toEqual({
+      type: 'error',
+      message: 'Stopped: tool-call budget exceeded.',
+    });
+  });
+});
