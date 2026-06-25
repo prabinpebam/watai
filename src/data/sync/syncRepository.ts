@@ -65,10 +65,11 @@ export class SyncRepository implements Repository {
   /** Resolve an image URL: prefer the local cache; otherwise download from Blob Storage
    *  via a read SAS and cache it locally (so other devices and reloads work offline after). */
   async resolveImageUrl(image: ImageRef): Promise<string> {
-    if (image.localBlobKey) {
-      const url = await this.local.getBlobUrl(image.localBlobKey);
-      if (url) return url;
-    }
+    // The cache key is the explicit local key, else a stable per-image cloud key. Always check
+    // it FIRST so a once-downloaded cloud image is never re-fetched (faster + no repeat SAS/egress).
+    const cacheKey = image.localBlobKey ?? `cloud-${image.id}`;
+    const cached = await this.local.getBlobUrl(cacheKey);
+    if (cached) return cached;
     if (image.blobPath && /^(data:|blob:|https?:)/.test(image.blobPath)) return image.blobPath;
     if (image.blobPath && (await this.syncEnabled())) {
       const parsed = parseBlobPath(image.blobPath);
@@ -83,9 +84,8 @@ export class SyncRepository implements Repository {
         const res = await this.fetchImpl(sas.url);
         if (!res.ok) return '';
         const blob = await res.blob();
-        const key = image.localBlobKey ?? `cloud-${image.id}`;
-        await this.local.putBlob(key, blob);
-        return this.local.getBlobUrl(key);
+        await this.local.putBlob(cacheKey, blob);
+        return this.local.getBlobUrl(cacheKey);
       } catch {
         return '';
       }

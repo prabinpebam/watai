@@ -68,6 +68,8 @@ export interface ResponsesCitation {
   fileId?: string;
   filename?: string;
   favicon?: string;
+  /** Raw result content (e.g. the Tavily snippet) for the source detail pane. Bounded. */
+  content?: string;
 }
 
 interface RawEvent {

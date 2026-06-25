@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useChat } from './useChat';
 import { Composer } from './Composer';
 import { AssistantMessage, UserMessage } from './Message';
+import { SourcePane } from './SourcePane';
 import { Icon } from '../../design/icons';
 import { Spinner } from '../../design/ui';
 import { useUi } from '../../state/store';
@@ -18,8 +19,12 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   const { messages, loading, send, regenerate, stop, streaming } = useChat(threadId);
   const draft = useUi((s) => s.composerDrafts[threadId] ?? '');
   const setDraft = useUi((s) => s.setDraft);
+  const closeSourcePane = useUi((s) => s.closeSourcePane);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
+
+  // Close any open source pane when this thread view unmounts (e.g. switching threads).
+  useEffect(() => () => closeSourcePane(), [closeSourcePane]);
 
   const isEmpty = !loading && messages.length === 0;
 
@@ -47,8 +52,9 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   };
 
   return (
-    <div className="chat">
-      <div className="chat__scroll" ref={scrollRef} onScroll={onScroll}>
+    <div className="chat-area">
+      <div className="chat">
+        <div className="chat__scroll" ref={scrollRef} onScroll={onScroll}>
         {loading ? (
           <div className="center-screen">
             <Spinner large />
@@ -98,6 +104,8 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
         streaming={streaming}
         onStop={stop}
       />
+      </div>
+      <SourcePane />
     </div>
   );
 }

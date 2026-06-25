@@ -9,7 +9,7 @@ describe('web_search tool', () => {
     expect(params.required).toContain('query');
   });
 
-  it('summarizes results and returns web citations (with favicons)', async () => {
+  it('summarizes results and returns web citations (with favicons + raw content)', async () => {
     const search = vi.fn(async () => ({
       query: 'q',
       answer: 'Short answer',
@@ -22,8 +22,8 @@ describe('web_search tool', () => {
     expect(res.output).toContain('Short answer');
     expect(res.output).toContain('https://a.com');
     expect(res.citations).toEqual([
-      { source: 'web', url: 'https://a.com', title: 'A', favicon: 'https://a.com/f.ico' },
-      { source: 'web', url: 'https://b.com', title: 'B' },
+      { source: 'web', url: 'https://a.com', title: 'A', favicon: 'https://a.com/f.ico', content: 'alpha' },
+      { source: 'web', url: 'https://b.com', title: 'B', content: 'beta' },
     ]);
     expect(search).toHaveBeenCalledWith('q', { topic: undefined, timeRange: undefined });
   });

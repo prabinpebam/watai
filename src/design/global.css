@@ -332,6 +332,11 @@ a:hover {
 
 /* ============================ Chat ============================ */
 
+.chat-area {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
 .chat {
   flex: 1;
   display: flex;

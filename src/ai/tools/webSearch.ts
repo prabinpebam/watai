@@ -79,6 +79,7 @@ export async function runWebSearch(
     url: r.url,
     title: r.title,
     ...(r.favicon ? { favicon: r.favicon } : {}),
+    ...(r.content ? { content: r.content.replace(/\s+/g, ' ').trim().slice(0, 1500) } : {}),
   }));
 
   return { output, citations };

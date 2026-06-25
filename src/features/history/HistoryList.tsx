@@ -6,7 +6,7 @@ import { useRuns } from '../chat/runStore';
 import { groupThreads } from '../../lib/format';
 import { Icon } from '../../design/icons';
 import { IconButton } from '../../design/ui';
-import { Menu, ConfirmDialog, type MenuItemDef } from '../../design/overlays';
+import { Menu, ConfirmDialog, PromptDialog, type MenuItemDef } from '../../design/overlays';
 import type { Thread } from '../../lib/types';
 
 interface HistoryListProps {
@@ -27,6 +27,7 @@ export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProp
   const [threads, setThreads] = useState<Thread[]>([]);
   const [menu, setMenu] = useState<{ x: number; y: number; thread: Thread } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Thread | null>(null);
+  const [renameTarget, setRenameTarget] = useState<Thread | null>(null);
 
   useEffect(() => {
     repo.listThreads({ includeArchived: false }).then(setThreads);
@@ -43,13 +44,7 @@ export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProp
     setMenu({ x: rect.right - 8, y: rect.bottom + 4, thread });
   };
 
-  const rename = async (thread: Thread) => {
-    const title = window.prompt('Rename conversation', thread.title);
-    if (title && title.trim()) {
-      await repo.updateThread(thread.id, { title: title.trim() });
-      bump();
-    }
-  };
+  const rename = (thread: Thread) => setRenameTarget(thread);
 
   const menuItems = (thread: Thread): MenuItemDef[] => [
     {
@@ -124,11 +119,26 @@ export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProp
       ))}
 
       {menu && <Menu x={menu.x} y={menu.y} items={menuItems(menu.thread)} onClose={() => setMenu(null)} />}
+      {renameTarget && (
+        <PromptDialog
+          title="Rename conversation"
+          initialValue={renameTarget.title}
+          placeholder="Conversation name"
+          confirmLabel="Save"
+          icon="pen-square"
+          onSubmit={async (title) => {
+            await repo.updateThread(renameTarget.id, { title });
+            bump();
+          }}
+          onClose={() => setRenameTarget(null)}
+        />
+      )}
       {confirmDelete && (
         <ConfirmDialog
           title="Delete conversation?"
-          message={`"${confirmDelete.title}" will be permanently removed.`}
+          message={`“${confirmDelete.title}” and its messages will be permanently deleted. This can’t be undone.`}
           confirmLabel="Delete"
+          icon="trash"
           danger
           onConfirm={async () => {
             await repo.deleteThread(confirmDelete.id);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { IconButton, Button } from './ui';
 import { Icon } from './icons';
@@ -69,20 +69,31 @@ interface ConfirmProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  cancelLabel?: string;
   danger?: boolean;
+  /** Icon for the badge; defaults to a trash icon when danger, else info. */
+  icon?: string;
   onConfirm: () => void;
   onClose: () => void;
 }
 
-export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', danger, onConfirm, onClose }: ConfirmProps) {
+export function ConfirmDialog({
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  danger,
+  icon,
+  onConfirm,
+  onClose,
+}: ConfirmProps) {
   return (
     <Modal
-      title={title}
       onClose={onClose}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {cancelLabel}
           </Button>
           <Button
             variant={danger ? 'danger' : 'primary'}
@@ -96,9 +107,90 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', danger
         </>
       }
     >
-      <p className="muted" style={{ margin: 0 }}>
-        {message}
-      </p>
+      <div className="dialog">
+        <div className={`dialog__icon ${danger ? 'dialog__icon--danger' : ''}`}>
+          <Icon name={icon ?? (danger ? 'trash' : 'info')} size={22} />
+        </div>
+        <div className="dialog__text">
+          <h3 className="dialog__title">{title}</h3>
+          <p className="dialog__message">{message}</p>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+interface PromptProps {
+  title: string;
+  message?: string;
+  initialValue?: string;
+  placeholder?: string;
+  confirmLabel?: string;
+  icon?: string;
+  onSubmit: (value: string) => void;
+  onClose: () => void;
+}
+
+/** A single-line text-input dialog (e.g. rename) sharing the ConfirmDialog visual language. */
+export function PromptDialog({
+  title,
+  message,
+  initialValue = '',
+  placeholder,
+  confirmLabel = 'Save',
+  icon = 'pen-square',
+  onSubmit,
+  onClose,
+}: PromptProps) {
+  const [value, setValue] = useState(initialValue);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 30);
+    return () => clearTimeout(t);
+  }, []);
+  const submit = () => {
+    const v = value.trim();
+    if (!v) return;
+    onSubmit(v);
+    onClose();
+  };
+  return (
+    <Modal
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={!value.trim()}>
+            {confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <div className="dialog">
+        <div className="dialog__icon">
+          <Icon name={icon} size={22} />
+        </div>
+        <div className="dialog__text">
+          <h3 className="dialog__title">{title}</h3>
+          {message && <p className="dialog__message">{message}</p>}
+          <input
+            ref={inputRef}
+            className="input dialog__input"
+            value={value}
+            placeholder={placeholder}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submit();
+            }}
+            aria-label={title}
+          />
+        </div>
+      </div>
     </Modal>
   );
 }

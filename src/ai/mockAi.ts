@@ -101,11 +101,23 @@ export async function* mockAgentStream(history: Message[]): AsyncGenerator<Agent
     await sleep(450);
     yield {
       type: 'citation',
-      citation: { source: 'web', url: 'https://learn.microsoft.com/azure/ai-foundry/', title: 'Azure AI Foundry documentation' },
+      citation: {
+        source: 'web',
+        url: 'https://learn.microsoft.com/azure/ai-foundry/',
+        title: 'Azure AI Foundry documentation',
+        content:
+          'Azure AI Foundry is a unified platform for building, evaluating, and deploying generative AI applications. It brings together models, prompt flows, evaluations, and content safety behind a single project, with a Responses API that supports server-side tools such as code interpreter and file search.',
+      },
     };
     yield {
       type: 'citation',
-      citation: { source: 'web', url: 'https://react.dev/blog', title: 'React Blog' },
+      citation: {
+        source: 'web',
+        url: 'https://react.dev/blog',
+        title: 'React Blog',
+        content:
+          'The React Blog publishes official release notes and announcements from the React team — including React 18 concurrent features, the new use() hook, Server Components, and migration guidance for app frameworks.',
+      },
     };
     yield { type: 'tool', name: 'web_search', status: 'done', callId: 'mock-ws', detail: query };
     yield* emit(

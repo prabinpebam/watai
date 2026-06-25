@@ -83,6 +83,8 @@ export interface Citation {
   fileId?: string;
   filename?: string;
   favicon?: string;
+  /** Raw result content (e.g. the Tavily snippet) shown in the source detail pane. Bounded. */
+  content?: string;
 }
 
 export interface Message {

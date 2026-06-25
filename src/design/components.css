@@ -400,6 +400,50 @@
   padding: var(--space-3) var(--space-5) var(--space-5);
 }
 
+/* Icon-led confirm / prompt dialog (delete, rename, …) */
+.dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+  padding-top: var(--space-6);
+}
+.dialog__icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+}
+.dialog__icon--danger {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  color: var(--color-danger);
+}
+.dialog__text {
+  width: 100%;
+}
+.dialog__title {
+  margin: 0;
+  font-size: var(--text-title-3-size);
+  font-weight: 650;
+  line-height: 1.3;
+}
+.dialog__message {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-body-size);
+  line-height: 1.55;
+  word-break: break-word;
+}
+.dialog__input {
+  margin-top: var(--space-5);
+  width: 100%;
+  text-align: left;
+}
+
 /* Bottom sheet (compact) */
 .sheet {
   position: fixed;
@@ -847,6 +891,149 @@ a.source-chip:hover {
 }
 .source-chip--bing {
   color: var(--color-accent);
+}
+button.source-chip {
+  cursor: pointer;
+  font: inherit;
+  color: var(--color-text-secondary);
+}
+button.source-chip:hover {
+  background: var(--color-surface-2);
+}
+
+/* ===== Source detail pane (raw web-search results) ===== */
+.source-pane {
+  flex: 0 0 360px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--color-bg);
+  border-left: 1px solid var(--color-border);
+  animation: source-pane-in var(--motion-base) var(--ease-standard);
+}
+@keyframes source-pane-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+}
+.source-pane--overlay {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(440px, 92vw);
+  z-index: var(--z-sheet);
+  box-shadow: var(--elevation-3);
+  border-left: none;
+  animation: source-pane-slide var(--motion-base) var(--ease-standard);
+}
+@keyframes source-pane-slide {
+  from {
+    transform: translateX(100%);
+  }
+}
+.source-pane__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+.source-pane__title {
+  font-weight: 650;
+  color: var(--color-text-primary);
+}
+.source-pane__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-right: auto;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+}
+.source-pane__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.source-pane__empty {
+  margin: var(--space-5) 0;
+  text-align: center;
+}
+.source-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  scroll-margin: var(--space-3);
+}
+.source-item--active {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+.source-item__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-tertiary);
+}
+.source-item__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-surface-3);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+.source-item__favicon {
+  flex: none;
+  border-radius: 3px;
+  object-fit: contain;
+}
+.source-item__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-body-size);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.35;
+}
+.source-item__domain {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-item__content {
+  margin: 0;
+  font-size: var(--text-body-size);
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.source-item__open {
+  align-self: flex-start;
+  gap: var(--space-2);
 }
 
 /* Composer Tools button + popover */
@@ -1404,6 +1591,17 @@ a.source-chip:hover {
 }
 .attach-thumb--loading {
   min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    115deg,
+    var(--color-surface-2) 0%,
+    color-mix(in srgb, var(--color-text-secondary) 10%, var(--color-surface-2)) 50%,
+    var(--color-surface-2) 100%
+  );
+  background-size: 200% 200%;
+  animation: image-gen-pan 2.6s ease-in-out infinite;
 }
 .file-card {
   border: 1px solid var(--color-border);
@@ -1577,9 +1775,35 @@ a.source-chip:hover {
     transform: translateX(100%);
   }
 }
+/* Subtle variant for the download/decode wait (less vibrant than generation). */
+.image-placeholder--loading {
+  background: linear-gradient(
+    115deg,
+    var(--color-surface-2) 0%,
+    color-mix(in srgb, var(--color-text-secondary) 10%, var(--color-surface-2)) 50%,
+    var(--color-surface-2) 100%
+  );
+  background-size: 200% 200%;
+  animation: image-gen-pan 2.6s ease-in-out infinite;
+}
+.image-placeholder--loading::after {
+  opacity: 0.5;
+  animation-duration: 2.8s;
+}
+.spinner--on-media {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--color-text-secondary) 40%, transparent);
+  border-top-color: var(--color-accent);
+}
 @media (prefers-reduced-motion: reduce) {
   .image-placeholder,
-  .image-placeholder::after {
+  .image-placeholder::after,
+  .image-placeholder--loading,
+  .attach-thumb--loading {
     animation: none;
   }
 }

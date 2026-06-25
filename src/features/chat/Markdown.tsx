@@ -73,6 +73,27 @@ function safeUrl(url: string): string {
   return '';
 }
 
+/** Normalize the LaTeX delimiters LLMs commonly emit (`\(...\)`, `\[...\]`) to the `$`/`$$`
+ *  that remark-math understands, without rewriting fenced code blocks or inline code spans. */
+function normalizeMath(src: string): string {
+  const blocks = src.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~)/g);
+  return blocks
+    .map((block, bi) => {
+      if (bi % 2 === 1) return block; // fenced code — leave untouched
+      return block
+        .split(/(`[^`]*`)/g)
+        .map((seg, si) =>
+          si % 2 === 1
+            ? seg // inline code — leave untouched
+            : seg
+                .replace(/\\\[([\s\S]+?)\\\]/g, (_m, body) => `$$${body}$$`)
+                .replace(/\\\(([\s\S]+?)\\\)/g, (_m, body) => `$${body}$`),
+        )
+        .join('');
+    })
+    .join('');
+}
+
 export const Markdown = memo(function Markdown({ content }: MarkdownProps) {
   const [light, setLight] = useState<{ src: string; alt: string } | null>(null);
 
@@ -106,7 +127,7 @@ export const Markdown = memo(function Markdown({ content }: MarkdownProps) {
             ) : null,
         }}
       >
-        {content}
+        {normalizeMath(content)}
       </ReactMarkdown>
 
       {light && <Lightbox src={light.src} alt={light.alt} onClose={() => setLight(null)} />}

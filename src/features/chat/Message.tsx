@@ -111,6 +111,7 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pushToast = useUi((s) => s.pushToast);
   const mockAi = useUi((s) => s.mockAi);
+  const openSourcePane = useUi((s) => s.openSourcePane);
   const isStreamingThis = streaming && message.status === 'streaming';
 
   const copy = () => {
@@ -179,50 +180,46 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
           </div>
         ) : null}
 
-        {message.citations && message.citations.length > 0 && (
-          <div className="sources">
-            <span className="sources__label">Sources</span>
-            <div className="sources__list">
-              {message.citations
-                .filter((c) => c.url || c.filename)
-                .map((c, i) =>
-                  c.url ? (
-                    <a
+        {!isStreamingThis &&
+          message.citations &&
+          message.citations.some((c) => c.url || c.filename || c.content) && (
+            <div className="sources">
+              <span className="sources__label">Sources</span>
+              <div className="sources__list">
+                {message.citations
+                  .filter((c) => c.url || c.filename || c.content)
+                  .map((c, i, arr) => (
+                    <button
                       key={i}
+                      type="button"
                       className="source-chip"
-                      href={c.url}
-                      target="_blank"
-                      rel="noreferrer noopener"
+                      onClick={() => openSourcePane(arr, i)}
+                      title={c.title || c.filename || domainOf(c.url || '')}
                     >
                       <span className="source-chip__num">{i + 1}</span>
                       {c.favicon ? (
                         <img className="source-chip__favicon" src={c.favicon} alt="" width={14} height={14} />
+                      ) : !c.url ? (
+                        <Icon name="paperclip" size={13} />
                       ) : null}
-                      <span className="source-chip__text">{c.title || domainOf(c.url)}</span>
-                      <Icon name="external" size={12} className="source-chip__ext" />
-                    </a>
-                  ) : (
-                    <span key={i} className="source-chip">
-                      <span className="source-chip__num">{i + 1}</span>
-                      <Icon name="paperclip" size={13} />
-                      <span className="source-chip__text">{c.filename}</span>
-                    </span>
-                  ),
+                      <span className="source-chip__text">{c.title || c.filename || domainOf(c.url || '')}</span>
+                      <Icon name="chevron-right" size={12} className="source-chip__ext" />
+                    </button>
+                  ))}
+                {message.citations.find((c) => c.bingQueryUrl)?.bingQueryUrl && (
+                  <a
+                    className="source-chip source-chip--bing"
+                    href={message.citations.find((c) => c.bingQueryUrl)?.bingQueryUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    <Icon name="globe" size={13} />
+                    <span className="source-chip__text">Searched the web</span>
+                  </a>
                 )}
-              {message.citations.find((c) => c.bingQueryUrl)?.bingQueryUrl && (
-                <a
-                  className="source-chip source-chip--bing"
-                  href={message.citations.find((c) => c.bingQueryUrl)?.bingQueryUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                >
-                  <Icon name="globe" size={13} />
-                  <span className="source-chip__text">Searched the web</span>
-                </a>
-              )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         <AttachmentList attachments={message.attachments} />
 

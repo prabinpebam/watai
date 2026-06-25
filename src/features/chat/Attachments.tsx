@@ -57,7 +57,12 @@ function iconForMime(mime: string, name = ''): string {
 function ImageAttachment({ att }: { att: Attachment }) {
   const url = useObjectUrl(att.blobPath, att.localBlobKey);
   const [open, setOpen] = useState(false);
-  if (!url) return <div className="attach-thumb attach-thumb--loading skeleton" />;
+  if (!url)
+    return (
+      <div className="attach-thumb attach-thumb--loading" role="img" aria-label="Loading image">
+        <span className="spinner spinner--on-media" />
+      </div>
+    );
   return (
     <>
       <button className="attach-thumb" onClick={() => setOpen(true)} title={att.name || 'Image'}>
@@ -232,7 +237,7 @@ function useResolvedImage(image: ImageRef): string | null {
 function GeneratedImage({ image }: { image: ImageRef }) {
   const url = useResolvedImage(image);
   const [open, setOpen] = useState(false);
-  if (!url) return <div className="image-card image-card--loading skeleton" style={{ height: 220 }} />;
+  if (!url) return <ImageLoading size={image.size} />;
   return (
     <div className="image-card">
       <button className="image-card__hit" onClick={() => setOpen(true)} aria-label="Expand image">
@@ -272,6 +277,23 @@ export function GeneratedImages({ images, pending }: { images?: ImageRef[]; pend
 function parseAspect(size: string): [number, number] {
   const m = /^(\d+)\s*[x\u00d7]\s*(\d+)$/.exec(size.trim());
   return m ? [Number(m[1]), Number(m[2])] : [1, 1];
+}
+
+/** Subtle aspect-correct placeholder shown while a generated image is downloading/decoding. */
+function ImageLoading({ size }: { size: string }) {
+  const [w, h] = parseAspect(size);
+  return (
+    <div className="image-card image-card--generating">
+      <div
+        className="image-placeholder image-placeholder--loading"
+        style={{ aspectRatio: `${w} / ${h}` }}
+        role="img"
+        aria-label="Loading image"
+      >
+        <span className="spinner spinner--on-media" />
+      </div>
+    </div>
+  );
 }
 
 /** Animated gradient placeholder shown while an image generates; matches the target aspect ratio. */

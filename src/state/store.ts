@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { CapabilityMatrix, Density, TextScale, Theme, Toast } from '../lib/types';
+import type { CapabilityMatrix, Citation, Density, TextScale, Theme, Toast } from '../lib/types';
 import { newId } from '../lib/ids';
 
 interface StreamState {
@@ -39,6 +39,8 @@ interface UiState {
   /** Per-thread message revision; bumped when a thread's persisted messages change. */
   threadRev: Record<string, number>;
   confirmRequest: ConfirmRequest | null;
+  /** Open source-detail pane (web search results) — transient, never persisted. */
+  sourcePane: { citations: Citation[]; index: number } | null;
 
   setTheme: (t: Theme) => void;
   setTextScale: (s: TextScale) => void;
@@ -59,6 +61,9 @@ interface UiState {
   bumpThread: (threadId: string) => void;
   requestConfirm: (opts: Omit<ConfirmRequest, 'resolve'>) => Promise<boolean>;
   resolveConfirm: (ok: boolean) => void;
+  openSourcePane: (citations: Citation[], index: number) => void;
+  setSourceIndex: (index: number) => void;
+  closeSourcePane: () => void;
 }
 
 export const useUi = create<UiState>()(
@@ -83,6 +88,7 @@ export const useUi = create<UiState>()(
       threadsVersion: 0,
       threadRev: {},
       confirmRequest: null,
+      sourcePane: null,
 
       setTheme: (theme) => set({ theme }),
       setTextScale: (textScale) => set({ textScale }),
@@ -112,6 +118,10 @@ export const useUi = create<UiState>()(
         if (req) req.resolve(ok);
         set({ confirmRequest: null });
       },
+      openSourcePane: (citations, index) => set({ sourcePane: { citations, index } }),
+      setSourceIndex: (index) =>
+        set((s) => (s.sourcePane ? { sourcePane: { ...s.sourcePane, index } } : {})),
+      closeSourcePane: () => set({ sourcePane: null }),
     }),
     {
       name: 'watai.ui',
