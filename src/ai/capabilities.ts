@@ -1,4 +1,4 @@
-import { aiFetch, transcriptionUrl } from './http';
+import { aiFetch, isFoundryHost, transcriptionUrl } from './http';
 import type { ApiConfig, CapabilityMatrix, EndpointKind } from '../lib/types';
 
 export type { ApiConfig } from '../lib/types';
@@ -225,21 +225,25 @@ export async function detectCapabilities(
   };
   const responses = (await p.responses(config)).ok;
   const off: ProbeResultLike = { ok: false };
-  const projectKind = endpointKind(config) === 'foundry-project';
-  const [code, web, file] = responses
+  // Web/file search are served by Azure AI Foundry hosts (with a project + connections). A
+  // Foundry host is NOT always identified by an `/api/projects/` URL segment — an account-level
+  // `…services.ai.azure.com` endpoint serves them too. Web search needs a Bing connection, so we
+  // probe it. File search uses on-demand vector stores (nothing to probe before a store exists),
+  // so it is available on any Foundry host that serves the Responses API.
+  const foundryCapable = isFoundryHost(config.baseUrl) || endpointKind(config) === 'foundry-project';
+  const [code, web] = responses
     ? await Promise.all([
         p.codeInterpreter(config),
-        projectKind ? p.webSearch(config) : Promise.resolve(off),
-        projectKind ? p.fileSearch(config) : Promise.resolve(off),
+        foundryCapable ? p.webSearch(config) : Promise.resolve(off),
       ])
-    : [off, off, off];
+    : [off, off];
   matrixCache = {
     ...FULL_CAPABILITY,
     responses,
     functions: responses,
     codeInterpreter: code.ok,
     webSearch: web.ok,
-    fileSearch: file.ok,
+    fileSearch: responses && foundryCapable,
   };
   return matrixCache;
 }

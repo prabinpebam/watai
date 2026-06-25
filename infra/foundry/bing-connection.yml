@@ -1,0 +1,20 @@
+# Grounding with Bing — project connection (TEMPLATE, preview surface — VERIFY before use).
+#
+# The Foundry portal is the reliable way to add this connection (Runbook §4.3). This file is a
+# starting point for the CLI path:
+#
+#   az ml connection create --file infra/foundry/bing-connection.yml \
+#     --resource-group watai-ai-rg --workspace-name watai
+#
+# Re-verify the schema/type against current docs — the connection category for Grounding with
+# Bing is preview and the exact field names may differ in your `az ml` extension version.
+
+name: watai-bing-grounding
+type: api_key                       # VERIFY: the connection category for Bing grounding
+target: https://api.bing.microsoft.com/   # VERIFY: the Bing grounding endpoint
+credentials:
+  type: api_key
+  key: ${BING_RESOURCE_KEY}         # pulled from the Microsoft.Bing/accounts resource (keep secret)
+metadata:
+  ApiType: Azure
+  Kind: Bing.Grounding

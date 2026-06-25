@@ -76,6 +76,17 @@ export function v1Url(baseUrl: string, path: string): string {
   return `https://${host}/openai/v1${path}`;
 }
 
+/** Whether the endpoint is an Azure AI Foundry host (services.ai / cognitiveservices), which
+ *  can serve the agentic tool suite (web search, code interpreter, file search) once a
+ *  project + connections are configured. Used to gate the (cheap) tool capability probes. */
+export function isFoundryHost(baseUrl: string): boolean {
+  try {
+    return /\.(services\.ai|cognitiveservices)\.azure\.com$/i.test(new URL(baseUrl).host);
+  } catch {
+    return false;
+  }
+}
+
 function withTimeout(signal: AbortSignal | undefined, timeoutMs: number): {
   signal: AbortSignal;
   cleanup: () => void;

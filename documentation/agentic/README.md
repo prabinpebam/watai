@@ -56,6 +56,7 @@ the others.
 | [06-data-model-and-frontend.md](06-data-model-and-frontend.md) | Concrete type, client-module, settings, and UI changes in `src/`. Capability detection. Persistence-plane impact. |
 | [07-execution-roadmap.md](07-execution-roadmap.md) | Phased delivery plan, provisioning (Bicep / CLI), testing strategy, risks, cost controls, and a decisions log. |
 | [08-implementation-plan.md](08-implementation-plan.md) | **Build-ready work order** for the five requested tools (web search, code interpreter, file search, function calling, image generation). File-by-file changes grounded in the current `src/ai/` code, backend + provisioning, and a phased rollout with acceptance criteria. |
+| [09-provisioning-and-enablement.md](09-provisioning-and-enablement.md) | **CLI runbook** to make every tool *Available*: provisions the Azure AI Foundry account/project, model deployments, and the Bing connection (with [../../infra/foundry/provision.ps1](../../infra/foundry/provision.ps1)), then points Watai at the endpoint. Includes the PAYG/web-search caveat and verification per tool. |
 
 ---
 

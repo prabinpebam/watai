@@ -66,6 +66,23 @@ describe('detectCapabilities', () => {
     expect(m.fileSearch).toBe(true);
   });
 
+  it('enables web (probed) + file (derived) search on a Foundry account host without an /api/projects/ url', async () => {
+    const account = { ...base, baseUrl: 'https://r.services.ai.azure.com' } as ApiConfig;
+    const webSearch = vi.fn(ok);
+    const fileSearch = vi.fn(no);
+    const m = await detectCapabilities(account, {
+      responses: ok,
+      codeInterpreter: ok,
+      webSearch,
+      fileSearch,
+    });
+    expect(webSearch).toHaveBeenCalled();
+    expect(m.webSearch).toBe(true);
+    // File search is derived from the Foundry host (vector stores are created on demand), so it
+    // is available even though the probe was not consulted.
+    expect(m.fileSearch).toBe(true);
+  });
+
   it('caches the matrix until reset', async () => {
     const responses = vi.fn(ok);
     const probes = { responses, codeInterpreter: ok, webSearch: no, fileSearch: no };
