@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { repo } from '../../data';
 import { useUi } from '../../state/store';
+import { useRuns } from '../chat/runStore';
 import { groupThreads } from '../../lib/format';
 import { Icon } from '../../design/icons';
 import { IconButton } from '../../design/ui';
@@ -19,6 +20,10 @@ export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProp
   const version = useUi((s) => s.threadsVersion);
   const bump = useUi((s) => s.bumpThreads);
   const pushToast = useUi((s) => s.pushToast);
+  // Thread ids with an active run. Subscribe to the keys (joined) so the list only re-renders
+  // when a run starts/stops — not on every streamed token.
+  const runKey = useRuns((s) => Object.keys(s.runs).sort().join('|'));
+  const runningSet = new Set(runKey ? runKey.split('|') : []);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [menu, setMenu] = useState<{ x: number; y: number; thread: Thread } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Thread | null>(null);
@@ -83,7 +88,13 @@ export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProp
           {g.threads.map((t) => (
             <div
               key={t.id}
-              className={`conv-row ${t.id === activeId ? 'conv-row--active' : ''}`}
+              className={`conv-row ${
+                t.id === activeId
+                  ? 'conv-row--active'
+                  : runningSet.has(t.id)
+                    ? 'conv-row--running'
+                    : ''
+              }`}
               onClick={() => go(t.id)}
               role="button"
               tabIndex={0}

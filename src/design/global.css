@@ -223,6 +223,43 @@ a:hover {
   border-radius: var(--radius-pill);
   background: var(--color-accent);
 }
+/* Active-run indicator: a subtle animated gradient bar; replaced by the solid bar above when
+   the row is the selected one (the component only adds --running when it is not active). */
+.conv-row--running::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  /* Fallback for browsers without color-mix, then the softer enhanced gradient. */
+  background: linear-gradient(180deg, var(--color-accent), transparent, var(--color-accent));
+  background: linear-gradient(
+    180deg,
+    var(--color-accent) 0%,
+    color-mix(in srgb, var(--color-accent) 30%, transparent) 50%,
+    var(--color-accent) 100%
+  );
+  background-size: 100% 200%;
+  animation: conv-row-run calc(1.5s * var(--motion-scale, 1)) ease-in-out infinite;
+}
+@keyframes conv-row-run {
+  0%,
+  100% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 0% 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conv-row--running::before {
+    animation: none;
+    background: var(--color-accent);
+    opacity: 0.6;
+  }
+}
 .conv-row__body {
   flex: 1;
   min-width: 0;
