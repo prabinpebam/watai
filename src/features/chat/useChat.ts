@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { repo } from '../../data';
 import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
@@ -37,6 +37,8 @@ async function persistAttachments(files: File[]): Promise<Attachment[]> {
 export function useChat(threadId: string, temporary = false) {
   const [persisted, setPersisted] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [indexing, setIndexing] = useState(false);
+  const busyRef = useRef(false);
   const run = useRuns((s) => s.runs[threadId]);
   const threadRev = useUi((s) => s.threadRev[threadId] ?? 0);
   const mockAi = useUi((s) => s.mockAi);
@@ -69,6 +71,7 @@ export function useChat(threadId: string, temporary = false) {
       const trimmed = text.trim();
       const hasFiles = !!files && files.length > 0;
       if (!trimmed && !hasFiles) return;
+      if (busyRef.current) return;
       if (useRuns.getState().isRunning(threadId)) return;
       // Lazily create the thread on first message (so /new doesn't litter history).
       const existing = await repo.getThread(threadId);
@@ -93,6 +96,8 @@ export function useChat(threadId: string, temporary = false) {
       const docs = (files ?? []).filter((f) => !f.type.startsWith('image/'));
       if (docs.length && !mockAi) {
         const toast = useUi.getState().pushToast;
+        busyRef.current = true;
+        setIndexing(true);
         toast(`Indexing ${docs.length} file${docs.length === 1 ? '' : 's'}…`, 'info');
         try {
           const existingStore = await getThreadVectorStore(threadId);
@@ -106,6 +111,9 @@ export function useChat(threadId: string, temporary = false) {
           else toast('File ready — you can ask about it', 'success');
         } catch {
           toast('Could not index the file(s)', 'error');
+        } finally {
+          busyRef.current = false;
+          setIndexing(false);
         }
       }
       const history = await repo.listMessages(threadId);
@@ -129,5 +137,5 @@ export function useChat(threadId: string, temporary = false) {
 
   const stop = useCallback(() => useRuns.getState().stop(threadId), [threadId]);
 
-  return { messages, loading, send, regenerate, stop, streaming: !!run };
+  return { messages, loading, send, regenerate, stop, streaming: !!run || indexing, indexing };
 }

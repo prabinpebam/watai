@@ -16,7 +16,7 @@ const SUGGESTIONS = [
 ];
 
 export function ChatView({ threadId, onScrolledChange }: { threadId: string; onScrolledChange?: (v: boolean) => void }) {
-  const { messages, loading, send, regenerate, stop, streaming } = useChat(threadId);
+  const { messages, loading, send, regenerate, stop, streaming, indexing } = useChat(threadId);
   const draft = useUi((s) => s.composerDrafts[threadId] ?? '');
   const setDraft = useUi((s) => s.setDraft);
   const closeSourcePane = useUi((s) => s.closeSourcePane);
@@ -97,6 +97,12 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
         )}
       </div>
 
+      {indexing && (
+        <div className="composer-status" role="status">
+          <span className="spinner" style={{ width: 14, height: 14 }} />
+          <span>Indexing your file… you can ask about it once it’s ready.</span>
+        </div>
+      )}
       <Composer
         value={draft}
         onChange={(v) => setDraft(threadId, v)}
