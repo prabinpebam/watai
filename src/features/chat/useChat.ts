@@ -3,10 +3,10 @@ import { repo } from '../../data';
 import { getApiConfig } from '../../data/secureStore';
 import { newId } from '../../lib/ids';
 import { streamChat, completeChat, type ChatMessage } from '../../ai/chat';
-import { mockStreamChat } from '../../ai/mockAi';
+import { mockAgentStream } from '../../ai/mockAi';
 import { isAiError } from '../../ai/errors';
 import { detectCapabilities } from '../../ai/capabilities';
-import { runAgent, type Turn } from '../../ai/orchestrator';
+import { runAgent, type AgentEvent, type Turn } from '../../ai/orchestrator';
 import { assembleTools, executeTool, isDestructiveTool } from '../../ai/tools';
 import { b64ToBlob } from '../../ai/image';
 import { useUi } from '../../state/store';
@@ -44,7 +44,12 @@ async function confirmDestructive({
       : name === 'update_setting'
         ? `change the setting "${String(args.path ?? '')}"`
         : `run ${name}`;
-  return window.confirm(`Allow the assistant to ${what}?`);
+  return useUi.getState().requestConfirm({
+    title: 'Confirm action',
+    message: `Allow the assistant to ${what}?`,
+    confirmLabel: 'Allow',
+    danger: name === 'delete_thread',
+  });
 }
 
 export function useChat(threadId: string, temporary = false) {
@@ -124,17 +129,16 @@ export function useChat(threadId: string, temporary = false) {
           ),
         );
 
-      // Agentic path (tools, incl. context-aware image generation) when the endpoint
-      // serves the Responses API; otherwise the classic single-shot chat path.
-      let useAgentic = false;
+      // Agentic path (tools, incl. context-aware image generation) when the endpoint serves
+      // the Responses API; mock dev mode replays a scripted agent stream; otherwise the
+      // classic single-shot chat path.
       let caps: CapabilityMatrix | null = null;
-      if (!mockAi && config) {
+      let agentStream: AsyncGenerator<AgentEvent> | null = null;
+      if (mockAi) {
+        agentStream = mockAgentStream(history);
+      } else if (config) {
         caps = await detectCapabilities(config);
-        useAgentic = caps.responses;
-      }
-
-      try {
-        if (useAgentic) {
+        if (caps.responses) {
           const turns: Turn[] = [];
           if (sysParts.length) turns.push({ role: 'system', text: sysParts.join('\n\n') });
           for (const m of history) {
@@ -143,19 +147,24 @@ export function useChat(threadId: string, temporary = false) {
             }
           }
           const toolCtx = {
-            webSearchConsent: config?.consent?.webSearchDataBoundary ?? false,
-            vectorStoreIds: config?.tools?.vectorStoreId ? [config.tools.vectorStoreId] : [],
+            webSearchConsent: config.consent?.webSearchDataBoundary ?? false,
+            vectorStoreIds: config.tools?.vectorStoreId ? [config.tools.vectorStoreId] : [],
           };
-          const tools = caps ? assembleTools(caps, settings.tools, toolCtx) : [];
-          for await (const ev of runAgent({
+          agentStream = runAgent({
             model,
             turns,
-            tools,
+            tools: assembleTools(caps, settings.tools, toolCtx),
             execute: executeTool,
             confirm: confirmDestructive,
             isDestructive: isDestructiveTool,
             signal: ctrl.signal,
-          })) {
+          });
+        }
+      }
+
+      try {
+        if (agentStream) {
+          for await (const ev of agentStream) {
             if (ev.type === 'text') {
               acc += ev.delta;
               setMessages((prev) =>
@@ -232,15 +241,13 @@ export function useChat(threadId: string, temporary = false) {
             }
           }
         } else {
-          const stream = mockAi
-            ? mockStreamChat({ messages: chatMessages, model, signal: ctrl.signal })
-            : streamChat({
-                messages: chatMessages,
-                model,
-                reasoningEffort: config?.chatDefaults.reasoningEffort,
-                maxCompletionTokens: config?.chatDefaults.maxCompletionTokens,
-                signal: ctrl.signal,
-              });
+          const stream = streamChat({
+            messages: chatMessages,
+            model,
+            reasoningEffort: config?.chatDefaults.reasoningEffort,
+            maxCompletionTokens: config?.chatDefaults.maxCompletionTokens,
+            signal: ctrl.signal,
+          });
           for await (const ev of stream) {
             if (ev.type === 'delta' && ev.textDelta) {
               acc += ev.textDelta;

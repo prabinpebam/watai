@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconButton } from '../../design/ui';
 import { Icon } from '../../design/icons';
+import { ToolsMenu } from './ToolsMenu';
 import { startRecording, type Recorder } from '../../lib/audio';
 import { transcribe } from '../../ai/transcribe';
 import { mockTranscribe } from '../../ai/mockAi';
@@ -95,6 +96,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
         onDrop={onDrop}
       >
         <IconButton name="plus" label="Add attachment" onClick={() => pushToast('Attachments coming soon', 'info')} />
+        <ToolsMenu />
         <textarea
           ref={taRef}
           className="composer__textarea"

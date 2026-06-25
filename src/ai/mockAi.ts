@@ -1,4 +1,6 @@
 import type { ChatParams, ChatStreamEvent } from './chat';
+import type { AgentEvent } from './orchestrator';
+import type { Message } from '../lib/types';
 
 const SAMPLE = `Sure — here's a quick overview.
 
@@ -52,4 +54,68 @@ const PLACEHOLDER_PNG =
 export async function mockGenerateImage(): Promise<Array<{ b64: string }>> {
   await new Promise((r) => setTimeout(r, 900));
   return [{ b64: PLACEHOLDER_PNG }];
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * A scripted agentic stream for mock/offline dev: demonstrates image generation, web-search
+ * grounding with citations, or a plain answer, so the full agentic UI (tool cards, sources)
+ * is exercisable without a real endpoint.
+ */
+export async function* mockAgentStream(history: Message[]): AsyncGenerator<AgentEvent> {
+  const last = history[history.length - 1]?.content ?? '';
+  const wantsImage = /\b(image|images|draw|drawing|picture|logo|illustrat|render|art)\b/i.test(last);
+  const wantsSearch = /\b(search|web|news|latest|today|current|recent|happening|trend)\b/i.test(last);
+
+  async function* emit(text: string): AsyncGenerator<AgentEvent> {
+    for (const tok of tokenize(text)) {
+      await sleep(14);
+      yield { type: 'text', delta: tok };
+    }
+  }
+
+  if (wantsImage) {
+    yield { type: 'tool', name: 'generate_image', status: 'running', callId: 'mock-img', args: { size: '1024x1024' } };
+    yield* emit('Here is a mock image based on your request.\n\n');
+    await sleep(600);
+    const [{ b64 }] = await mockGenerateImage();
+    yield {
+      type: 'image',
+      b64,
+      partial: false,
+      callId: 'mock-img',
+      prompt: last,
+      size: '1024x1024',
+      expandedPrompt: last,
+      model: 'gpt-image (mock)',
+    };
+    yield { type: 'tool', name: 'generate_image', status: 'done', callId: 'mock-img' };
+    yield { type: 'done' };
+    return;
+  }
+
+  if (wantsSearch) {
+    const query = last.slice(0, 48);
+    yield { type: 'tool', name: 'web_search', status: 'running', callId: 'mock-ws', detail: query };
+    await sleep(450);
+    yield {
+      type: 'citation',
+      citation: { source: 'web', url: 'https://learn.microsoft.com/azure/ai-foundry/', title: 'Azure AI Foundry documentation' },
+    };
+    yield {
+      type: 'citation',
+      citation: { source: 'web', url: 'https://react.dev/blog', title: 'React Blog' },
+    };
+    yield { type: 'tool', name: 'web_search', status: 'done', callId: 'mock-ws', detail: query };
+    yield* emit(
+      'Based on a quick web search, here is a grounded, **mock** answer with clickable sources below. Toggle off mock mode to use your real endpoint.',
+    );
+    yield { type: 'done' };
+    return;
+  }
+
+  const intro = last ? `You asked: "${last.slice(0, 80)}"\n\n` : '';
+  yield* emit(intro + SAMPLE);
+  yield { type: 'done' };
 }

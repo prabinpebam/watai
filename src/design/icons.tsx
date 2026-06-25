@@ -56,6 +56,7 @@ const ICONS: Record<string, string> = {
   database: 'database',
   palette: 'palette',
   type: 'text_fields',
+  tune: 'tune',
   bug: 'bug_report',
   logout: 'logout',
   mail: 'mail',

@@ -9,6 +9,15 @@ interface StreamState {
   messageId?: string;
 }
 
+/** A pending confirmation surfaced as a design-system dialog (no native window.confirm). */
+export interface ConfirmRequest {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  danger?: boolean;
+  resolve: (ok: boolean) => void;
+}
+
 interface UiState {
   theme: Theme;
   textScale: TextScale;
@@ -27,6 +36,7 @@ interface UiState {
   connectivity: 'online' | 'offline';
   toasts: Toast[];
   threadsVersion: number;
+  confirmRequest: ConfirmRequest | null;
 
   setTheme: (t: Theme) => void;
   setTextScale: (s: TextScale) => void;
@@ -44,11 +54,13 @@ interface UiState {
   pushToast: (message: string, kind?: Toast['kind']) => void;
   dismissToast: (id: string) => void;
   bumpThreads: () => void;
+  requestConfirm: (opts: Omit<ConfirmRequest, 'resolve'>) => Promise<boolean>;
+  resolveConfirm: (ok: boolean) => void;
 }
 
 export const useUi = create<UiState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       theme: 'system',
       textScale: 1.0,
       density: 'comfortable',
@@ -66,6 +78,7 @@ export const useUi = create<UiState>()(
       connectivity: 'online',
       toasts: [],
       threadsVersion: 0,
+      confirmRequest: null,
 
       setTheme: (theme) => set({ theme }),
       setTextScale: (textScale) => set({ textScale }),
@@ -86,6 +99,13 @@ export const useUi = create<UiState>()(
         set((s) => ({ toasts: [...s.toasts, { id: newId(), message, kind }] })),
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
       bumpThreads: () => set((s) => ({ threadsVersion: s.threadsVersion + 1 })),
+      requestConfirm: (opts) =>
+        new Promise<boolean>((resolve) => set({ confirmRequest: { ...opts, resolve } })),
+      resolveConfirm: (ok) => {
+        const req = get().confirmRequest;
+        if (req) req.resolve(ok);
+        set({ confirmRequest: null });
+      },
     }),
     {
       name: 'watai.ui',

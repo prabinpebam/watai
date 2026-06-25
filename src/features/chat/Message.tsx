@@ -5,13 +5,28 @@ import { IconButton } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
 import { synthesize } from '../../ai/tts';
-import type { Message } from '../../lib/types';
+import type { Message, ToolCall } from '../../lib/types';
 
 function domainOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
   } catch {
     return url;
+  }
+}
+
+function kindIcon(kind: ToolCall['kind']): string {
+  switch (kind) {
+    case 'web_search':
+      return 'globe';
+    case 'code_interpreter':
+      return 'code';
+    case 'file_search':
+      return 'database';
+    case 'image':
+      return 'image';
+    default:
+      return 'sparkle';
   }
 }
 
@@ -97,17 +112,22 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
         </div>
 
         {message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="tool-cards">
+          <div className="tool-cards" aria-live="polite">
             {message.toolCalls.map((tc) => (
               <div key={tc.id} className={`tool-card tool-card--${tc.status}`}>
-                <span className="tool-card__icon" aria-hidden>
-                  {tc.status === 'running' || tc.status === 'awaiting-confirm' ? (
-                    <span className="spinner" style={{ width: 13, height: 13 }} />
-                  ) : (
-                    <Icon name={tc.status === 'error' ? 'alert' : 'check'} size={14} />
-                  )}
+                <span className="tool-card__kind" aria-hidden>
+                  <Icon name={kindIcon(tc.kind)} size={15} />
                 </span>
                 <span className="tool-card__label">{tc.summary ?? tc.name}</span>
+                <span className="tool-card__status" aria-hidden>
+                  {tc.status === 'running' || tc.status === 'awaiting-confirm' ? (
+                    <span className="spinner" style={{ width: 12, height: 12 }} />
+                  ) : tc.status === 'error' ? (
+                    <Icon name="alert" size={14} />
+                  ) : (
+                    <Icon name="check" size={14} />
+                  )}
+                </span>
               </div>
             ))}
           </div>
@@ -131,28 +151,32 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
           <div className="sources">
             <span className="sources__label">Sources</span>
             <div className="sources__list">
-              {message.citations.map((c, i) =>
-                c.url ? (
-                  <a
-                    key={i}
-                    className="source-chip"
-                    href={c.url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    <Icon name="link" size={13} />
-                    <span className="source-chip__text">{c.title || domainOf(c.url)}</span>
-                  </a>
-                ) : c.filename ? (
-                  <span key={i} className="source-chip">
-                    <Icon name="paperclip" size={13} />
-                    <span className="source-chip__text">{c.filename}</span>
-                  </span>
-                ) : null,
-              )}
-              {message.citations.some((c) => c.bingQueryUrl) && (
+              {message.citations
+                .filter((c) => c.url || c.filename)
+                .map((c, i) =>
+                  c.url ? (
+                    <a
+                      key={i}
+                      className="source-chip"
+                      href={c.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      <span className="source-chip__num">{i + 1}</span>
+                      <span className="source-chip__text">{c.title || domainOf(c.url)}</span>
+                      <Icon name="external" size={12} className="source-chip__ext" />
+                    </a>
+                  ) : (
+                    <span key={i} className="source-chip">
+                      <span className="source-chip__num">{i + 1}</span>
+                      <Icon name="paperclip" size={13} />
+                      <span className="source-chip__text">{c.filename}</span>
+                    </span>
+                  ),
+                )}
+              {message.citations.find((c) => c.bingQueryUrl)?.bingQueryUrl && (
                 <a
-                  className="source-chip"
+                  className="source-chip source-chip--bing"
                   href={message.citations.find((c) => c.bingQueryUrl)?.bingQueryUrl}
                   target="_blank"
                   rel="noreferrer noopener"
