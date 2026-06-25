@@ -212,18 +212,34 @@ export function Settings() {
 
   const current = section && SECTIONS[section] ? section : null;
 
+  // Pop within the app when there's history to pop, else navigate to a deterministic fallback.
+  // This avoids the section<->hub loop that arose from mixing navigate('/settings') (push) with
+  // navigate(-1) (pop), which left no way out of Settings.
+  const back = (fallback: string) => {
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (idx > 0) navigate(-1);
+    else navigate(fallback, { replace: true });
+  };
+
   if (expanded) {
     return (
-      <SettingsDesktop active={current ?? 'account'} ctx={ctx} onSelect={(id) => navigate(`/settings/${id}`)} />
+      <SettingsDesktop
+        active={current ?? 'account'}
+        ctx={ctx}
+        // Desktop is master/detail (no drill-in), so switching sections REPLACES rather than
+        // pushes — keeping a single Settings entry in history so Close exits cleanly.
+        onSelect={(id) => navigate(`/settings/${id}`, { replace: true })}
+        onClose={() => back('/')}
+      />
     );
   }
 
   if (!current) {
-    return <SettingsHub ctx={ctx} onOpen={(id) => navigate(`/settings/${id}`)} onClose={() => navigate(-1)} />;
+    return <SettingsHub ctx={ctx} onOpen={(id) => navigate(`/settings/${id}`)} onClose={() => back('/')} />;
   }
 
   return (
-    <Section id={current} onBack={() => navigate('/settings')}>
+    <Section id={current} onBack={() => back('/settings')}>
       <SectionBody id={current} ctx={ctx} />
     </Section>
   );
@@ -244,10 +260,12 @@ function SettingsDesktop({
   active,
   ctx,
   onSelect,
+  onClose,
 }: {
   active: string;
   ctx: SettingsCtx;
   onSelect: (id: string) => void;
+  onClose: () => void;
 }) {
   const toggleSidebar = useUi((s) => s.toggleSidebar);
   return (
@@ -257,7 +275,7 @@ function SettingsDesktop({
         <div className="appbar__title" style={{ textAlign: 'left' }}>
           Settings
         </div>
-        <div style={{ width: 40 }} />
+        <IconButton name="close" label="Close settings" onClick={onClose} />
       </div>
       <div className="settings-shell">
         <nav className="settings-rail" aria-label="Settings sections">
