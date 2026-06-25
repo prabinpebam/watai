@@ -60,12 +60,21 @@ interface SwitchProps {
   onChange: (v: boolean) => void;
   label: string;
   id?: string;
+  disabled?: boolean;
 }
 
-export function Switch({ checked, onChange, label, id }: SwitchProps) {
+export function Switch({ checked, onChange, label, id, disabled }: SwitchProps) {
   return (
-    <span className="switch">
-      <input id={id} type="checkbox" role="switch" checked={checked} aria-label={label} onChange={(e) => onChange(e.target.checked)} />
+    <span className={`switch${disabled ? ' switch--disabled' : ''}`}>
+      <input
+        id={id}
+        type="checkbox"
+        role="switch"
+        checked={checked}
+        disabled={disabled}
+        aria-label={label}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <span className="switch__track" />
       <span className="switch__thumb" />
     </span>

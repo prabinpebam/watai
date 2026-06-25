@@ -671,11 +671,12 @@ function ToolToggle({
         <div className="setting-row__title">{label}</div>
         <div className="setting-row__sub">{available ? sub : (hint ?? 'Not available on this endpoint.')}</div>
       </div>
-      {available ? (
-        <Switch checked={checked} onChange={onChange} label={label} />
-      ) : (
-        <span className="badge">Unavailable</span>
-      )}
+      <Switch
+        checked={available && checked}
+        onChange={onChange}
+        disabled={!available}
+        label={label}
+      />
     </div>
   );
 }
@@ -775,10 +776,7 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
     await saveTavilyKey(k);
     setTavilyHasKey(true);
     setTavilyKeyInput('');
-    // Saving a key is a clear intent to use web search — enable it so there isn't a silent
-    // second step the user has to discover. They can still toggle it off above.
-    if (!t.webSearch) setTool({ webSearch: true });
-    pushToast('Tavily key saved — web search enabled', 'success');
+    pushToast('Tavily key saved', 'success');
     void refreshTavilyUsage();
   };
 
@@ -786,7 +784,6 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
     await saveTavilyKey('');
     setTavilyHasKey(false);
     setTavilyUsageData(null);
-    if (t.webSearch) setTool({ webSearch: false });
     pushToast('Tavily key removed', 'info');
   };
 
@@ -950,15 +947,15 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
           </Button>
         </div>
 
-        <div className="setting-row__sub" style={{ paddingLeft: 'var(--space-1)' }}>
-          No key?{' '}
-          <a href="https://app.tavily.com" target="_blank" rel="noreferrer noopener">
-            Get a free one at app.tavily.com
-          </a>{' '}
-          — sign up, copy your key (starts with <code>tvly-</code>), and paste it above.
-        </div>
-        <div className="setting-row__sub" style={{ paddingLeft: 'var(--space-1)' }}>
-          Web searches send your query to Tavily.
+        <div className="settings-note">
+          <p>
+            No key?{' '}
+            <a href="https://app.tavily.com" target="_blank" rel="noreferrer noopener">
+              Get a free one at app.tavily.com
+            </a>{' '}
+            — sign up, copy your key (starts with <code>tvly-</code>), and paste it above.
+          </p>
+          <p>Web searches send your query to Tavily.</p>
         </div>
 
         {tavilyHasKey && (
