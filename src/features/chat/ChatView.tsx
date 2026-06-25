@@ -15,10 +15,9 @@ const SUGGESTIONS = [
 ];
 
 export function ChatView({ threadId, onScrolledChange }: { threadId: string; onScrolledChange?: (v: boolean) => void }) {
-  const { messages, loading, send, regenerate, stop } = useChat(threadId);
+  const { messages, loading, send, regenerate, stop, streaming } = useChat(threadId);
   const draft = useUi((s) => s.composerDrafts[threadId] ?? '');
   const setDraft = useUi((s) => s.setDraft);
-  const streaming = useUi((s) => s.stream.status === 'streaming');
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
 

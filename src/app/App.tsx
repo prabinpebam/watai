@@ -11,6 +11,7 @@ import { IconButton, Spinner, Button } from '../design/ui';
 import { useIsExpanded } from '../lib/hooks';
 import { useUi } from '../state/store';
 import { repo, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync } from '../data';
+import { restoreInterruptedRuns } from '../features/chat/runStore';
 import { hasValidConfig } from '../data/secureStore';
 import { isSignedIn, signOut } from '../auth/cloudAuth';
 import { loadMe, cachedMe } from '../auth/access';
@@ -137,6 +138,9 @@ export function App() {
     } else {
       purgeDemoData().catch(() => undefined);
     }
+    // Recover any assistant run interrupted by a browser close: persist what streamed as an
+    // 'interrupted' message so nothing is silently lost.
+    restoreInterruptedRuns().catch(() => undefined);
   }, []);
 
   // Background cloud sync: a no-op unless Settings.data.sync is on and a user is signed in.

@@ -36,6 +36,8 @@ interface UiState {
   connectivity: 'online' | 'offline';
   toasts: Toast[];
   threadsVersion: number;
+  /** Per-thread message revision; bumped when a thread's persisted messages change. */
+  threadRev: Record<string, number>;
   confirmRequest: ConfirmRequest | null;
 
   setTheme: (t: Theme) => void;
@@ -54,6 +56,7 @@ interface UiState {
   pushToast: (message: string, kind?: Toast['kind']) => void;
   dismissToast: (id: string) => void;
   bumpThreads: () => void;
+  bumpThread: (threadId: string) => void;
   requestConfirm: (opts: Omit<ConfirmRequest, 'resolve'>) => Promise<boolean>;
   resolveConfirm: (ok: boolean) => void;
 }
@@ -78,6 +81,7 @@ export const useUi = create<UiState>()(
       connectivity: 'online',
       toasts: [],
       threadsVersion: 0,
+      threadRev: {},
       confirmRequest: null,
 
       setTheme: (theme) => set({ theme }),
@@ -99,6 +103,8 @@ export const useUi = create<UiState>()(
         set((s) => ({ toasts: [...s.toasts, { id: newId(), message, kind }] })),
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
       bumpThreads: () => set((s) => ({ threadsVersion: s.threadsVersion + 1 })),
+      bumpThread: (threadId) =>
+        set((s) => ({ threadRev: { ...s.threadRev, [threadId]: (s.threadRev[threadId] ?? 0) + 1 } })),
       requestConfirm: (opts) =>
         new Promise<boolean>((resolve) => set({ confirmRequest: { ...opts, resolve } })),
       resolveConfirm: (ok) => {
