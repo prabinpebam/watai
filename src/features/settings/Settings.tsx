@@ -21,6 +21,7 @@ import {
   normalizeBaseUrl,
 } from '../../data/secureStore';
 import { detectCapabilities, endpointKind, resetAgenticCache } from '../../ai/capabilities';
+import { isFoundryHost } from '../../ai/http';
 import {
   indexFileIntoStore,
   listStoreFiles,
@@ -735,8 +736,8 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
     await saveApiConfig(next);
   };
 
-  const kind = config ? endpointKind(config) : 'aoai';
-  const projectHint = 'Needs a Foundry project endpoint.';
+  const foundry = config ? isFoundryHost(config.baseUrl) || endpointKind(config) === 'foundry-project' : false;
+  const projectHint = 'Needs an Azure AI Foundry endpoint.';
 
   const onUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -935,13 +936,13 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
           <div className="setting-row__body">
             <div className="setting-row__title">Endpoint</div>
             <div className="setting-row__sub">
-              {kind === 'foundry-project'
-                ? 'Foundry project — the full tool suite is available.'
+              {foundry
+                ? 'Azure AI Foundry — the full tool suite is available.'
                 : 'Azure OpenAI key — function calling, code, and images.'}
             </div>
           </div>
           <div className="setting-row__value setting-row__value--strong">
-            {kind === 'foundry-project' ? 'Project' : 'Standard'}
+            {foundry ? 'Foundry' : 'Standard'}
           </div>
         </div>
         <div className="setting-row">

@@ -63,6 +63,13 @@ describe('assembleTools', () => {
     ).toBe(false);
   });
 
+  it('gives the code interpreter tool a container (required by the Responses API)', () => {
+    const ci = assembleTools(caps({ codeInterpreter: true }), settings(), ctx).find(
+      (t) => t.type === 'code_interpreter',
+    );
+    expect(ci?.container).toEqual({ type: 'auto' });
+  });
+
   it('adds web search only when capable AND enabled AND consented', () => {
     const c = caps({ webSearch: true });
     expect(assembleTools(c, settings(), ctx).some((t) => t.type === 'web_search')).toBe(true);

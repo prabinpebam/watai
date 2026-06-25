@@ -178,7 +178,7 @@ async function probeTool(
 }
 
 export const probeCodeInterpreter = (c: ApiConfig): Promise<ProbeResult> =>
-  probeTool(c, [{ type: 'code_interpreter' }]);
+  probeTool(c, [{ type: 'code_interpreter', container: { type: 'auto' } }]);
 export const probeWebSearch = (c: ApiConfig): Promise<ProbeResult> =>
   probeTool(c, [{ type: 'web_search' }], { tool_choice: 'auto' });
 export const probeFileSearch = (c: ApiConfig): Promise<ProbeResult> =>

@@ -12,6 +12,8 @@ export interface ResponsesTool {
   description?: string;
   parameters?: Record<string, unknown>;
   vector_store_ids?: string[];
+  /** Code interpreter requires a container; `{ type: 'auto' }` lets the service manage it. */
+  container?: { type: string };
   user_location?: { type: 'approximate'; country?: string; city?: string; region?: string };
   search_context_size?: 'low' | 'medium' | 'high';
   [key: string]: unknown;

@@ -3,7 +3,12 @@
 // into a turn by `assembleTools` only when the capability matrix + settings allow them.
 import type { ResponsesTool } from '../responses';
 
-export const codeInterpreterTool = (): ResponsesTool => ({ type: 'code_interpreter' });
+// Code interpreter requires a `container`; `{ type: 'auto' }` lets the service provision a
+// sandbox per call. Without it the Responses API rejects the tool with a 400.
+export const codeInterpreterTool = (): ResponsesTool => ({
+  type: 'code_interpreter',
+  container: { type: 'auto' },
+});
 
 export const webSearchTool = (opts?: {
   userLocation?: { country?: string; city?: string; region?: string };
