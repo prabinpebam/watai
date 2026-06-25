@@ -6,6 +6,11 @@ controls, risks, and a decisions log. Dovetails with the base plan in
 [../../HANDOFF.md](../../HANDOFF.md) (strict TDD on the backend, no emoji, no auto-launching
 dev servers, Conventional Commits).
 
+> For the **five-tool build order** the product owner asked for (web search, code
+> interpreter, file search, function calling, image generation), see
+> [08-implementation-plan.md](08-implementation-plan.md). It **supersedes the phase ordering
+> here** for those features and **resolves A5 and A7** (see §8 below).
+
 ---
 
 ## 1. Guiding principles
@@ -135,7 +140,7 @@ dev servers, Conventional Commits).
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| **A7 unresolved** (BYO vs. operated project) | Blocks Phases 2/5 | Decide before Phase 2; default BYO project; Phase 1 + Stage-1 image expansion ship regardless. |
+| A7 — **resolved** ([08 §0 D2](08-implementation-plan.md)): both kinds, capability-gated | Was blocking Phases 2/5 | Project-only tools (web/file search) gate on capability detection; plain-key features ship regardless. |
 | Preview APIs change | Breakage | Pin API version; feature-flag; capability-probe; re-verify at build. |
 | Bing cost/data-boundary surprises users | Trust/cost | Explicit consent + cost notice (A8); off by default. |
 | Prompt injection via tool output | Security | Treat tool output as untrusted; allow-list client tools; confirm destructive ops; never auto-act on web content. |
@@ -165,9 +170,9 @@ dev servers, Conventional Commits).
 | A2 | Server-side tools in the service; client-side function tools in the browser. | Assumed |
 | A3 | Detect endpoint kind; capability-gate advanced tools. | Assumed |
 | A4 | Deep Research = `o3-deep-research` + web search (standalone tool deprecated). | Assumed |
-| A5 | Agentic images via Stage-1 prompt expansion + `image_generation` tool, with plain-API fallback. | Assumed |
+| A5 | **Revised ([08 §0 D1](08-implementation-plan.md)):** ship the **plain Image API** via the `generate_image` function tool (intent expansion kept); the `image_generation` server tool is deferred. | Revised |
 | A6 | Persist bounded tool/citation/research/image provenance; never raw payloads. | Assumed |
-| **A7** | **BYO Foundry project vs. Watai-operated project.** | **OPEN — decide before Phase 2** |
+| A7 | BYO Foundry project vs. Watai-operated. **Resolved ([08 §0 D2](08-implementation-plan.md)):** support both, capability-gated. | Resolved |
 | A8 | Web search / deep research behind explicit cost + data-boundary consent. | Assumed |
 | A9 | Computer Use / Browser Automation out of scope this iteration. | Assumed |
 | A10 | Voice-mode agent tool use deferred. | Assumed |

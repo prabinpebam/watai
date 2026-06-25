@@ -8,6 +8,12 @@ Cross-references: [02-architecture-and-adoption.md](02-architecture-and-adoption
 orchestrator & paths), feature specs [03](03-agentic-chat-and-tools.md)–[05](05-agentic-image-generation.md),
 and the base data model [../04-data-model.md](../04-data-model.md).
 
+> **Note — partly built since this was written.** `responses.ts` and `orchestrator.ts` now
+> exist in [../../src/ai/](../../src/ai/) with slightly different shapes than the sketches
+> below (e.g. the normalized event names). For the **as-built** state and the concrete delta
+> plan, see [08-implementation-plan.md](08-implementation-plan.md); where this doc's sketches
+> differ from the code, **the code + 08 win**.
+
 ---
 
 ## 1. New & changed modules (`src/ai/`)

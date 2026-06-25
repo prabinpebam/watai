@@ -10,6 +10,14 @@ and [../../src/ai/image.ts](../../src/ai/image.ts); platform detail in
 [01-foundry-capabilities.md](01-foundry-capabilities.md) §7; orchestration in
 [02-architecture-and-adoption.md](02-architecture-and-adoption.md).
 
+> **Status — this is the future-state reference, not the current build target.** The
+> shipping decision ([08 §0 D1](08-implementation-plan.md)) is to keep the **plain Image
+> API** via the `generate_image` **function tool** (works on any endpoint, no Foundry
+> project). The **Stage-1 intent expansion** in this doc still applies; the server
+> **`image_generation` tool** below (streaming partials, edit/inpaint) is **deferred**.
+> Build per [08](08-implementation-plan.md); treat this doc as the design for the later
+> upgrade.
+
 ---
 
 ## 1. The problem with today's image flow

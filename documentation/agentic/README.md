@@ -55,6 +55,7 @@ the others.
 | [05-agentic-image-generation.md](05-agentic-image-generation.md) | The intent-aware image generation agent: context understanding, prompt expansion, the `image_generation` tool, streaming partial images, edit/inpaint, and the UI. |
 | [06-data-model-and-frontend.md](06-data-model-and-frontend.md) | Concrete type, client-module, settings, and UI changes in `src/`. Capability detection. Persistence-plane impact. |
 | [07-execution-roadmap.md](07-execution-roadmap.md) | Phased delivery plan, provisioning (Bicep / CLI), testing strategy, risks, cost controls, and a decisions log. |
+| [08-implementation-plan.md](08-implementation-plan.md) | **Build-ready work order** for the five requested tools (web search, code interpreter, file search, function calling, image generation). File-by-file changes grounded in the current `src/ai/` code, backend + provisioning, and a phased rollout with acceptance criteria. |
 
 ---
 
@@ -156,12 +157,13 @@ the alternative; items marked **OPEN** should be confirmed before building.
 | A2 | Tool execution split | **Server-side tools** (web search, code interpreter, image gen, file search, MCP) run in the service; **client-side function tools** (e.g. Watai persistence API, local UI actions) run in the browser via the tool-calling loop. | Best of both: managed tools need no backend; private actions stay in the browser. | Assumed |
 | A3 | Endpoint capability tiers | Detect whether the user's endpoint is a **plain Azure OpenAI** endpoint or a **Foundry project** endpoint, and **capability-gate** advanced tools accordingly. | Web search, image-gen tool, deep research need a Foundry project + connections; classic chat/image must keep working without them. | Assumed |
 | A4 | Deep Research | Use the **`o3-deep-research` model + web search tool** (the standalone Deep Research tool is deprecated). Run it as an async task with a cited report artifact. | Microsoft's current guidance; standalone tool retires. | Assumed |
-| A5 | Agentic image generation | A **prompt-expansion orchestrator** (a small reasoning model) turns conversation context into a detailed prompt, then calls the **`image_generation` tool** (or `gpt-image` direct as fallback). | Matches the user's request for intent-aware images; tool adds streaming + edit/inpaint. | Assumed |
+| A5 | Agentic image generation | A **prompt-expansion** step turns conversation context into a detailed prompt, then generates the image. **Shipping path ([08](08-implementation-plan.md) §0 D1): the plain Image API via the `generate_image` function tool** (works on any endpoint); the `image_generation` server tool (streaming/inpaint) is deferred. | Intent-aware images without requiring a Foundry project. | Revised → 08 D1 |
 | A6 | Persistence of agent artifacts | Tool calls, citations, research steps, and image provenance are stored on the `Message` and synced like other content; raw tool payloads are summarized, not dumped. | Auditable, reproducible, but bounded in size. | Assumed |
-| A7 | Where the Foundry project lives | **OPEN** — does each BYO-key user bring their **own** Foundry project (true BYO), or does Watai operate a **shared** project the user authenticates into? This changes auth, cost attribution, and data boundary. | Web search/deep research need a project + Bing resource + Entra auth, which a pure API-key user may not have. | **OPEN** |
+| A7 | Where the Foundry project lives | Each BYO user brings their **own** project endpoint; Watai stays a pure client. **Resolved ([08](08-implementation-plan.md) §0 D2): support both endpoint kinds, capability-gated** — full suite on a project, function calling + code interpreter + plain image gen on a plain key. | Preserves the privacy invariant; serves both user profiles without Watai owning the AI plane. | Resolved → 08 D2 |
 | A8 | Cost & data-boundary consent | Gate web search / deep research behind an explicit **consent + cost notice** (Bing grounding sends data outside the Azure compliance boundary and incurs cost). | Required by Grounding-with-Bing terms; protects the user. | Assumed |
 
-Decision **A7** is the most consequential open question and is analyzed in
+Decision **A7** is now **resolved** in [08-implementation-plan.md](08-implementation-plan.md)
+§0 (D2) — support both endpoint kinds, capability-gated; the underlying analysis is in
 [02-architecture-and-adoption.md](02-architecture-and-adoption.md) §2.
 
 ---

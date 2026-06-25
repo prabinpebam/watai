@@ -63,6 +63,10 @@ So there are two realistic user profiles, and Watai must serve both:
 **Default:** build for **(1) true BYO project**, detect capabilities, and degrade. Revisit
 (2) only if onboarding friction proves too high. This keeps the invariant intact.
 
+**Resolved (A7 → [08 §0 D2](08-implementation-plan.md)):** support **both** endpoint kinds,
+capability-gated — the full suite on a Foundry project, and function calling + code
+interpreter + plain image generation on a plain Azure OpenAI key.
+
 ---
 
 ## 3. Three adoption paths (and how they combine)
@@ -262,8 +266,8 @@ Beyond the existing invariants:
 
 ## 9. Open questions routed to the roadmap
 
-- **A7** — BYO project vs. Watai-operated project (this doc §2.1). Roadmap gates Phase 2 on
-  this.
+- **A7** — **Resolved** in [08 §0 D2](08-implementation-plan.md): support both endpoint
+  kinds, capability-gated (BYO project for the full suite). Was: BYO vs. Watai-operated.
 - **Cost UX** — how to show per-turn tool cost estimates to the user.
 - **Realtime/voice agents** — whether voice mode gains tool use (deferred).
 - **Hosted agent** — whether Watai ever ships a managed orchestrator (Path B as a product,
