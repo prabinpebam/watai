@@ -20,7 +20,15 @@ import {
   getApiKey,
   normalizeBaseUrl,
 } from '../../data/secureStore';
-import type { ApiConfig, ImageRef, Settings as SettingsModel, TextScale } from '../../lib/types';
+import { detectCapabilities, endpointKind, resetAgenticCache } from '../../ai/capabilities';
+import { DEFAULT_SETTINGS } from '../../lib/types';
+import type {
+  ApiConfig,
+  CapabilityMatrix,
+  ImageRef,
+  Settings as SettingsModel,
+  TextScale,
+} from '../../lib/types';
 
 const APP_VERSION = '0.1.0';
 
@@ -46,6 +54,7 @@ const SECTIONS: Record<string, SectionMeta> = {
     sub: 'Custom instructions and memory',
   },
   voice: { id: 'voice', label: 'Voice', icon: 'mic', sub: 'Dictation and read-aloud' },
+  tools: { id: 'tools', label: 'Tools', icon: 'code', sub: 'Web search, code, files, and functions' },
   appearance: { id: 'appearance', label: 'Appearance', icon: 'palette', sub: 'Theme, text size, and density' },
   data: { id: 'data', label: 'Data controls', icon: 'database', sub: 'Sync, export, retention, and deletion' },
   invites: { id: 'invites', label: 'Invites', icon: 'user-add', sub: 'Manage who can sign in', adminOnly: true },
@@ -53,7 +62,7 @@ const SECTIONS: Record<string, SectionMeta> = {
 };
 
 const GROUPS: { label: string; ids: string[] }[] = [
-  { label: 'Assistant', ids: ['models', 'personalization', 'voice'] },
+  { label: 'Assistant', ids: ['models', 'tools', 'personalization', 'voice'] },
   { label: 'App', ids: ['appearance', 'data', 'about'] },
   { label: 'Admin', ids: ['invites'] },
 ];
@@ -89,6 +98,14 @@ function summaryFor(id: string, ctx: SettingsCtx): string {
       return s.personalization.memoryEnabled ? 'Memory on' : 'Memory off';
     case 'voice':
       return `${s.voice.autoSend ? 'Auto-send on' : 'Auto-send off'} · ${s.voice.rate.toFixed(1)}×`;
+    case 'tools': {
+      const tl = s.tools;
+      if (!tl?.agenticMode) return 'Off';
+      const on = [tl.webSearch && 'Web', tl.codeInterpreter && 'Code', tl.fileSearch && 'Files'].filter(
+        Boolean,
+      );
+      return on.length ? on.join(' · ') : 'Functions';
+    }
     case 'appearance':
       return appearanceSummary(s.appearance);
     case 'data':
@@ -311,6 +328,8 @@ function SectionBody({ id, ctx }: { id: string; ctx: SettingsCtx }) {
       return <PersonalizationBody ctx={ctx} />;
     case 'voice':
       return <VoiceBody ctx={ctx} />;
+    case 'tools':
+      return <ToolsBody ctx={ctx} />;
     case 'appearance':
       return <AppearanceBody ctx={ctx} />;
     case 'data':
@@ -615,6 +634,167 @@ function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
             }}
             label="Memory"
           />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ToolToggle({
+  label,
+  sub,
+  checked,
+  onChange,
+  available,
+  hint,
+}: {
+  label: string;
+  sub: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  available: boolean;
+  hint?: string;
+}) {
+  return (
+    <div className="setting-row">
+      <div className="setting-row__body">
+        <div className="setting-row__title">{label}</div>
+        <div className="setting-row__sub">{available ? sub : (hint ?? 'Not available on this endpoint.')}</div>
+      </div>
+      {available ? (
+        <Switch checked={checked} onChange={onChange} label={label} />
+      ) : (
+        <span className="badge">Unavailable</span>
+      )}
+    </div>
+  );
+}
+
+function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
+  const { settings, setSettings } = ctx;
+  const pushToast = useUi((s) => s.pushToast);
+  const t = settings.tools ?? DEFAULT_SETTINGS.tools!;
+  const [caps, setCaps] = useState<CapabilityMatrix | null>(null);
+  const [config, setConfig] = useState<ApiConfig | null>(null);
+  const [detecting, setDetecting] = useState(false);
+
+  useEffect(() => {
+    getApiConfig().then((c) => {
+      setConfig(c);
+      if (c) detectCapabilities(c).then(setCaps).catch(() => undefined);
+    });
+  }, []);
+
+  const setTool = (patch: Partial<NonNullable<SettingsModel['tools']>>) =>
+    setSettings({ ...settings, tools: { ...t, ...patch } });
+
+  const detect = async () => {
+    if (!config) return;
+    setDetecting(true);
+    resetAgenticCache();
+    try {
+      setCaps(await detectCapabilities(config));
+      pushToast('Capabilities detected', 'success');
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  const consent = config?.consent?.webSearchDataBoundary ?? false;
+  const setConsent = async (v: boolean) => {
+    if (!config) return;
+    const next: ApiConfig = { ...config, consent: { ...config.consent, webSearchDataBoundary: v } };
+    setConfig(next);
+    await saveApiConfig(next);
+  };
+
+  const kind = config ? endpointKind(config) : 'aoai';
+  const projectHint = 'Needs a Foundry project endpoint.';
+
+  return (
+    <>
+      <div className="settings-card">
+        <div className="setting-row">
+          <div className="setting-row__body">
+            <div className="setting-row__title">Agentic mode</div>
+            <div className="setting-row__sub">
+              Let the assistant use tools — search, code, images, and your saved data.
+            </div>
+          </div>
+          <Switch checked={t.agenticMode} onChange={(v) => setTool({ agenticMode: v })} label="Agentic mode" />
+        </div>
+      </div>
+
+      <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
+        <ToolToggle
+          label="Image generation"
+          sub="Create images from the conversation."
+          checked={t.imageAgent}
+          onChange={(v) => setTool({ imageAgent: v })}
+          available
+        />
+        <ToolToggle
+          label="Code interpreter"
+          sub="Run Python for math, data, and charts."
+          checked={t.codeInterpreter}
+          onChange={(v) => setTool({ codeInterpreter: v })}
+          available={caps?.codeInterpreter ?? false}
+          hint="Needs a Responses-capable endpoint."
+        />
+        <ToolToggle
+          label="Web search"
+          sub="Ground answers with cited web results."
+          checked={t.webSearch}
+          onChange={(v) => setTool({ webSearch: v })}
+          available={caps?.webSearch ?? false}
+          hint={projectHint}
+        />
+        <ToolToggle
+          label="File search"
+          sub="Answer from your uploaded documents."
+          checked={t.fileSearch}
+          onChange={(v) => setTool({ fileSearch: v })}
+          available={caps?.fileSearch ?? false}
+          hint={projectHint}
+        />
+      </div>
+
+      {(caps?.webSearch || t.webSearch) && (
+        <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
+          <div className="setting-row">
+            <div className="setting-row__body">
+              <div className="setting-row__title">Allow web data boundary</div>
+              <div className="setting-row__sub">
+                Web search sends your query to Bing (outside the Azure compliance boundary) and may incur cost.
+              </div>
+            </div>
+            <Switch checked={consent} onChange={setConsent} label="Web data-boundary consent" />
+          </div>
+        </div>
+      )}
+
+      <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
+        <div className="setting-row">
+          <div className="setting-row__body">
+            <div className="setting-row__title">Endpoint</div>
+            <div className="setting-row__sub">
+              {kind === 'foundry-project'
+                ? 'Foundry project — the full tool suite is available.'
+                : 'Azure OpenAI key — function calling, code, and images.'}
+            </div>
+          </div>
+          <div className="setting-row__value setting-row__value--strong">
+            {kind === 'foundry-project' ? 'Project' : 'Standard'}
+          </div>
+        </div>
+        <div className="setting-row">
+          <div className="setting-row__body">
+            <div className="setting-row__title">Detect capabilities</div>
+            <div className="setting-row__sub">Re-probe which tools this endpoint supports.</div>
+          </div>
+          <Button variant="outline" icon="refresh" loading={detecting} onClick={detect}>
+            Detect
+          </Button>
         </div>
       </div>
     </>

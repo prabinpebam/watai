@@ -5,6 +5,7 @@ export interface ImageParams {
   prompt: string;
   size?: string;
   n?: number;
+  quality?: 'low' | 'medium' | 'high';
   outputFormat?: 'png' | 'jpeg' | 'webp';
   outputCompression?: number;
   signal?: AbortSignal;
@@ -21,6 +22,7 @@ export async function generateImage(p: ImageParams): Promise<Array<{ b64: string
     n: p.n ?? 1,
     output_format: p.outputFormat ?? 'png',
     output_compression: p.outputCompression ?? 100,
+    ...(p.quality ? { quality: p.quality } : {}),
   };
   const res = await aiFetch({ path: '/images/generations', body, signal: p.signal, timeoutMs: 180000 });
   if (!res.ok) throw await normalizeHttpError(res, 'image');

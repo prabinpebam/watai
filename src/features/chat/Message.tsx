@@ -88,6 +88,23 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
           <span className="assistant__name">Watai</span>
         </div>
 
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <div className="tool-cards">
+            {message.toolCalls.map((tc) => (
+              <div key={tc.id} className={`tool-card tool-card--${tc.status}`}>
+                <span className="tool-card__icon" aria-hidden>
+                  {tc.status === 'running' || tc.status === 'awaiting-confirm' ? (
+                    <span className="spinner" style={{ width: 13, height: 13 }} />
+                  ) : (
+                    <Icon name={tc.status === 'error' ? 'alert' : 'check'} size={14} />
+                  )}
+                </span>
+                <span className="tool-card__label">{tc.summary ?? tc.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <GeneratedImages images={message.images} pending={message.pendingImages} />
 
         {message.content ? (

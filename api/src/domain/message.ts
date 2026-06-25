@@ -18,6 +18,31 @@ const imageSchema = z
 
 export type MessageImage = z.infer<typeof imageSchema>;
 
+/** Bounded, secret-free record of one tool invocation (agentic transcript). */
+const toolCallSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    kind: z.enum(['function', 'web_search', 'code_interpreter', 'file_search', 'image']),
+    name: z.string().max(100).optional(),
+    status: z.enum(['running', 'done', 'error']),
+    summary: z.string().max(400).optional(),
+  })
+  .strict();
+
+export type MessageToolCall = z.infer<typeof toolCallSchema>;
+
+/** A grounding citation (web url_citation or file_citation). */
+const citationSchema = z
+  .object({
+    url: z.string().url().max(2048).optional(),
+    title: z.string().max(400).optional(),
+    source: z.enum(['web', 'file']).optional(),
+    filename: z.string().max(256).optional(),
+  })
+  .strict();
+
+export type MessageCitation = z.infer<typeof citationSchema>;
+
 const appendSchema = z
   .object({
     id: z.string().min(1).max(64).optional(),
@@ -26,6 +51,8 @@ const appendSchema = z
     model: z.string().min(1).max(100).optional(),
     parentId: z.string().min(1).max(64).optional(),
     images: z.array(imageSchema).max(16).optional(),
+    toolCalls: z.array(toolCallSchema).max(32).optional(),
+    citations: z.array(citationSchema).max(64).optional(),
   })
   .strict()
   // Allow image-only messages (no text), but reject fully-empty ones.

@@ -1,4 +1,4 @@
-import type { MessageImage, MessageStatus, Role } from '../domain/message';
+import type { MessageCitation, MessageImage, MessageStatus, MessageToolCall, Role } from '../domain/message';
 
 /** Server-side message document (Cosmos `messages` container, partition key /threadId). */
 export interface MessageRecord {
@@ -10,6 +10,8 @@ export interface MessageRecord {
   model?: string;
   parentId?: string;
   images?: MessageImage[];
+  toolCalls?: MessageToolCall[];
+  citations?: MessageCitation[];
   status: MessageStatus;
   createdAt: string;
   deletedAt: string | null;

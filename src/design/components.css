@@ -618,6 +618,45 @@
   color: var(--color-text-primary);
 }
 
+/* Agentic tool-activity cards (in assistant messages) */
+.tool-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+}
+.tool-card {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+}
+.tool-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.tool-card--done .tool-card__icon {
+  color: var(--color-success);
+}
+.tool-card--error {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+.tool-card__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- Settings: master/detail (desktop) ---- */
 .settings-shell {
   flex: 1 1 auto;

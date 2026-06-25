@@ -43,6 +43,11 @@ export interface ImageRef {
   size: string;
   outputFormat: 'png' | 'jpeg' | 'webp';
   createdAt: string;
+  /** Provenance (intent-aware image generation). All optional/additive. */
+  expandedPrompt?: string;
+  model?: string;
+  sourceMessageIds?: Id[];
+  editOf?: Id | null;
 }
 
 /** Transient placeholder for an image being generated. Render-only — never persisted or synced. */
@@ -50,6 +55,33 @@ export interface PendingImage {
   id: Id;
   /** Requested image size as `WxH` (e.g. `1024x1536`), used to size the placeholder. */
   size: string;
+}
+
+/** Kind of tool activity recorded on an assistant message. */
+export type ToolKind = 'function' | 'web_search' | 'code_interpreter' | 'file_search' | 'image';
+
+/** A bounded, secret-free record of one tool invocation (for the transcript). */
+export interface ToolCall {
+  id: Id;
+  kind: ToolKind;
+  name?: string;
+  status: 'running' | 'awaiting-confirm' | 'done' | 'error';
+  summary?: string;
+  argsPreview?: string;
+  resultPreview?: string;
+  error?: AiError;
+}
+
+/** A grounding citation (web url_citation or file_citation). */
+export interface Citation {
+  url?: string;
+  title?: string;
+  startIndex?: number;
+  endIndex?: number;
+  bingQueryUrl?: string;
+  source?: 'web' | 'file';
+  fileId?: string;
+  filename?: string;
 }
 
 export interface Message {
@@ -66,16 +98,31 @@ export interface Message {
   usage?: { promptTokens?: number; completionTokens?: number };
   error?: AiError;
   createdAt: string;
+  /** Agentic activity (additive/optional). */
+  toolCalls?: ToolCall[];
+  citations?: Citation[];
 }
+
+export type EndpointKind = 'aoai' | 'foundry-project';
 
 export interface ApiConfig {
   baseUrl: string;
-  models: { chat: string; transcribe: string; image: string; tts?: string };
+  endpointKind?: EndpointKind;
+  projectEndpoint?: string;
+  models: { chat: string; transcribe: string; image: string; tts?: string; orchestrator?: string };
   chatDefaults: {
     reasoningEffort?: 'minimal' | 'low' | 'high' | 'medium';
     maxCompletionTokens?: number;
     systemPrompt?: string;
   };
+  tools?: {
+    webSearch?: boolean;
+    codeInterpreter?: boolean;
+    fileSearch?: boolean;
+    bingConnectionId?: string;
+    vectorStoreId?: string;
+  };
+  consent?: { webSearchDataBoundary?: boolean };
   keyEncrypted: boolean;
 }
 
@@ -97,6 +144,13 @@ export interface Settings {
     captions: boolean;
   };
   data: { sync: boolean; temporaryDefault: boolean; retention: 'forever' | '30d' | '90d' };
+  tools?: {
+    agenticMode: boolean;
+    webSearch: boolean;
+    codeInterpreter: boolean;
+    fileSearch: boolean;
+    imageAgent: boolean;
+  };
 }
 
 export interface MemoryItem {
@@ -117,7 +171,12 @@ export type AiErrorCode =
   | 'server_error'
   | 'timeout'
   | 'aborted'
-  | 'unsupported_capability';
+  | 'unsupported_capability'
+  | 'tool_unsupported'
+  | 'tool_unauthorized'
+  | 'web_search_disabled'
+  | 'file_search_unavailable'
+  | 'budget_exceeded';
 
 export interface AiError {
   code: AiErrorCode;
@@ -136,6 +195,11 @@ export interface CapabilityMatrix {
   image: boolean;
   imageEdit: boolean;
   tts: boolean;
+  responses: boolean;
+  functions: boolean;
+  codeInterpreter: boolean;
+  webSearch: boolean;
+  fileSearch: boolean;
 }
 
 export interface Toast {
@@ -155,4 +219,11 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   voice: { engine: 'tts', rate: 1, vad: 0.5, autoSend: true, captions: true },
   data: { sync: true, temporaryDefault: false, retention: 'forever' },
+  tools: {
+    agenticMode: true,
+    webSearch: false,
+    codeInterpreter: true,
+    fileSearch: false,
+    imageAgent: true,
+  },
 };

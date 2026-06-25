@@ -69,4 +69,67 @@ describe('parseAppendMessage', () => {
       ),
     ).toBe('validation');
   });
+
+  it('accepts bounded toolCalls and citations', () => {
+    const input = {
+      role: 'assistant',
+      content: 'Here you go',
+      toolCalls: [{ id: 'tc1', kind: 'web_search', status: 'done', summary: 'Searched the web' }],
+      citations: [{ url: 'https://example.com/', title: 'Example', source: 'web' }],
+    };
+    expect(parseAppendMessage(input)).toMatchObject({
+      toolCalls: [{ id: 'tc1', kind: 'web_search', status: 'done' }],
+      citations: [{ url: 'https://example.com/', source: 'web' }],
+    });
+  });
+
+  it('accepts a file citation without a url', () => {
+    const input = {
+      role: 'assistant',
+      content: 'x',
+      citations: [{ title: 'report.pdf', source: 'file', filename: 'report.pdf' }],
+    };
+    expect(parseAppendMessage(input)).toMatchObject({ citations: [{ source: 'file' }] });
+  });
+
+  it('rejects an invalid tool kind or status', () => {
+    expect(
+      code(() =>
+        parseAppendMessage({ role: 'assistant', content: 'x', toolCalls: [{ id: 't', kind: 'evil', status: 'done' }] }),
+      ),
+    ).toBe('validation');
+    expect(
+      code(() =>
+        parseAppendMessage({
+          role: 'assistant',
+          content: 'x',
+          toolCalls: [{ id: 't', kind: 'function', status: 'pending' }],
+        }),
+      ),
+    ).toBe('validation');
+  });
+
+  it('rejects too many toolCalls', () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ id: `t${i}`, kind: 'function', status: 'done' }));
+    expect(code(() => parseAppendMessage({ role: 'assistant', content: 'x', toolCalls: many }))).toBe(
+      'validation',
+    );
+  });
+
+  it('rejects an invalid citation url and unknown keys (strict)', () => {
+    expect(
+      code(() =>
+        parseAppendMessage({ role: 'assistant', content: 'x', citations: [{ url: 'not-a-url', source: 'web' }] }),
+      ),
+    ).toBe('validation');
+    expect(
+      code(() =>
+        parseAppendMessage({
+          role: 'assistant',
+          content: 'x',
+          toolCalls: [{ id: 't', kind: 'function', status: 'done', evil: 1 }],
+        }),
+      ),
+    ).toBe('validation');
+  });
 });

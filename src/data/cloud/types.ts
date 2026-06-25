@@ -39,9 +39,28 @@ export interface MessageRecord {
   model?: string;
   parentId?: string;
   images?: ImageRecord[];
+  toolCalls?: ToolCallRecord[];
+  citations?: CitationRecord[];
   status: ServerMessageStatus;
   createdAt: string;
   deletedAt: string | null;
+}
+
+/** Bounded tool-activity record synced with a message (mirrors api message validator). */
+export interface ToolCallRecord {
+  id: string;
+  kind: 'function' | 'web_search' | 'code_interpreter' | 'file_search' | 'image';
+  name?: string;
+  status: 'running' | 'done' | 'error';
+  summary?: string;
+}
+
+/** Grounding citation record synced with a message. */
+export interface CitationRecord {
+  url?: string;
+  title?: string;
+  source?: 'web' | 'file';
+  filename?: string;
 }
 
 export interface CreateThreadBody {
@@ -65,6 +84,8 @@ export interface AppendMessageBody {
   model?: string;
   parentId?: string;
   images?: ImageRecord[];
+  toolCalls?: ToolCallRecord[];
+  citations?: CitationRecord[];
 }
 
 /** Request a scoped, short-lived SAS URL for an asset blob. */
@@ -141,6 +162,8 @@ export function messageFromRecord(r: MessageRecord): Message {
           })),
         }
       : {}),
+    ...(r.toolCalls?.length ? { toolCalls: r.toolCalls.map((t) => ({ ...t })) } : {}),
+    ...(r.citations?.length ? { citations: r.citations.map((c) => ({ ...c })) } : {}),
   };
 }
 
@@ -164,5 +187,27 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
     ...(m.model !== undefined ? { model: m.model } : {}),
     ...(m.parentId != null ? { parentId: m.parentId } : {}),
     ...(uploaded.length ? { images: uploaded } : {}),
+    ...(m.toolCalls?.length
+      ? {
+          toolCalls: m.toolCalls.map((t) => ({
+            id: t.id,
+            kind: t.kind,
+            ...(t.name !== undefined ? { name: t.name } : {}),
+            // Persisted activity is terminal; coerce transient UI states to 'done'.
+            status: t.status === 'done' || t.status === 'error' ? t.status : ('done' as const),
+            ...(t.summary !== undefined ? { summary: t.summary } : {}),
+          })),
+        }
+      : {}),
+    ...(m.citations?.length
+      ? {
+          citations: m.citations.map((c) => ({
+            ...(c.url !== undefined ? { url: c.url } : {}),
+            ...(c.title !== undefined ? { title: c.title } : {}),
+            ...(c.source !== undefined ? { source: c.source } : {}),
+            ...(c.filename !== undefined ? { filename: c.filename } : {}),
+          })),
+        }
+      : {}),
   };
 }

@@ -41,6 +41,8 @@ export class MessageService {
       ...(input.model ? { model: input.model } : {}),
       ...(input.parentId ? { parentId: input.parentId } : {}),
       ...(input.images && input.images.length ? { images: input.images } : {}),
+      ...(input.toolCalls && input.toolCalls.length ? { toolCalls: input.toolCalls } : {}),
+      ...(input.citations && input.citations.length ? { citations: input.citations } : {}),
       status: 'complete',
       createdAt: ts,
       deletedAt: null,

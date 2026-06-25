@@ -20,18 +20,27 @@ export interface Turn {
 /** Result of a client-executed tool: `output` goes back to the model; `image` renders in chat. */
 export interface ToolResult {
   output: string;
-  image?: { b64: string; prompt?: string; size?: string };
+  image?: { b64: string; prompt?: string; size?: string; expandedPrompt?: string; model?: string };
 }
 
 export type ToolExecute = (name: string, args: Record<string, unknown>) => Promise<ToolResult>;
 
 export type AgentEvent =
   | { type: 'text'; delta: string }
-  | { type: 'image'; b64: string; partial: boolean; prompt?: string; size?: string; callId?: string }
+  | {
+      type: 'image';
+      b64: string;
+      partial: boolean;
+      prompt?: string;
+      size?: string;
+      callId?: string;
+      expandedPrompt?: string;
+      model?: string;
+    }
   | {
       type: 'tool';
       name: string;
-      status: 'running' | 'done' | 'error';
+      status: 'running' | 'awaiting-confirm' | 'done' | 'error';
       detail?: string;
       callId?: string;
       args?: Record<string, unknown>;
@@ -48,6 +57,10 @@ export interface RunAgentParams {
   signal?: AbortSignal;
   /** Max model<->tool round-trips before stopping (cost guard). */
   maxIterations?: number;
+  /** Ask the user to approve a destructive tool before it runs. */
+  confirm?: (req: { name: string; args: Record<string, unknown> }) => Promise<boolean>;
+  /** Predicate marking a tool as destructive (gated behind `confirm`). */
+  isDestructive?: (name: string) => boolean;
   /** Injectable stream for tests; defaults to the real Responses client. */
   streamFn?: (p: ResponsesParams) => AsyncGenerator<ResponsesEvent>;
 }
@@ -92,7 +105,12 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
           } catch {
             /* malformed args -> empty object */
           }
-          yield { type: 'tool', name: ev.name, status: 'running', callId: ev.callId, args: toolArgs };
+          // A destructive tool that will be confirmed shows its 'running' state only AFTER
+          // the user accepts (in the execution phase), not here.
+          const needsConfirm = !!params.confirm && (params.isDestructive?.(ev.name) ?? false);
+          if (!needsConfirm) {
+            yield { type: 'tool', name: ev.name, status: 'running', callId: ev.callId, args: toolArgs };
+          }
           break;
         }
         case 'error':
@@ -117,6 +135,20 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
       } catch {
         /* malformed args -> empty object; the tool validates at its boundary */
       }
+
+      // Guard destructive tools: never run from model/tool output without explicit consent.
+      const needsConfirm = !!params.confirm && (params.isDestructive?.(call.name) ?? false);
+      if (needsConfirm) {
+        yield { type: 'tool', name: call.name, status: 'awaiting-confirm', callId: call.callId, args };
+        const approved = await params.confirm!({ name: call.name, args });
+        if (!approved) {
+          outputs.push({ type: 'function_call_output', call_id: call.callId, output: 'User declined.' });
+          yield { type: 'tool', name: call.name, status: 'done', detail: 'Declined', callId: call.callId };
+          continue;
+        }
+        yield { type: 'tool', name: call.name, status: 'running', callId: call.callId, args };
+      }
+
       try {
         const result = await params.execute(call.name, args);
         if (result.image) {
@@ -127,6 +159,10 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
             callId: call.callId,
             ...(result.image.prompt !== undefined ? { prompt: result.image.prompt } : {}),
             ...(result.image.size !== undefined ? { size: result.image.size } : {}),
+            ...(result.image.expandedPrompt !== undefined
+              ? { expandedPrompt: result.image.expandedPrompt }
+              : {}),
+            ...(result.image.model !== undefined ? { model: result.image.model } : {}),
           };
         }
         outputs.push({ type: 'function_call_output', call_id: call.callId, output: result.output });

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runAgent, type AgentEvent } from './orchestrator';
 import type { ResponsesEvent, ResponsesParams } from './responses';
 
@@ -142,6 +142,90 @@ describe('runAgent', () => {
     expect(events[events.length - 1]).toEqual({
       type: 'error',
       message: 'Stopped: tool-call budget exceeded.',
+    });
+  });
+
+  it('asks for confirmation before a destructive tool and skips it on decline', async () => {
+    const streamFn = fakeStream([
+      [
+        { type: 'functionCall', callId: 'c1', name: 'delete_thread', arguments: '{"threadId":"t1"}' },
+        { type: 'completed' },
+      ],
+      [{ type: 'text', delta: 'done' }, { type: 'completed' }],
+    ]);
+    const execute = vi.fn(async () => ({ output: 'deleted' }));
+    const confirm = vi.fn(async () => false);
+    const events = await collect(
+      runAgent({
+        model: 'm',
+        turns: [],
+        tools: [],
+        execute,
+        confirm,
+        isDestructive: (n) => n === 'delete_thread',
+        streamFn,
+      }),
+    );
+    expect(confirm).toHaveBeenCalledWith({ name: 'delete_thread', args: { threadId: 't1' } });
+    expect(execute).not.toHaveBeenCalled();
+    expect(events).toContainEqual({
+      type: 'tool',
+      name: 'delete_thread',
+      status: 'awaiting-confirm',
+      callId: 'c1',
+      args: { threadId: 't1' },
+    });
+    expect(events[events.length - 1]).toEqual({ type: 'done' });
+  });
+
+  it('runs a destructive tool after the user confirms', async () => {
+    const streamFn = fakeStream([
+      [
+        { type: 'functionCall', callId: 'c1', name: 'delete_thread', arguments: '{"threadId":"t1"}' },
+        { type: 'completed' },
+      ],
+      [{ type: 'text', delta: 'done' }, { type: 'completed' }],
+    ]);
+    const execute = vi.fn(async () => ({ output: 'deleted' }));
+    const confirm = vi.fn(async () => true);
+    const events = await collect(
+      runAgent({
+        model: 'm',
+        turns: [],
+        tools: [],
+        execute,
+        confirm,
+        isDestructive: (n) => n === 'delete_thread',
+        streamFn,
+      }),
+    );
+    expect(execute).toHaveBeenCalledWith('delete_thread', { threadId: 't1' });
+    expect(events).toContainEqual({
+      type: 'tool',
+      name: 'delete_thread',
+      status: 'running',
+      callId: 'c1',
+      args: { threadId: 't1' },
+    });
+    expect(events).toContainEqual({ type: 'tool', name: 'delete_thread', status: 'done', callId: 'c1' });
+  });
+
+  it('does not gate destructive tools when no confirm callback is given (back-compat)', async () => {
+    const streamFn = fakeStream([
+      [{ type: 'functionCall', callId: 'c1', name: 'delete_thread', arguments: '{}' }, { type: 'completed' }],
+      [{ type: 'completed' }],
+    ]);
+    const execute = vi.fn(async () => ({ output: 'ok' }));
+    const events = await collect(
+      runAgent({ model: 'm', turns: [], tools: [], execute, isDestructive: () => true, streamFn }),
+    );
+    expect(execute).toHaveBeenCalled();
+    expect(events).toContainEqual({
+      type: 'tool',
+      name: 'delete_thread',
+      status: 'running',
+      callId: 'c1',
+      args: {},
     });
   });
 });

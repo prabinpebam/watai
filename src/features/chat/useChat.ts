@@ -5,14 +5,41 @@ import { newId } from '../../lib/ids';
 import { streamChat, completeChat, type ChatMessage } from '../../ai/chat';
 import { mockStreamChat } from '../../ai/mockAi';
 import { isAiError } from '../../ai/errors';
-import { agenticAvailable } from '../../ai/capabilities';
+import { detectCapabilities } from '../../ai/capabilities';
 import { runAgent, type Turn } from '../../ai/orchestrator';
-import { CHAT_TOOLS, executeTool } from '../../ai/tools';
+import { assembleTools, executeTool, isDestructiveTool } from '../../ai/tools';
 import { b64ToBlob } from '../../ai/image';
 import { useUi } from '../../state/store';
-import type { AiError, ImageRef, Message } from '../../lib/types';
+import type { AiError, CapabilityMatrix, ImageRef, Message, ToolCall } from '../../lib/types';
 
 export const DEFAULT_CHAT_MODEL = 'gpt-5.4';
+
+/** Human labels for the tool-activity cards shown in the transcript. */
+const TOOL_LABELS: Record<string, string> = {
+  search_history: 'Searched your chat history',
+  get_thread_summary: 'Read a past conversation',
+  create_thread: 'Created a conversation',
+  delete_thread: 'Deleted a conversation',
+  add_memory: 'Saved to memory',
+  update_setting: 'Updated a setting',
+};
+
+/** Confirm a destructive tool before it runs (prompt-injection guard). */
+async function confirmDestructive({
+  name,
+  args,
+}: {
+  name: string;
+  args: Record<string, unknown>;
+}): Promise<boolean> {
+  const what =
+    name === 'delete_thread'
+      ? 'delete a conversation'
+      : name === 'update_setting'
+        ? `change the setting "${String(args.path ?? '')}"`
+        : `run ${name}`;
+  return window.confirm(`Allow the assistant to ${what}?`);
+}
 
 export function useChat(threadId: string, temporary = false) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -79,6 +106,7 @@ export function useChat(threadId: string, temporary = false) {
       const genImages: ImageRef[] = [];
       // Transient placeholders for images currently being generated (never persisted).
       const pendingImages: { id: string; callId?: string; size: string }[] = [];
+      const toolCalls: ToolCall[] = [];
       const applyMedia = () =>
         setMessages((prev) =>
           prev.map((m) =>
@@ -91,8 +119,10 @@ export function useChat(threadId: string, temporary = false) {
       // Agentic path (tools, incl. context-aware image generation) when the endpoint
       // serves the Responses API; otherwise the classic single-shot chat path.
       let useAgentic = false;
+      let caps: CapabilityMatrix | null = null;
       if (!mockAi && config) {
-        useAgentic = await agenticAvailable(config);
+        caps = await detectCapabilities(config);
+        useAgentic = caps.responses;
       }
 
       try {
@@ -104,11 +134,18 @@ export function useChat(threadId: string, temporary = false) {
               turns.push({ role: m.role, text: m.content });
             }
           }
+          const toolCtx = {
+            webSearchConsent: config?.consent?.webSearchDataBoundary ?? false,
+            vectorStoreIds: config?.tools?.vectorStoreId ? [config.tools.vectorStoreId] : [],
+          };
+          const tools = caps ? assembleTools(caps, settings.tools, toolCtx) : [];
           for await (const ev of runAgent({
             model,
             turns,
-            tools: CHAT_TOOLS,
+            tools,
             execute: executeTool,
+            confirm: confirmDestructive,
+            isDestructive: isDestructiveTool,
             signal: ctrl.signal,
           })) {
             if (ev.type === 'text') {
@@ -130,6 +167,20 @@ export function useChat(threadId: string, temporary = false) {
                 if (i >= 0) pendingImages.splice(i, 1);
                 applyMedia();
               }
+            } else if (ev.type === 'tool') {
+              // Record non-image tool activity as a collapsible card on the message.
+              const id = ev.callId ?? ev.name;
+              const label = TOOL_LABELS[ev.name] ?? ev.name;
+              const existing = toolCalls.find((t) => t.id === id);
+              if (existing) {
+                existing.status = ev.status;
+                if (ev.detail) existing.summary = `${label} · ${ev.detail}`;
+              } else {
+                toolCalls.push({ id, kind: 'function', name: ev.name, status: ev.status, summary: label });
+              }
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantId ? { ...m, toolCalls: [...toolCalls] } : m)),
+              );
             } else if (ev.type === 'image' && !ev.partial) {
               const imgId = newId();
               const key = `img-${imgId}`;
@@ -141,6 +192,9 @@ export function useChat(threadId: string, temporary = false) {
                 size: ev.size ?? '1024x1024',
                 outputFormat: 'png',
                 createdAt: new Date().toISOString(),
+                ...(ev.expandedPrompt ? { expandedPrompt: ev.expandedPrompt } : {}),
+                ...(ev.model ? { model: ev.model } : {}),
+                sourceMessageIds: history.map((m) => m.id),
               });
               const i = ev.callId
                 ? pendingImages.findIndex((p) => p.callId === ev.callId)
@@ -193,6 +247,7 @@ export function useChat(threadId: string, temporary = false) {
         usage,
         error: err,
         ...(genImages.length ? { images: genImages } : {}),
+        ...(toolCalls.length ? { toolCalls } : {}),
       };
       setMessages((prev) => prev.map((m) => (m.id === assistantId ? final : m)));
       setStream({ status: err ? 'error' : 'idle' });

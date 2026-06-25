@@ -7,10 +7,13 @@ import { normalizeHttpError } from './errors';
 
 /** A tool the model may use: a client-side `function`, or a service-side built-in. */
 export interface ResponsesTool {
-  type: 'function' | 'image_generation' | 'web_search' | 'code_interpreter';
+  type: 'function' | 'image_generation' | 'web_search' | 'code_interpreter' | 'file_search';
   name?: string;
   description?: string;
   parameters?: Record<string, unknown>;
+  vector_store_ids?: string[];
+  user_location?: { type: 'approximate'; country?: string; city?: string; region?: string };
+  search_context_size?: 'low' | 'medium' | 'high';
   [key: string]: unknown;
 }
 

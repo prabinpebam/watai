@@ -1,5 +1,8 @@
 import { aiFetch, transcriptionUrl } from './http';
-import type { ApiConfig, CapabilityMatrix } from '../lib/types';
+import type { ApiConfig, CapabilityMatrix, EndpointKind } from '../lib/types';
+
+export type { ApiConfig } from '../lib/types';
+export type ProbeResultLike = { ok: boolean };
 
 export const FULL_CAPABILITY: CapabilityMatrix = {
   chat: true,
@@ -10,6 +13,13 @@ export const FULL_CAPABILITY: CapabilityMatrix = {
   image: true,
   imageEdit: true,
   tts: true,
+  // Agentic defaults: function calling + code interpreter come with /responses; the
+  // project-only tools stay off until detected (P2).
+  responses: true,
+  functions: true,
+  codeInterpreter: true,
+  webSearch: false,
+  fileSearch: false,
 };
 
 /**
@@ -147,11 +157,91 @@ export async function probeResponses(config: ApiConfig): Promise<ProbeResult> {
   }
 }
 
-let responsesSupport: boolean | null = null;
+/** Probe one service-side tool by asking /responses to accept it (cheap; body cancelled). */
+async function probeTool(
+  config: ApiConfig,
+  tools: unknown[],
+  extra: Record<string, unknown> = {},
+): Promise<ProbeResult> {
+  try {
+    const res = await aiFetch({
+      path: '/responses',
+      body: { model: config.models.chat, input: 'ping', max_output_tokens: 16, tools, ...extra },
+      timeoutMs: 30000,
+    });
+    if (!res.ok) return { ok: false, status: res.status, detail: await detailFrom(res) };
+    await res.body?.cancel();
+    return { ok: true, status: res.status };
+  } catch (e) {
+    return failed(e);
+  }
+}
 
-/** Clear the cached agentic-support flag (call when the endpoint config changes). */
+export const probeCodeInterpreter = (c: ApiConfig): Promise<ProbeResult> =>
+  probeTool(c, [{ type: 'code_interpreter' }]);
+export const probeWebSearch = (c: ApiConfig): Promise<ProbeResult> =>
+  probeTool(c, [{ type: 'web_search' }], { tool_choice: 'auto' });
+export const probeFileSearch = (c: ApiConfig): Promise<ProbeResult> =>
+  probeTool(c, [{ type: 'file_search', vector_store_ids: [] }]);
+
+/** Derive the endpoint tier from the URL shape (a project endpoint serves the full suite). */
+export function endpointKind(config: ApiConfig): EndpointKind {
+  return /\/api\/projects\//i.test(config.projectEndpoint ?? config.baseUrl)
+    ? 'foundry-project'
+    : 'aoai';
+}
+
+/** Injectable probes so the matrix logic is unit-testable without the network. */
+export interface CapabilityProbes {
+  responses: (c: ApiConfig) => Promise<ProbeResultLike>;
+  codeInterpreter: (c: ApiConfig) => Promise<ProbeResultLike>;
+  webSearch: (c: ApiConfig) => Promise<ProbeResultLike>;
+  fileSearch: (c: ApiConfig) => Promise<ProbeResultLike>;
+}
+
+let matrixCache: CapabilityMatrix | null = null;
+
+/** Clear the cached capability matrix (call when the endpoint config changes). */
 export function resetAgenticCache(): void {
-  responsesSupport = null;
+  matrixCache = null;
+}
+
+/**
+ * Detect and cache the full agentic capability matrix for the configured endpoint. Function
+ * calling + code interpreter come with /responses; web/file search are probed only on a
+ * Foundry project endpoint (no wasted 4xx spend on a plain key).
+ */
+export async function detectCapabilities(
+  config: ApiConfig,
+  probes: Partial<CapabilityProbes> = {},
+): Promise<CapabilityMatrix> {
+  if (matrixCache) return matrixCache;
+  const p: CapabilityProbes = {
+    responses: probeResponses,
+    codeInterpreter: probeCodeInterpreter,
+    webSearch: probeWebSearch,
+    fileSearch: probeFileSearch,
+    ...probes,
+  };
+  const responses = (await p.responses(config)).ok;
+  const off: ProbeResultLike = { ok: false };
+  const projectKind = endpointKind(config) === 'foundry-project';
+  const [code, web, file] = responses
+    ? await Promise.all([
+        p.codeInterpreter(config),
+        projectKind ? p.webSearch(config) : Promise.resolve(off),
+        projectKind ? p.fileSearch(config) : Promise.resolve(off),
+      ])
+    : [off, off, off];
+  matrixCache = {
+    ...FULL_CAPABILITY,
+    responses,
+    functions: responses,
+    codeInterpreter: code.ok,
+    webSearch: web.ok,
+    fileSearch: file.ok,
+  };
+  return matrixCache;
 }
 
 /**
@@ -159,10 +249,7 @@ export function resetAgenticCache(): void {
  * agentic chat + tools)? Probed once on first use; classic chat is the fallback.
  */
 export async function agenticAvailable(config: ApiConfig): Promise<boolean> {
-  if (responsesSupport === null) {
-    responsesSupport = (await probeResponses(config)).ok;
-  }
-  return responsesSupport;
+  return (await detectCapabilities(config)).responses;
 }
 
 export function probeModel(key: ModelKey, config: ApiConfig): Promise<ProbeResult> {
