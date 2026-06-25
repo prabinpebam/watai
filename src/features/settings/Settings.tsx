@@ -88,6 +88,7 @@ interface SettingsCtx {
   stats: UsageStats;
   chatModel: string | null;
   onModelSaved: (model: string) => void;
+  tavilyConfigured: boolean;
 }
 
 interface UsageStats {
@@ -111,7 +112,7 @@ function summaryFor(id: string, ctx: SettingsCtx): string {
     case 'tools': {
       const tl = s.tools;
       if (!tl?.agenticMode) return 'Off';
-      const on = [tl.webSearch && 'Web', tl.codeInterpreter && 'Code', tl.fileSearch && 'Files'].filter(
+      const on = [ctx.tavilyConfigured && 'Web', tl.codeInterpreter && 'Code', tl.fileSearch && 'Files'].filter(
         Boolean,
       );
       return on.length ? on.join(' · ') : 'Functions';
@@ -193,11 +194,17 @@ export function Settings() {
   const stats = useUsageStats();
   const { settings, setSettings, loaded } = useSettings();
   const [chatModel, setChatModel] = useState<string | null>(null);
+  const [tavilyConfigured, setTavilyConfigured] = useState(false);
   useEffect(() => {
     getApiConfig()
       .then((c) => c && setChatModel(c.models.chat))
       .catch(() => undefined);
   }, []);
+  useEffect(() => {
+    getTavilyKey()
+      .then((k) => setTavilyConfigured(!!k))
+      .catch(() => undefined);
+  }, [section]);
 
   const ctx: SettingsCtx = {
     settings,
@@ -208,6 +215,7 @@ export function Settings() {
     stats,
     chatModel,
     onModelSaved: setChatModel,
+    tavilyConfigured,
   };
 
   const current = section && SECTIONS[section] ? section : null;

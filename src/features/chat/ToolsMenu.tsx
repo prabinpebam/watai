@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../../design/icons';
 import { Switch } from '../../design/ui';
 import { repo } from '../../data';
-import { getApiConfig } from '../../data/secureStore';
+import { getApiConfig, getTavilyKey, saveTavilyKey } from '../../data/secureStore';
 import { detectCapabilities } from '../../ai/capabilities';
 import { useUi } from '../../state/store';
 import type { CapabilityMatrix, Settings } from '../../lib/types';
@@ -26,9 +26,10 @@ interface ToolDef {
   hint?: string;
 }
 
-// Web search is intentionally absent here: it is governed solely by the presence of a Tavily
-// API key (managed in Settings -> Tools), not a per-chat capability toggle. Keeping it out of
-// this menu removes a long-standing conflation with the Foundry server web_search capability.
+// Image / code / file search are per-chat capability toggles. Web search is rendered separately
+// (see the menu body) because its switch is the presence of a Tavily key (managed in
+// Settings -> Tools), not a per-chat capability — but it appears here too so the tool list is
+// identical in all places.
 const TOOL_DEFS: ToolDef[] = [
   { key: 'imageAgent', label: 'Image generation', sub: 'Create images from chat', icon: 'image', available: () => true },
   {
@@ -65,23 +66,29 @@ const MOCK_CAPS: CapabilityMatrix = {
   fileSearch: true,
 };
 
-/** In-composer tool toggles (image / code / file search), capability-gated. Edits the global
- *  Settings.tools (the chat composer and the Settings screen are never co-visible, so there is
- *  no drift). Web search is not here — it is governed solely by the Tavily key in Settings. */
+/** In-composer tool toggles (image / code / web search / file search). Image/code/file are
+ *  per-chat capability toggles writing Settings.tools; web search reflects the Tavily key (its
+ *  single switch). The composer and Settings are never co-visible, so there is no drift, and the
+ *  tool list is identical in both. */
 export function ToolsMenu() {
   const [open, setOpen] = useState(false);
   const [caps, setCaps] = useState<CapabilityMatrix | null>(null);
   const [tools, setTools] = useState<ToolsState>(DEFAULTS);
+  const [tavilyHasKey, setTavilyHasKey] = useState(false);
   const [anchor, setAnchor] = useState<{ left: number; bottom: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const mockAi = useUi((s) => s.mockAi);
+  const pushToast = useUi((s) => s.pushToast);
+  const requestConfirm = useUi((s) => s.requestConfirm);
 
   useEffect(() => {
     let live = true;
     void (async () => {
       const s = await repo.getSettings();
       if (live && s.tools) setTools(s.tools);
+      const key = await getTavilyKey().catch(() => null);
+      if (live) setTavilyHasKey(mockAi ? true : !!key);
       if (mockAi) {
         if (live) setCaps(MOCK_CAPS);
         return;
@@ -116,7 +123,8 @@ export function ToolsMenu() {
 
   if (!caps?.responses) return null;
 
-  const activeCount = TOOL_DEFS.filter((d) => d.available(caps) && tools[d.key]).length;
+  const activeCount =
+    TOOL_DEFS.filter((d) => d.available(caps) && tools[d.key]).length + (tavilyHasKey ? 1 : 0);
 
   const openMenu = () => {
     const r = btnRef.current?.getBoundingClientRect();
@@ -133,6 +141,26 @@ export function ToolsMenu() {
   const toggle = async (d: ToolDef) => {
     if (!caps || !d.available(caps)) return;
     await save({ ...tools, [d.key]: !tools[d.key] });
+  };
+
+  // Web search's switch is the Tavily key. Turning it on without a key points to Settings (the
+  // composer has no key field); turning it off removes the key (with confirmation).
+  const toggleWebSearch = async (v: boolean) => {
+    if (v) {
+      if (!tavilyHasKey) pushToast('Add a Tavily key in Settings \u2192 Tools to turn on web search', 'info');
+      return;
+    }
+    if (!tavilyHasKey) return;
+    const ok = await requestConfirm({
+      title: 'Turn off web search',
+      message: 'This removes your saved Tavily key. You can add it again anytime.',
+      confirmLabel: 'Turn off',
+      danger: true,
+    });
+    if (ok) {
+      await saveTavilyKey('');
+      setTavilyHasKey(false);
+    }
   };
 
   return (
@@ -165,20 +193,37 @@ export function ToolsMenu() {
               const available = d.available(caps);
               const on = available && !!tools[d.key];
               return (
-                <div key={d.key} className="tools-pop__row">
-                  <span className={`tools-pop__icon ${on ? 'is-on' : ''}`}>
-                    <Icon name={d.icon} size={18} />
-                  </span>
-                  <span className="tools-pop__text">
-                    <span className="tools-pop__label">{d.label}</span>
-                    <span className="tools-pop__sub">{available ? d.sub : (d.hint ?? 'Unavailable')}</span>
-                  </span>
-                  {available ? (
-                    <Switch checked={!!tools[d.key]} onChange={() => void toggle(d)} label={d.label} />
-                  ) : (
-                    <span className="badge">Off</span>
+                <Fragment key={d.key}>
+                  {/* Web search sits before File search to match the Settings order. */}
+                  {d.key === 'fileSearch' && (
+                    <div className="tools-pop__row">
+                      <span className={`tools-pop__icon ${tavilyHasKey ? 'is-on' : ''}`}>
+                        <Icon name="globe" size={18} />
+                      </span>
+                      <span className="tools-pop__text">
+                        <span className="tools-pop__label">Web search</span>
+                        <span className="tools-pop__sub">
+                          {tavilyHasKey ? 'Search the web and cite sources' : 'Add a Tavily key in Settings'}
+                        </span>
+                      </span>
+                      <Switch checked={tavilyHasKey} onChange={(v) => void toggleWebSearch(v)} label="Web search" />
+                    </div>
                   )}
-                </div>
+                  <div className="tools-pop__row">
+                    <span className={`tools-pop__icon ${on ? 'is-on' : ''}`}>
+                      <Icon name={d.icon} size={18} />
+                    </span>
+                    <span className="tools-pop__text">
+                      <span className="tools-pop__label">{d.label}</span>
+                      <span className="tools-pop__sub">{available ? d.sub : (d.hint ?? 'Unavailable')}</span>
+                    </span>
+                    {available ? (
+                      <Switch checked={!!tools[d.key]} onChange={() => void toggle(d)} label={d.label} />
+                    ) : (
+                      <span className="badge">Off</span>
+                    )}
+                  </div>
+                </Fragment>
               );
             })}
           </div>,
