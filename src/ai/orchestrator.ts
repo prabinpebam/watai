@@ -17,6 +17,8 @@ import type { AiErrorCode } from '../lib/types';
 export interface Turn {
   role: 'system' | 'user' | 'assistant';
   text: string;
+  /** Optional image inputs (data/remote URLs) for vision — user turns only. */
+  images?: string[];
 }
 
 /** Result of a client-executed tool: `output` goes back to the model; `image` renders in chat. */

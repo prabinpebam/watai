@@ -5,7 +5,7 @@ import { IconButton } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
 import { synthesize } from '../../ai/tts';
-import type { Message, ToolCall } from '../../lib/types';
+import type { Citation, Message, ToolCall } from '../../lib/types';
 
 function domainOf(url: string): string {
   try {
@@ -76,6 +76,59 @@ function ToolCardView({ tc }: { tc: ToolCall }) {
   );
 }
 
+/** Collapsed-by-default strip of grounding sources. Clicking a chip opens the source pane. */
+function SourcesStrip({ citations }: { citations: Citation[] }) {
+  const [open, setOpen] = useState(false);
+  const openSourcePane = useUi((s) => s.openSourcePane);
+  const sources = citations.filter((c) => c.url || c.filename || c.content);
+  const bing = citations.find((c) => c.bingQueryUrl)?.bingQueryUrl;
+  if (sources.length === 0 && !bing) return null;
+  return (
+    <div className={`sources ${open ? 'sources--open' : ''}`}>
+      <button
+        type="button"
+        className="sources__toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Icon name="globe" size={14} />
+        <span className="sources__toggle-label">
+          {sources.length} source{sources.length === 1 ? '' : 's'}
+        </span>
+        <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} className="sources__caret" />
+      </button>
+      {open && (
+        <div className="sources__list">
+          {sources.map((c, i) => (
+            <button
+              key={i}
+              type="button"
+              className="source-chip"
+              onClick={() => openSourcePane(sources, i)}
+              title={c.title || c.filename || domainOf(c.url || '')}
+            >
+              <span className="source-chip__num">{i + 1}</span>
+              {c.favicon ? (
+                <img className="source-chip__favicon" src={c.favicon} alt="" width={14} height={14} />
+              ) : !c.url ? (
+                <Icon name="paperclip" size={13} />
+              ) : null}
+              <span className="source-chip__text">{c.title || c.filename || domainOf(c.url || '')}</span>
+              <Icon name="chevron-right" size={12} className="source-chip__ext" />
+            </button>
+          ))}
+          {bing && (
+            <a className="source-chip source-chip--bing" href={bing} target="_blank" rel="noreferrer noopener">
+              <Icon name="globe" size={13} />
+              <span className="source-chip__text">Searched the web</span>
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function UserMessage({ message }: { message: Message }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
@@ -111,7 +164,6 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pushToast = useUi((s) => s.pushToast);
   const mockAi = useUi((s) => s.mockAi);
-  const openSourcePane = useUi((s) => s.openSourcePane);
   const isStreamingThis = streaming && message.status === 'streaming';
 
   const copy = () => {
@@ -180,46 +232,7 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
           </div>
         ) : null}
 
-        {!isStreamingThis &&
-          message.citations &&
-          message.citations.some((c) => c.url || c.filename || c.content) && (
-            <div className="sources">
-              <span className="sources__label">Sources</span>
-              <div className="sources__list">
-                {message.citations
-                  .filter((c) => c.url || c.filename || c.content)
-                  .map((c, i, arr) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className="source-chip"
-                      onClick={() => openSourcePane(arr, i)}
-                      title={c.title || c.filename || domainOf(c.url || '')}
-                    >
-                      <span className="source-chip__num">{i + 1}</span>
-                      {c.favicon ? (
-                        <img className="source-chip__favicon" src={c.favicon} alt="" width={14} height={14} />
-                      ) : !c.url ? (
-                        <Icon name="paperclip" size={13} />
-                      ) : null}
-                      <span className="source-chip__text">{c.title || c.filename || domainOf(c.url || '')}</span>
-                      <Icon name="chevron-right" size={12} className="source-chip__ext" />
-                    </button>
-                  ))}
-                {message.citations.find((c) => c.bingQueryUrl)?.bingQueryUrl && (
-                  <a
-                    className="source-chip source-chip--bing"
-                    href={message.citations.find((c) => c.bingQueryUrl)?.bingQueryUrl}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    <Icon name="globe" size={13} />
-                    <span className="source-chip__text">Searched the web</span>
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
+        {!isStreamingThis && message.citations && <SourcesStrip citations={message.citations} />}
 
         <AttachmentList attachments={message.attachments} />
 

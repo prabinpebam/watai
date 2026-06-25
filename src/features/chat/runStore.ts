@@ -39,6 +39,41 @@ const TOOL_LABELS: Record<string, string> = {
 /** Service-side tools (rendered as cards; never executed in the browser). */
 const SERVER_TOOLS = new Set(['web_search', 'code_interpreter', 'file_search']);
 
+/** Read a blob as a data URL (for vision `input_image`). */
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = () => reject(r.error ?? new Error('blob read failed'));
+    r.readAsDataURL(blob);
+  });
+}
+
+/** Resolve a user message's image attachments to data/remote URLs for vision input. */
+async function imageUrlsForMessage(m: Message): Promise<string[]> {
+  const atts = (m.attachments ?? []).filter((a) => a.mime.startsWith('image/'));
+  const urls: string[] = [];
+  for (const a of atts) {
+    if (a.blobPath && /^(data:|https?:)/.test(a.blobPath)) urls.push(a.blobPath);
+    else if (a.localBlobKey) {
+      const blob = await repo.getBlob(a.localBlobKey).catch(() => null);
+      if (blob) urls.push(await blobToDataUrl(blob));
+    }
+  }
+  return urls;
+}
+
+/** Most recent uploaded image (blob) in history — the reference for generate_image edits. */
+async function latestReferenceImage(history: Message[]): Promise<Blob | null> {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m.role !== 'user') continue;
+    const att = (m.attachments ?? []).find((a) => a.mime.startsWith('image/') && a.localBlobKey);
+    if (att?.localBlobKey) return repo.getBlob(att.localBlobKey).catch(() => null);
+  }
+  return null;
+}
+
 /** A concise nudge so the model actually USES the available service tools, not prose. */
 function agenticToolGuidance(tools: { type?: string; name?: string }[]): string {
   const has = (t: string) => tools.some((x) => x.type === t);
@@ -227,14 +262,21 @@ export const useRuns = create<RunsStore>((set, get) => ({
           if (sysText) turns.push({ role: 'system', text: sysText });
           for (const m of history) {
             if (m.role === 'user' || m.role === 'assistant') {
-              turns.push({ role: m.role, text: m.content });
+              const images = m.role === 'user' ? await imageUrlsForMessage(m) : undefined;
+              turns.push({
+                role: m.role,
+                text: m.content,
+                ...(images && images.length ? { images } : {}),
+              });
             }
           }
+          // The latest uploaded image is offered to generate_image as an edit reference.
+          const referenceImage = await latestReferenceImage(history);
           agentStream = runAgent({
             model,
             turns,
             tools,
-            execute: executeTool,
+            execute: (name, args) => executeTool(name, args, { referenceImage }),
             confirm: confirmDestructive,
             isDestructive: isDestructiveTool,
             signal: ctrl.signal,

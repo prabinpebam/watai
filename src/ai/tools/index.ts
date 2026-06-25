@@ -7,22 +7,25 @@ import { repo } from '../../data';
 import type { CapabilityMatrix, Settings } from '../../lib/types';
 import type { ResponsesTool } from '../responses';
 import type { ToolResult } from '../orchestrator';
-import { generateImageTool, runGenerateImage } from './image';
+import { generateImageTool, runGenerateImage, type ImageToolContext } from './image';
 import { searchHistoryTool, runSearchHistory, threadSummaryTool, runThreadSummary } from './history';
 import { createThreadTool, runCreateThread, deleteThreadTool, runDeleteThread } from './threads';
 import { addMemoryTool, runAddMemory, updateSettingTool, runUpdateSetting } from './memory';
 import { codeInterpreterTool, fileSearchTool } from './serverTools';
 import { webSearchTool, runWebSearch } from './webSearch';
 
+/** Per-run context the registry injects into tools (e.g. the user's latest uploaded image). */
+export type ToolExecContext = ImageToolContext;
+
 export interface ClientTool {
   def: ResponsesTool;
   destructive?: boolean;
-  run: (args: Record<string, unknown>) => Promise<ToolResult>;
+  run: (args: Record<string, unknown>, ctx?: ToolExecContext) => Promise<ToolResult>;
 }
 
 /** The allow-listed client function tools, bound to the real `repo`. */
 export const CLIENT_TOOLS: Record<string, ClientTool> = {
-  generate_image: { def: generateImageTool, run: (a) => runGenerateImage(a) },
+  generate_image: { def: generateImageTool, run: (a, ctx) => runGenerateImage(a, {}, ctx) },
   search_history: { def: searchHistoryTool, run: (a) => runSearchHistory(a, repo) },
   get_thread_summary: { def: threadSummaryTool, run: (a) => runThreadSummary(a, repo) },
   create_thread: { def: createThreadTool, run: (a) => runCreateThread(a, repo) },
@@ -75,10 +78,11 @@ export function isDestructiveTool(name: string): boolean {
 export async function executeTool(
   name: string,
   args: Record<string, unknown>,
+  ctx?: ToolExecContext,
 ): Promise<ToolResult> {
   const tool = CLIENT_TOOLS[name];
   if (!tool) return { output: `Unknown tool: ${name}` };
-  return tool.run(args);
+  return tool.run(args, ctx);
 }
 
 /** Back-compat default tool set (client function tools only). Prefer `assembleTools`. */

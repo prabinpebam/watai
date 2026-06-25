@@ -3,9 +3,28 @@ import { repo } from '../../data';
 import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
 import { useRuns } from './runStore';
-import type { Message } from '../../lib/types';
+import type { Attachment, Message } from '../../lib/types';
 
 export { DEFAULT_CHAT_MODEL } from './runStore';
+
+/** Persist uploaded files as local blobs and return their attachment records. */
+async function persistAttachments(files: File[]): Promise<Attachment[]> {
+  const out: Attachment[] = [];
+  for (const f of files) {
+    const id = newId();
+    const key = `att-${id}`;
+    await repo.putBlob(key, f);
+    out.push({
+      id,
+      kind: f.type.startsWith('image/') ? 'image' : f.type.startsWith('audio/') ? 'audio' : 'file',
+      localBlobKey: key,
+      mime: f.type || 'application/octet-stream',
+      bytes: f.size,
+      name: f.name,
+    });
+  }
+  return out;
+}
 
 /**
  * Thin chat hook. The thread's persisted messages are merged with any in-progress run, which is
@@ -44,9 +63,10 @@ export function useChat(threadId: string, temporary = false) {
   }, [persisted, run]);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, files?: File[]) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      const hasFiles = !!files && files.length > 0;
+      if (!trimmed && !hasFiles) return;
       if (useRuns.getState().isRunning(threadId)) return;
       // Lazily create the thread on first message (so /new doesn't litter history).
       const existing = await repo.getThread(threadId);
@@ -54,6 +74,7 @@ export function useChat(threadId: string, temporary = false) {
         await repo.createThread({ id: threadId, title: 'New chat', temporary });
         useUi.getState().bumpThreads();
       }
+      const attachments = hasFiles ? await persistAttachments(files!) : undefined;
       const userMsg: Message = {
         id: newId(),
         threadId,
@@ -61,6 +82,7 @@ export function useChat(threadId: string, temporary = false) {
         content: trimmed,
         status: 'complete',
         createdAt: new Date().toISOString(),
+        ...(attachments && attachments.length ? { attachments } : {}),
       };
       setPersisted((prev) => [...prev, userMsg]); // optimistic — reload dedupes by id
       await repo.appendMessage(userMsg);

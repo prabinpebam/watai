@@ -223,4 +223,33 @@ describe('toInputMessages', () => {
       { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'more' }] },
     ]);
   });
+
+  it('appends input_image parts for user turns that carry images', () => {
+    expect(
+      toInputMessages([
+        { role: 'user', text: 'what is this?', images: ['data:image/png;base64,AAA'] },
+      ]),
+    ).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'what is this?' },
+          { type: 'input_image', image_url: 'data:image/png;base64,AAA' },
+        ],
+      },
+    ]);
+  });
+
+  it('omits the empty input_text for an image-only user turn', () => {
+    expect(
+      toInputMessages([{ role: 'user', text: '', images: ['data:image/png;base64,BBB'] }]),
+    ).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_image', image_url: 'data:image/png;base64,BBB' }],
+      },
+    ]);
+  });
 });

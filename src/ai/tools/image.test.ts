@@ -75,4 +75,34 @@ describe('runGenerateImage', () => {
     expect(res.image).toBeUndefined();
     expect(res.output).toMatch(/no image/i);
   });
+
+  it('routes to image edits with the reference when edit_reference is set', async () => {
+    const generate = vi.fn(async () => [{ b64: 'GEN' }]);
+    const edit = vi.fn(async () => [{ b64: 'EDIT' }]);
+    const reference = new Blob(['ref'], { type: 'image/png' });
+    const res = await runGenerateImage(
+      { prompt: 'make it watercolor', edit_reference: true },
+      { generate, edit, getConfig: okConfig },
+      { referenceImage: reference },
+    );
+    expect(edit).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: 'make it watercolor', image: reference }),
+    );
+    expect(generate).not.toHaveBeenCalled();
+    expect(res.image?.b64).toBe('EDIT');
+    expect(res.output).toMatch(/edited/i);
+  });
+
+  it('generates from scratch when edit_reference is set but no reference exists', async () => {
+    const generate = vi.fn(async () => [{ b64: 'GEN' }]);
+    const edit = vi.fn(async () => [{ b64: 'EDIT' }]);
+    const res = await runGenerateImage(
+      { prompt: 'a cat', edit_reference: true },
+      { generate, edit, getConfig: okConfig },
+      {},
+    );
+    expect(generate).toHaveBeenCalled();
+    expect(edit).not.toHaveBeenCalled();
+    expect(res.image?.b64).toBe('GEN');
+  });
 });

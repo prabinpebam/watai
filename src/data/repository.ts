@@ -20,6 +20,8 @@ export interface Repository {
 
   putBlob(key: string, blob: Blob): Promise<void>;
   getBlobUrl(key: string): Promise<string>;
+  /** Read raw blob bytes (e.g. an uploaded image, for vision input or an edit reference). */
+  getBlob(key: string): Promise<Blob | null>;
   /** Resolve a displayable URL for a generated/attached image, fetching from the cloud
    *  (read SAS) and caching locally when only a cloud `blobPath` is known. */
   resolveImageUrl(image: ImageRef): Promise<string>;
@@ -43,6 +45,4 @@ export interface Repository {
  */
 export interface SyncLocalStore extends Repository {
   putMessageRaw(message: Message): Promise<void>;
-  /** Read raw blob bytes (for uploading a local image to Blob Storage). */
-  getBlob(key: string): Promise<Blob | null>;
 }

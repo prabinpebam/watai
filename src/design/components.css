@@ -839,6 +839,29 @@ button.tool-card__head:hover {
   color: var(--color-text-tertiary);
   margin-bottom: var(--space-2);
 }
+.sources__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-caption-size);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast);
+}
+.sources__toggle:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+}
+.sources__caret {
+  color: var(--color-text-tertiary);
+}
+.sources--open .sources__list {
+  margin-top: var(--space-2);
+}
 .sources__list {
   display: flex;
   flex-wrap: wrap;

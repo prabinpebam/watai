@@ -24,7 +24,10 @@ export type ResponsesInputItem =
   | {
       type: 'message';
       role: 'system' | 'user' | 'assistant';
-      content: Array<{ type: 'input_text' | 'output_text'; text: string }>;
+      content: Array<
+        | { type: 'input_text' | 'output_text'; text: string }
+        | { type: 'input_image'; image_url: string; detail?: 'low' | 'high' | 'auto' }
+      >;
     }
   | { type: 'function_call_output'; call_id: string; output: string };
 
@@ -257,17 +260,25 @@ export async function* streamResponses(p: ResponsesParams): AsyncGenerator<Respo
   yield* parseResponsesStream(res, p.signal);
 }
 
-/** Build Responses `input` message items from simple role/text turns. */
+/** Build Responses `input` message items from simple role/text(/image) turns. */
 export function toInputMessages(
-  turns: Array<{ role: 'system' | 'user' | 'assistant'; text: string }>,
+  turns: Array<{ role: 'system' | 'user' | 'assistant'; text: string; images?: string[] }>,
 ): ResponsesInputItem[] {
-  return turns.map((t) => ({
-    type: 'message',
-    role: t.role,
+  return turns.map((t) => {
     // Prior assistant turns are model OUTPUT and must use `output_text`; user/system
     // turns are inputs and use `input_text`. Tagging an assistant turn as `input_text`
     // makes the Responses API reject the whole request (400) the moment history
     // contains an assistant message — i.e. every turn after the first.
-    content: [{ type: t.role === 'assistant' ? 'output_text' : 'input_text', text: t.text }],
-  }));
+    const textType = t.role === 'assistant' ? 'output_text' : 'input_text';
+    const content: Array<
+      | { type: 'input_text' | 'output_text'; text: string }
+      | { type: 'input_image'; image_url: string }
+    > = [];
+    if (t.text || !t.images?.length) content.push({ type: textType, text: t.text });
+    // Only user/system turns may carry image inputs; assistant output cannot include input_image.
+    if (t.role !== 'assistant' && t.images?.length) {
+      for (const url of t.images) content.push({ type: 'input_image', image_url: url });
+    }
+    return { type: 'message', role: t.role, content };
+  });
 }
