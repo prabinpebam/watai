@@ -2,6 +2,7 @@
 // query; the browser runs the Tavily search (BYO key) and returns a bounded text summary to the
 // model plus citations for the Sources strip. Works on ANY endpoint — no Foundry/Bing needed.
 import { tavilySearch as defaultSearch } from '../tavily';
+import { useUi } from '../../state/store';
 import type { ResponsesCitation, ResponsesTool } from '../responses';
 import type { ToolResult } from '../orchestrator';
 
@@ -58,7 +59,10 @@ export async function runWebSearch(
   try {
     resp = await search(query, { topic, timeRange });
   } catch (e) {
-    return { output: `Web search failed: ${e instanceof Error ? e.message : 'unknown error'}.` };
+    const msg = e instanceof Error ? e.message : 'unknown error';
+    // Surface the real reason (bad key, rate/usage limit, network) instead of failing silently.
+    useUi.getState().pushToast(`Web search failed: ${msg}`, 'error');
+    return { output: `Web search failed: ${msg}.` };
   }
 
   // Bounded text the model reads to write its grounded answer.

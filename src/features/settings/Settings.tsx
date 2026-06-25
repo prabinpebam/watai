@@ -30,7 +30,7 @@ import {
   removeFileFromStore,
   deleteVectorStore,
 } from '../../ai/fileSearch';
-import { tavilyUsage } from '../../ai/tavily';
+import { tavilyUsage, tavilySearch } from '../../ai/tavily';
 import { DEFAULT_SETTINGS } from '../../lib/types';
 import type {
   ApiConfig,
@@ -693,6 +693,7 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
   const [tavilyHasKey, setTavilyHasKey] = useState(false);
   const [tavilyUsageData, setTavilyUsageData] = useState<{ used: number; limit: number | null } | null>(null);
   const [tavilyBusy, setTavilyBusy] = useState(false);
+  const [tavilyTesting, setTavilyTesting] = useState(false);
 
   const kbFiles = config?.tools?.kbFiles ?? [];
   const mapStatus = (s: string): 'ready' | 'indexing' | 'failed' =>
@@ -774,7 +775,10 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
     await saveTavilyKey(k);
     setTavilyHasKey(true);
     setTavilyKeyInput('');
-    pushToast('Tavily key saved', 'success');
+    // Saving a key is a clear intent to use web search — enable it so there isn't a silent
+    // second step the user has to discover. They can still toggle it off above.
+    if (!t.webSearch) setTool({ webSearch: true });
+    pushToast('Tavily key saved — web search enabled', 'success');
     void refreshTavilyUsage();
   };
 
@@ -784,6 +788,19 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
     setTavilyUsageData(null);
     if (t.webSearch) setTool({ webSearch: false });
     pushToast('Tavily key removed', 'info');
+  };
+
+  const testTavily = async () => {
+    setTavilyTesting(true);
+    try {
+      const r = await tavilySearch('Tavily connectivity test');
+      pushToast(`Web search works — ${r.results.length} results returned`, 'success');
+      void refreshTavilyUsage();
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Search test failed', 'error');
+    } finally {
+      setTavilyTesting(false);
+    }
   };
 
   const foundry = config ? isFoundryHost(config.baseUrl) || endpointKind(config) === 'foundry-project' : false;
@@ -956,6 +973,15 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
                   : 'Usage unavailable.'}
               </div>
             </div>
+            <button
+              type="button"
+              className="btn btn--outline"
+              onClick={testTavily}
+              disabled={tavilyTesting}
+            >
+              {tavilyTesting ? <span className="spinner" style={{ width: 16, height: 16 }} /> : null}
+              <span>Test search</span>
+            </button>
             <IconButton
               name="refresh"
               label="Refresh usage"
