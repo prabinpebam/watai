@@ -6,29 +6,146 @@ import { Icon } from '../../design/icons';
 import { Logo } from '../../design/Logo';
 import { ConfirmDialog } from '../../design/overlays';
 import { useUi } from '../../state/store';
+import { useIsExpanded } from '../../lib/hooks';
+import { formatBytes } from '../../lib/format';
 import { repo, cloudApi } from '../../data';
+import { kvGet } from '../../data/db';
 import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import { useMe } from '../../auth/access';
-import type { InviteRecord } from '../../data/cloud/types';
+import type { InviteRecord, MeInfo } from '../../data/cloud/types';
 import {
   getApiConfig,
   saveApiConfig,
   saveApiKey,
   getApiKey,
-  clearApiCredentials,
   normalizeBaseUrl,
 } from '../../data/secureStore';
-import type { ApiConfig, Settings as SettingsModel, TextScale } from '../../lib/types';
+import type { ApiConfig, ImageRef, Settings as SettingsModel, TextScale } from '../../lib/types';
 
-const SECTIONS = [
-  { id: 'account', label: 'Account', icon: 'user', sub: 'Profile and session' },
-  { id: 'models', label: 'Models & keys', icon: 'key', sub: 'Endpoint and deployments' },
-  { id: 'personalization', label: 'Personalization', icon: 'sparkle', sub: 'Custom instructions and memory' },
-  { id: 'voice', label: 'Voice', icon: 'mic', sub: 'Dictation and read-aloud' },
-  { id: 'appearance', label: 'Appearance', icon: 'palette', sub: 'Theme, text size, density' },
-  { id: 'data', label: 'Data controls', icon: 'database', sub: 'Export, retention, delete' },
-  { id: 'about', label: 'About', icon: 'info', sub: 'Version and links' },
+const APP_VERSION = '0.1.0';
+
+// ---------------------------------------------------------------------------
+// Information architecture: one registry drives the desktop rail, the mobile
+// hub, and the section headers so labels/order/grouping stay consistent.
+// ---------------------------------------------------------------------------
+interface SectionMeta {
+  id: string;
+  label: string;
+  icon: string;
+  sub: string;
+  adminOnly?: boolean;
+}
+
+const SECTIONS: Record<string, SectionMeta> = {
+  account: { id: 'account', label: 'Account', icon: 'user', sub: 'Profile, storage, and session' },
+  models: { id: 'models', label: 'Models & keys', icon: 'key', sub: 'Endpoint, deployments, and defaults' },
+  personalization: {
+    id: 'personalization',
+    label: 'Personalization',
+    icon: 'sparkle',
+    sub: 'Custom instructions and memory',
+  },
+  voice: { id: 'voice', label: 'Voice', icon: 'mic', sub: 'Dictation and read-aloud' },
+  appearance: { id: 'appearance', label: 'Appearance', icon: 'palette', sub: 'Theme, text size, and density' },
+  data: { id: 'data', label: 'Data controls', icon: 'database', sub: 'Sync, export, retention, and deletion' },
+  invites: { id: 'invites', label: 'Invites', icon: 'user-add', sub: 'Manage who can sign in', adminOnly: true },
+  about: { id: 'about', label: 'About', icon: 'info', sub: 'Version and links' },
+};
+
+const GROUPS: { label: string; ids: string[] }[] = [
+  { label: 'Assistant', ids: ['models', 'personalization', 'voice'] },
+  { label: 'App', ids: ['appearance', 'data', 'about'] },
+  { label: 'Admin', ids: ['invites'] },
 ];
+
+/** Shared, single-source state handed to every section so the rail summaries
+ *  and the editors never drift apart. */
+interface SettingsCtx {
+  settings: SettingsModel;
+  setSettings: (s: SettingsModel) => Promise<void> | void;
+  loaded: boolean;
+  account: { name: string | null; email: string | null };
+  me: MeInfo | null;
+  stats: UsageStats;
+  chatModel: string | null;
+  onModelSaved: (model: string) => void;
+}
+
+interface UsageStats {
+  bytes: number | null;
+  chats: number | null;
+  images: number | null;
+}
+
+// ---- Inline summaries: surface the current value next to each section ----
+function summaryFor(id: string, ctx: SettingsCtx): string {
+  const s = ctx.settings;
+  switch (id) {
+    case 'account':
+      return ctx.account.email ?? SECTIONS.account.sub;
+    case 'models':
+      return ctx.chatModel || SECTIONS.models.sub;
+    case 'personalization':
+      return s.personalization.memoryEnabled ? 'Memory on' : 'Memory off';
+    case 'voice':
+      return `${s.voice.autoSend ? 'Auto-send on' : 'Auto-send off'} · ${s.voice.rate.toFixed(1)}×`;
+    case 'appearance':
+      return appearanceSummary(s.appearance);
+    case 'data':
+      return dataSummary(s.data);
+    case 'about':
+      return `Version ${APP_VERSION}`;
+    default:
+      return SECTIONS[id]?.sub ?? '';
+  }
+}
+
+function appearanceSummary(a: SettingsModel['appearance']): string {
+  const theme = a.theme === 'system' ? 'System' : a.theme === 'dark' ? 'Dark' : 'Light';
+  const size =
+    a.textScale === 0.9 ? 'Small' : a.textScale === 1.1 ? 'Large' : a.textScale === 1.25 ? 'XL' : 'Default';
+  return `${theme} · ${size}`;
+}
+
+function dataSummary(d: SettingsModel['data']): string {
+  const ret =
+    d.retention === 'forever' ? 'Keep forever' : `Keep ${d.retention === '30d' ? '30' : '90'} days`;
+  return `${d.sync ? 'Synced' : 'Local only'} · ${ret}`;
+}
+
+// ---------------------------------------------------------------------------
+// Data hooks
+// ---------------------------------------------------------------------------
+function useCloudAccount(): { name: string | null; email: string | null } {
+  const [acc, setAcc] = useState<{ name: string | null; email: string | null }>({ name: null, email: null });
+  useEffect(() => {
+    getSignedInAccount()
+      .then((a) => setAcc({ name: a?.name ?? null, email: a?.username ?? null }))
+      .catch(() => undefined);
+  }, []);
+  return acc;
+}
+
+function useUsageStats(): UsageStats {
+  const [stats, setStats] = useState<UsageStats>({ bytes: null, chats: null, images: null });
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const threads = await repo.listThreads({ includeArchived: true }).catch(() => []);
+      const images = (await kvGet<ImageRef[]>('images').catch(() => undefined)) ?? [];
+      let bytes: number | null = null;
+      if (navigator.storage?.estimate) {
+        const est = await navigator.storage.estimate().catch(() => undefined);
+        bytes = est?.usage ?? null;
+      }
+      if (live) setStats({ bytes, chats: threads.length, images: images.length });
+    })();
+    return () => {
+      live = false;
+    };
+  }, []);
+  return stats;
+}
 
 function Header({ title, onBack }: { title: string; onBack: () => void }) {
   return (
@@ -43,133 +160,314 @@ function Header({ title, onBack }: { title: string; onBack: () => void }) {
 export function Settings() {
   const navigate = useNavigate();
   const { section } = useParams();
+  const expanded = useIsExpanded();
+  const me = useMe();
+  const account = useCloudAccount();
+  const stats = useUsageStats();
+  const { settings, setSettings, loaded } = useSettings();
+  const [chatModel, setChatModel] = useState<string | null>(null);
+  useEffect(() => {
+    getApiConfig()
+      .then((c) => c && setChatModel(c.models.chat))
+      .catch(() => undefined);
+  }, []);
 
-  if (!section) return <SettingsHub onOpen={(id) => navigate(`/settings/${id}`)} onClose={() => navigate(-1)} />;
+  const ctx: SettingsCtx = {
+    settings,
+    setSettings,
+    loaded,
+    account,
+    me,
+    stats,
+    chatModel,
+    onModelSaved: setChatModel,
+  };
 
-  const back = () => navigate('/settings');
-  switch (section) {
+  const current = section && SECTIONS[section] ? section : null;
+
+  if (expanded) {
+    return (
+      <SettingsDesktop active={current ?? 'account'} ctx={ctx} onSelect={(id) => navigate(`/settings/${id}`)} />
+    );
+  }
+
+  if (!current) {
+    return <SettingsHub ctx={ctx} onOpen={(id) => navigate(`/settings/${id}`)} onClose={() => navigate(-1)} />;
+  }
+
+  return (
+    <Section id={current} onBack={() => navigate('/settings')}>
+      <SectionBody id={current} ctx={ctx} />
+    </Section>
+  );
+}
+
+// Visible groups, with the Admin group hidden from non-admins.
+function visibleGroups(me: MeInfo | null): { label: string; ids: string[] }[] {
+  return GROUPS.map((g) => ({
+    label: g.label,
+    ids: g.ids.filter((id) => !SECTIONS[id]?.adminOnly || me?.isAdmin),
+  })).filter((g) => g.ids.length > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Desktop (>= 1024px): persistent nav rail + detail pane — no drill-in/out.
+// ---------------------------------------------------------------------------
+function SettingsDesktop({
+  active,
+  ctx,
+  onSelect,
+}: {
+  active: string;
+  ctx: SettingsCtx;
+  onSelect: (id: string) => void;
+}) {
+  const toggleSidebar = useUi((s) => s.toggleSidebar);
+  return (
+    <>
+      <div className="appbar">
+        <IconButton name="sidebar" label="Toggle sidebar" onClick={() => toggleSidebar()} />
+        <div className="appbar__title" style={{ textAlign: 'left' }}>
+          Settings
+        </div>
+        <div style={{ width: 40 }} />
+      </div>
+      <div className="settings-shell">
+        <nav className="settings-rail" aria-label="Settings sections">
+          <AccountMiniCard ctx={ctx} active={active === 'account'} onClick={() => onSelect('account')} />
+          {visibleGroups(ctx.me).map((g) => (
+            <div key={g.label} className="settings-rail__group">
+              <div className="settings-rail__label">{g.label}</div>
+              {g.ids.map((id) => {
+                const meta = SECTIONS[id];
+                return (
+                  <button
+                    key={id}
+                    className={`settings-rail__item ${active === id ? 'is-active' : ''}`}
+                    aria-current={active === id ? 'page' : undefined}
+                    onClick={() => onSelect(id)}
+                  >
+                    <span className="settings-rail__icon">
+                      <Icon name={meta.icon} size={20} />
+                    </span>
+                    <span className="settings-rail__text">
+                      <span className="settings-rail__title">{meta.label}</span>
+                      <span className="settings-rail__sub">{summaryFor(id, ctx)}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+        <div className="settings-content">
+          <div className="page__inner">
+            <SectionHeader id={active} />
+            <SectionBody id={active} ctx={ctx} />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function AccountMiniCard({ ctx, active, onClick }: { ctx: SettingsCtx; active: boolean; onClick: () => void }) {
+  const { account, me } = ctx;
+  const name = account.name ?? account.email ?? 'Your account';
+  return (
+    <button className={`account-card ${active ? 'is-active' : ''}`} onClick={onClick}>
+      <span className="avatar" style={{ width: 44, height: 44, fontSize: 18 }}>
+        {name.slice(0, 1).toUpperCase()}
+      </span>
+      <span className="account-card__body">
+        <span className="account-card__name">{name}</span>
+        <span className="account-card__email">{me?.isAdmin ? 'Admin' : 'Member'} · Cloud account</span>
+      </span>
+    </button>
+  );
+}
+
+// Detail-pane title block (desktop) — gives each section a heading + description.
+function SectionHeader({ id }: { id: string }) {
+  const meta = SECTIONS[id];
+  if (!meta) return null;
+  return (
+    <div className="settings-head">
+      <div className="settings-head__title">{meta.label}</div>
+      <div className="settings-head__sub">{meta.sub}</div>
+    </div>
+  );
+}
+
+// Maps a section id to its body. Bodies render cards only (no chrome) so they
+// work identically inside the desktop detail pane and the mobile section page.
+function SectionBody({ id, ctx }: { id: string; ctx: SettingsCtx }) {
+  switch (id) {
     case 'account':
-      return <AccountSection onBack={back} />;
+      return <AccountBody ctx={ctx} />;
     case 'models':
-      return <ModelsSection onBack={back} />;
+      return <ModelsBody ctx={ctx} />;
     case 'personalization':
-      return <PersonalizationSection onBack={back} />;
+      return <PersonalizationBody ctx={ctx} />;
     case 'voice':
-      return <VoiceSection onBack={back} />;
+      return <VoiceBody ctx={ctx} />;
     case 'appearance':
-      return <AppearanceSection onBack={back} />;
+      return <AppearanceBody ctx={ctx} />;
     case 'data':
-      return <DataSection onBack={back} />;
+      return <DataBody ctx={ctx} />;
     case 'invites':
-      return <InvitesSection onBack={back} />;
+      return <InvitesBody />;
     case 'about':
-      return <AboutSection onBack={back} />;
+      return <AboutBody />;
     default:
-      return <SettingsHub onOpen={(id) => navigate(`/settings/${id}`)} onClose={() => navigate('/new')} />;
+      return null;
   }
 }
 
-/** The signed-in cloud account's display name (or username), or null while loading. */
-function useCloudAccountName(): string | null {
-  const [name, setName] = useState<string | null>(null);
-  useEffect(() => {
-    getSignedInAccount()
-      .then((a) => setName(a?.name ?? a?.username ?? null))
-      .catch(() => undefined);
-  }, []);
-  return name;
-}
-
-function SettingsHub({ onOpen, onClose }: { onOpen: (id: string) => void; onClose: () => void }) {
-  const account = useCloudAccountName();
-  const me = useMe();
+function SettingsHub({
+  ctx,
+  onOpen,
+  onClose,
+}: {
+  ctx: SettingsCtx;
+  onOpen: (id: string) => void;
+  onClose: () => void;
+}) {
+  const { account, me } = ctx;
+  const name = account.name ?? account.email ?? 'Your account';
   return (
     <>
       <Header title="Settings" onBack={onClose} />
       <div className="page">
         <div className="page__inner">
-          <div className="row" style={{ marginBottom: 'var(--space-6)' }}>
-            <span className="avatar" style={{ width: 64, height: 64, fontSize: 24 }}>
-              {(account ?? 'Y').slice(0, 1).toUpperCase()}
+          <button className="account-hero" onClick={() => onOpen('account')}>
+            <span className="avatar" style={{ width: 56, height: 56, fontSize: 22 }}>
+              {name.slice(0, 1).toUpperCase()}
             </span>
-            <div>
-              <div style={{ fontSize: 'var(--text-title-3-size)', fontWeight: 600 }}>{account ?? 'Your account'}</div>
-              <div className="muted" style={{ fontSize: 'var(--text-caption-size)' }}>
-                Cloud account
+            <span className="account-hero__body">
+              <span className="account-hero__name">{name}</span>
+              <span className="account-hero__email">{account.email ?? 'Cloud account'}</span>
+              <span className="profile-hero__badges">
+                <span className={`badge ${me?.isAdmin ? 'badge--accent' : ''}`}>
+                  {me?.isAdmin ? 'Admin' : 'Member'}
+                </span>
+              </span>
+            </span>
+            <Icon name="chevron-right" size={18} className="muted" />
+          </button>
+
+          {visibleGroups(me).map((g) => (
+            <div key={g.label} className="settings-group">
+              <div className="settings-group__label">{g.label}</div>
+              <div className="settings-card">
+                {g.ids.map((id) => {
+                  const meta = SECTIONS[id];
+                  return (
+                    <button key={id} className="setting-row" onClick={() => onOpen(id)}>
+                      <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+                        <Icon name={meta.icon} size={18} />
+                      </span>
+                      <div className="setting-row__body">
+                        <div className="setting-row__title">{meta.label}</div>
+                        <div className="setting-row__sub">{summaryFor(id, ctx)}</div>
+                      </div>
+                      <Icon name="chevron-right" size={18} className="muted" />
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          </div>
-
-          <div className="settings-card">
-            {SECTIONS.map((s) => (
-              <button key={s.id} className="setting-row" onClick={() => onOpen(s.id)}>
-                <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
-                  <Icon name={s.icon} size={18} />
-                </span>
-                <div className="setting-row__body">
-                  <div className="setting-row__title">{s.label}</div>
-                  <div className="setting-row__sub">{s.sub}</div>
-                </div>
-                <Icon name="chevron-right" size={18} className="muted" />
-              </button>
-            ))}
-            {me?.isAdmin && (
-              <button key="invites" className="setting-row" onClick={() => onOpen('invites')}>
-                <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
-                  <Icon name="user-add" size={18} />
-                </span>
-                <div className="setting-row__body">
-                  <div className="setting-row__title">Invites</div>
-                  <div className="setting-row__sub">Manage who can sign in</div>
-                </div>
-                <Icon name="chevron-right" size={18} className="muted" />
-              </button>
-            )}
-          </div>
+          ))}
         </div>
       </div>
     </>
   );
 }
 
-function Section({ title, onBack, children }: { title: string; onBack: () => void; children: React.ReactNode }) {
+function Section({ id, onBack, children }: { id: string; onBack: () => void; children: React.ReactNode }) {
+  const meta = SECTIONS[id];
   return (
     <>
-      <Header title={title} onBack={onBack} />
+      <Header title={meta?.label ?? 'Settings'} onBack={onBack} />
       <div className="page">
-        <div className="page__inner">{children}</div>
+        <div className="page__inner">
+          {meta?.sub && (
+            <p className="muted" style={{ marginTop: 0, marginBottom: 'var(--space-5)' }}>
+              {meta.sub}
+            </p>
+          )}
+          {children}
+        </div>
       </div>
     </>
   );
 }
 
-function AccountSection({ onBack }: { onBack: () => void }) {
-  const account = useCloudAccountName();
+function AccountBody({ ctx }: { ctx: SettingsCtx }) {
+  const { account, me, stats } = ctx;
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const name = account.name ?? account.email ?? 'Your account';
+  const email = account.email ?? me?.email ?? '—';
   return (
-    <Section title="Account" onBack={onBack}>
-      <div className="settings-card">
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Signed in as</div>
-            <div className="setting-row__value">{account ?? 'Your account'}</div>
-          </div>
-        </div>
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Storage</div>
-            <div className="setting-row__sub">
-              Your chats and images are synced to your account and cached on this device.
-            </div>
+    <>
+      <div className="profile-hero">
+        <span className="avatar" style={{ width: 64, height: 64, fontSize: 24 }}>
+          {name.slice(0, 1).toUpperCase()}
+        </span>
+        <div>
+          <div className="profile-hero__name">{name}</div>
+          <div className="profile-hero__email">{email}</div>
+          <div className="profile-hero__badges">
+            <span className={`badge ${me?.isAdmin ? 'badge--accent' : ''}`}>
+              <Icon name={me?.isAdmin ? 'shield' : 'user'} size={13} />
+              {me?.isAdmin ? 'Admin' : 'Member'}
+            </span>
+            <span className="badge badge--success">
+              <Icon name="check-circle" size={13} />
+              Signed in
+            </span>
           </div>
         </div>
       </div>
+
+      <div className="settings-group__label">Profile</div>
+      <div className="settings-card">
+        <DefRow label="Name" value={account.name ?? '—'} />
+        <DefRow label="Email" value={email} />
+        <DefRow label="Role" value={me?.isAdmin ? 'Administrator' : 'Member'} />
+        <DefRow label="Sign-in" value="Microsoft Entra" />
+      </div>
+
+      <div className="settings-group">
+        <div className="settings-group__label">Storage & usage</div>
+        <div className="stat-grid">
+          <Stat value={stats.chats == null ? '—' : String(stats.chats)} label="Chats" />
+          <Stat value={stats.images == null ? '—' : String(stats.images)} label="Images" />
+          <Stat value={stats.bytes == null ? '—' : formatBytes(stats.bytes)} label="On this device" />
+        </div>
+        <div className="settings-card" style={{ marginTop: 'var(--space-3)' }}>
+          <div className="setting-row">
+            <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+              <Icon name="check-circle" size={18} />
+            </span>
+            <div className="setting-row__body">
+              <div className="setting-row__title">Cloud sync</div>
+              <div className="setting-row__sub">
+                {account.email ? `On · synced to ${account.email}` : 'Synced to your account across devices.'}
+              </div>
+            </div>
+            <Icon name="check-circle" size={20} style={{ color: 'var(--color-success)' }} />
+          </div>
+        </div>
+      </div>
+
       <div style={{ marginTop: 'var(--space-6)' }}>
         <Button variant="outline" icon="logout" disabled={busy} onClick={() => setConfirm(true)}>
           Sign out
         </Button>
       </div>
+
       {confirm && (
         <ConfirmDialog
           title="Sign out?"
@@ -187,11 +485,31 @@ function AccountSection({ onBack }: { onBack: () => void }) {
           onClose={() => setConfirm(false)}
         />
       )}
-    </Section>
+    </>
   );
 }
 
-function ModelsSection({ onBack }: { onBack: () => void }) {
+function DefRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="setting-row">
+      <div className="setting-row__body">
+        <div className="setting-row__title">{label}</div>
+      </div>
+      <div className="setting-row__value setting-row__value--strong">{value}</div>
+    </div>
+  );
+}
+
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="stat">
+      <div className="stat__value">{value}</div>
+      <div className="stat__label">{label}</div>
+    </div>
+  );
+}
+
+function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
   const pushToast = useUi((s) => s.pushToast);
   const [config, setConfig] = useState<ApiConfig | null>(null);
   const [key, setKey] = useState('');
@@ -201,20 +519,22 @@ function ModelsSection({ onBack }: { onBack: () => void }) {
     getApiKey().then((k) => setKey(k ?? ''));
   }, []);
 
-  if (!config) return <Section title="Models & keys" onBack={onBack}><p className="muted">Loading…</p></Section>;
+  if (!config) return <p className="muted">Loading…</p>;
 
   const update = (patch: Partial<ApiConfig>) => setConfig({ ...config, ...patch });
   const updateModels = (patch: Partial<ApiConfig['models']>) =>
     setConfig({ ...config, models: { ...config.models, ...patch } });
 
   const save = async () => {
-    await saveApiConfig({ ...config, baseUrl: normalizeBaseUrl(config.baseUrl) });
+    const next = { ...config, baseUrl: normalizeBaseUrl(config.baseUrl) };
+    await saveApiConfig(next);
     await saveApiKey(key.trim());
+    ctx.onModelSaved(next.models.chat);
     pushToast('Saved', 'success');
   };
 
   return (
-    <Section title="Models & keys" onBack={onBack}>
+    <>
       <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
         <div className="col" style={{ gap: 'var(--space-5)' }}>
           <Field
@@ -255,16 +575,16 @@ function ModelsSection({ onBack }: { onBack: () => void }) {
           Save changes
         </Button>
       </div>
-    </Section>
+    </>
   );
 }
 
-function PersonalizationSection({ onBack }: { onBack: () => void }) {
-  const { settings, setSettings } = useSettings();
+function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
+  const { settings, setSettings } = ctx;
   const pushToast = useUi((s) => s.pushToast);
   const p = settings.personalization;
   return (
-    <Section title="Personalization" onBack={onBack}>
+    <>
       <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
         <div className="col" style={{ gap: 'var(--space-5)' }}>
           <TextAreaField
@@ -297,142 +617,106 @@ function PersonalizationSection({ onBack }: { onBack: () => void }) {
           />
         </div>
       </div>
-    </Section>
+    </>
   );
 }
 
-function VoiceSection({ onBack }: { onBack: () => void }) {
-  const { settings, setSettings } = useSettings();
+function VoiceBody({ ctx }: { ctx: SettingsCtx }) {
+  const { settings, setSettings } = ctx;
   const v = settings.voice;
   const set = (patch: Partial<typeof v>) => setSettings({ ...settings, voice: { ...v, ...patch } });
-  return (
-    <Section title="Voice" onBack={onBack}>
-      <div className="settings-card">
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Auto-send after dictation</div>
-            <div className="setting-row__sub">Send as soon as you stop speaking.</div>
-          </div>
-          <Switch checked={v.autoSend} onChange={(x) => set({ autoSend: x })} label="Auto-send" />
-        </div>
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Live captions</div>
-            <div className="setting-row__sub">Show text during voice mode.</div>
-          </div>
-          <Switch checked={v.captions} onChange={(x) => set({ captions: x })} label="Captions" />
-        </div>
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Speaking rate</div>
-            <div className="setting-row__sub">{v.rate.toFixed(1)}x</div>
-          </div>
-          <input
-            type="range"
-            min={0.5}
-            max={2}
-            step={0.1}
-            value={v.rate}
-            onChange={(e) => set({ rate: Number(e.target.value) })}
-            aria-label="Speaking rate"
-          />
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-function AppearanceSection({ onBack }: { onBack: () => void }) {
-  const { settings, setSettings } = useSettings();
-  const a = settings.appearance;
-  const set = (patch: Partial<typeof a>) => setSettings({ ...settings, appearance: { ...a, ...patch } });
-  return (
-    <Section title="Appearance" onBack={onBack}>
-      <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
-        <div className="col" style={{ gap: 'var(--space-6)' }}>
-          <div className="field">
-            <span className="field__label">Theme</span>
-            <Segmented
-              value={a.theme}
-              onChange={(t) => set({ theme: t })}
-              options={[
-                { value: 'system', label: 'System' },
-                { value: 'light', label: 'Light' },
-                { value: 'dark', label: 'Dark' },
-              ]}
-            />
-          </div>
-          <div className="field">
-            <span className="field__label">Text size</span>
-            <Segmented
-              value={String(a.textScale)}
-              onChange={(t) => set({ textScale: Number(t) as TextScale })}
-              options={[
-                { value: '0.9', label: 'Small' },
-                { value: '1', label: 'Default' },
-                { value: '1.1', label: 'Large' },
-                { value: '1.25', label: 'XL' },
-              ]}
-            />
-          </div>
-          <div className="field">
-            <span className="field__label">Density</span>
-            <Segmented
-              value={a.density}
-              onChange={(d) => set({ density: d })}
-              options={[
-                { value: 'comfortable', label: 'Comfortable' },
-                { value: 'compact', label: 'Compact' },
-              ]}
-            />
-          </div>
-          <div className="setting-row" style={{ padding: 0, borderBottom: 'none' }}>
-            <div className="setting-row__body">
-              <div className="setting-row__title">Reduce motion</div>
-              <div className="setting-row__sub">Minimize animations.</div>
-            </div>
-            <Switch
-              checked={a.reduceMotion === true}
-              onChange={(x) => set({ reduceMotion: x })}
-              label="Reduce motion"
-            />
-          </div>
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-function CloudSyncCard({ loaded }: { loaded: boolean }) {
-  const [accountName, setAccountName] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (loaded) {
-      getSignedInAccount()
-        .then((a) => setAccountName(a?.username ?? a?.name ?? null))
-        .catch(() => undefined);
-    }
-  }, [loaded]);
-
   return (
     <div className="settings-card">
       <div className="setting-row">
         <div className="setting-row__body">
-          <div className="setting-row__title">Cloud sync</div>
-          <div className="setting-row__sub">
-            {accountName
-              ? `On · signed in as ${accountName}`
-              : 'Your chats and images sync to your account across all your devices.'}
-          </div>
+          <div className="setting-row__title">Auto-send after dictation</div>
+          <div className="setting-row__sub">Send as soon as you stop speaking.</div>
         </div>
-        <Icon name="check-circle" size={20} style={{ color: 'var(--color-success)' }} />
+        <Switch checked={v.autoSend} onChange={(x) => set({ autoSend: x })} label="Auto-send" />
+      </div>
+      <div className="setting-row">
+        <div className="setting-row__body">
+          <div className="setting-row__title">Live captions</div>
+          <div className="setting-row__sub">Show text during voice mode.</div>
+        </div>
+        <Switch checked={v.captions} onChange={(x) => set({ captions: x })} label="Captions" />
+      </div>
+      <div className="setting-row">
+        <div className="setting-row__body">
+          <div className="setting-row__title">Speaking rate</div>
+          <div className="setting-row__sub">{v.rate.toFixed(1)}x</div>
+        </div>
+        <input
+          type="range"
+          min={0.5}
+          max={2}
+          step={0.1}
+          value={v.rate}
+          onChange={(e) => set({ rate: Number(e.target.value) })}
+          aria-label="Speaking rate"
+        />
       </div>
     </div>
   );
 }
 
-function DataSection({ onBack }: { onBack: () => void }) {
-  const { settings, setSettings, loaded } = useSettings();
+function AppearanceBody({ ctx }: { ctx: SettingsCtx }) {
+  const { settings, setSettings } = ctx;
+  const a = settings.appearance;
+  const set = (patch: Partial<typeof a>) => setSettings({ ...settings, appearance: { ...a, ...patch } });
+  return (
+    <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
+      <div className="col" style={{ gap: 'var(--space-6)' }}>
+        <div className="field">
+          <span className="field__label">Theme</span>
+          <Segmented
+            value={a.theme}
+            onChange={(t) => set({ theme: t })}
+            options={[
+              { value: 'system', label: 'System' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+          />
+        </div>
+        <div className="field">
+          <span className="field__label">Text size</span>
+          <Segmented
+            value={String(a.textScale)}
+            onChange={(t) => set({ textScale: Number(t) as TextScale })}
+            options={[
+              { value: '0.9', label: 'Small' },
+              { value: '1', label: 'Default' },
+              { value: '1.1', label: 'Large' },
+              { value: '1.25', label: 'XL' },
+            ]}
+          />
+        </div>
+        <div className="field">
+          <span className="field__label">Density</span>
+          <Segmented
+            value={a.density}
+            onChange={(d) => set({ density: d })}
+            options={[
+              { value: 'comfortable', label: 'Comfortable' },
+              { value: 'compact', label: 'Compact' },
+            ]}
+          />
+        </div>
+        <div className="setting-row" style={{ padding: 0, borderBottom: 'none' }}>
+          <div className="setting-row__body">
+            <div className="setting-row__title">Reduce motion</div>
+            <div className="setting-row__sub">Minimize animations.</div>
+          </div>
+          <Switch checked={a.reduceMotion === true} onChange={(x) => set({ reduceMotion: x })} label="Reduce motion" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DataBody({ ctx }: { ctx: SettingsCtx }) {
+  const { settings, setSettings, account } = ctx;
   const pushToast = useUi((s) => s.pushToast);
   const bump = useUi((s) => s.bumpThreads);
   const navigate = useNavigate();
@@ -450,9 +734,23 @@ function DataSection({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <Section title="Data controls" onBack={onBack}>
-      <CloudSyncCard loaded={loaded} />
+    <>
       <div className="settings-card">
+        <div className="setting-row">
+          <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+            <Icon name="check-circle" size={18} />
+          </span>
+          <div className="setting-row__body">
+            <div className="setting-row__title">Cloud sync</div>
+            <div className="setting-row__sub">
+              {account.email ? `On · synced to ${account.email}` : 'Synced to your account across all your devices.'}
+            </div>
+          </div>
+          <Icon name="check-circle" size={20} style={{ color: 'var(--color-success)' }} />
+        </div>
+      </div>
+
+      <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
         <div className="setting-row">
           <div className="setting-row__body">
             <div className="setting-row__title">Default to temporary chats</div>
@@ -464,23 +762,56 @@ function DataSection({ onBack }: { onBack: () => void }) {
             label="Temporary default"
           />
         </div>
+        <div className="setting-row">
+          <div className="setting-row__body">
+            <div className="setting-row__title">Keep history</div>
+            <div className="setting-row__sub">How long saved chats are retained.</div>
+          </div>
+          <Segmented
+            value={settings.data.retention}
+            onChange={(r) => setSettings({ ...settings, data: { ...settings.data, retention: r } })}
+            options={[
+              { value: 'forever', label: 'Forever' },
+              { value: '30d', label: '30 days' },
+              { value: '90d', label: '90 days' },
+            ]}
+          />
+        </div>
+      </div>
+
+      <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
         <button className="setting-row" onClick={exportData}>
+          <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+            <Icon name="download" size={18} />
+          </span>
           <div className="setting-row__body">
             <div className="setting-row__title">Export all data</div>
-            <div className="setting-row__sub">Download a JSON archive.</div>
+            <div className="setting-row__sub">Download a JSON archive of your chats and settings.</div>
           </div>
-          <Icon name="download" size={18} className="muted" />
+          <Icon name="chevron-right" size={18} className="muted" />
         </button>
         <button className="setting-row" onClick={() => setConfirm(true)}>
+          <span
+            className="avatar"
+            style={{
+              width: 36,
+              height: 36,
+              background: 'color-mix(in srgb, var(--color-danger) 16%, transparent)',
+              color: 'var(--color-danger)',
+            }}
+          >
+            <Icon name="trash" size={18} />
+          </span>
           <div className="setting-row__body">
             <div className="setting-row__title" style={{ color: 'var(--color-danger)' }}>
               Delete all conversations
             </div>
-            <div className="setting-row__sub">Permanently removes local data.</div>
+            <div className="setting-row__sub">Permanently removes local data on this device.</div>
           </div>
-          <Icon name="trash" size={18} style={{ color: 'var(--color-danger)' }} />
+          <Icon name="chevron-right" size={18} className="muted" />
         </button>
       </div>
+
       {confirm && (
         <ConfirmDialog
           title="Delete all data?"
@@ -497,11 +828,11 @@ function DataSection({ onBack }: { onBack: () => void }) {
           onClose={() => setConfirm(false)}
         />
       )}
-    </Section>
+    </>
   );
 }
 
-function InvitesSection({ onBack }: { onBack: () => void }) {
+function InvitesBody() {
   const pushToast = useUi((s) => s.pushToast);
   const [invites, setInvites] = useState<InviteRecord[] | null>(null);
   const [email, setEmail] = useState('');
@@ -559,7 +890,7 @@ function InvitesSection({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <Section title="Invites" onBack={onBack}>
+    <>
       <p className="muted" style={{ marginBottom: 'var(--space-5)' }}>
         Watai is invite-only. Add someone&apos;s email to let them sign in, then send them the
         invite from your mail app.
@@ -633,23 +964,43 @@ function InvitesSection({ onBack }: { onBack: () => void }) {
           ))
         )}
       </div>
-    </Section>
+    </>
   );
 }
 
-function AboutSection({ onBack }: { onBack: () => void }) {
+function AboutBody() {
   return (
-    <Section title="About" onBack={onBack}>
-      <div className="col" style={{ alignItems: 'center', textAlign: 'center', gap: 'var(--space-4)', padding: 'var(--space-7) 0' }}>
+    <>
+      <div
+        className="col"
+        style={{ alignItems: 'center', textAlign: 'center', gap: 'var(--space-4)', padding: 'var(--space-7) 0' }}
+      >
         <Logo size={64} />
         <div>
           <div style={{ fontSize: 'var(--text-title-2-size)', fontWeight: 600 }}>Watai</div>
-          <div className="muted">Version 0.1.0</div>
+          <div className="muted">Version {APP_VERSION}</div>
         </div>
         <p className="muted" style={{ maxWidth: '40ch' }}>
           A privacy-first AI client. Your endpoint, your key, your data — running entirely in your browser.
         </p>
       </div>
-    </Section>
+      <div className="settings-card">
+        <a
+          className="setting-row"
+          href="https://github.com/prabinpebam/watai"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+            <Icon name="external" size={18} />
+          </span>
+          <div className="setting-row__body">
+            <div className="setting-row__title">Source code</div>
+            <div className="setting-row__sub">github.com/prabinpebam/watai</div>
+          </div>
+          <Icon name="external" size={18} className="muted" />
+        </a>
+      </div>
+    </>
   );
 }
