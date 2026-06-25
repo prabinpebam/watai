@@ -21,3 +21,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 *.local
+
+# Local-only secrets (e.g. Tavily test key) — never commit
+.env
+.env.*
+!.env.example
+# One-off local Tavily connectivity test
+tavily-test.mjs
