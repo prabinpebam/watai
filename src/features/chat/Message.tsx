@@ -3,7 +3,6 @@ import { Markdown } from './Markdown';
 import { AttachmentList, GeneratedImages } from './Attachments';
 import { IconButton } from '../../design/ui';
 import { Icon } from '../../design/icons';
-import { Menu, type MenuItemDef } from '../../design/overlays';
 import { useUi } from '../../state/store';
 import { synthesize } from '../../ai/tts';
 import type { Message } from '../../lib/types';
@@ -40,8 +39,6 @@ interface AssistantProps {
 export function AssistantMessage({ message, streaming, onRegenerate }: AssistantProps) {
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pushToast = useUi((s) => s.pushToast);
   const mockAi = useUi((s) => s.mockAi);
@@ -52,10 +49,6 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
-  };
-
-  const vote = (dir: 'up' | 'down') => {
-    setFeedback((cur) => (cur === dir ? null : dir));
   };
 
   const readAloud = async () => {
@@ -84,12 +77,6 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
       pushToast(e instanceof Error ? e.message : 'Could not read aloud', 'error');
     }
   };
-
-  const moreItems: MenuItemDef[] = [
-    { label: 'Copy text', icon: 'copy', onClick: copy },
-    { label: speaking ? 'Stop reading' : 'Read aloud', icon: 'speaker', onClick: readAloud },
-    { label: 'Regenerate', icon: 'refresh', onClick: onRegenerate },
-  ];
 
   return (
     <div className="msg-group msg-group--assistant">
@@ -137,22 +124,6 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
             <IconButton name={copied ? 'check' : 'copy'} label="Copy" size={18} onClick={copy} />
             <IconButton name="refresh" label="Regenerate" size={18} onClick={onRegenerate} />
             <IconButton
-              name="thumbs-up"
-              label="Good response"
-              size={18}
-              filled={feedback === 'up'}
-              className={feedback === 'up' ? 'icon-btn--active' : ''}
-              onClick={() => vote('up')}
-            />
-            <IconButton
-              name="thumbs-down"
-              label="Bad response"
-              size={18}
-              filled={feedback === 'down'}
-              className={feedback === 'down' ? 'icon-btn--active' : ''}
-              onClick={() => vote('down')}
-            />
-            <IconButton
               name="speaker"
               label={speaking ? 'Stop reading' : 'Read aloud'}
               size={18}
@@ -160,20 +131,9 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
               className={speaking ? 'icon-btn--active' : ''}
               onClick={readAloud}
             />
-            <IconButton
-              name="more"
-              label="More"
-              size={18}
-              onClick={(e) => {
-                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                setMenu({ x: r.left, y: r.bottom + 4 });
-              }}
-            />
           </div>
         )}
       </div>
-
-      {menu && <Menu x={menu.x} y={menu.y} items={moreItems} onClose={() => setMenu(null)} />}
     </div>
   );
 }

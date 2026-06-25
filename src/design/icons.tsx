@@ -75,9 +75,6 @@ const ICONS: Record<string, string> = {
   play: 'play_arrow',
   pause: 'pause',
   wrap: 'wrap_text',
-  // Feedback
-  'thumbs-up': 'thumb_up',
-  'thumbs-down': 'thumb_down',
 };
 
 interface IconProps {
