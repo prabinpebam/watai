@@ -23,6 +23,8 @@ export interface Turn {
 export interface ToolResult {
   output: string;
   image?: { b64: string; prompt?: string; size?: string; expandedPrompt?: string; model?: string };
+  /** Grounding citations (e.g. from web_search) — forwarded to the transcript's Sources strip. */
+  citations?: ResponsesCitation[];
 }
 
 export type ToolExecute = (name: string, args: Record<string, unknown>) => Promise<ToolResult>;
@@ -185,6 +187,9 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
           };
         }
         outputs.push({ type: 'function_call_output', call_id: call.callId, output: result.output });
+        if (result.citations) {
+          for (const c of result.citations) yield { type: 'citation', citation: c };
+        }
         yield { type: 'tool', name: call.name, status: 'done', callId: call.callId };
       } catch (e) {
         const detail = e instanceof Error ? e.message : 'Tool failed.';

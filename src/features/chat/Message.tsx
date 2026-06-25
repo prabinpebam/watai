@@ -195,6 +195,9 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
                       rel="noreferrer noopener"
                     >
                       <span className="source-chip__num">{i + 1}</span>
+                      {c.favicon ? (
+                        <img className="source-chip__favicon" src={c.favicon} alt="" width={14} height={14} />
+                      ) : null}
                       <span className="source-chip__text">{c.title || domainOf(c.url)}</span>
                       <Icon name="external" size={12} className="source-chip__ext" />
                     </a>

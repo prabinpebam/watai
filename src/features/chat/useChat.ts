@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { repo } from '../../data';
-import { getApiConfig } from '../../data/secureStore';
+import { getApiConfig, getTavilyKey } from '../../data/secureStore';
 import { newId } from '../../lib/ids';
 import { streamChat, completeChat, type ChatMessage } from '../../ai/chat';
 import { mockAgentStream } from '../../ai/mockAi';
@@ -155,8 +155,9 @@ export function useChat(threadId: string, temporary = false) {
       } else if (config) {
         caps = await detectCapabilities(config);
         if (caps.responses) {
+          const tavilyKey = await getTavilyKey();
           const toolCtx = {
-            webSearchConsent: config.consent?.webSearchDataBoundary ?? false,
+            tavilyConfigured: !!tavilyKey,
             vectorStoreIds: config.tools?.vectorStoreId ? [config.tools.vectorStoreId] : [],
           };
           const tools = assembleTools(caps, settings.tools, toolCtx);

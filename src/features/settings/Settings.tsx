@@ -18,6 +18,8 @@ import {
   saveApiConfig,
   saveApiKey,
   getApiKey,
+  getTavilyKey,
+  saveTavilyKey,
   normalizeBaseUrl,
 } from '../../data/secureStore';
 import { detectCapabilities, endpointKind, resetAgenticCache } from '../../ai/capabilities';
@@ -28,6 +30,7 @@ import {
   removeFileFromStore,
   deleteVectorStore,
 } from '../../ai/fileSearch';
+import { tavilyUsage } from '../../ai/tavily';
 import { DEFAULT_SETTINGS } from '../../lib/types';
 import type {
   ApiConfig,
@@ -686,6 +689,10 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
   const [detecting, setDetecting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [busyFileId, setBusyFileId] = useState<string | null>(null);
+  const [tavilyKeyInput, setTavilyKeyInput] = useState('');
+  const [tavilyHasKey, setTavilyHasKey] = useState(false);
+  const [tavilyUsageData, setTavilyUsageData] = useState<{ used: number; limit: number | null } | null>(null);
+  const [tavilyBusy, setTavilyBusy] = useState(false);
 
   const kbFiles = config?.tools?.kbFiles ?? [];
   const mapStatus = (s: string): 'ready' | 'indexing' | 'failed' =>
@@ -728,12 +735,55 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
     }
   };
 
-  const consent = config?.consent?.webSearchDataBoundary ?? false;
-  const setConsent = async (v: boolean) => {
-    if (!config) return;
-    const next: ApiConfig = { ...config, consent: { ...config.consent, webSearchDataBoundary: v } };
-    setConfig(next);
-    await saveApiConfig(next);
+  // Load the Tavily key presence + usage on open.
+  useEffect(() => {
+    let live = true;
+    getTavilyKey().then(async (k) => {
+      if (!live) return;
+      setTavilyHasKey(!!k);
+      if (k) {
+        try {
+          const u = await tavilyUsage();
+          if (live) setTavilyUsageData({ used: u.key?.usage ?? 0, limit: u.key?.limit ?? null });
+        } catch {
+          /* usage unavailable */
+        }
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const refreshTavilyUsage = async () => {
+    setTavilyBusy(true);
+    try {
+      const u = await tavilyUsage();
+      setTavilyUsageData({ used: u.key?.usage ?? 0, limit: u.key?.limit ?? null });
+    } catch (err) {
+      setTavilyUsageData(null);
+      pushToast(err instanceof Error ? err.message : 'Could not load usage', 'error');
+    } finally {
+      setTavilyBusy(false);
+    }
+  };
+
+  const saveTavily = async () => {
+    const k = tavilyKeyInput.trim();
+    if (!k) return;
+    await saveTavilyKey(k);
+    setTavilyHasKey(true);
+    setTavilyKeyInput('');
+    pushToast('Tavily key saved', 'success');
+    void refreshTavilyUsage();
+  };
+
+  const removeTavily = async () => {
+    await saveTavilyKey('');
+    setTavilyHasKey(false);
+    setTavilyUsageData(null);
+    if (t.webSearch) setTool({ webSearch: false });
+    pushToast('Tavily key removed', 'info');
   };
 
   const foundry = config ? isFoundryHost(config.baseUrl) || endpointKind(config) === 'foundry-project' : false;
@@ -835,11 +885,11 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
         />
         <ToolToggle
           label="Web search"
-          sub="Ground answers with cited web results."
+          sub="Ground answers with cited web results (Tavily)."
           checked={t.webSearch}
           onChange={(v) => setTool({ webSearch: v })}
-          available={caps?.webSearch ?? false}
-          hint={projectHint}
+          available={tavilyHasKey}
+          hint="Add a Tavily API key below."
         />
         <ToolToggle
           label="File search"
@@ -851,19 +901,71 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
         />
       </div>
 
-      {(caps?.webSearch || t.webSearch) && (
-        <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
+      <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
+        <div className="setting-row">
+          <div className="setting-row__body">
+            <div className="setting-row__title">Web search (Tavily)</div>
+            <div className="setting-row__sub">
+              {tavilyHasKey
+                ? 'Your key is saved. The assistant can search the web and cite sources.'
+                : 'Add a Tavily API key to enable web search.'}
+            </div>
+          </div>
+          {tavilyHasKey && (
+            <button type="button" className="btn btn--ghost btn--danger" onClick={removeTavily}>
+              Remove key
+            </button>
+          )}
+        </div>
+
+        <div className="setting-row">
+          <input
+            className="input grow"
+            type="password"
+            autoComplete="off"
+            placeholder={tavilyHasKey ? '•••••••••••• (saved — paste to replace)' : 'tvly-...'}
+            value={tavilyKeyInput}
+            onChange={(e) => setTavilyKeyInput(e.target.value)}
+            aria-label="Tavily API key"
+          />
+          <Button onClick={saveTavily} disabled={!tavilyKeyInput.trim()}>
+            Save
+          </Button>
+        </div>
+
+        <div className="setting-row__sub" style={{ paddingLeft: 'var(--space-1)' }}>
+          No key?{' '}
+          <a href="https://app.tavily.com" target="_blank" rel="noreferrer noopener">
+            Get a free one at app.tavily.com
+          </a>{' '}
+          — sign up, copy your key (starts with <code>tvly-</code>), and paste it above.
+        </div>
+        <div className="setting-row__sub" style={{ paddingLeft: 'var(--space-1)' }}>
+          Web searches send your query to Tavily.
+        </div>
+
+        {tavilyHasKey && (
           <div className="setting-row">
             <div className="setting-row__body">
-              <div className="setting-row__title">Allow web data boundary</div>
+              <div className="setting-row__title">Usage</div>
               <div className="setting-row__sub">
-                Web search sends your query to Bing (outside the Azure compliance boundary) and may incur cost.
+                {tavilyUsageData
+                  ? `${tavilyUsageData.used}${
+                      tavilyUsageData.limit != null ? ` / ${tavilyUsageData.limit}` : ''
+                    } credits used this billing cycle`
+                  : 'Usage unavailable.'}
               </div>
             </div>
-            <Switch checked={consent} onChange={setConsent} label="Web data-boundary consent" />
+            <IconButton
+              name="refresh"
+              label="Refresh usage"
+              size={18}
+              disabled={tavilyBusy}
+              onClick={refreshTavilyUsage}
+            />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {caps?.fileSearch && (
         <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>

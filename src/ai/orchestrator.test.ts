@@ -82,6 +82,27 @@ describe('runAgent', () => {
     expect(events[events.length - 1]).toEqual({ type: 'done' });
   });
 
+  it('forwards citations returned by a client tool (e.g. web_search)', async () => {
+    const streamFn = fakeStream([
+      [
+        { type: 'functionCall', callId: 'w1', name: 'web_search', arguments: '{"query":"news"}' },
+        { type: 'completed' },
+      ],
+      [{ type: 'text', delta: 'Per the sources…' }, { type: 'completed' }],
+    ]);
+    const execute = async () => ({
+      output: 'results…',
+      citations: [{ source: 'web' as const, url: 'https://a.com', title: 'A' }],
+    });
+    const events = await collect(
+      runAgent({ model: 'm', turns: [{ role: 'user', text: 'what is new' }], tools: [], execute, streamFn }),
+    );
+    expect(events).toContainEqual({
+      type: 'citation',
+      citation: { source: 'web', url: 'https://a.com', title: 'A' },
+    });
+  });
+
   it('passes the requested image size through the running tool event (for the UI placeholder)', async () => {
     const streamFn = fakeStream([
       [

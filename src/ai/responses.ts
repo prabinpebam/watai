@@ -67,6 +67,7 @@ export interface ResponsesCitation {
   endIndex?: number;
   fileId?: string;
   filename?: string;
+  favicon?: string;
 }
 
 interface RawEvent {

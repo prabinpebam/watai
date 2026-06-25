@@ -11,7 +11,8 @@ import { generateImageTool, runGenerateImage } from './image';
 import { searchHistoryTool, runSearchHistory, threadSummaryTool, runThreadSummary } from './history';
 import { createThreadTool, runCreateThread, deleteThreadTool, runDeleteThread } from './threads';
 import { addMemoryTool, runAddMemory, updateSettingTool, runUpdateSetting } from './memory';
-import { codeInterpreterTool, webSearchTool, fileSearchTool } from './serverTools';
+import { codeInterpreterTool, fileSearchTool } from './serverTools';
+import { webSearchTool, runWebSearch } from './webSearch';
 
 export interface ClientTool {
   def: ResponsesTool;
@@ -28,13 +29,14 @@ export const CLIENT_TOOLS: Record<string, ClientTool> = {
   add_memory: { def: addMemoryTool, run: (a) => runAddMemory(a, repo) },
   delete_thread: { def: deleteThreadTool, run: (a) => runDeleteThread(a, repo), destructive: true },
   update_setting: { def: updateSettingTool, run: (a) => runUpdateSetting(a, repo), destructive: true },
+  web_search: { def: webSearchTool, run: (a) => runWebSearch(a) },
 };
 
-/** Inputs beyond settings that gate the server tools. */
+/** Inputs beyond settings that gate the tools. */
 export interface ToolContext {
-  webSearchConsent: boolean;
+  /** Whether a Tavily API key is configured (gates the web_search function tool). */
+  tavilyConfigured: boolean;
   vectorStoreIds: string[];
-  userLocation?: { country?: string; city?: string; region?: string };
 }
 
 /** Build the tool list for a turn from capabilities + user settings + context. */
@@ -56,8 +58,8 @@ export function assembleTools(
   );
   // Server tools — added only when the endpoint supports them AND the user enabled them.
   if (caps.codeInterpreter && s?.codeInterpreter) tools.push(codeInterpreterTool());
-  if (caps.webSearch && s?.webSearch && ctx.webSearchConsent)
-    tools.push(webSearchTool({ userLocation: ctx.userLocation }));
+  // Web search is a client function tool backed by Tavily (BYO key) — works on any endpoint.
+  if (s?.webSearch && ctx.tavilyConfigured) tools.push(webSearchTool);
   if (caps.fileSearch && s?.fileSearch && ctx.vectorStoreIds.length)
     tools.push(fileSearchTool(ctx.vectorStoreIds));
   return tools;

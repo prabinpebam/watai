@@ -818,6 +818,13 @@ a.source-chip:hover {
   color: var(--color-text-tertiary);
   flex: none;
 }
+.source-chip__favicon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: contain;
+}
 .source-chip--bing {
   color: var(--color-accent);
 }

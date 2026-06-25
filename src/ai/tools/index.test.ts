@@ -28,7 +28,7 @@ const settings = (over: Partial<NonNullable<Settings['tools']>> = {}): Settings[
   ...over,
 });
 
-const ctx = { webSearchConsent: true, vectorStoreIds: ['vs1'] };
+const ctx = { tavilyConfigured: true, vectorStoreIds: ['vs1'] };
 
 describe('assembleTools', () => {
   it('always offers the client function tools', () => {
@@ -70,11 +70,13 @@ describe('assembleTools', () => {
     expect(ci?.container).toEqual({ type: 'auto' });
   });
 
-  it('adds web search only when capable AND enabled AND consented', () => {
-    const c = caps({ webSearch: true });
-    expect(assembleTools(c, settings(), ctx).some((t) => t.type === 'web_search')).toBe(true);
+  it('adds the Tavily web_search function tool only when enabled AND a key is configured', () => {
+    expect(assembleTools(caps(), settings(), ctx).some((t) => t.name === 'web_search')).toBe(true);
     expect(
-      assembleTools(c, settings(), { ...ctx, webSearchConsent: false }).some((t) => t.type === 'web_search'),
+      assembleTools(caps(), settings(), { ...ctx, tavilyConfigured: false }).some((t) => t.name === 'web_search'),
+    ).toBe(false);
+    expect(
+      assembleTools(caps(), settings({ webSearch: false }), ctx).some((t) => t.name === 'web_search'),
     ).toBe(false);
   });
 
@@ -97,6 +99,7 @@ describe('client tool registry', () => {
       'get_thread_summary',
       'search_history',
       'update_setting',
+      'web_search',
     ]);
   });
 

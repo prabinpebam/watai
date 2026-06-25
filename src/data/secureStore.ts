@@ -5,6 +5,7 @@ import type { ApiConfig } from '../lib/types';
 
 const CONFIG_KEY = 'apiConfig';
 const SECRET_KEY = 'apiKey';
+const TAVILY_KEY = 'tavilyKey';
 
 export async function getApiConfig(): Promise<ApiConfig | null> {
   return (await kvGet<ApiConfig>(CONFIG_KEY)) ?? null;
@@ -21,6 +22,15 @@ export async function getApiKey(): Promise<string | null> {
 
 export async function saveApiKey(key: string): Promise<void> {
   await kvSet(SECRET_KEY, key);
+}
+
+/** The Tavily web-search key is BYO and local-only — same invariant as the AI key. */
+export async function getTavilyKey(): Promise<string | null> {
+  return (await kvGet<string>(TAVILY_KEY)) ?? null;
+}
+
+export async function saveTavilyKey(key: string): Promise<void> {
+  await kvSet(TAVILY_KEY, key.trim() || undefined);
 }
 
 export async function clearApiCredentials(): Promise<void> {

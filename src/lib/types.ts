@@ -82,6 +82,7 @@ export interface Citation {
   source?: 'web' | 'file';
   fileId?: string;
   filename?: string;
+  favicon?: string;
 }
 
 export interface Message {
