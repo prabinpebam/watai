@@ -821,6 +821,42 @@ a:hover {
 .composer-thumb__remove:hover {
   background: var(--color-bg);
 }
+.composer-file {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 220px;
+  height: 60px;
+  padding: 0 calc(var(--space-5) + var(--space-2)) 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+  flex: none;
+}
+.composer-file__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-file__remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+.composer-file__remove:hover {
+  background: var(--color-surface-3);
+  color: var(--color-text-primary);
+}
 
 .attach-chip {
   display: flex;

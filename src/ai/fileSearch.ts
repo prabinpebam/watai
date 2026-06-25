@@ -136,3 +136,35 @@ export async function indexFileIntoStore(
   const indexed = await pollIndex(vectorStoreId, fileId);
   return { vectorStoreId, fileId, indexed };
 }
+
+export interface ThreadDoc {
+  file: Blob;
+  name: string;
+}
+
+/**
+ * Index a batch of thread documents into a single vector store (creating it on the first doc).
+ * Never throws — returns the resolved store id plus indexed/failed counts so the caller can
+ * surface status. Used for per-thread file upload + file search (thread-scoped RAG).
+ */
+export async function indexThreadDocuments(
+  docs: ThreadDoc[],
+  existingStoreId: string | undefined,
+  deps: { index?: typeof indexFileIntoStore } = {},
+): Promise<{ vectorStoreId?: string; indexed: number; failed: number }> {
+  const index = deps.index ?? indexFileIntoStore;
+  let vectorStoreId = existingStoreId;
+  let indexed = 0;
+  let failed = 0;
+  for (const d of docs) {
+    try {
+      const r = await index(d.file, d.name, vectorStoreId);
+      vectorStoreId = r.vectorStoreId;
+      if (r.indexed) indexed++;
+      else failed++;
+    } catch {
+      failed++;
+    }
+  }
+  return { vectorStoreId, indexed, failed };
+}

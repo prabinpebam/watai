@@ -3,6 +3,8 @@ import { repo } from '../../data';
 import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
 import { useRuns } from './runStore';
+import { indexThreadDocuments } from '../../ai/fileSearch';
+import { getThreadVectorStore, setThreadVectorStore } from '../../data/threadFiles';
 import type { Attachment, Message } from '../../lib/types';
 
 export { DEFAULT_CHAT_MODEL } from './runStore';
@@ -86,6 +88,26 @@ export function useChat(threadId: string, temporary = false) {
       };
       setPersisted((prev) => [...prev, userMsg]); // optimistic — reload dedupes by id
       await repo.appendMessage(userMsg);
+      // Thread-scoped file search: index any non-image docs into the thread's vector store so the
+      // model can answer questions about them via file_search. Blocks the run until indexed.
+      const docs = (files ?? []).filter((f) => !f.type.startsWith('image/'));
+      if (docs.length && !mockAi) {
+        const toast = useUi.getState().pushToast;
+        toast(`Indexing ${docs.length} file${docs.length === 1 ? '' : 's'}…`, 'info');
+        try {
+          const existingStore = await getThreadVectorStore(threadId);
+          const { vectorStoreId, indexed, failed } = await indexThreadDocuments(
+            docs.map((f) => ({ file: f, name: f.name })),
+            existingStore,
+          );
+          if (vectorStoreId) await setThreadVectorStore(threadId, vectorStoreId);
+          if (failed && !indexed) toast('Could not index the file(s)', 'error');
+          else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
+          else toast('File ready — you can ask about it', 'success');
+        } catch {
+          toast('Could not index the file(s)', 'error');
+        }
+      }
       const history = await repo.listMessages(threadId);
       void useRuns.getState().startRun(threadId, history, mockAi);
       useUi.getState().bumpThreads();

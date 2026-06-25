@@ -7,6 +7,7 @@ import {
   listStoreFiles,
   removeFileFromStore,
   deleteVectorStore,
+  indexThreadDocuments,
 } from './fileSearch';
 import type { AiRequest } from './http';
 
@@ -103,5 +104,43 @@ describe('fileSearch vector-store client', () => {
     await deleteVectorStore('vs_1', { request: fn, getConfig });
     expect(calls[0]?.method).toBe('DELETE');
     expect(calls[0]?.url).toMatch(/\/vector_stores\/vs_1$/);
+  });
+});
+
+describe('indexThreadDocuments', () => {
+  it('indexes each doc into the same store (creating one) and reports counts', async () => {
+    const index = vi
+      .fn()
+      .mockResolvedValueOnce({ vectorStoreId: 'vs-new', fileId: 'f1', indexed: true })
+      .mockResolvedValueOnce({ vectorStoreId: 'vs-new', fileId: 'f2', indexed: true });
+    const res = await indexThreadDocuments(
+      [
+        { file: new Blob(['a']), name: 'a.pdf' },
+        { file: new Blob(['b']), name: 'b.txt' },
+      ],
+      undefined,
+      { index },
+    );
+    expect(index).toHaveBeenNthCalledWith(1, expect.any(Blob), 'a.pdf', undefined);
+    // The second doc reuses the store id created by the first.
+    expect(index).toHaveBeenNthCalledWith(2, expect.any(Blob), 'b.txt', 'vs-new');
+    expect(res).toEqual({ vectorStoreId: 'vs-new', indexed: 2, failed: 0 });
+  });
+
+  it('reuses an existing store and counts failures without throwing', async () => {
+    const index = vi
+      .fn()
+      .mockResolvedValueOnce({ vectorStoreId: 'vs1', fileId: 'f1', indexed: false })
+      .mockRejectedValueOnce(new Error('boom'));
+    const res = await indexThreadDocuments(
+      [
+        { file: new Blob(['a']), name: 'a.pdf' },
+        { file: new Blob(['b']), name: 'b.txt' },
+      ],
+      'vs1',
+      { index },
+    );
+    expect(index).toHaveBeenNthCalledWith(1, expect.any(Blob), 'a.pdf', 'vs1');
+    expect(res).toEqual({ vectorStoreId: 'vs1', indexed: 0, failed: 2 });
   });
 });

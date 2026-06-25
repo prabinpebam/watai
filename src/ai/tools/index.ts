@@ -65,9 +65,25 @@ export function assembleTools(
   // The key IS the switch: if a Tavily key is configured, web search is offered. There is no
   // separate enable flag to drift out of sync (a recurring source of "search never works").
   if (ctx.tavilyConfigured) tools.push(webSearchTool);
-  if (caps.fileSearch && s?.fileSearch && ctx.vectorStoreIds.length)
+  // File search is offered whenever the endpoint is capable AND a vector store is available.
+  // The caller (resolveVectorStores) decides which stores apply: the user KB only when the
+  // toggle is on, plus any thread-scoped store (uploading a file to a thread opts it in).
+  if (caps.fileSearch && ctx.vectorStoreIds.length)
     tools.push(fileSearchTool(ctx.vectorStoreIds));
   return tools;
+}
+
+/** Combine the vector stores available to a turn: the user KB (only when the File search toggle
+ *  is on) plus any thread-scoped store (always, since uploading a file to a thread opts in). */
+export function resolveVectorStores(opts: {
+  fileSearchEnabled?: boolean;
+  kbStoreId?: string;
+  threadStoreId?: string;
+}): string[] {
+  const ids: string[] = [];
+  if (opts.fileSearchEnabled && opts.kbStoreId) ids.push(opts.kbStoreId);
+  if (opts.threadStoreId && opts.threadStoreId !== opts.kbStoreId) ids.push(opts.threadStoreId);
+  return ids;
 }
 
 export function isDestructiveTool(name: string): boolean {

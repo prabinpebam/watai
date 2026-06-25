@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { assembleTools, isDestructiveTool, CLIENT_TOOLS, executeTool } from './index';
+import { assembleTools, isDestructiveTool, CLIENT_TOOLS, executeTool, resolveVectorStores } from './index';
 import type { CapabilityMatrix, Settings } from '../../lib/types';
 
 const caps = (over: Partial<CapabilityMatrix> = {}): CapabilityMatrix => ({
@@ -82,12 +82,47 @@ describe('assembleTools', () => {
     ).toBe(false);
   });
 
-  it('adds file search only when capable AND enabled AND a vector store exists', () => {
+  it('adds file search when capable AND a vector store is present (toggle-independent)', () => {
     const c = caps({ fileSearch: true });
+    // A store is present (e.g. a thread upload) -> offered even if the KB toggle is off.
     expect(assembleTools(c, settings(), ctx).some((t) => t.type === 'file_search')).toBe(true);
+    expect(
+      assembleTools(c, settings({ fileSearch: false }), ctx).some((t) => t.type === 'file_search'),
+    ).toBe(true);
+    // No store -> not offered.
     expect(
       assembleTools(c, settings(), { ...ctx, vectorStoreIds: [] }).some((t) => t.type === 'file_search'),
     ).toBe(false);
+    // Endpoint not capable -> not offered.
+    expect(assembleTools(caps(), settings(), ctx).some((t) => t.type === 'file_search')).toBe(false);
+  });
+
+  it('passes the vector store ids through to the file_search tool', () => {
+    const c = caps({ fileSearch: true });
+    const fs = assembleTools(c, settings(), { ...ctx, vectorStoreIds: ['a', 'b'] }).find(
+      (t) => t.type === 'file_search',
+    );
+    expect(fs?.vector_store_ids).toEqual(['a', 'b']);
+  });
+});
+
+describe('resolveVectorStores', () => {
+  it('includes the KB store only when the File search toggle is on', () => {
+    expect(resolveVectorStores({ fileSearchEnabled: true, kbStoreId: 'kb' })).toEqual(['kb']);
+    expect(resolveVectorStores({ fileSearchEnabled: false, kbStoreId: 'kb' })).toEqual([]);
+  });
+
+  it('always includes a thread store (uploading a file opts the thread in)', () => {
+    expect(resolveVectorStores({ fileSearchEnabled: false, threadStoreId: 'thr' })).toEqual(['thr']);
+  });
+
+  it('combines KB + thread stores without duplicates', () => {
+    expect(
+      resolveVectorStores({ fileSearchEnabled: true, kbStoreId: 'kb', threadStoreId: 'thr' }),
+    ).toEqual(['kb', 'thr']);
+    expect(
+      resolveVectorStores({ fileSearchEnabled: true, kbStoreId: 'same', threadStoreId: 'same' }),
+    ).toEqual(['same']);
   });
 });
 

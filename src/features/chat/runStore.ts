@@ -13,7 +13,8 @@ import { mockAgentStream } from '../../ai/mockAi';
 import { isAiError } from '../../ai/errors';
 import { detectCapabilities } from '../../ai/capabilities';
 import { runAgent, type AgentEvent, type Turn } from '../../ai/orchestrator';
-import { assembleTools, executeTool, isDestructiveTool } from '../../ai/tools';
+import { assembleTools, executeTool, isDestructiveTool, resolveVectorStores } from '../../ai/tools';
+import { getThreadVectorStore } from '../../data/threadFiles';
 import { b64ToBlob } from '../../ai/image';
 import { useUi } from '../../state/store';
 import type { AiError, CapabilityMatrix, Citation, ImageRef, Message, ToolCall } from '../../lib/types';
@@ -252,9 +253,14 @@ export const useRuns = create<RunsStore>((set, get) => ({
         caps = await detectCapabilities(config);
         if (caps.responses) {
           const tavilyKey = await getTavilyKey();
+          const threadStoreId = await getThreadVectorStore(threadId);
           const toolCtx = {
             tavilyConfigured: !!tavilyKey,
-            vectorStoreIds: config.tools?.vectorStoreId ? [config.tools.vectorStoreId] : [],
+            vectorStoreIds: resolveVectorStores({
+              fileSearchEnabled: settings.tools?.fileSearch,
+              kbStoreId: config.tools?.vectorStoreId,
+              threadStoreId,
+            }),
           };
           const tools = assembleTools(caps, settings.tools, toolCtx);
           const sysText = [sysParts.join('\n\n'), agenticToolGuidance(tools)].filter(Boolean).join('\n\n');

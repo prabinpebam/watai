@@ -46,25 +46,26 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   // Revoke preview object URLs on unmount.
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
-  useEffect(() => () => pendingRef.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
+  useEffect(() => () => pendingRef.current.forEach((p) => p.url && URL.revokeObjectURL(p.url)), []);
 
   const addFiles = (list: FileList | File[]) => {
     const all = Array.from(list);
-    const imgs = all.filter((f) => f.type.startsWith('image/'));
-    if (imgs.length === 0) {
-      if (all.length) pushToast('Only image files are supported right now', 'info');
-      return;
-    }
+    if (all.length === 0) return;
     setPending((prev) => [
       ...prev,
-      ...imgs.map((file) => ({ id: newId(), file, url: URL.createObjectURL(file) })),
+      ...all.map((file) => ({
+        id: newId(),
+        file,
+        // Images get an object URL for a thumbnail; documents render as a file chip.
+        url: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
+      })),
     ]);
   };
 
   const removePending = (id: string) => {
     setPending((prev) => {
       const hit = prev.find((p) => p.id === id);
-      if (hit) URL.revokeObjectURL(hit.url);
+      if (hit?.url) URL.revokeObjectURL(hit.url);
       return prev.filter((p) => p.id !== id);
     });
   };
@@ -78,7 +79,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
       pending.map((p) => p.file),
     );
     onChange('');
-    pending.forEach((p) => URL.revokeObjectURL(p.url));
+    pending.forEach((p) => p.url && URL.revokeObjectURL(p.url));
     setPending([]);
   };
 
@@ -136,19 +137,34 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
     <div className="composer-wrap">
       {pending.length > 0 && (
         <div className="composer__attachments">
-          {pending.map((p) => (
-            <div key={p.id} className="composer-thumb">
-              <img src={p.url} alt={p.file.name} />
-              <button
-                type="button"
-                className="composer-thumb__remove"
-                aria-label={`Remove ${p.file.name}`}
-                onClick={() => removePending(p.id)}
-              >
-                <Icon name="close" size={12} />
-              </button>
-            </div>
-          ))}
+          {pending.map((p) =>
+            p.url ? (
+              <div key={p.id} className="composer-thumb">
+                <img src={p.url} alt={p.file.name} />
+                <button
+                  type="button"
+                  className="composer-thumb__remove"
+                  aria-label={`Remove ${p.file.name}`}
+                  onClick={() => removePending(p.id)}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+            ) : (
+              <div key={p.id} className="composer-file" title={p.file.name}>
+                <Icon name="file-text" size={16} />
+                <span className="composer-file__name">{p.file.name}</span>
+                <button
+                  type="button"
+                  className="composer-file__remove"
+                  aria-label={`Remove ${p.file.name}`}
+                  onClick={() => removePending(p.id)}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+            ),
+          )}
         </div>
       )}
       <div
@@ -160,11 +176,11 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
       >
-        <IconButton name="plus" label="Add image" onClick={() => fileRef.current?.click()} />
+        <IconButton name="plus" label="Attach image or file" onClick={() => fileRef.current?.click()} />
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf,text/plain,text/markdown,text/csv,application/json,.md,.markdown,.docx,.pptx,.xlsx"
           multiple
           hidden
           onChange={(e) => {
