@@ -30,6 +30,22 @@ const TOOL_LABELS: Record<string, string> = {
 /** Service-side tools (rendered as cards; never executed in the browser). */
 const SERVER_TOOLS = new Set(['web_search', 'code_interpreter', 'file_search']);
 
+/** A concise nudge so the model actually USES the available service tools, not prose. */
+function agenticToolGuidance(tools: { type?: string }[]): string {
+  const has = (t: string) => tools.some((x) => x.type === t);
+  const lines: string[] = [];
+  if (has('code_interpreter'))
+    lines.push(
+      '- For any calculation, data analysis, simulation, or chart/plot request, use the code ' +
+        'interpreter to compute and render the result. Do not estimate or hand-wave the math in prose.',
+    );
+  if (has('file_search'))
+    lines.push("- When the answer may be in the user's uploaded documents, use file search and cite them.");
+  if (has('web_search'))
+    lines.push('- When current or factual web information is needed, use web search and cite the sources.');
+  return lines.length ? `Tool use:\n${lines.join('\n')}` : '';
+}
+
 /** Confirm a destructive tool before it runs (prompt-injection guard). */
 async function confirmDestructive({
   name,
@@ -139,21 +155,25 @@ export function useChat(threadId: string, temporary = false) {
       } else if (config) {
         caps = await detectCapabilities(config);
         if (caps.responses) {
+          const toolCtx = {
+            webSearchConsent: config.consent?.webSearchDataBoundary ?? false,
+            vectorStoreIds: config.tools?.vectorStoreId ? [config.tools.vectorStoreId] : [],
+          };
+          const tools = assembleTools(caps, settings.tools, toolCtx);
+          // Nudge the model to actually use the available tools (it often answers compute/plot
+          // requests in prose otherwise), appended to the user's system prompt.
+          const sysText = [sysParts.join('\n\n'), agenticToolGuidance(tools)].filter(Boolean).join('\n\n');
           const turns: Turn[] = [];
-          if (sysParts.length) turns.push({ role: 'system', text: sysParts.join('\n\n') });
+          if (sysText) turns.push({ role: 'system', text: sysText });
           for (const m of history) {
             if (m.role === 'user' || m.role === 'assistant') {
               turns.push({ role: m.role, text: m.content });
             }
           }
-          const toolCtx = {
-            webSearchConsent: config.consent?.webSearchDataBoundary ?? false,
-            vectorStoreIds: config.tools?.vectorStoreId ? [config.tools.vectorStoreId] : [],
-          };
           agentStream = runAgent({
             model,
             turns,
-            tools: assembleTools(caps, settings.tools, toolCtx),
+            tools,
             execute: executeTool,
             confirm: confirmDestructive,
             isDestructive: isDestructiveTool,
