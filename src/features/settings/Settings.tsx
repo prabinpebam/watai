@@ -805,6 +805,23 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
     pushToast('Tavily key removed', 'info');
   };
 
+  // The Tavily key IS the web-search switch. Toggling on without a key points the user at the
+  // key field below; toggling off removes the key (with confirmation) so there is one source of truth.
+  const onWebSearchToggle = async (v: boolean) => {
+    if (v) {
+      if (!tavilyHasKey) pushToast('Paste your Tavily key below to turn on web search', 'info');
+      return;
+    }
+    if (!tavilyHasKey) return;
+    const ok = await useUi.getState().requestConfirm({
+      title: 'Turn off web search',
+      message: 'This removes your saved Tavily key. You can add it again anytime.',
+      confirmLabel: 'Turn off',
+      danger: true,
+    });
+    if (ok) await removeTavily();
+  };
+
   const testTavily = async () => {
     setTavilyTesting(true);
     try {
@@ -917,11 +934,10 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
         />
         <ToolToggle
           label="Web search"
-          sub="Ground answers with cited web results (Tavily)."
-          checked={t.webSearch}
-          onChange={(v) => setTool({ webSearch: v })}
-          available={tavilyHasKey}
-          hint="Add a Tavily API key below."
+          sub="Search the web and cite sources. Your Tavily key is the on/off switch."
+          checked={tavilyHasKey}
+          onChange={(v) => void onWebSearchToggle(v)}
+          available
         />
         <ToolToggle
           label="File search"

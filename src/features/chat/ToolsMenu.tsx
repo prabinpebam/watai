@@ -3,10 +3,10 @@ import { createPortal } from 'react-dom';
 import { Icon } from '../../design/icons';
 import { Switch } from '../../design/ui';
 import { repo } from '../../data';
-import { getApiConfig, saveApiConfig } from '../../data/secureStore';
+import { getApiConfig } from '../../data/secureStore';
 import { detectCapabilities } from '../../ai/capabilities';
 import { useUi } from '../../state/store';
-import type { ApiConfig, CapabilityMatrix, Settings } from '../../lib/types';
+import type { CapabilityMatrix, Settings } from '../../lib/types';
 
 type ToolsState = NonNullable<Settings['tools']>;
 const DEFAULTS: ToolsState = {
@@ -24,9 +24,11 @@ interface ToolDef {
   icon: string;
   available: (c: CapabilityMatrix) => boolean;
   hint?: string;
-  consent?: boolean;
 }
 
+// Web search is intentionally absent here: it is governed solely by the presence of a Tavily
+// API key (managed in Settings -> Tools), not a per-chat capability toggle. Keeping it out of
+// this menu removes a long-standing conflation with the Foundry server web_search capability.
 const TOOL_DEFS: ToolDef[] = [
   { key: 'imageAgent', label: 'Image generation', sub: 'Create images from chat', icon: 'image', available: () => true },
   {
@@ -36,15 +38,6 @@ const TOOL_DEFS: ToolDef[] = [
     icon: 'code',
     available: (c) => c.codeInterpreter,
     hint: 'Needs a Responses endpoint',
-  },
-  {
-    key: 'webSearch',
-    label: 'Web search',
-    sub: 'Cited, up-to-date answers',
-    icon: 'globe',
-    available: (c) => c.webSearch,
-    hint: 'Needs a Foundry project',
-    consent: true,
   },
   {
     key: 'fileSearch',
@@ -72,18 +65,16 @@ const MOCK_CAPS: CapabilityMatrix = {
   fileSearch: true,
 };
 
-/** In-composer tool toggles (web search / code / file search / image), capability-gated, with
- *  the web-search cost + data-boundary consent. Edits the global Settings.tools (the chat
- *  composer and the Settings screen are never co-visible, so there is no drift). */
+/** In-composer tool toggles (image / code / file search), capability-gated. Edits the global
+ *  Settings.tools (the chat composer and the Settings screen are never co-visible, so there is
+ *  no drift). Web search is not here — it is governed solely by the Tavily key in Settings. */
 export function ToolsMenu() {
   const [open, setOpen] = useState(false);
   const [caps, setCaps] = useState<CapabilityMatrix | null>(null);
   const [tools, setTools] = useState<ToolsState>(DEFAULTS);
-  const [config, setConfig] = useState<ApiConfig | null>(null);
   const [anchor, setAnchor] = useState<{ left: number; bottom: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const requestConfirm = useUi((s) => s.requestConfirm);
   const mockAi = useUi((s) => s.mockAi);
 
   useEffect(() => {
@@ -97,7 +88,6 @@ export function ToolsMenu() {
       }
       const c = await getApiConfig();
       if (!live) return;
-      setConfig(c);
       if (c) {
         detectCapabilities(c)
           .then((m) => live && setCaps(m))
@@ -142,20 +132,7 @@ export function ToolsMenu() {
 
   const toggle = async (d: ToolDef) => {
     if (!caps || !d.available(caps)) return;
-    const turningOn = !tools[d.key];
-    if (turningOn && d.consent && config && !config.consent?.webSearchDataBoundary) {
-      const ok = await requestConfirm({
-        title: 'Enable web search?',
-        message:
-          'Web search sends your query to Bing (outside the Azure compliance boundary) and may incur cost on your subscription.',
-        confirmLabel: 'Enable',
-      });
-      if (!ok) return;
-      const nextCfg: ApiConfig = { ...config, consent: { ...config.consent, webSearchDataBoundary: true } };
-      setConfig(nextCfg);
-      await saveApiConfig(nextCfg);
-    }
-    await save({ ...tools, [d.key]: turningOn });
+    await save({ ...tools, [d.key]: !tools[d.key] });
   };
 
   return (

@@ -59,7 +59,9 @@ export function assembleTools(
   // Server tools — added only when the endpoint supports them AND the user enabled them.
   if (caps.codeInterpreter && s?.codeInterpreter) tools.push(codeInterpreterTool());
   // Web search is a client function tool backed by Tavily (BYO key) — works on any endpoint.
-  if (s?.webSearch && ctx.tavilyConfigured) tools.push(webSearchTool);
+  // The key IS the switch: if a Tavily key is configured, web search is offered. There is no
+  // separate enable flag to drift out of sync (a recurring source of "search never works").
+  if (ctx.tavilyConfigured) tools.push(webSearchTool);
   if (caps.fileSearch && s?.fileSearch && ctx.vectorStoreIds.length)
     tools.push(fileSearchTool(ctx.vectorStoreIds));
   return tools;

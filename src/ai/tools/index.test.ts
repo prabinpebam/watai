@@ -70,13 +70,15 @@ describe('assembleTools', () => {
     expect(ci?.container).toEqual({ type: 'auto' });
   });
 
-  it('adds the Tavily web_search function tool only when enabled AND a key is configured', () => {
+  it('offers the Tavily web_search tool whenever a key is configured (the key is the switch)', () => {
+    // Key present -> offered, regardless of any legacy webSearch flag.
     expect(assembleTools(caps(), settings(), ctx).some((t) => t.name === 'web_search')).toBe(true);
     expect(
-      assembleTools(caps(), settings(), { ...ctx, tavilyConfigured: false }).some((t) => t.name === 'web_search'),
-    ).toBe(false);
-    expect(
       assembleTools(caps(), settings({ webSearch: false }), ctx).some((t) => t.name === 'web_search'),
+    ).toBe(true);
+    // No key -> not offered.
+    expect(
+      assembleTools(caps(), settings(), { ...ctx, tavilyConfigured: false }).some((t) => t.name === 'web_search'),
     ).toBe(false);
   });
 
