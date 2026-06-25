@@ -72,6 +72,42 @@ describe('normalizeResponsesEvent', () => {
     ).toEqual({ type: 'image', b64: 'PARTIAL', partial: true });
   });
 
+  it('maps server-tool calls to serverTool running/done events', () => {
+    expect(
+      normalizeResponsesEvent({
+        type: 'response.output_item.added',
+        item: { type: 'code_interpreter_call', id: 'ci1' },
+      }),
+    ).toEqual({ type: 'serverTool', kind: 'code_interpreter', callId: 'ci1', status: 'running' });
+
+    expect(
+      normalizeResponsesEvent({
+        type: 'response.output_item.done',
+        item: { type: 'code_interpreter_call', id: 'ci1' },
+      }),
+    ).toEqual({ type: 'serverTool', kind: 'code_interpreter', callId: 'ci1', status: 'done' });
+
+    expect(
+      normalizeResponsesEvent({
+        type: 'response.output_item.done',
+        item: { type: 'web_search_call', id: 'ws1', action: { query: 'react 19' } },
+      }),
+    ).toEqual({
+      type: 'serverTool',
+      kind: 'web_search',
+      callId: 'ws1',
+      status: 'done',
+      summary: 'react 19',
+    });
+
+    expect(
+      normalizeResponsesEvent({
+        type: 'response.output_item.done',
+        item: { type: 'file_search_call', id: 'fs1' },
+      }),
+    ).toEqual({ type: 'serverTool', kind: 'file_search', callId: 'fs1', status: 'done' });
+  });
+
   it('maps errors and ignores unknown/empty events', () => {
     expect(normalizeResponsesEvent({ type: 'response.error', error: { message: 'boom' } })).toEqual({
       type: 'error',
@@ -83,6 +119,35 @@ describe('normalizeResponsesEvent', () => {
 });
 
 describe('parseResponsesStream', () => {
+  it('extracts url and file citations from a completed message item', async () => {
+    const res = sseResponse([
+      {
+        type: 'response.output_item.done',
+        item: {
+          type: 'message',
+          content: [
+            {
+              annotations: [
+                { type: 'url_citation', url: 'https://a.com/', title: 'A', start_index: 0, end_index: 2 },
+                { type: 'file_citation', file_id: 'f1', filename: 'doc.pdf' },
+              ],
+            },
+          ],
+        },
+      },
+      { type: 'response.completed' },
+    ]);
+    const out = await collect(parseResponsesStream(res));
+    expect(out).toContainEqual({
+      type: 'citation',
+      citation: { source: 'web', url: 'https://a.com/', title: 'A', startIndex: 0, endIndex: 2 },
+    });
+    expect(out).toContainEqual({
+      type: 'citation',
+      citation: { source: 'file', fileId: 'f1', filename: 'doc.pdf' },
+    });
+  });
+
   it('streams a full run: created -> text -> image -> completed', async () => {
     const res = sseResponse([
       { type: 'response.created', response: { id: 'resp_9' } },

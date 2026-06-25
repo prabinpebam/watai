@@ -6,6 +6,7 @@
 import {
   streamResponses,
   toInputMessages,
+  type ResponsesCitation,
   type ResponsesEvent,
   type ResponsesInputItem,
   type ResponsesParams,
@@ -46,7 +47,8 @@ export type AgentEvent =
       args?: Record<string, unknown>;
     }
   | { type: 'done' }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'citation'; citation: ResponsesCitation };
 
 export interface RunAgentParams {
   model: string;
@@ -94,6 +96,20 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
           break;
         case 'image':
           yield { type: 'image', b64: ev.b64, partial: ev.partial };
+          break;
+        case 'serverTool':
+          // Service-side tools (web search / code interpreter / file search) need no client
+          // work — just surface their activity as a tool card.
+          yield {
+            type: 'tool',
+            name: ev.kind,
+            status: ev.status,
+            callId: ev.callId,
+            ...(ev.summary ? { detail: ev.summary } : {}),
+          };
+          break;
+        case 'citation':
+          yield { type: 'citation', citation: ev.citation };
           break;
         case 'functionCall': {
           pending.push(ev);

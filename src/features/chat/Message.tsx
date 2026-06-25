@@ -7,6 +7,14 @@ import { useUi } from '../../state/store';
 import { synthesize } from '../../ai/tts';
 import type { Message } from '../../lib/types';
 
+function domainOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 export function UserMessage({ message }: { message: Message }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
@@ -118,6 +126,44 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
             <span />
           </div>
         ) : null}
+
+        {message.citations && message.citations.length > 0 && (
+          <div className="sources">
+            <span className="sources__label">Sources</span>
+            <div className="sources__list">
+              {message.citations.map((c, i) =>
+                c.url ? (
+                  <a
+                    key={i}
+                    className="source-chip"
+                    href={c.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    <Icon name="link" size={13} />
+                    <span className="source-chip__text">{c.title || domainOf(c.url)}</span>
+                  </a>
+                ) : c.filename ? (
+                  <span key={i} className="source-chip">
+                    <Icon name="paperclip" size={13} />
+                    <span className="source-chip__text">{c.filename}</span>
+                  </span>
+                ) : null,
+              )}
+              {message.citations.some((c) => c.bingQueryUrl) && (
+                <a
+                  className="source-chip"
+                  href={message.citations.find((c) => c.bingQueryUrl)?.bingQueryUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  <Icon name="globe" size={13} />
+                  <span className="source-chip__text">Searched the web</span>
+                </a>
+              )}
+            </div>
+          </div>
+        )}
 
         <AttachmentList attachments={message.attachments} />
 

@@ -43,8 +43,26 @@ export type ResponsesEvent =
   | { type: 'text'; delta: string }
   | { type: 'functionCall'; callId: string; name: string; arguments: string }
   | { type: 'image'; b64: string; partial: boolean }
+  | {
+      type: 'serverTool';
+      kind: 'web_search' | 'code_interpreter' | 'file_search';
+      callId: string;
+      status: 'running' | 'done';
+      summary?: string;
+    }
+  | { type: 'citation'; citation: ResponsesCitation }
   | { type: 'completed' }
   | { type: 'error'; message: string };
+
+export interface ResponsesCitation {
+  source: 'web' | 'file';
+  url?: string;
+  title?: string;
+  startIndex?: number;
+  endIndex?: number;
+  fileId?: string;
+  filename?: string;
+}
 
 interface RawEvent {
   type?: string;
@@ -53,13 +71,69 @@ interface RawEvent {
   error?: { message?: string };
   item?: {
     type?: string;
+    id?: string;
     call_id?: string;
     name?: string;
     arguments?: string;
     result?: string;
+    status?: string;
+    action?: { query?: string };
+    queries?: string[];
+    content?: Array<{ annotations?: RawAnnotation[] }>;
   };
   partial_image_b64?: string;
   b64_json?: string;
+}
+
+interface RawAnnotation {
+  type?: string;
+  url?: string;
+  title?: string;
+  start_index?: number;
+  end_index?: number;
+  file_id?: string;
+  filename?: string;
+}
+
+/** Extract url_citation / file_citation annotations from a completed message item. */
+function citationsFrom(raw: unknown): ResponsesEvent[] {
+  const ev = raw as RawEvent;
+  if (ev?.type !== 'response.output_item.done' || ev.item?.type !== 'message') return [];
+  const out: ResponsesEvent[] = [];
+  for (const part of ev.item.content ?? []) {
+    for (const a of part.annotations ?? []) {
+      if (a.type === 'url_citation' && a.url) {
+        out.push({
+          type: 'citation',
+          citation: {
+            source: 'web',
+            url: a.url,
+            ...(a.title ? { title: a.title } : {}),
+            ...(a.start_index !== undefined ? { startIndex: a.start_index } : {}),
+            ...(a.end_index !== undefined ? { endIndex: a.end_index } : {}),
+          },
+        });
+      } else if (a.type === 'file_citation') {
+        out.push({
+          type: 'citation',
+          citation: {
+            source: 'file',
+            ...(a.file_id ? { fileId: a.file_id } : {}),
+            ...(a.filename ? { filename: a.filename } : {}),
+          },
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/** Map a service-side tool call item type to our normalized tool kind (or null). */
+function serverToolKind(t?: string): 'web_search' | 'code_interpreter' | 'file_search' | null {
+  if (t === 'web_search_call') return 'web_search';
+  if (t === 'code_interpreter_call') return 'code_interpreter';
+  if (t === 'file_search_call') return 'file_search';
+  return null;
 }
 
 /** Map one raw Responses SSE event to a normalized event, or null to ignore it. */
@@ -70,6 +144,13 @@ export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
       return ev.response?.id ? { type: 'created', responseId: ev.response.id } : null;
     case 'response.output_text.delta':
       return ev.delta ? { type: 'text', delta: ev.delta } : null;
+    case 'response.output_item.added': {
+      const kind = serverToolKind(ev.item?.type);
+      if (kind && ev.item) {
+        return { type: 'serverTool', kind, callId: ev.item.id ?? ev.item.call_id ?? '', status: 'running' };
+      }
+      return null;
+    }
     case 'response.output_item.done': {
       const item = ev.item;
       if (item?.type === 'function_call' && item.call_id && item.name) {
@@ -82,6 +163,17 @@ export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
       }
       if (item?.type === 'image_generation_call' && item.result) {
         return { type: 'image', b64: item.result, partial: false };
+      }
+      const kind = serverToolKind(item?.type);
+      if (kind && item) {
+        const query = item.action?.query ?? item.queries?.[0];
+        return {
+          type: 'serverTool',
+          kind,
+          callId: item.id ?? item.call_id ?? '',
+          status: 'done',
+          ...(query ? { summary: query } : {}),
+        };
       }
       return null;
     }
@@ -112,6 +204,7 @@ export async function* parseResponsesStream(
     }
     const ev = normalizeResponsesEvent(raw);
     if (ev) yield ev;
+    for (const c of citationsFrom(raw)) yield c;
   }
 }
 

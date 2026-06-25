@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSettings } from './useSettings';
 import { Button, Field, IconButton, Segmented, Switch, TextAreaField } from '../../design/ui';
@@ -21,6 +21,7 @@ import {
   normalizeBaseUrl,
 } from '../../data/secureStore';
 import { detectCapabilities, endpointKind, resetAgenticCache } from '../../ai/capabilities';
+import { indexFileIntoStore } from '../../ai/fileSearch';
 import { DEFAULT_SETTINGS } from '../../lib/types';
 import type {
   ApiConfig,
@@ -677,6 +678,7 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
   const [caps, setCaps] = useState<CapabilityMatrix | null>(null);
   const [config, setConfig] = useState<ApiConfig | null>(null);
   const [detecting, setDetecting] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     getApiConfig().then((c) => {
@@ -710,6 +712,28 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
 
   const kind = config ? endpointKind(config) : 'aoai';
   const projectHint = 'Needs a Foundry project endpoint.';
+
+  const onUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !config) return;
+    setUploading(true);
+    try {
+      const { vectorStoreId, indexed } = await indexFileIntoStore(
+        file,
+        file.name,
+        config.tools?.vectorStoreId,
+      );
+      const next: ApiConfig = { ...config, tools: { ...config.tools, vectorStoreId } };
+      setConfig(next);
+      await saveApiConfig(next);
+      pushToast(indexed ? 'File indexed' : 'Uploaded; indexing continues', indexed ? 'success' : 'info');
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : 'Upload failed', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <>
@@ -769,6 +793,36 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
               </div>
             </div>
             <Switch checked={consent} onChange={setConsent} label="Web data-boundary consent" />
+          </div>
+        </div>
+      )}
+
+      {caps?.fileSearch && (
+        <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
+          <div className="setting-row">
+            <div className="setting-row__body">
+              <div className="setting-row__title">Knowledge base</div>
+              <div className="setting-row__sub">
+                {config?.tools?.vectorStoreId
+                  ? 'Documents are indexed; the assistant can search and cite them.'
+                  : 'Upload documents the assistant can search and cite.'}
+              </div>
+            </div>
+            <label className="btn btn--outline" aria-disabled={uploading}>
+              {uploading ? (
+                <span className="spinner" style={{ width: 16, height: 16 }} />
+              ) : (
+                <Icon name="paperclip" size={18} />
+              )}
+              <span>{uploading ? 'Indexing…' : 'Add file'}</span>
+              <input
+                type="file"
+                hidden
+                disabled={uploading}
+                onChange={onUpload}
+                accept=".pdf,.txt,.md,.markdown,.docx,.json,.csv"
+              />
+            </label>
           </div>
         </div>
       )}

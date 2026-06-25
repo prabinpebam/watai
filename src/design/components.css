@@ -657,6 +657,46 @@
   white-space: nowrap;
 }
 
+/* Citation sources strip */
+.sources {
+  margin: var(--space-3) 0 var(--space-2);
+}
+.sources__label {
+  display: block;
+  font-size: var(--text-label-size);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2);
+}
+.sources__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 280px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-1);
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+}
+a.source-chip:hover {
+  background: var(--color-surface-2);
+  text-decoration: none;
+}
+.source-chip__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- Settings: master/detail (desktop) ---- */
 .settings-shell {
   flex: 1 1 auto;

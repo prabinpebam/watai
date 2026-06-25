@@ -228,4 +228,35 @@ describe('runAgent', () => {
       args: {},
     });
   });
+
+  it('forwards citations from the stream', async () => {
+    const streamFn = fakeStream([
+      [
+        { type: 'citation', citation: { source: 'web', url: 'https://a.com/' } },
+        { type: 'text', delta: 'grounded' },
+        { type: 'completed' },
+      ],
+    ]);
+    const events = await collect(
+      runAgent({ model: 'm', turns: [], tools: [], execute: noopExecute, streamFn }),
+    );
+    expect(events).toContainEqual({ type: 'citation', citation: { source: 'web', url: 'https://a.com/' } });
+  });
+
+  it('forwards server-tool activity as tool cards without client execution', async () => {
+    const streamFn = fakeStream([
+      [
+        { type: 'serverTool', kind: 'code_interpreter', callId: 'ci1', status: 'running' },
+        { type: 'text', delta: 'Computing…' },
+        { type: 'serverTool', kind: 'code_interpreter', callId: 'ci1', status: 'done' },
+        { type: 'completed' },
+      ],
+    ]);
+    const execute = vi.fn(async () => ({ output: '' }));
+    const events = await collect(runAgent({ model: 'm', turns: [], tools: [], execute, streamFn }));
+    expect(execute).not.toHaveBeenCalled();
+    expect(events).toContainEqual({ type: 'tool', name: 'code_interpreter', status: 'running', callId: 'ci1' });
+    expect(events).toContainEqual({ type: 'tool', name: 'code_interpreter', status: 'done', callId: 'ci1' });
+    expect(events[events.length - 1]).toEqual({ type: 'done' });
+  });
 });

@@ -10,7 +10,7 @@ import { runAgent, type Turn } from '../../ai/orchestrator';
 import { assembleTools, executeTool, isDestructiveTool } from '../../ai/tools';
 import { b64ToBlob } from '../../ai/image';
 import { useUi } from '../../state/store';
-import type { AiError, CapabilityMatrix, ImageRef, Message, ToolCall } from '../../lib/types';
+import type { AiError, CapabilityMatrix, Citation, ImageRef, Message, ToolCall } from '../../lib/types';
 
 export const DEFAULT_CHAT_MODEL = 'gpt-5.4';
 
@@ -22,7 +22,13 @@ const TOOL_LABELS: Record<string, string> = {
   delete_thread: 'Deleted a conversation',
   add_memory: 'Saved to memory',
   update_setting: 'Updated a setting',
+  web_search: 'Searched the web',
+  code_interpreter: 'Ran code',
+  file_search: 'Searched your files',
 };
+
+/** Service-side tools (rendered as cards; never executed in the browser). */
+const SERVER_TOOLS = new Set(['web_search', 'code_interpreter', 'file_search']);
 
 /** Confirm a destructive tool before it runs (prompt-injection guard). */
 async function confirmDestructive({
@@ -107,6 +113,8 @@ export function useChat(threadId: string, temporary = false) {
       // Transient placeholders for images currently being generated (never persisted).
       const pendingImages: { id: string; callId?: string; size: string }[] = [];
       const toolCalls: ToolCall[] = [];
+      const citations: Citation[] = [];
+      let bingQueryUrl: string | undefined;
       const applyMedia = () =>
         setMessages((prev) =>
           prev.map((m) =>
@@ -171,12 +179,19 @@ export function useChat(threadId: string, temporary = false) {
               // Record non-image tool activity as a collapsible card on the message.
               const id = ev.callId ?? ev.name;
               const label = TOOL_LABELS[ev.name] ?? ev.name;
+              const summary = ev.detail ? `${label} · ${ev.detail}` : label;
+              const kind: ToolCall['kind'] = SERVER_TOOLS.has(ev.name)
+                ? (ev.name as ToolCall['kind'])
+                : 'function';
+              if (ev.name === 'web_search' && ev.status === 'done' && ev.detail) {
+                bingQueryUrl = `https://www.bing.com/search?q=${encodeURIComponent(ev.detail)}`;
+              }
               const existing = toolCalls.find((t) => t.id === id);
               if (existing) {
                 existing.status = ev.status;
-                if (ev.detail) existing.summary = `${label} · ${ev.detail}`;
+                existing.summary = summary;
               } else {
-                toolCalls.push({ id, kind: 'function', name: ev.name, status: ev.status, summary: label });
+                toolCalls.push({ id, kind, name: ev.name, status: ev.status, summary });
               }
               setMessages((prev) =>
                 prev.map((m) => (m.id === assistantId ? { ...m, toolCalls: [...toolCalls] } : m)),
@@ -203,6 +218,15 @@ export function useChat(threadId: string, temporary = false) {
                   : -1;
               if (i >= 0) pendingImages.splice(i, 1);
               applyMedia();
+            } else if (ev.type === 'citation') {
+              const c = ev.citation;
+              const key = c.url ?? c.fileId;
+              if (!citations.some((x) => (x.url ?? x.fileId) === key)) {
+                citations.push(c);
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === assistantId ? { ...m, citations: [...citations] } : m)),
+                );
+              }
             } else if (ev.type === 'error') {
               err = { code: 'server_error', message: ev.message };
             }
@@ -240,6 +264,15 @@ export function useChat(threadId: string, temporary = false) {
         : wasAborted
           ? 'interrupted'
           : 'complete';
+      // Display obligation: surface the Bing search-query link when web search ran.
+      if (bingQueryUrl) {
+        const web = citations.find((c) => c.source === 'web');
+        if (web) {
+          for (const c of citations) if (c.source === 'web' && !c.bingQueryUrl) c.bingQueryUrl = bingQueryUrl;
+        } else {
+          citations.push({ source: 'web', bingQueryUrl });
+        }
+      }
       const final: Message = {
         ...placeholder,
         content: acc,
@@ -248,6 +281,7 @@ export function useChat(threadId: string, temporary = false) {
         error: err,
         ...(genImages.length ? { images: genImages } : {}),
         ...(toolCalls.length ? { toolCalls } : {}),
+        ...(citations.length ? { citations } : {}),
       };
       setMessages((prev) => prev.map((m) => (m.id === assistantId ? final : m)));
       setStream({ status: err ? 'error' : 'idle' });

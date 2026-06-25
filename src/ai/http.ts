@@ -8,12 +8,16 @@ export type AiPath =
   | '/audio/transcriptions'
   | '/audio/speech'
   | '/images/generations'
-  | '/images/edits';
+  | '/images/edits'
+  | '/files'
+  | '/vector_stores';
 
 export interface AiRequest {
   path: AiPath;
   /** Absolute URL override (used for the classic transcription path); bypasses baseUrl + path. */
   url?: string;
+  /** HTTP method; defaults to POST. GET/DELETE are used by the file-search vector-store API. */
+  method?: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
   form?: FormData;
   stream?: boolean;
@@ -109,7 +113,7 @@ export async function aiFetch(req: AiRequest): Promise<Response> {
   if (req.stream) headers['Accept'] = 'text/event-stream';
 
   try {
-    return await fetch(url, { method: 'POST', headers, body: payload, signal });
+    return await fetch(url, { method: req.method ?? 'POST', headers, body: payload, signal });
   } finally {
     cleanup();
   }
