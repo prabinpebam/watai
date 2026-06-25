@@ -24,8 +24,9 @@ const toolCallSchema = z
     id: z.string().min(1).max(64),
     kind: z.enum(['function', 'web_search', 'code_interpreter', 'file_search', 'image']),
     name: z.string().max(100).optional(),
-    status: z.enum(['running', 'done', 'error']),
+    status: z.enum(['running', 'awaiting-confirm', 'done', 'error']),
     summary: z.string().max(400).optional(),
+    resultPreview: z.string().max(4000).optional(),
   })
   .strict();
 

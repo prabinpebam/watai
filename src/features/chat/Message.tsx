@@ -30,6 +30,52 @@ function kindIcon(kind: ToolCall['kind']): string {
   }
 }
 
+function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
+  if (status === 'running' || status === 'awaiting-confirm')
+    return <span className="spinner" style={{ width: 12, height: 12 }} />;
+  if (status === 'error') return <Icon name="alert" size={14} />;
+  return <Icon name="check" size={14} />;
+}
+
+/** One tool-activity card. Expands to reveal the detail (e.g. code + output) when present. */
+function ToolCardView({ tc }: { tc: ToolCall }) {
+  const [open, setOpen] = useState(false);
+  const hasDetail = !!tc.resultPreview;
+  const header = (
+    <>
+      <span className="tool-card__kind" aria-hidden>
+        <Icon name={kindIcon(tc.kind)} size={15} />
+      </span>
+      <span className="tool-card__label">{tc.summary ?? tc.name}</span>
+      {hasDetail && (
+        <span className="tool-card__chevron" aria-hidden>
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />
+        </span>
+      )}
+      <span className="tool-card__status" aria-hidden>
+        <ToolStatusIcon status={tc.status} />
+      </span>
+    </>
+  );
+  return (
+    <div className={`tool-card tool-card--${tc.status}`}>
+      {hasDetail ? (
+        <button
+          type="button"
+          className="tool-card__head"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {header}
+        </button>
+      ) : (
+        <div className="tool-card__head">{header}</div>
+      )}
+      {hasDetail && open && <pre className="tool-card__detail">{tc.resultPreview}</pre>}
+    </div>
+  );
+}
+
 export function UserMessage({ message }: { message: Message }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
@@ -114,21 +160,7 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
         {message.toolCalls && message.toolCalls.length > 0 && (
           <div className="tool-cards" aria-live="polite">
             {message.toolCalls.map((tc) => (
-              <div key={tc.id} className={`tool-card tool-card--${tc.status}`}>
-                <span className="tool-card__kind" aria-hidden>
-                  <Icon name={kindIcon(tc.kind)} size={15} />
-                </span>
-                <span className="tool-card__label">{tc.summary ?? tc.name}</span>
-                <span className="tool-card__status" aria-hidden>
-                  {tc.status === 'running' || tc.status === 'awaiting-confirm' ? (
-                    <span className="spinner" style={{ width: 12, height: 12 }} />
-                  ) : tc.status === 'error' ? (
-                    <Icon name="alert" size={14} />
-                  ) : (
-                    <Icon name="check" size={14} />
-                  )}
-                </span>
-              </div>
+              <ToolCardView key={tc.id} tc={tc} />
             ))}
           </div>
         )}

@@ -1,5 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { uploadFile, createVectorStore, addFileToStore, pollIndex } from './fileSearch';
+import {
+  uploadFile,
+  createVectorStore,
+  addFileToStore,
+  pollIndex,
+  listStoreFiles,
+  removeFileFromStore,
+  deleteVectorStore,
+} from './fileSearch';
 import type { AiRequest } from './http';
 
 function jsonRes(body: unknown, ok = true, status = 200): Response {
@@ -68,5 +76,32 @@ describe('fileSearch vector-store client', () => {
       maxAttempts: 3,
     });
     expect(done).toBe(false);
+  });
+
+  it('lists store files (GET) with their status', async () => {
+    const { fn, calls } = fakeRequest([
+      jsonRes({ data: [{ id: 'file_1', status: 'completed' }, { id: 'file_2', status: 'in_progress' }] }),
+    ]);
+    const files = await listStoreFiles('vs_1', { request: fn, getConfig });
+    expect(files).toEqual([
+      { id: 'file_1', status: 'completed' },
+      { id: 'file_2', status: 'in_progress' },
+    ]);
+    expect(calls[0]?.method).toBe('GET');
+    expect(calls[0]?.url).toContain('/vector_stores/vs_1/files');
+  });
+
+  it('removes a file from a store (DELETE)', async () => {
+    const { fn, calls } = fakeRequest([jsonRes({ deleted: true })]);
+    await removeFileFromStore('vs_1', 'file_1', { request: fn, getConfig });
+    expect(calls[0]?.method).toBe('DELETE');
+    expect(calls[0]?.url).toContain('/vector_stores/vs_1/files/file_1');
+  });
+
+  it('deletes a whole vector store (DELETE)', async () => {
+    const { fn, calls } = fakeRequest([jsonRes({ deleted: true })]);
+    await deleteVectorStore('vs_1', { request: fn, getConfig });
+    expect(calls[0]?.method).toBe('DELETE');
+    expect(calls[0]?.url).toMatch(/\/vector_stores\/vs_1$/);
   });
 });

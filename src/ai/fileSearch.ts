@@ -55,7 +55,6 @@ export interface PollDeps extends Deps {
   sleep?: (ms: number) => Promise<void>;
   maxAttempts?: number;
 }
-
 /** Poll a vector-store file (GET) until it finishes indexing. Returns true on success. */
 export async function pollIndex(
   vectorStoreId: string,
@@ -76,6 +75,50 @@ export async function pollIndex(
     await sleep(1000);
   }
   return false;
+}
+
+/** One file in a vector store, as returned by the list endpoint. */
+export interface VectorStoreFile {
+  id: string;
+  status: string;
+}
+
+/** List the files in a vector store (GET) with their indexing status. */
+export async function listStoreFiles(
+  vectorStoreId: string,
+  deps: Deps = {},
+): Promise<VectorStoreFile[]> {
+  const request = deps.request ?? aiFetch;
+  const getConfig = deps.getConfig ?? getApiConfig;
+  const url = await subPath(getConfig, `/vector_stores/${vectorStoreId}/files`);
+  const res = await request({ path: '/vector_stores', url, method: 'GET' });
+  if (!res.ok) throw await normalizeHttpError(res);
+  const data = ((await res.json()).data ?? []) as Array<{ id?: string; status?: string }>;
+  return data
+    .filter((f): f is { id: string; status?: string } => typeof f.id === 'string')
+    .map((f) => ({ id: f.id, status: f.status ?? 'unknown' }));
+}
+
+/** Detach + delete one file from a vector store (DELETE). */
+export async function removeFileFromStore(
+  vectorStoreId: string,
+  fileId: string,
+  deps: Deps = {},
+): Promise<void> {
+  const request = deps.request ?? aiFetch;
+  const getConfig = deps.getConfig ?? getApiConfig;
+  const url = await subPath(getConfig, `/vector_stores/${vectorStoreId}/files/${fileId}`);
+  const res = await request({ path: '/vector_stores', url, method: 'DELETE' });
+  if (!res.ok) throw await normalizeHttpError(res);
+}
+
+/** Delete an entire vector store (DELETE) — used to clear the knowledge base. */
+export async function deleteVectorStore(vectorStoreId: string, deps: Deps = {}): Promise<void> {
+  const request = deps.request ?? aiFetch;
+  const getConfig = deps.getConfig ?? getApiConfig;
+  const url = await subPath(getConfig, `/vector_stores/${vectorStoreId}`);
+  const res = await request({ path: '/vector_stores', url, method: 'DELETE' });
+  if (!res.ok) throw await normalizeHttpError(res);
 }
 
 /**

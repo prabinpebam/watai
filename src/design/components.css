@@ -627,18 +627,36 @@
 }
 .tool-card {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
   align-self: flex-start;
   max-width: 100%;
   min-width: 220px;
-  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-1);
   font-size: var(--text-caption-size);
   color: var(--color-text-secondary);
   animation: tool-card-in var(--motion-base) var(--ease-standard);
+}
+.tool-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  /* button reset (the head is a <button> when the card has expandable detail) */
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.tool-card__head {
+  cursor: pointer;
+}
+button.tool-card__head:hover {
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
 }
 @keyframes tool-card-in {
   from {
@@ -663,6 +681,24 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tool-card__chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+.tool-card__detail {
+  margin: 0;
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--color-text-secondary);
+}
 .tool-card__status {
   display: inline-flex;
   align-items: center;
@@ -684,6 +720,45 @@
   color: var(--color-danger);
 }
 .tool-card--error .tool-card__status {
+  color: var(--color-danger);
+}
+
+/* File-search knowledge base list (Settings → Tools) */
+.kb-list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.kb-file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-1);
+  border-top: 1px solid var(--color-border);
+}
+.kb-file__icon {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+.kb-file__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-body-size);
+}
+.kb-file__status {
+  flex: none;
+  font-size: var(--text-caption-size);
+  color: var(--color-text-tertiary);
+}
+.kb-file__status--ready {
+  color: var(--color-success);
+}
+.kb-file__status--failed {
   color: var(--color-danger);
 }
 
@@ -1234,6 +1309,31 @@ a.source-chip:hover {
   max-height: 100%;
   object-fit: contain;
   animation: pop var(--motion-base) var(--ease-spring);
+}
+.viewer__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+.viewer__meta-row {
+  display: flex;
+  gap: var(--space-4);
+}
+.viewer__prompt {
+  max-width: min(720px, 92vw);
+  color: #ccc;
+  font-size: var(--text-caption-size);
+}
+.viewer__prompt summary {
+  cursor: pointer;
+  color: #aaa;
+  text-align: center;
+}
+.viewer__prompt p {
+  margin: var(--space-2) 0 0;
+  line-height: 1.5;
 }
 .viewer .icon-btn {
   color: #fff;

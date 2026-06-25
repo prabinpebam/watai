@@ -92,6 +92,32 @@ describe('parseAppendMessage', () => {
     expect(parseAppendMessage(input)).toMatchObject({ citations: [{ source: 'file' }] });
   });
 
+  it('accepts a code-interpreter tool call with awaiting-confirm status and a bounded resultPreview', () => {
+    const input = {
+      role: 'assistant',
+      content: 'Done',
+      toolCalls: [
+        { id: 'ci1', kind: 'code_interpreter', status: 'done', summary: 'Ran code', resultPreview: 'print(2+2)\n4' },
+        { id: 'fn1', kind: 'function', name: 'delete_thread', status: 'awaiting-confirm' },
+      ],
+    };
+    expect(parseAppendMessage(input)).toMatchObject({
+      toolCalls: [{ id: 'ci1', resultPreview: 'print(2+2)\n4' }, { id: 'fn1', status: 'awaiting-confirm' }],
+    });
+  });
+
+  it('rejects an over-long resultPreview', () => {
+    expect(
+      code(() =>
+        parseAppendMessage({
+          role: 'assistant',
+          content: 'x',
+          toolCalls: [{ id: 't', kind: 'code_interpreter', status: 'done', resultPreview: 'a'.repeat(4001) }],
+        }),
+      ),
+    ).toBe('validation');
+  });
+
   it('rejects an invalid tool kind or status', () => {
     expect(
       code(() =>

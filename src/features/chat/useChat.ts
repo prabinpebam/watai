@@ -199,8 +199,16 @@ export function useChat(threadId: string, temporary = false) {
               if (existing) {
                 existing.status = ev.status;
                 existing.summary = summary;
+                if (ev.result) existing.resultPreview = ev.result;
               } else {
-                toolCalls.push({ id, kind, name: ev.name, status: ev.status, summary });
+                toolCalls.push({
+                  id,
+                  kind,
+                  name: ev.name,
+                  status: ev.status,
+                  summary,
+                  ...(ev.result ? { resultPreview: ev.result } : {}),
+                });
               }
               setMessages((prev) =>
                 prev.map((m) => (m.id === assistantId ? { ...m, toolCalls: [...toolCalls] } : m)),
@@ -237,7 +245,7 @@ export function useChat(threadId: string, temporary = false) {
                 );
               }
             } else if (ev.type === 'error') {
-              err = { code: 'server_error', message: ev.message };
+              err = { code: ev.code ?? 'server_error', message: ev.message };
             }
           }
         } else {

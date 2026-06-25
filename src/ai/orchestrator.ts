@@ -12,6 +12,7 @@ import {
   type ResponsesParams,
   type ResponsesTool,
 } from './responses';
+import type { AiErrorCode } from '../lib/types';
 
 export interface Turn {
   role: 'system' | 'user' | 'assistant';
@@ -43,11 +44,12 @@ export type AgentEvent =
       name: string;
       status: 'running' | 'awaiting-confirm' | 'done' | 'error';
       detail?: string;
+      result?: string;
       callId?: string;
       args?: Record<string, unknown>;
     }
   | { type: 'done' }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; code?: AiErrorCode }
   | { type: 'citation'; citation: ResponsesCitation };
 
 export interface RunAgentParams {
@@ -106,6 +108,7 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
             status: ev.status,
             callId: ev.callId,
             ...(ev.summary ? { detail: ev.summary } : {}),
+            ...(ev.detail ? { result: ev.detail } : {}),
           };
           break;
         case 'citation':
@@ -194,5 +197,5 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
     previousResponseId = responseId;
   }
 
-  yield { type: 'error', message: 'Stopped: tool-call budget exceeded.' };
+  yield { type: 'error', message: 'Stopped: tool-call budget exceeded.', code: 'budget_exceeded' };
 }

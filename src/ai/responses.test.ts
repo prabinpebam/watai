@@ -108,6 +108,26 @@ describe('normalizeResponsesEvent', () => {
     ).toEqual({ type: 'serverTool', kind: 'file_search', callId: 'fs1', status: 'done' });
   });
 
+  it('captures code-interpreter source + output as the serverTool detail', () => {
+    expect(
+      normalizeResponsesEvent({
+        type: 'response.output_item.done',
+        item: {
+          type: 'code_interpreter_call',
+          id: 'ci2',
+          code: 'print(2 + 2)',
+          outputs: [{ type: 'logs', logs: '4' }],
+        },
+      }),
+    ).toEqual({
+      type: 'serverTool',
+      kind: 'code_interpreter',
+      callId: 'ci2',
+      status: 'done',
+      detail: 'print(2 + 2)\n\n--- Output ---\n4',
+    });
+  });
+
   it('maps errors and ignores unknown/empty events', () => {
     expect(normalizeResponsesEvent({ type: 'response.error', error: { message: 'boom' } })).toEqual({
       type: 'error',

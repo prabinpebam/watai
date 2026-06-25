@@ -48,7 +48,10 @@ export type ResponsesEvent =
       kind: 'web_search' | 'code_interpreter' | 'file_search';
       callId: string;
       status: 'running' | 'done';
+      /** Short label suffix, e.g. the search query. */
       summary?: string;
+      /** Expandable body, e.g. the code interpreter's source + output. */
+      detail?: string;
     }
   | { type: 'citation'; citation: ResponsesCitation }
   | { type: 'completed' }
@@ -79,6 +82,9 @@ interface RawEvent {
     status?: string;
     action?: { query?: string };
     queries?: string[];
+    code?: string;
+    input?: string;
+    outputs?: Array<{ type?: string; logs?: string; text?: string }>;
     content?: Array<{ annotations?: RawAnnotation[] }>;
   };
   partial_image_b64?: string;
@@ -136,6 +142,20 @@ function serverToolKind(t?: string): 'web_search' | 'code_interpreter' | 'file_s
   return null;
 }
 
+/** Build the expandable code-interpreter detail (source + captured output) from a CI item. */
+function codeInterpreterDetail(item: NonNullable<RawEvent['item']>): string | undefined {
+  const code = (item.code ?? item.input ?? '').trim();
+  const logs = (item.outputs ?? [])
+    .map((o) => o.logs ?? o.text)
+    .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    .join('\n')
+    .trim();
+  let detail = code;
+  if (logs) detail += (detail ? '\n\n--- Output ---\n' : '') + logs;
+  detail = detail.slice(0, 4000);
+  return detail || undefined;
+}
+
 /** Map one raw Responses SSE event to a normalized event, or null to ignore it. */
 export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
   const ev = raw as RawEvent;
@@ -167,12 +187,14 @@ export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
       const kind = serverToolKind(item?.type);
       if (kind && item) {
         const query = item.action?.query ?? item.queries?.[0];
+        const detail = kind === 'code_interpreter' ? codeInterpreterDetail(item) : undefined;
         return {
           type: 'serverTool',
           kind,
           callId: item.id ?? item.call_id ?? '',
           status: 'done',
           ...(query ? { summary: query } : {}),
+          ...(detail ? { detail } : {}),
         };
       }
       return null;

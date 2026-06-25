@@ -121,6 +121,8 @@ export interface ApiConfig {
     fileSearch?: boolean;
     bingConnectionId?: string;
     vectorStoreId?: string;
+    /** Local-only filename registry for the file-search knowledge base (names never leave the browser). */
+    kbFiles?: { id: string; name: string; status: 'ready' | 'indexing' | 'failed' }[];
   };
   consent?: { webSearchDataBoundary?: boolean };
   keyEncrypted: boolean;

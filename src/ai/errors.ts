@@ -67,6 +67,27 @@ export async function normalizeHttpError(
         message = 'The service is temporarily unavailable.';
       }
   }
+
+  // Refine tool-specific failures from the error body (bounded; no raw payload leaks).
+  if (detail && (code === 'bad_request' || code === 'forbidden' || code === 'deployment_not_found')) {
+    const d = detail.toLowerCase();
+    const mentionsTool = /\b(tool|code_interpreter|file_search|web_search)\b|vector.?store/.test(d);
+    const notSupported = /not supported|unsupported|not enabled|isn't supported|cannot be used/.test(d);
+    if ((res.status === 400 || res.status === 404) && /file_search|vector.?store/.test(d)) {
+      code = 'file_search_unavailable';
+      message = 'File search needs a Foundry project with vector stores.';
+    } else if (res.status === 403 && mentionsTool) {
+      code = 'tool_unauthorized';
+      message = "Your endpoint isn't allowed to use that tool.";
+    } else if (/web_search/.test(d) && notSupported) {
+      code = 'web_search_disabled';
+      message = "Web search isn't available on this resource.";
+    } else if (res.status === 400 && mentionsTool && notSupported) {
+      code = 'tool_unsupported';
+      message = "This endpoint can't run that tool.";
+    }
+  }
+
   return { code, message, detail, retryAfterMs, capability };
 }
 

@@ -21,7 +21,12 @@ import {
   normalizeBaseUrl,
 } from '../../data/secureStore';
 import { detectCapabilities, endpointKind, resetAgenticCache } from '../../ai/capabilities';
-import { indexFileIntoStore } from '../../ai/fileSearch';
+import {
+  indexFileIntoStore,
+  listStoreFiles,
+  removeFileFromStore,
+  deleteVectorStore,
+} from '../../ai/fileSearch';
 import { DEFAULT_SETTINGS } from '../../lib/types';
 import type {
   ApiConfig,
@@ -679,11 +684,31 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
   const [config, setConfig] = useState<ApiConfig | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [busyFileId, setBusyFileId] = useState<string | null>(null);
+
+  const kbFiles = config?.tools?.kbFiles ?? [];
+  const mapStatus = (s: string): 'ready' | 'indexing' | 'failed' =>
+    s === 'completed' ? 'ready' : s === 'failed' || s === 'cancelled' ? 'failed' : 'indexing';
 
   useEffect(() => {
     getApiConfig().then((c) => {
       setConfig(c);
       if (c) detectCapabilities(c).then(setCaps).catch(() => undefined);
+      // Reconcile the local file registry with the live store's indexing status.
+      const storeId = c?.tools?.vectorStoreId;
+      if (c && storeId && (c.tools?.kbFiles?.length ?? 0) > 0) {
+        listStoreFiles(storeId)
+          .then((live) => {
+            const byId = new Map(live.map((f) => [f.id, mapStatus(f.status)]));
+            const merged = (c.tools?.kbFiles ?? []).map((f) =>
+              byId.has(f.id) ? { ...f, status: byId.get(f.id)! } : f,
+            );
+            const next: ApiConfig = { ...c, tools: { ...c.tools, kbFiles: merged } };
+            setConfig(next);
+            void saveApiConfig(next);
+          })
+          .catch(() => undefined);
+      }
     });
   }, []);
 
@@ -719,12 +744,15 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
     if (!file || !config) return;
     setUploading(true);
     try {
-      const { vectorStoreId, indexed } = await indexFileIntoStore(
+      const { vectorStoreId, fileId, indexed } = await indexFileIntoStore(
         file,
         file.name,
         config.tools?.vectorStoreId,
       );
-      const next: ApiConfig = { ...config, tools: { ...config.tools, vectorStoreId } };
+      const status: 'ready' | 'indexing' = indexed ? 'ready' : 'indexing';
+      const entry = { id: fileId, name: file.name, status };
+      const files = [...(config.tools?.kbFiles ?? []).filter((f) => f.id !== fileId), entry];
+      const next: ApiConfig = { ...config, tools: { ...config.tools, vectorStoreId, kbFiles: files } };
       setConfig(next);
       await saveApiConfig(next);
       pushToast(indexed ? 'File indexed' : 'Uploaded; indexing continues', indexed ? 'success' : 'info');
@@ -733,6 +761,45 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
     } finally {
       setUploading(false);
     }
+  };
+
+  const onRemoveFile = async (fileId: string) => {
+    const storeId = config?.tools?.vectorStoreId;
+    if (!config || !storeId) return;
+    setBusyFileId(fileId);
+    try {
+      await removeFileFromStore(storeId, fileId);
+      const files = (config.tools?.kbFiles ?? []).filter((f) => f.id !== fileId);
+      const next: ApiConfig = { ...config, tools: { ...config.tools, kbFiles: files } };
+      setConfig(next);
+      await saveApiConfig(next);
+      pushToast('File removed', 'success');
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : 'Could not remove file', 'error');
+    } finally {
+      setBusyFileId(null);
+    }
+  };
+
+  const onClearKb = async () => {
+    const storeId = config?.tools?.vectorStoreId;
+    if (!config || !storeId) return;
+    const ok = await useUi.getState().requestConfirm({
+      title: 'Clear knowledge base',
+      message: 'Delete all indexed documents? The assistant will no longer be able to search them.',
+      confirmLabel: 'Clear',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteVectorStore(storeId);
+    } catch {
+      /* store may already be gone; clear local state regardless */
+    }
+    const next: ApiConfig = { ...config, tools: { ...config.tools, vectorStoreId: undefined, kbFiles: [] } };
+    setConfig(next);
+    await saveApiConfig(next);
+    pushToast('Knowledge base cleared', 'success');
   };
 
   return (
@@ -803,8 +870,8 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
             <div className="setting-row__body">
               <div className="setting-row__title">Knowledge base</div>
               <div className="setting-row__sub">
-                {config?.tools?.vectorStoreId
-                  ? 'Documents are indexed; the assistant can search and cite them.'
+                {kbFiles.length
+                  ? 'The assistant can search and cite these documents.'
                   : 'Upload documents the assistant can search and cite.'}
               </div>
             </div>
@@ -824,6 +891,42 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
               />
             </label>
           </div>
+
+          {kbFiles.length > 0 && (
+            <ul className="kb-list">
+              {kbFiles.map((f) => (
+                <li key={f.id} className="kb-file">
+                  <Icon name="paperclip" size={15} className="kb-file__icon" />
+                  <span className="kb-file__name" title={f.name}>
+                    {f.name}
+                  </span>
+                  <span className={`kb-file__status kb-file__status--${f.status}`}>
+                    {f.status === 'ready' ? 'Ready' : f.status === 'failed' ? 'Failed' : 'Indexing…'}
+                  </span>
+                  <IconButton
+                    name="trash"
+                    label={`Remove ${f.name}`}
+                    size={16}
+                    disabled={busyFileId === f.id}
+                    onClick={() => onRemoveFile(f.id)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {kbFiles.length > 0 && (
+            <div className="setting-row">
+              <div className="setting-row__body">
+                <div className="setting-row__sub">
+                  {kbFiles.length} {kbFiles.length === 1 ? 'document' : 'documents'} indexed.
+                </div>
+              </div>
+              <button type="button" className="btn btn--ghost btn--danger" onClick={onClearKb}>
+                Clear all
+              </button>
+            </div>
+          )}
         </div>
       )}
 

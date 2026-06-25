@@ -142,6 +142,7 @@ describe('runAgent', () => {
     expect(events[events.length - 1]).toEqual({
       type: 'error',
       message: 'Stopped: tool-call budget exceeded.',
+      code: 'budget_exceeded',
     });
   });
 

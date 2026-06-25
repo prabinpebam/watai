@@ -26,6 +26,24 @@ describe('normalizeHttpError', () => {
     expect(e.code).toBe('content_filtered');
   });
 
+  it('maps an unsupported-tool 400 to tool_unsupported', async () => {
+    const body = JSON.stringify({ error: { message: "Tool 'code_interpreter' is not supported with this model." } });
+    const e = await normalizeHttpError(res(400, body));
+    expect(e.code).toBe('tool_unsupported');
+  });
+
+  it('maps a vector-store 404 to file_search_unavailable', async () => {
+    const body = JSON.stringify({ error: { message: 'Vector store vs_1 was not found.' } });
+    const e = await normalizeHttpError(res(404, body));
+    expect(e.code).toBe('file_search_unavailable');
+  });
+
+  it('maps a forbidden tool 403 to tool_unauthorized', async () => {
+    const body = JSON.stringify({ error: { message: 'The web_search tool is not allowed for this resource.' } });
+    const e = await normalizeHttpError(res(403, body));
+    expect(e.code).toBe('tool_unauthorized');
+  });
+
   it('extracts the provider error message as detail', async () => {
     const body = JSON.stringify({ error: { message: 'deployment xyz does not exist' } });
     const e = await normalizeHttpError(res(404, body));

@@ -155,10 +155,23 @@ export function ImagesView() {
           <div className="viewer__stage">
             {urls[viewer.id] && <img src={urls[viewer.id]} alt={viewer.prompt} />}
           </div>
-          <div className="viewer__bar" style={{ justifyContent: 'center' }}>
-            <span className="muted" style={{ color: '#aaa' }}>
-              <Icon name="image" size={14} style={{ verticalAlign: '-2px' }} /> {viewer.size}
-            </span>
+          <div className="viewer__meta">
+            <div className="viewer__meta-row">
+              <span className="muted" style={{ color: '#aaa' }}>
+                <Icon name="image" size={14} style={{ verticalAlign: '-2px' }} /> {viewer.size}
+              </span>
+              {viewer.model && (
+                <span className="muted" style={{ color: '#aaa' }}>
+                  <Icon name="sparkle" size={14} style={{ verticalAlign: '-2px' }} /> {viewer.model}
+                </span>
+              )}
+            </div>
+            {viewer.expandedPrompt && viewer.expandedPrompt !== viewer.prompt && (
+              <details className="viewer__prompt">
+                <summary>Prompt the model used</summary>
+                <p>{viewer.expandedPrompt}</p>
+              </details>
+            )}
           </div>
         </div>
       )}
