@@ -76,6 +76,7 @@ const ICONS: Record<string, string> = {
   play: 'play_arrow',
   pause: 'pause',
   wrap: 'wrap_text',
+  eye: 'visibility',
 };
 
 interface IconProps {

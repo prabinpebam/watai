@@ -1667,11 +1667,13 @@ button.source-chip:hover {
   margin: var(--space-2) 0;
 }
 .attach-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 .attach-thumb {
+  width: 180px;
+  max-width: 100%;
   padding: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);

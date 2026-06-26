@@ -17,18 +17,32 @@ function extractText(node: ReactNode): string {
   return '';
 }
 
-/** ChatGPT-style fenced code block: header [lang · wrap · copy] + scrollable body. */
+/** Which live preview, if any, a fenced block supports. SVG is detected from the language or a
+ *  leading `<svg>`; HTML from the language only (to avoid false positives on arbitrary markup). */
+function previewKind(lang: string | undefined, code: string): 'svg' | 'html' | null {
+  const l = (lang || '').toLowerCase();
+  if (l === 'svg') return 'svg';
+  if (l === 'html' || l === 'htm' || l === 'xhtml') return 'html';
+  if ((l === '' || l === 'xml' || l === 'markup') && /^\s*<svg[\s>]/i.test(code)) return 'svg';
+  return null;
+}
+
+/** ChatGPT-style fenced code block: header [lang · preview? · wrap · copy] + scrollable body.
+ *  SVG/HTML blocks can toggle a live, sandboxed preview. */
 function CodeBlock({ children }: { children?: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const [wrap, setWrap] = useState(false);
+  const [preview, setPreview] = useState(false);
 
   const codeEl: any = Array.isArray(children) ? children[0] : children;
   const codeProps = codeEl?.props ?? {};
   const className: string = codeProps.className || '';
   const lang = /language-([\w-]+)/.exec(className)?.[1];
+  const code = extractText(codeProps.children);
+  const kind = previewKind(lang, code);
 
   const copy = () => {
-    navigator.clipboard.writeText(extractText(codeProps.children)).then(() => {
+    navigator.clipboard.writeText(code).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
@@ -42,22 +56,50 @@ function CodeBlock({ children }: { children?: ReactNode }) {
           {lang || 'text'}
         </span>
         <div className="code-block__actions">
-          <button
-            type="button"
-            className={`code-block__btn ${wrap ? 'code-block__btn--on' : ''}`}
-            onClick={() => setWrap((w) => !w)}
-            title={wrap ? 'Disable soft wrap' : 'Soft wrap'}
-            aria-pressed={wrap}
-          >
-            <Icon name="wrap" size={14} />
-          </button>
+          {kind && (
+            <button
+              type="button"
+              className={`code-block__btn ${preview ? 'code-block__btn--on' : ''}`}
+              onClick={() => setPreview((p) => !p)}
+              title={preview ? 'Show code' : `Preview ${kind.toUpperCase()}`}
+              aria-pressed={preview}
+            >
+              <Icon name={preview ? 'code' : 'eye'} size={14} />
+              <span>{preview ? 'Code' : 'Preview'}</span>
+            </button>
+          )}
+          {!preview && (
+            <button
+              type="button"
+              className={`code-block__btn ${wrap ? 'code-block__btn--on' : ''}`}
+              onClick={() => setWrap((w) => !w)}
+              title={wrap ? 'Disable soft wrap' : 'Soft wrap'}
+              aria-pressed={wrap}
+            >
+              <Icon name="wrap" size={14} />
+            </button>
+          )}
           <button type="button" className="code-block__btn" onClick={copy} title="Copy code">
             <Icon name={copied ? 'check' : 'copy'} size={14} />
             <span>{copied ? 'Copied' : 'Copy'}</span>
           </button>
         </div>
       </div>
-      <pre className={`code-block__pre ${wrap ? 'code-block__pre--wrap' : ''}`}>{children}</pre>
+      {preview && kind === 'svg' ? (
+        <div className="code-block__preview">
+          <img
+            className="code-block__svg"
+            src={`data:image/svg+xml;utf8,${encodeURIComponent(code)}`}
+            alt="SVG preview"
+          />
+        </div>
+      ) : preview && kind === 'html' ? (
+        // Sandboxed WITHOUT allow-same-origin: scripts run in an opaque origin and cannot reach the
+        // app's DOM, cookies, or storage — a safe live preview of generated/untrusted HTML.
+        <iframe className="code-block__html" title="HTML preview" sandbox="allow-scripts" srcDoc={code} />
+      ) : (
+        <pre className={`code-block__pre ${wrap ? 'code-block__pre--wrap' : ''}`}>{children}</pre>
+      )}
     </div>
   );
 }

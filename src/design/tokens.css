@@ -64,6 +64,8 @@
   --color-text-on-media-muted: #aaaaaa;
   --color-on-media-hover: rgba(255, 255, 255, 0.12);
   --color-media-bg: #000000;
+  /* Canvas behind rendered SVG / HTML code previews (browser-like white, theme-independent). */
+  --color-preview-bg: #ffffff;
   /* Text highlight (search match / <mark>) — theme-independent. */
   --color-mark-bg: #fde68a;
   --color-mark-text: #1f2937;
