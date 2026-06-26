@@ -4,7 +4,6 @@ import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
 import { useRuns } from './runStore';
 import { indexThreadDocuments } from '../../ai/fileSearch';
-import { getThreadVectorStore, setThreadVectorStore } from '../../data/threadFiles';
 import type { Attachment, Message } from '../../lib/types';
 
 export { DEFAULT_CHAT_MODEL } from './runStore';
@@ -100,12 +99,15 @@ export function useChat(threadId: string, temporary = false) {
         setIndexing(true);
         toast(`Indexing ${docs.length} file${docs.length === 1 ? '' : 's'}…`, 'info');
         try {
-          const existingStore = await getThreadVectorStore(threadId);
+          const existingStore = (await repo.getThread(threadId))?.vectorStoreId;
           const { vectorStoreId, indexed, failed } = await indexThreadDocuments(
             docs.map((f) => ({ file: f, name: f.name })),
             existingStore,
           );
-          if (vectorStoreId) await setThreadVectorStore(threadId, vectorStoreId);
+          // Persist the store id ON THE THREAD so it syncs across devices (file search travels).
+          if (vectorStoreId && vectorStoreId !== existingStore) {
+            await repo.updateThread(threadId, { vectorStoreId });
+          }
           if (failed && !indexed) toast('Could not index the file(s)', 'error');
           else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
           else toast('File ready — you can ask about it', 'success');

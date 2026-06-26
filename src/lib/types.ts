@@ -13,6 +13,8 @@ export interface Thread {
   archived: boolean;
   temporary: boolean;
   model?: string;
+  /** Vector store id holding this thread's uploaded documents (thread-scoped file search). */
+  vectorStoreId?: string;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;

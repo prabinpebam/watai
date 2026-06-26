@@ -251,4 +251,65 @@ describe('cloud mappers', () => {
     };
     expect(appendBodyFromMessage(m)).toEqual({ id: 'm1', role: 'user', content: 'hi' });
   });
+
+  it('appendBodyFromMessage syncs full citations and tool result previews', () => {
+    const m: Message = {
+      id: 'm1',
+      threadId: 't1',
+      role: 'assistant',
+      content: 'a',
+      status: 'complete',
+      createdAt: '2026-01-01T00:00:00Z',
+      toolCalls: [
+        { id: 'tc1', kind: 'code_interpreter', status: 'done', summary: 'Ran code', resultPreview: 'print(1)\n1' },
+      ],
+      citations: [
+        {
+          source: 'web',
+          url: 'https://a.com/',
+          title: 'A',
+          content: 'the raw snippet',
+          favicon: 'https://a.com/f.ico',
+          bingQueryUrl: 'https://bing/q',
+        },
+      ],
+    };
+    const body = appendBodyFromMessage(m);
+    expect(body.toolCalls).toEqual([
+      { id: 'tc1', kind: 'code_interpreter', status: 'done', summary: 'Ran code', resultPreview: 'print(1)\n1' },
+    ]);
+    expect(body.citations).toEqual([
+      {
+        source: 'web',
+        url: 'https://a.com/',
+        title: 'A',
+        content: 'the raw snippet',
+        favicon: 'https://a.com/f.ico',
+        bingQueryUrl: 'https://bing/q',
+      },
+    ]);
+  });
+
+  it('updateBodyFromPatch passes through vectorStoreId', () => {
+    expect(updateBodyFromPatch({ vectorStoreId: 'vs_1' } as Partial<Thread>)).toEqual({
+      vectorStoreId: 'vs_1',
+    });
+  });
+
+  it('threadFromRecord surfaces vectorStoreId', () => {
+    const r: ThreadRecord = {
+      id: 't',
+      userId: 'u',
+      title: 'T',
+      pinned: false,
+      archived: false,
+      temporary: false,
+      messageCount: 0,
+      createdAt: 'x',
+      updatedAt: 'x',
+      deletedAt: null,
+      vectorStoreId: 'vs_1',
+    };
+    expect(threadFromRecord(r).vectorStoreId).toBe('vs_1');
+  });
 });

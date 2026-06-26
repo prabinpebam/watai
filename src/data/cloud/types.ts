@@ -13,6 +13,7 @@ export interface ThreadRecord {
   temporary: boolean;
   messageCount: number;
   lastMessagePreview?: string;
+  vectorStoreId?: string;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -53,14 +54,22 @@ export interface ToolCallRecord {
   name?: string;
   status: 'running' | 'done' | 'error';
   summary?: string;
+  /** Bounded tool output (e.g. code-interpreter result) shown in the tool card. */
+  resultPreview?: string;
 }
 
-/** Grounding citation record synced with a message. */
+/** Grounding citation record synced with a message (full, so the source pane matches everywhere). */
 export interface CitationRecord {
   url?: string;
   title?: string;
   source?: 'web' | 'file';
   filename?: string;
+  content?: string;
+  favicon?: string;
+  bingQueryUrl?: string;
+  fileId?: string;
+  startIndex?: number;
+  endIndex?: number;
 }
 
 export interface CreateThreadBody {
@@ -68,13 +77,15 @@ export interface CreateThreadBody {
   id?: string;
   title: string;
   temporary?: boolean;
+  vectorStoreId?: string;
 }
 
-/** The server's update schema is strict: only these three fields are accepted. */
+/** The server's update schema is strict: only these fields are accepted. */
 export interface UpdateThreadBody {
   title?: string;
   pinned?: boolean;
   archived?: boolean;
+  vectorStoreId?: string;
 }
 
 export interface AppendMessageBody {
@@ -128,6 +139,7 @@ export function threadFromRecord(r: ThreadRecord): Thread {
     deletedAt: r.deletedAt,
     messageCount: r.messageCount,
     ...(r.lastMessagePreview !== undefined ? { lastMessagePreview: r.lastMessagePreview } : {}),
+    ...(r.vectorStoreId !== undefined ? { vectorStoreId: r.vectorStoreId } : {}),
   };
 }
 
@@ -137,6 +149,7 @@ export function updateBodyFromPatch(patch: Partial<Thread>): UpdateThreadBody {
   if (patch.title !== undefined) body.title = patch.title;
   if (patch.pinned !== undefined) body.pinned = patch.pinned;
   if (patch.archived !== undefined) body.archived = patch.archived;
+  if (patch.vectorStoreId !== undefined) body.vectorStoreId = patch.vectorStoreId;
   return body;
 }
 
@@ -196,6 +209,7 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
             // Persisted activity is terminal; coerce transient UI states to 'done'.
             status: t.status === 'done' || t.status === 'error' ? t.status : ('done' as const),
             ...(t.summary !== undefined ? { summary: t.summary } : {}),
+            ...(t.resultPreview !== undefined ? { resultPreview: t.resultPreview } : {}),
           })),
         }
       : {}),
@@ -206,6 +220,12 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
             ...(c.title !== undefined ? { title: c.title } : {}),
             ...(c.source !== undefined ? { source: c.source } : {}),
             ...(c.filename !== undefined ? { filename: c.filename } : {}),
+            ...(c.content !== undefined ? { content: c.content } : {}),
+            ...(c.favicon !== undefined ? { favicon: c.favicon } : {}),
+            ...(c.bingQueryUrl !== undefined ? { bingQueryUrl: c.bingQueryUrl } : {}),
+            ...(c.fileId !== undefined ? { fileId: c.fileId } : {}),
+            ...(c.startIndex !== undefined ? { startIndex: c.startIndex } : {}),
+            ...(c.endIndex !== undefined ? { endIndex: c.endIndex } : {}),
           })),
         }
       : {}),

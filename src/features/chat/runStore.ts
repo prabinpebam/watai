@@ -14,7 +14,6 @@ import { isAiError } from '../../ai/errors';
 import { detectCapabilities } from '../../ai/capabilities';
 import { runAgent, type AgentEvent, type Turn } from '../../ai/orchestrator';
 import { assembleTools, executeTool, isDestructiveTool, resolveVectorStores } from '../../ai/tools';
-import { getThreadVectorStore } from '../../data/threadFiles';
 import { b64ToBlob } from '../../ai/image';
 import { useUi } from '../../state/store';
 import type { AiError, CapabilityMatrix, Citation, ImageRef, Message, ToolCall } from '../../lib/types';
@@ -253,7 +252,7 @@ export const useRuns = create<RunsStore>((set, get) => ({
         caps = await detectCapabilities(config);
         if (caps.responses) {
           const tavilyKey = await getTavilyKey();
-          const threadStoreId = await getThreadVectorStore(threadId);
+          const threadStoreId = (await repo.getThread(threadId))?.vectorStoreId;
           const toolCtx = {
             tavilyConfigured: !!tavilyKey,
             vectorStoreIds: resolveVectorStores({
