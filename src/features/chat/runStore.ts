@@ -4,7 +4,7 @@
 // of the in-progress message is kept in IndexedDB so a browser close mid-stream is not fully
 // lost — orphaned snapshots are restored as `interrupted` messages on next load.
 import { create } from 'zustand';
-import { repo } from '../../data';
+import { repo, cloudApi, syncNow } from '../../data';
 import { getApiConfig, getTavilyKey } from '../../data/secureStore';
 import { idbKvStore } from '../../data/sync/kvStore';
 import { newId } from '../../lib/ids';
@@ -15,7 +15,9 @@ import { detectCapabilities } from '../../ai/capabilities';
 import { runAgent, type AgentEvent, type Turn } from '../../ai/orchestrator';
 import { assembleTools, executeTool, isDestructiveTool, resolveVectorStores } from '../../ai/tools';
 import { b64ToBlob } from '../../ai/image';
+import { runOnServer } from './serverRun';
 import { useUi } from '../../state/store';
+import type { SubmitRunBody } from '../../data/cloud/types';
 import type { AiError, CapabilityMatrix, Citation, ImageRef, Message, ToolCall } from '../../lib/types';
 
 export const DEFAULT_CHAT_MODEL = 'gpt-5.4';
@@ -135,19 +137,67 @@ interface ActiveRun {
 
 interface RunsStore {
   runs: Record<string, ActiveRun>;
+  /** Threads with an active server-authoritative run (generation owned by the backend). */
+  serverRunning: Record<string, true>;
   isRunning: (threadId: string) => boolean;
   stop: (threadId: string) => void;
   /** Begin generating the assistant reply for `history`. Fire-and-forget; renders via `runs`. */
   startRun: (threadId: string, history: Message[], mockAi: boolean) => Promise<void>;
+  /** Submit a server-authoritative run; generation completes server-side even if this client
+   *  closes. Renders the reply by polling cloud sync. Fire-and-forget. */
+  startServerRun: (threadId: string, body: SubmitRunBody) => Promise<void>;
 }
 
 export const useRuns = create<RunsStore>((set, get) => ({
   runs: {},
+  serverRunning: {},
 
-  isRunning: (threadId) => !!get().runs[threadId],
+  isRunning: (threadId) => !!get().runs[threadId] || !!get().serverRunning[threadId],
 
   stop: (threadId) => {
     get().runs[threadId]?.controller.abort();
+  },
+
+  startServerRun: async (threadId, body) => {
+    if (get().isRunning(threadId) || startingThreads.has(threadId)) return; // one run per thread
+    set((s) => ({ serverRunning: { ...s.serverRunning, [threadId]: true } }));
+    const ui = useUi.getState();
+    ui.setStream({ status: 'streaming', threadId, messageId: body.clientMessageId ?? '' });
+    try {
+      const run = await runOnServer(
+        {
+          sync: syncNow,
+          submitRun: (tid, b) => cloudApi.submitRun(tid, b),
+          getRun: (tid, rid) => cloudApi.getRun(tid, rid),
+          onThreadsChanged: (ids) => {
+            if (ids.size === 0) return;
+            const u = useUi.getState();
+            u.bumpThreads();
+            ids.forEach((id) => u.bumpThread(id));
+          },
+          sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+          now: () => Date.now(),
+        },
+        threadId,
+        body,
+      );
+      if (run?.status === 'error') {
+        useUi.getState().pushToast(run.error?.message ?? 'The response failed on the server.', 'error');
+      }
+    } catch (e) {
+      useUi
+        .getState()
+        .pushToast(e instanceof Error ? e.message : 'Could not start the response.', 'error');
+    } finally {
+      set((s) => {
+        const next = { ...s.serverRunning };
+        delete next[threadId];
+        return { serverRunning: next };
+      });
+      const u = useUi.getState();
+      u.setStream({ status: 'idle' });
+      u.bumpThread(threadId); // final reload so the completed message is shown
+    }
   },
 
   startRun: async (threadId, history, mockAi) => {

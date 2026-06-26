@@ -147,6 +147,83 @@ export interface InviteRecord {
   createdAt: string;
 }
 
+// --- credential vault (server-side AI keys) ---
+
+/** Model deployment names configured server-side (mirrors api credentials schema). */
+export interface ModelDeployments {
+  chat: string;
+  image?: string;
+  transcribe?: string;
+  tts?: string;
+}
+
+/**
+ * Non-secret credential status (GET/PUT /credentials). This is the ONLY credential shape the
+ * server returns — it never carries the key or any ciphertext, only a last-4 hint.
+ */
+export interface CredentialStatus {
+  configured: boolean;
+  baseUrl?: string;
+  models?: ModelDeployments;
+  keyHint?: string;
+  tavilyConfigured: boolean;
+  tavilyHint?: string | null;
+}
+
+/** Write payload for PUT /credentials. The key is encrypted server-side and never returned. */
+export interface CredentialsInput {
+  /** Bare resource name or full base URL; the server normalizes to the `…/openai/v1` base. */
+  baseUrl: string;
+  models: ModelDeployments;
+  key: string;
+  tavilyKey?: string;
+}
+
+// --- runs (server-authoritative generation) ---
+
+export type RunStatus = 'queued' | 'running' | 'complete' | 'error' | 'canceled';
+
+export interface RunError {
+  code: string;
+  message: string;
+}
+
+/** Server run record (GET /threads/{id}/runs/{runId}). One row per generation. */
+export interface RunRecord {
+  id: string;
+  threadId: string;
+  userId: string;
+  assistantMessageId: string;
+  status: RunStatus;
+  instanceId?: string | null;
+  tools: string[];
+  allowDestructive: string[];
+  prompt?: { text?: string; attachments?: AttachmentRecord[] };
+  error?: RunError | null;
+  createdAt: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  heartbeatAt: string;
+}
+
+/** Submit a run (POST /threads/{id}/runs). Generation continues server-side after the 202. */
+export interface SubmitRunBody {
+  text?: string;
+  attachments?: AttachmentRecord[];
+  /** Idempotency key for the user message — pass the locally-created user message id so the
+   *  server's copy and the local one converge to a single record when sync pulls it back. */
+  clientMessageId?: string;
+  tools?: string[];
+  allowDestructive?: string[];
+}
+
+/** The 202 acknowledgement from POST /threads/{id}/runs. */
+export interface SubmitRunResult {
+  runId: string;
+  assistantMessageId: string;
+  status: RunStatus;
+}
+
 export function threadFromRecord(r: ThreadRecord): Thread {
   return {
     id: r.id,

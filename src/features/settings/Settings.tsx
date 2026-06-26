@@ -12,7 +12,8 @@ import { repo, cloudApi } from '../../data';
 import { kvGet } from '../../data/db';
 import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import { useMe } from '../../auth/access';
-import type { InviteRecord, MeInfo } from '../../data/cloud/types';
+import type { CredentialStatus, InviteRecord, MeInfo } from '../../data/cloud/types';
+import { isServerRunsEnabled, setServerRunsEnabled } from '../../lib/flags';
 import {
   getApiConfig,
   saveApiConfig,
@@ -560,12 +561,21 @@ function Stat({ value, label }: { value: string; label: string }) {
 
 function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
   const pushToast = useUi((s) => s.pushToast);
+  const me = useMe();
   const [config, setConfig] = useState<ApiConfig | null>(null);
   const [key, setKey] = useState('');
+  const [serverRuns, setServerRuns] = useState(isServerRunsEnabled());
+  const [serverStatus, setServerStatus] = useState<CredentialStatus | null>(null);
+  const [pushingToServer, setPushingToServer] = useState(false);
 
   useEffect(() => {
     getApiConfig().then(setConfig);
     getApiKey().then((k) => setKey(k ?? ''));
+    // Server credential status requires sign-in; treat any failure as "not configured / signed out".
+    cloudApi
+      .getCredentialStatus()
+      .then(setServerStatus)
+      .catch(() => setServerStatus(null));
   }, []);
 
   if (!config) return <p className="muted">Loading…</p>;
@@ -582,8 +592,78 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
     pushToast('Saved', 'success');
   };
 
+  // Encrypt + store the current endpoint/models/key in the server vault (write-only; the key is
+  // never returned). Required before server generation can run.
+  const saveToServer = async () => {
+    if (!key.trim()) {
+      pushToast('Enter an API key first.', 'error');
+      return;
+    }
+    setPushingToServer(true);
+    try {
+      const status = await cloudApi.putCredentials({
+        baseUrl: normalizeBaseUrl(config.baseUrl),
+        models: {
+          chat: config.models.chat,
+          ...(config.models.image ? { image: config.models.image } : {}),
+          ...(config.models.transcribe ? { transcribe: config.models.transcribe } : {}),
+          ...(config.models.tts ? { tts: config.models.tts } : {}),
+        },
+        key: key.trim(),
+      });
+      setServerStatus(status);
+      pushToast('Keys stored securely on the server', 'success');
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Could not store keys on the server.', 'error');
+    } finally {
+      setPushingToServer(false);
+    }
+  };
+
+  const onToggleServerRuns = (v: boolean) => {
+    setServerRuns(v);
+    setServerRunsEnabled(v);
+    pushToast(v ? 'Server generation on' : 'Server generation off');
+  };
+
   return (
     <>
+      <div className="settings-card" style={{ padding: 'var(--space-5)', marginBottom: 'var(--space-5)' }}>
+        <div className="col" style={{ gap: 'var(--space-4)' }}>
+          <div className="setting-row">
+            <div className="setting-row__body">
+              <div className="setting-row__title">Generate on the server (preview)</div>
+              <div className="setting-row__sub">
+                Run generation in the cloud so a reply finishes and is saved even if you close the app
+                or lock your phone. Requires cloud sign-in and keys stored on the server below.
+              </div>
+            </div>
+            <Switch
+              checked={serverRuns}
+              onChange={onToggleServerRuns}
+              label="Server generation"
+              disabled={!me || !serverStatus?.configured}
+            />
+          </div>
+          {!me && (
+            <p className="muted">Sign in to your account in Data controls to use server generation.</p>
+          )}
+          <div className="setting-row">
+            <div className="setting-row__body">
+              <div className="setting-row__title">Server keys</div>
+              <div className="setting-row__sub">
+                {serverStatus?.configured
+                  ? `Stored on the server · key ••${serverStatus.keyHint ?? ''}`
+                  : 'Not stored on the server yet. Uses the endpoint, models, and key below.'}
+              </div>
+            </div>
+            <Button variant="secondary" onClick={saveToServer} loading={pushingToServer} disabled={!me}>
+              {serverStatus?.configured ? 'Update server keys' : 'Store on server'}
+            </Button>
+          </div>
+        </div>
+      </div>
+
       <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
         <div className="col" style={{ gap: 'var(--space-5)' }}>
           <Field

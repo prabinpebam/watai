@@ -7,6 +7,7 @@ import { useRuns } from './runStore';
 import { orderMessages } from './ordering';
 import { lockHeldByOther } from './lock';
 import { indexThreadDocuments } from '../../ai/fileSearch';
+import { isServerRunsEnabled } from '../../lib/flags';
 import type { Attachment, Message } from '../../lib/types';
 
 export { DEFAULT_CHAT_MODEL } from './runStore';
@@ -42,6 +43,7 @@ export function useChat(threadId: string, temporary = false) {
   const [indexing, setIndexing] = useState(false);
   const busyRef = useRef(false);
   const run = useRuns((s) => s.runs[threadId]);
+  const serverRun = useRuns((s) => s.serverRunning[threadId]);
   const threadRev = useUi((s) => s.threadRev[threadId] ?? 0);
   const mockAi = useUi((s) => s.mockAi);
   const setThreadLock = useUi((s) => s.setThreadLock);
@@ -169,7 +171,15 @@ export function useChat(threadId: string, temporary = false) {
         }
       }
       const history = await repo.listMessages(threadId);
-      void useRuns.getState().startRun(threadId, history, mockAi);
+      if (isServerRunsEnabled() && !mockAi) {
+        // Server-authoritative: the backend generates + persists the reply, which survives this
+        // client closing. Pass the local message id as the idempotency key so the server's copy of
+        // the user turn converges with the local one. (Attachments over server runs are a follow-up;
+        // text prompts route to the server.)
+        void useRuns.getState().startServerRun(threadId, { text: trimmed, clientMessageId: userMsg.id });
+      } else {
+        void useRuns.getState().startRun(threadId, history, mockAi);
+      }
       useUi.getState().bumpThreads();
     },
     [threadId, temporary, mockAi],
@@ -189,5 +199,5 @@ export function useChat(threadId: string, temporary = false) {
 
   const stop = useCallback(() => useRuns.getState().stop(threadId), [threadId]);
 
-  return { messages, loading, send, regenerate, stop, streaming: !!run || indexing, indexing, lockedBy };
+  return { messages, loading, send, regenerate, stop, streaming: !!run || !!serverRun || indexing, indexing, lockedBy };
 }

@@ -16,9 +16,14 @@ import {
 import type {
   AppendMessageBody,
   CreateThreadBody,
+  CredentialStatus,
+  CredentialsInput,
   MessageRecord,
+  RunRecord,
   SasRequestBody,
   SasResult,
+  SubmitRunBody,
+  SubmitRunResult,
   ThreadRecord,
   UpdateThreadBody,
 } from '../cloud/types';
@@ -312,6 +317,58 @@ class FakeCloud implements CloudApi {
   }
   async getMe() {
     return { email: 'u@example.com', isAdmin: false, isInvited: true };
+  }
+  async getCredentialStatus(): Promise<CredentialStatus> {
+    this.calls.push('getCredentialStatus');
+    return { configured: false, tavilyConfigured: false };
+  }
+  async putCredentials(body: CredentialsInput): Promise<CredentialStatus> {
+    this.calls.push('putCredentials');
+    return {
+      configured: true,
+      baseUrl: body.baseUrl,
+      models: body.models,
+      tavilyConfigured: !!body.tavilyKey,
+    };
+  }
+  async deleteCredentials(): Promise<void> {
+    this.calls.push('deleteCredentials');
+  }
+  async submitRun(threadId: string, body: SubmitRunBody): Promise<SubmitRunResult> {
+    this.calls.push(`submitRun:${threadId}`);
+    return { runId: 'r1', assistantMessageId: body.clientMessageId ?? 'm', status: 'queued' };
+  }
+  async getRun(threadId: string, runId: string): Promise<RunRecord> {
+    this.calls.push(`getRun:${threadId}:${runId}`);
+    return {
+      id: runId,
+      threadId,
+      userId: 'u',
+      assistantMessageId: 'm',
+      status: 'complete',
+      tools: [],
+      allowDestructive: [],
+      createdAt: this.now(),
+      heartbeatAt: this.now(),
+    };
+  }
+  async listActiveRuns(threadId: string): Promise<RunRecord[]> {
+    this.calls.push(`listActiveRuns:${threadId}`);
+    return [];
+  }
+  async cancelRun(threadId: string, runId: string): Promise<RunRecord> {
+    this.calls.push(`cancelRun:${threadId}:${runId}`);
+    return {
+      id: runId,
+      threadId,
+      userId: 'u',
+      assistantMessageId: 'm',
+      status: 'canceled',
+      tools: [],
+      allowDestructive: [],
+      createdAt: this.now(),
+      heartbeatAt: this.now(),
+    };
   }
   async listInvites() {
     return [];

@@ -6,11 +6,16 @@ import { apiBaseUrl } from './env';
 import type {
   AppendMessageBody,
   CreateThreadBody,
+  CredentialStatus,
+  CredentialsInput,
   InviteRecord,
   MeInfo,
   MessageRecord,
+  RunRecord,
   SasRequestBody,
   SasResult,
+  SubmitRunBody,
+  SubmitRunResult,
   ThreadRecord,
   UpdateThreadBody,
 } from './types';
@@ -195,6 +200,48 @@ export class WataiApiClient implements CloudApi {
     return this.request('POST', '/assets/sas', body);
   }
 
+  // --- credential vault (server-side AI keys) ---
+  getCredentialStatus(): Promise<CredentialStatus> {
+    return this.request('GET', '/credentials');
+  }
+
+  /** Write the AI credentials. The key is encrypted server-side; only non-secret status returns. */
+  putCredentials(body: CredentialsInput): Promise<CredentialStatus> {
+    return this.request('PUT', '/credentials', body);
+  }
+
+  deleteCredentials(): Promise<void> {
+    return this.request('DELETE', '/credentials');
+  }
+
+  // --- runs (server-authoritative generation) ---
+  /** Submit a prompt; the server generates + persists the reply even if this client disconnects. */
+  submitRun(threadId: string, body: SubmitRunBody): Promise<SubmitRunResult> {
+    return this.request('POST', `/threads/${encodeURIComponent(threadId)}/runs`, body);
+  }
+
+  getRun(threadId: string, runId: string): Promise<RunRecord> {
+    return this.request(
+      'GET',
+      `/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}`,
+    );
+  }
+
+  async listActiveRuns(threadId: string): Promise<RunRecord[]> {
+    const out = await this.request<{ runs: RunRecord[] }>(
+      'GET',
+      `/threads/${encodeURIComponent(threadId)}/runs`,
+    );
+    return out.runs;
+  }
+
+  cancelRun(threadId: string, runId: string): Promise<RunRecord> {
+    return this.request(
+      'DELETE',
+      `/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}`,
+    );
+  }
+
   // --- access / invites ---
   getMe(): Promise<MeInfo> {
     return this.request('GET', '/me');
@@ -254,6 +301,13 @@ export interface CloudApi {
   getSettings(): Promise<Settings>;
   patchSettings(patch: Partial<Settings>): Promise<Settings>;
   requestSas(body: SasRequestBody): Promise<SasResult>;
+  getCredentialStatus(): Promise<CredentialStatus>;
+  putCredentials(body: CredentialsInput): Promise<CredentialStatus>;
+  deleteCredentials(): Promise<void>;
+  submitRun(threadId: string, body: SubmitRunBody): Promise<SubmitRunResult>;
+  getRun(threadId: string, runId: string): Promise<RunRecord>;
+  listActiveRuns(threadId: string): Promise<RunRecord[]>;
+  cancelRun(threadId: string, runId: string): Promise<RunRecord>;
   getMe(): Promise<MeInfo>;
   listInvites(): Promise<InviteRecord[]>;
   createInvite(email: string): Promise<InviteRecord>;

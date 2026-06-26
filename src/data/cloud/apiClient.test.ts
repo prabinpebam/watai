@@ -200,6 +200,95 @@ describe('WataiApiClient', () => {
     expect(err?.code).toBe('conflict');
     expect((err?.details as { lock: typeof holder }).lock.deviceLabel).toBe('Safari on iPhone');
   });
+
+  it('GETs the credential status', async () => {
+    const { fetchImpl, calls } = stubFetch([
+      { status: 200, body: { configured: true, keyHint: '1234', tavilyConfigured: false } },
+    ]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    const status = await client.getCredentialStatus();
+
+    expect(calls[0].method).toBe('GET');
+    expect(calls[0].url).toBe('https://api.test/api/credentials');
+    expect(status).toMatchObject({ configured: true, keyHint: '1234' });
+  });
+
+  it('PUTs credentials and returns non-secret status (key never echoed)', async () => {
+    const { fetchImpl, calls } = stubFetch([
+      { status: 200, body: { configured: true, models: { chat: 'gpt' }, keyHint: 'cdef', tavilyConfigured: false } },
+    ]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    const status = await client.putCredentials({
+      baseUrl: 'my-res',
+      models: { chat: 'gpt' },
+      key: 'sk-secret',
+    });
+
+    expect(calls[0].method).toBe('PUT');
+    expect(calls[0].url).toBe('https://api.test/api/credentials');
+    expect(calls[0].body).toEqual({ baseUrl: 'my-res', models: { chat: 'gpt' }, key: 'sk-secret' });
+    expect(status.configured).toBe(true);
+    expect(status).not.toHaveProperty('key');
+  });
+
+  it('DELETEs credentials (204)', async () => {
+    const { fetchImpl, calls } = stubFetch([{ status: 204 }]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    await expect(client.deleteCredentials()).resolves.toBeUndefined();
+    expect(calls[0].method).toBe('DELETE');
+    expect(calls[0].url).toBe('https://api.test/api/credentials');
+  });
+
+  it('submits a run and returns the 202 acknowledgement', async () => {
+    const { fetchImpl, calls } = stubFetch([
+      { status: 202, body: { runId: 'r1', assistantMessageId: 'm2', status: 'queued' } },
+    ]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    const out = await client.submitRun('t1', { text: 'hi', clientMessageId: 'm1' });
+
+    expect(calls[0].method).toBe('POST');
+    expect(calls[0].url).toBe('https://api.test/api/threads/t1/runs');
+    expect(calls[0].body).toEqual({ text: 'hi', clientMessageId: 'm1' });
+    expect(out).toEqual({ runId: 'r1', assistantMessageId: 'm2', status: 'queued' });
+  });
+
+  it('gets a run by id (path ids encoded)', async () => {
+    const { fetchImpl, calls } = stubFetch([{ status: 200, body: { id: 'r1', status: 'running' } }]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    const run = await client.getRun('t1', 'r1');
+
+    expect(calls[0].method).toBe('GET');
+    expect(calls[0].url).toBe('https://api.test/api/threads/t1/runs/r1');
+    expect(run.status).toBe('running');
+  });
+
+  it('lists active runs from the envelope', async () => {
+    const { fetchImpl, calls } = stubFetch([
+      { status: 200, body: { runs: [{ id: 'r1', status: 'queued' }] } },
+    ]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    const runs = await client.listActiveRuns('t1');
+
+    expect(calls[0].url).toBe('https://api.test/api/threads/t1/runs');
+    expect(runs).toEqual([{ id: 'r1', status: 'queued' }]);
+  });
+
+  it('cancels a run via DELETE', async () => {
+    const { fetchImpl, calls } = stubFetch([{ status: 200, body: { id: 'r1', status: 'canceled' } }]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    const run = await client.cancelRun('t1', 'r1');
+
+    expect(calls[0].method).toBe('DELETE');
+    expect(calls[0].url).toBe('https://api.test/api/threads/t1/runs/r1');
+    expect(run.status).toBe('canceled');
+  });
 });
 
 describe('cloud mappers', () => {
