@@ -615,6 +615,10 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
         ...(tavily ? { tavilyKey: tavily } : {}),
       });
       await saveTavilyKey(tavily); // keep the local web-search key in sync with the vault
+      // Also persist the config locally so the capability probe (for server-run tools) + the
+      // in-browser path have the endpoint/key without a separate "Save changes".
+      await saveApiConfig({ ...config, baseUrl: normalizeBaseUrl(config.baseUrl) });
+      await saveApiKey(key.trim());
       setServerStatus(status);
       pushToast('Keys stored securely on the server', 'success');
     } catch (e) {

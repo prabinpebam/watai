@@ -3,7 +3,7 @@ import type { ServiceClock } from './threadService';
 import type { DecryptedCredentials } from './credentialService';
 import type { RunStore } from '../ports/runStore';
 import type { MessageRecord, MessageStore } from '../ports/messageStore';
-import type { MessageToolCall, MessageCitation } from '../domain/message';
+import type { MessageToolCall, MessageCitation, MessageImage } from '../domain/message';
 import type { ThreadStore } from '../ports/threadStore';
 import {
   runAgent as defaultRunAgent,
@@ -14,6 +14,7 @@ import {
 } from '../ai/orchestrator';
 import type { ResponsesCitation, ResponsesTool } from '../ai/responses';
 import { tavilySearch } from '../ai/tavily';
+import { generateImage } from '../ai/image';
 
 export interface CredentialReader {
   getDecrypted(userId: string): Promise<DecryptedCredentials>;
@@ -29,8 +30,17 @@ export interface RunWorkerDeps {
   clock: ServiceClock;
   /** ms between throttled incremental message upserts (default 250). */
   flushIntervalMs?: number;
-  /** Injectable fetch for the web-search executor (tests). */
+  /** Injectable fetch for the web-search / image executors (tests). */
   fetchImpl?: typeof fetch;
+  /** Upload generated image bytes to Blob Storage; returns the blob path. Without it, image
+   *  events are dropped (the text answer still completes). */
+  uploadImage?: (
+    userId: string,
+    threadId: string,
+    imageId: string,
+    bytes: Uint8Array,
+    contentType: string,
+  ) => Promise<string>;
 }
 
 const DEFAULT_FLUSH_MS = 250;
@@ -55,10 +65,22 @@ function buildTurns(system: string, messages: MessageRecord[], assistantMessageI
   return turns;
 }
 
-/** Tools offered to the model this run. Web search is gated on a configured Tavily key. */
-function assembleTools(creds: DecryptedCredentials): ResponsesTool[] {
+/** Tools offered to the model this run. web_search needs a Tavily key; file_search needs the
+ *  thread's vector store. The built-ins (code_interpreter, file_search) are only offered when the
+ *  client explicitly requests them in `run.tools` (the client has probed endpoint capability), so
+ *  an endpoint that lacks them is never sent an unsupported tool. With no allowlist (older clients)
+ *  we default to web search only. */
+function assembleTools(
+  creds: DecryptedCredentials,
+  run: { tools: string[] },
+  thread: { vectorStoreId?: string } | null,
+): ResponsesTool[] {
+  const requested = run.tools.length > 0 ? new Set(run.tools) : null;
+  const wants = (name: string): boolean =>
+    requested === null ? name === 'web_search' : requested.has(name);
+
   const tools: ResponsesTool[] = [];
-  if (creds.tavilyKey) {
+  if (wants('web_search') && creds.tavilyKey) {
     tools.push({
       type: 'function',
       name: 'web_search',
@@ -68,6 +90,29 @@ function assembleTools(creds: DecryptedCredentials): ResponsesTool[] {
         type: 'object',
         properties: { query: { type: 'string', description: 'The search query.' } },
         required: ['query'],
+        additionalProperties: false,
+      },
+    });
+  }
+  if (wants('code_interpreter')) {
+    tools.push({ type: 'code_interpreter', container: { type: 'auto' } });
+  }
+  if (wants('file_search') && thread?.vectorStoreId) {
+    tools.push({ type: 'file_search', vector_store_ids: [thread.vectorStoreId] });
+  }
+  if (wants('generate_image') && creds.models.image) {
+    tools.push({
+      type: 'function',
+      name: 'generate_image',
+      description:
+        'Generate an image from a text description. Use when the user asks for an image, illustration, diagram, logo, or picture.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'A detailed description of the image to generate.' },
+          size: { type: 'string', description: 'Optional size, e.g. 1024x1024, 1024x1536, or 1536x1024.' },
+        },
+        required: ['prompt'],
         additionalProperties: false,
       },
     });
@@ -96,6 +141,26 @@ function makeExecute(creds: DecryptedCredentials, fetchImpl?: typeof fetch): Too
       const output = (r.answer ? `Answer: ${r.answer}\n\n` : '') + body;
       return { output, citations };
     }
+    if (name === 'generate_image') {
+      if (!creds.models.image) return { output: 'Image generation is not configured.' };
+      const prompt = String((args as { prompt?: unknown }).prompt ?? '').trim();
+      if (!prompt) return { output: 'No image prompt was provided.' };
+      const sizeArg = (args as { size?: unknown }).size;
+      const size = typeof sizeArg === 'string' && sizeArg ? sizeArg : undefined;
+      const imgs = await generateImage({
+        baseUrl: creds.baseUrl,
+        key: creds.key,
+        model: creds.models.image,
+        prompt,
+        ...(size ? { size } : {}),
+        fetchImpl,
+      });
+      if (!imgs.length) return { output: 'No image was generated.' };
+      return {
+        output: 'Generated the requested image.',
+        image: { b64: imgs[0].b64, prompt, ...(size ? { size } : {}) },
+      };
+    }
     return { output: `Unknown tool: ${name}` };
   };
 }
@@ -106,6 +171,11 @@ function toolKind(name: string): MessageToolCall['kind'] {
   if (name === 'file_search') return 'file_search';
   if (name === 'generate_image') return 'image';
   return 'function';
+}
+
+/** Decode a base64 image payload to bytes for upload. */
+function b64ToBytes(b64: string): Uint8Array {
+  return new Uint8Array(Buffer.from(b64, 'base64'));
 }
 
 function mapCitation(c: ResponsesCitation): MessageCitation {
@@ -140,10 +210,12 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
 
   await runStore.put({ ...run, status: 'running', startedAt: clock.now(), heartbeatAt: clock.now() });
 
+  const thread = await threadStore.get(run.userId, threadId);
   const orderAt = run.createdAt;
   const toolCalls = new Map<string, MessageToolCall>();
   const citations: MessageCitation[] = [];
   const seenCitations = new Set<string>();
+  const images: MessageImage[] = [];
   let acc = '';
   let lastFlush = 0;
   let flushed = false;
@@ -163,6 +235,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     ...(model ? { model } : {}),
     ...(toolCalls.size ? { toolCalls: [...toolCalls.values()] } : {}),
     ...(citations.length ? { citations } : {}),
+    ...(images.length ? { images } : {}),
   });
 
   const flush = async (force = false): Promise<void> => {
@@ -182,7 +255,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       await messageStore.list(threadId),
       run.assistantMessageId,
     );
-    const tools = assembleTools(creds);
+    const tools = assembleTools(creds, run, thread);
     const execute = makeExecute(creds, deps.fetchImpl);
 
     for await (const ev of runAgent({ baseUrl: creds.baseUrl, key: creds.key, model, turns, tools, execute })) {
@@ -208,6 +281,28 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
           citations.push(mapCitation(c));
           await flush(true);
         }
+      } else if (ev.type === 'image' && !ev.partial && deps.uploadImage) {
+        try {
+          const imageId = `img${images.length + 1}-${run.assistantMessageId}`.slice(0, 64);
+          const blobPath = await deps.uploadImage(
+            run.userId,
+            threadId,
+            imageId,
+            b64ToBytes(ev.b64),
+            'image/png',
+          );
+          images.push({
+            id: imageId,
+            blobPath,
+            prompt: ev.prompt ?? '',
+            size: ev.size ?? '1024x1024',
+            outputFormat: 'png',
+            createdAt: clock.now(),
+          });
+          await flush(true);
+        } catch {
+          /* image upload failed -> the text answer still completes without it */
+        }
       } else if (ev.type === 'error') {
         err = { code: 'internal', message: ev.message };
       }
@@ -224,7 +319,6 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   await messageStore.append(buildAssistant(finalStatus));
 
   // Bump the thread so the assistant message syncs and the thread surfaces as recently active.
-  const thread = await threadStore.get(run.userId, threadId);
   if (thread) {
     await threadStore.put({
       ...thread,

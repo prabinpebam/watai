@@ -7,10 +7,36 @@ import { useRuns } from './runStore';
 import { orderMessages } from './ordering';
 import { lockHeldByOther } from './lock';
 import { indexThreadDocuments } from '../../ai/fileSearch';
+import { detectCapabilities } from '../../ai/capabilities';
+import { getApiConfig } from '../../data/secureStore';
 import { isServerRunsEnabled } from '../../lib/flags';
 import type { Attachment, Message } from '../../lib/types';
 
 export { DEFAULT_CHAT_MODEL } from './runStore';
+
+/**
+ * Tools to offer a server run. `web_search` is always listed (the server gates it on the vault
+ * Tavily key). The built-ins (code interpreter, file search) are listed only when the user enabled
+ * them AND the endpoint is known to support them (capability matrix, probed once + cached), so an
+ * endpoint that lacks a tool is never sent it (which would fail the whole run).
+ */
+async function serverRunTools(): Promise<string[]> {
+  const tools = ['web_search', 'generate_image'];
+  const settings = await repo.getSettings().catch(() => null);
+  const t = settings?.tools;
+  if (!t || t.agenticMode === false) return tools;
+  let cap = useUi.getState().capability;
+  if (!cap) {
+    const cfg = await getApiConfig().catch(() => null);
+    if (cfg?.baseUrl) {
+      cap = await detectCapabilities(cfg).catch(() => null);
+      if (cap) useUi.getState().setCapability(cap);
+    }
+  }
+  if (t.codeInterpreter && cap?.codeInterpreter) tools.push('code_interpreter');
+  if (t.fileSearch && cap?.fileSearch) tools.push('file_search');
+  return tools;
+}
 
 /** Persist uploaded files as local blobs and return their attachment records. */
 async function persistAttachments(files: File[]): Promise<Attachment[]> {
@@ -173,9 +199,13 @@ export function useChat(threadId: string, temporary = false) {
       if (isServerRunsEnabled() && !mockAi) {
         // Server-authoritative: the backend generates + persists the reply, which survives this
         // client closing. Pass the local message id as the idempotency key so the server's copy of
-        // the user turn converges with the local one. (Attachments over server runs are a follow-up;
-        // text prompts route to the server.)
-        void useRuns.getState().startServerRun(threadId, { text: trimmed, clientMessageId: userMsg.id });
+        // the user turn converges with the local one, and the enabled tool set for this run.
+        const tools = await serverRunTools();
+        void useRuns.getState().startServerRun(threadId, {
+          text: trimmed,
+          clientMessageId: userMsg.id,
+          ...(tools.length ? { tools } : {}),
+        });
       } else {
         void useRuns.getState().startRun(threadId, history, mockAi);
       }

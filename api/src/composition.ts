@@ -15,6 +15,7 @@ import { ThreadLockService } from './application/threadLockService';
 import { MessageService } from './application/messageService';
 import { SettingsService } from './application/settingsService';
 import { AssetService } from './application/assetService';
+import type { AllowedContentType } from './domain/asset';
 import { AccessService } from './application/accessService';
 import { CredentialService } from './application/credentialService';
 import { RunService } from './application/runService';
@@ -91,6 +92,7 @@ export function container(): ApiContainer {
   const messageService = new MessageService(threadStore, messageStore, clock);
   const credentialService = new CredentialService(credentialStore, buildKeyWrapper(), clock);
   const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
+  const assetService = new AssetService(threadStore, minter);
 
   cached = {
     verifier: buildVerifier(),
@@ -99,7 +101,7 @@ export function container(): ApiContainer {
     threadLock: createThreadLockController(new ThreadLockService(threadStore, clock)),
     messages: createMessagesController(messageService),
     settings: createSettingsController(new SettingsService(settingsStore)),
-    assets: createAssetsController(new AssetService(threadStore, minter)),
+    assets: createAssetsController(assetService),
     me: createMeController(access),
     invites: createInvitesController(inviteStore, clock),
     credentials: createCredentialsController(credentialService),
@@ -109,8 +111,35 @@ export function container(): ApiContainer {
       messageStore,
       threadStore,
       credentials: credentialService,
+      uploadImage: makeUploadImage(assetService),
       clock,
     },
   };
   return cached;
+}
+
+/** Upload generated image bytes via a short-lived write SAS (reuses the asset path scheme), so the
+ *  worker needs no extra blob role beyond the SAS minter's. Returns the stored blob path. */
+function makeUploadImage(assets: AssetService) {
+  return async (
+    userId: string,
+    threadId: string,
+    imageId: string,
+    bytes: Uint8Array,
+    contentType: string,
+  ): Promise<string> => {
+    const sas = await assets.requestSas(userId, {
+      threadId,
+      assetId: imageId,
+      op: 'write',
+      contentType: contentType as AllowedContentType,
+    });
+    const res = await fetch(sas.url, {
+      method: 'PUT',
+      headers: { 'x-ms-blob-type': 'BlockBlob', 'Content-Type': contentType },
+      body: bytes as unknown as RequestInit['body'],
+    });
+    if (!res.ok) throw new Error(`Image upload failed (${res.status}).`);
+    return sas.blobPath;
+  };
 }

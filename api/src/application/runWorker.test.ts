@@ -137,6 +137,58 @@ describe('processRun', () => {
     expect(seen[0].tools.map((t) => t.name)).toContain('web_search');
   });
 
+  it('offers code_interpreter + file_search when the run requests them and a vector store exists', async () => {
+    const run = await seed(ctx);
+    await ctx.runStore.put({ ...run, tools: ['web_search', 'code_interpreter', 'file_search'] });
+    const thread = await ctx.threadStore.get('userA', 't1');
+    await ctx.threadStore.put({ ...thread!, vectorStoreId: 'vs1' });
+    const seen: RunAgentParams[] = [];
+    const runAgent: RunAgentFn = (p) => {
+      seen.push(p);
+      return script([{ type: 'text', delta: 'ok' }, { type: 'done' }])(p);
+    };
+    await processRun(ctx.deps(runAgent), 't1', 'r1');
+    const types = seen[0].tools.map((t) => t.type);
+    expect(types).toContain('code_interpreter');
+    expect(types).toContain('file_search');
+    expect(seen[0].tools.find((t) => t.type === 'file_search')?.vector_store_ids).toEqual(['vs1']);
+  });
+
+  it('uploads a generated image and attaches it to the message', async () => {
+    await seed(ctx);
+    const uploads: Array<{ imageId: string; len: number }> = [];
+    const uploadImage = async (
+      userId: string,
+      threadId: string,
+      imageId: string,
+      bytes: Uint8Array,
+    ): Promise<string> => {
+      uploads.push({ imageId, len: bytes.length });
+      return `${userId}/${threadId}/${imageId}.png`;
+    };
+    const runAgent: RunAgentFn = script([
+      { type: 'tool', name: 'generate_image', status: 'running', callId: 'g1' },
+      {
+        type: 'image',
+        b64: Buffer.from('PNGDATA').toString('base64'),
+        partial: false,
+        prompt: 'a cat',
+        size: '1024x1024',
+        callId: 'g1',
+      },
+      { type: 'tool', name: 'generate_image', status: 'done', callId: 'g1' },
+      { type: 'text', delta: "Here's your image." },
+      { type: 'done' },
+    ]);
+    await processRun({ ...ctx.deps(runAgent), uploadImage }, 't1', 'r1');
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.images?.length).toBe(1);
+    expect(msg?.images?.[0]).toMatchObject({ prompt: 'a cat', size: '1024x1024', outputFormat: 'png' });
+    expect(msg?.images?.[0].blobPath).toContain('.png');
+    expect(uploads[0].len).toBeGreaterThan(0);
+    expect(msg?.toolCalls?.find((t) => t.id === 'g1')?.kind).toBe('image');
+  });
+
   it('accumulates tool cards and citations onto the message', async () => {
     await seed(ctx);
     await processRun(
