@@ -5,10 +5,12 @@ import { InMemoryMessageStore } from '../adapters/memory/messageStore';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import type { RunRecord } from '../ports/runStore';
 import type { RunStatus } from '../domain/run';
-import type { ChatStreamEvent, StreamChatParams } from '../ai/chat';
+import type { AgentEvent, RunAgentParams } from '../ai/orchestrator';
 import { AppError } from '../domain/errors';
 
-function setup(opts?: { credError?: boolean }) {
+type RunAgentFn = NonNullable<RunWorkerDeps['runAgent']>;
+
+function setup(opts?: { credError?: boolean; tavily?: boolean }) {
   const runStore = new InMemoryRunStore();
   const messageStore = new InMemoryMessageStore();
   const threadStore = new InMemoryThreadStore();
@@ -24,15 +26,16 @@ function setup(opts?: { credError?: boolean }) {
         baseUrl: 'https://r.services.ai.azure.com/openai/v1',
         key: 'k',
         models: { chat: 'gpt-5.4' },
+        ...(opts?.tavily ? { tavilyKey: 'tav-key' } : {}),
       };
     },
   };
-  const deps = (streamChat: RunWorkerDeps['streamChat']): RunWorkerDeps => ({
+  const deps = (runAgent: RunAgentFn): RunWorkerDeps => ({
     runStore,
     messageStore,
     threadStore,
     credentials,
-    streamChat,
+    runAgent,
     clock,
     flushIntervalMs: 0,
   });
@@ -79,23 +82,23 @@ async function seed(ctx: ReturnType<typeof setup>, runStatus: RunStatus = 'queue
   return run;
 }
 
-async function* script(events: ChatStreamEvent[]): AsyncGenerator<ChatStreamEvent> {
-  for (const e of events) yield e;
+function script(events: AgentEvent[]): RunAgentFn {
+  return async function* () {
+    for (const e of events) yield e;
+  };
 }
 
 describe('processRun', () => {
   let ctx: ReturnType<typeof setup>;
   beforeEach(() => (ctx = setup()));
 
-  it('streams a completion into a finalized assistant message and completes the run', async () => {
+  it('streams the agent answer into a finalized assistant message and completes the run', async () => {
     await seed(ctx);
-    const stream = () =>
-      script([
-        { type: 'delta', textDelta: 'Hi ' },
-        { type: 'delta', textDelta: 'there' },
-        { type: 'done', usage: { completionTokens: 2 } },
-      ]);
-    await processRun(ctx.deps(stream), 't1', 'r1');
+    await processRun(
+      ctx.deps(script([{ type: 'text', delta: 'Hi ' }, { type: 'text', delta: 'there' }, { type: 'done' }])),
+      't1',
+      'r1',
+    );
 
     const msg = await ctx.messageStore.get('t1', 'am1');
     expect(msg?.content).toBe('Hi there');
@@ -108,23 +111,59 @@ describe('processRun', () => {
     expect((await ctx.threadStore.get('userA', 't1'))?.lastMessagePreview).toBe('Hi there');
   });
 
-  it('passes only prior user/assistant turns as history (not the in-progress assistant message)', async () => {
+  it('builds turns: a system prompt then the prior user/assistant history (no in-progress msg)', async () => {
     await seed(ctx);
-    const seen: StreamChatParams[] = [];
-    const stream = (p: StreamChatParams) => {
+    const seen: RunAgentParams[] = [];
+    const runAgent: RunAgentFn = (p) => {
       seen.push(p);
-      return script([{ type: 'delta', textDelta: 'ok' }, { type: 'done' }]);
+      return script([{ type: 'text', delta: 'ok' }, { type: 'done' }])(p);
     };
-    await processRun(ctx.deps(stream), 't1', 'r1');
-    expect(seen[0].messages).toEqual([{ role: 'user', content: 'hello' }]);
+    await processRun(ctx.deps(runAgent), 't1', 'r1');
     expect(seen[0].model).toBe('gpt-5.4');
+    expect(seen[0].turns[0].role).toBe('system');
+    expect(seen[0].turns[1]).toEqual({ role: 'user', text: 'hello' });
+    expect(seen[0].tools).toEqual([]); // no Tavily key -> no web_search tool
+  });
+
+  it('offers the web_search tool when a Tavily key is configured', async () => {
+    const c = setup({ tavily: true });
+    await seed(c);
+    const seen: RunAgentParams[] = [];
+    const runAgent: RunAgentFn = (p) => {
+      seen.push(p);
+      return script([{ type: 'text', delta: 'ok' }, { type: 'done' }])(p);
+    };
+    await processRun(c.deps(runAgent), 't1', 'r1');
+    expect(seen[0].tools.map((t) => t.name)).toContain('web_search');
+  });
+
+  it('accumulates tool cards and citations onto the message', async () => {
+    await seed(ctx);
+    await processRun(
+      ctx.deps(
+        script([
+          { type: 'tool', name: 'web_search', status: 'running', callId: 'c1', args: { query: 'x' } },
+          { type: 'citation', citation: { source: 'web', url: 'https://example.com', title: 'E', content: 'snip' } },
+          { type: 'tool', name: 'web_search', status: 'done', callId: 'c1' },
+          { type: 'text', delta: 'Per the web.' },
+          { type: 'done' },
+        ]),
+      ),
+      't1',
+      'r1',
+    );
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.content).toBe('Per the web.');
+    expect(msg?.toolCalls).toEqual([{ id: 'c1', kind: 'web_search', name: 'web_search', status: 'done' }]);
+    expect(msg?.citations?.[0]).toMatchObject({ source: 'web', url: 'https://example.com', title: 'E', content: 'snip' });
+    expect(msg?.status).toBe('complete');
   });
 
   it('writes a streaming message before the final one (incremental upserts)', async () => {
     await seed(ctx);
     const spy = vi.spyOn(ctx.messageStore, 'append');
     await processRun(
-      ctx.deps(() => script([{ type: 'delta', textDelta: 'a' }, { type: 'delta', textDelta: 'b' }, { type: 'done' }])),
+      ctx.deps(script([{ type: 'text', delta: 'a' }, { type: 'text', delta: 'b' }, { type: 'done' }])),
       't1',
       'r1',
     );
@@ -135,17 +174,13 @@ describe('processRun', () => {
 
   it('is a no-op for a run that is not active', async () => {
     await seed(ctx, 'complete');
-    await processRun(ctx.deps(() => script([{ type: 'delta', textDelta: 'x' }])), 't1', 'r1');
+    await processRun(ctx.deps(script([{ type: 'text', delta: 'x' }])), 't1', 'r1');
     expect(await ctx.messageStore.get('t1', 'am1')).toBeNull();
   });
 
-  it('marks the message + run errored on a stream error', async () => {
+  it('marks the message + run errored on an agent error', async () => {
     await seed(ctx);
-    await processRun(
-      ctx.deps(() => script([{ type: 'error', error: { code: 'rate_limited', message: '429' } }])),
-      't1',
-      'r1',
-    );
+    await processRun(ctx.deps(script([{ type: 'error', message: '429' }])), 't1', 'r1');
     expect((await ctx.messageStore.get('t1', 'am1'))?.status).toBe('error');
     expect((await ctx.runStore.get('t1', 'r1'))?.status).toBe('error');
   });
@@ -153,20 +188,20 @@ describe('processRun', () => {
   it('errors cleanly when credentials are missing', async () => {
     const c = setup({ credError: true });
     await seed(c);
-    await processRun(c.deps(() => script([{ type: 'delta', textDelta: 'x' }])), 't1', 'r1');
+    await processRun(c.deps(script([{ type: 'text', delta: 'x' }])), 't1', 'r1');
     expect((await c.runStore.get('t1', 'r1'))?.status).toBe('error');
     expect((await c.messageStore.get('t1', 'am1'))?.status).toBe('error');
   });
 
   it('finalizes as interrupted when the run is canceled mid-stream', async () => {
     const run = await seed(ctx);
-    const cancelingStream = async function* (): AsyncGenerator<ChatStreamEvent> {
-      yield { type: 'delta', textDelta: 'partial' };
+    const cancelingAgent: RunAgentFn = async function* () {
+      yield { type: 'text', delta: 'partial' };
       await ctx.runStore.put({ ...run, status: 'canceled' });
-      yield { type: 'delta', textDelta: ' more' };
+      yield { type: 'text', delta: ' more' };
       yield { type: 'done' };
     };
-    await processRun(ctx.deps(() => cancelingStream()), 't1', 'r1');
+    await processRun(ctx.deps(cancelingAgent), 't1', 'r1');
     expect((await ctx.messageStore.get('t1', 'am1'))?.status).toBe('interrupted');
     expect((await ctx.runStore.get('t1', 'r1'))?.status).toBe('canceled');
   });

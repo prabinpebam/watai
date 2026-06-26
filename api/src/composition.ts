@@ -19,7 +19,6 @@ import { AccessService } from './application/accessService';
 import { CredentialService } from './application/credentialService';
 import { RunService } from './application/runService';
 import type { RunWorkerDeps } from './application/runWorker';
-import { streamChat } from './ai/chat';
 import { createThreadsController } from './http/threadsController';
 import { createThreadLockController } from './http/threadLockController';
 import { createMessagesController } from './http/messagesController';
@@ -110,7 +109,6 @@ export function container(): ApiContainer {
       messageStore,
       threadStore,
       credentials: credentialService,
-      streamChat,
       clock,
     },
   };
