@@ -187,6 +187,8 @@
   background: var(--color-surface-3);
   border-radius: var(--radius-pill);
   transition: background var(--motion-base);
+  /* Visual only — let clicks fall through to the <input> underneath. */
+  pointer-events: none;
 }
 .switch__thumb {
   position: absolute;
@@ -198,6 +200,8 @@
   border-radius: 50%;
   box-shadow: var(--elevation-1);
   transition: transform var(--motion-base) var(--ease-standard);
+  /* Visual only — let clicks fall through to the <input> underneath. */
+  pointer-events: none;
 }
 .switch input:checked + .switch__track {
   background: var(--color-accent);
