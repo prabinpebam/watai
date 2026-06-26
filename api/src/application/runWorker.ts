@@ -6,6 +6,7 @@ import type { MessageRecord, MessageStore } from '../ports/messageStore';
 import type { MessageToolCall, MessageCitation, MessageImage } from '../domain/message';
 import type { Settings } from '../domain/settings';
 import type { ThreadStore } from '../ports/threadStore';
+import type { SignalRSender } from '../adapters/azure/signalr';
 import {
   runAgent as defaultRunAgent,
   type AgentEvent,
@@ -40,6 +41,9 @@ export interface RunWorkerDeps {
   flushIntervalMs?: number;
   /** Injectable fetch for the web-search / image executors (tests). */
   fetchImpl?: typeof fetch;
+  /** Realtime push to the running user (token-by-token snapshots + thread updates). Optional;
+   *  the client's sync poll is the fallback when push isn't configured. */
+  signalr?: SignalRSender;
   /** Upload generated image bytes to Blob Storage; returns the blob path. Without it, image
    *  events are dropped (the text answer still completes). */
   uploadImage?: (
@@ -291,7 +295,9 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     if (force || !flushed || now - lastFlush > flushMs) {
       flushed = true;
       lastFlush = now;
-      await messageStore.append(buildAssistant('streaming'));
+      const snapshot = buildAssistant('streaming');
+      await messageStore.append(snapshot);
+      if (deps.signalr) await deps.signalr.sendToUser(run.userId, 'message', { threadId, message: snapshot });
     }
   };
 
@@ -373,16 +379,28 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   }
 
   const finalStatus: MessageRecord['status'] = canceled ? 'interrupted' : err ? 'error' : 'complete';
-  await messageStore.append(buildAssistant(finalStatus));
+  const finalMessage = buildAssistant(finalStatus);
+  await messageStore.append(finalMessage);
+  if (deps.signalr) await deps.signalr.sendToUser(run.userId, 'message', { threadId, message: finalMessage });
 
   // Bump the thread so the assistant message syncs and the thread surfaces as recently active.
   if (thread) {
-    await threadStore.put({
+    const nextThread = {
       ...thread,
       ...(newTitle ? { title: newTitle } : {}),
       lastMessagePreview: (acc.trim() || (err ? 'Error' : '')).slice(0, 140),
       updatedAt: clock.now(),
-    });
+    };
+    await threadStore.put(nextThread);
+    if (deps.signalr)
+      await deps.signalr.sendToUser(run.userId, 'thread', {
+        thread: {
+          id: nextThread.id,
+          title: nextThread.title,
+          lastMessagePreview: nextThread.lastMessagePreview,
+          updatedAt: nextThread.updatedAt,
+        },
+      });
   }
 
   if (!canceled) {

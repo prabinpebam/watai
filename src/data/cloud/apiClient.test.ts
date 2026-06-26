@@ -289,6 +289,19 @@ describe('WataiApiClient', () => {
     expect(calls[0].url).toBe('https://api.test/api/threads/t1/runs/r1');
     expect(run.status).toBe('canceled');
   });
+
+  it('negotiates realtime via POST', async () => {
+    const { fetchImpl, calls } = stubFetch([
+      { status: 200, body: { url: 'https://sig/client/?hub=watai', accessToken: 'rt-tok' } },
+    ]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    const info = await client.negotiate();
+
+    expect(calls[0].method).toBe('POST');
+    expect(calls[0].url).toBe('https://api.test/api/negotiate');
+    expect(info).toEqual({ url: 'https://sig/client/?hub=watai', accessToken: 'rt-tok' });
+  });
 });
 
 describe('cloud mappers', () => {

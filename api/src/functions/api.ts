@@ -72,6 +72,14 @@ app.http('thread-run-item', {
   handler: methodDispatch({ GET: (c) => c.runs.get, DELETE: (c) => c.runs.cancel }, invited),
 });
 
+// SignalR negotiate — returns the realtime connection info scoped to the caller's user id.
+app.http('negotiate', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'negotiate',
+  handler: methodDispatch({ POST: (c) => c.negotiate.negotiate }, invited),
+});
+
 app.http('messages', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',

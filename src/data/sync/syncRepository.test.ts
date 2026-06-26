@@ -377,6 +377,9 @@ class FakeCloud implements CloudApi {
     return { email, invitedBy: 'admin@example.com', createdAt: this.now() };
   }
   async deleteInvite() {}
+  async negotiate() {
+    return { url: '', accessToken: '' };
+  }
 }
 
 function setup(sync = true) {

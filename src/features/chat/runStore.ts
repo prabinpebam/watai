@@ -4,7 +4,7 @@
 // of the in-progress message is kept in IndexedDB so a browser close mid-stream is not fully
 // lost — orphaned snapshots are restored as `interrupted` messages on next load.
 import { create } from 'zustand';
-import { repo, cloudApi, syncNow, saveServerMessage } from '../../data';
+import { repo, cloudApi, syncNow, saveServerMessage, realtime } from '../../data';
 import { getApiConfig, getTavilyKey } from '../../data/secureStore';
 import { idbKvStore } from '../../data/sync/kvStore';
 import { newId } from '../../lib/ids';
@@ -18,7 +18,7 @@ import { b64ToBlob } from '../../ai/image';
 import { runOnServer } from './serverRun';
 import { useUi } from '../../state/store';
 import { messageFromRecord } from '../../data/cloud/types';
-import type { SubmitRunBody } from '../../data/cloud/types';
+import type { MessageRecord, SubmitRunBody } from '../../data/cloud/types';
 import type { AiError, CapabilityMatrix, Citation, ImageRef, Message, ToolCall } from '../../lib/types';
 
 export const DEFAULT_CHAT_MODEL = 'gpt-5.4';
@@ -178,6 +178,36 @@ export const useRuns = create<RunsStore>((set, get) => ({
     set((s) => ({ runs: { ...s.runs, [threadId]: { threadId, message: seed, controller: ctrl } } }));
     useUi.getState().setStream({ status: 'streaming', threadId, messageId: seed.id });
 
+    // Connect realtime push (lazy, best-effort) so the streaming reply + thread title arrive
+    // straight from the server instead of waiting for the next sync poll.
+    void realtime.ensure();
+
+    // Write a (possibly partial) assistant message into the live overlay for this thread.
+    const applyOverlay = (msg: Message) => {
+      set((s) => {
+        const r = s.runs[threadId];
+        return r ? { runs: { ...s.runs, [threadId]: { ...r, message: msg } } } : s;
+      });
+    };
+
+    // SignalR pushes the assistant snapshot on every worker flush (~250ms) — render it immediately.
+    const offMessage = realtime.on('message', (payload) => {
+      const p = payload as { threadId?: string; message?: MessageRecord } | null;
+      if (!p || p.threadId !== threadId || !p.message) return;
+      applyOverlay(messageFromRecord(p.message));
+    });
+    // A thread push (title/preview set after generation) — pull it and refresh the list in place.
+    const offThread = realtime.on('thread', (payload) => {
+      const id = (payload as { thread?: { id?: string } } | null)?.thread?.id;
+      if (!id) return;
+      void syncNow().then((ids) => {
+        const u = useUi.getState();
+        u.bumpThreads();
+        ids.forEach((tid) => u.bumpThread(tid));
+        u.bumpThread(id);
+      });
+    });
+
     let finalAssistant: Message | null = null;
     try {
       const { run, assistant } = await runOnServer(
@@ -198,12 +228,12 @@ export const useRuns = create<RunsStore>((set, get) => ({
             const rec = recs.find((r) => r.id === mid);
             return rec ? messageFromRecord(rec) : null;
           },
-          // Stream the growing reply into the live overlay (instant, token-ish updates).
+          // Stream the growing reply into the live overlay (instant, token-ish updates). While a
+          // realtime push is driving this thread (seen within the last 3s), defer to it so the
+          // slower poll never regresses the fresher pushed snapshot.
           onAssistant: (msg) => {
-            set((s) => {
-              const r = s.runs[threadId];
-              return r ? { runs: { ...s.runs, [threadId]: { ...r, message: msg } } } : s;
-            });
+            if (Date.now() - realtime.liveSince(threadId) < 3000) return;
+            applyOverlay(msg);
           },
           onThreadsChanged: (ids) => {
             if (ids.size === 0) return;
@@ -229,6 +259,8 @@ export const useRuns = create<RunsStore>((set, get) => ({
         .getState()
         .pushToast(e instanceof Error ? e.message : 'Could not start the response.', 'error');
     } finally {
+      offMessage();
+      offThread();
       // Land the finished reply locally so it survives the overlay clearing (the bulk sync cursor
       // skips the streaming message), then clear the overlay and reload the persisted list.
       if (finalAssistant) await saveServerMessage(finalAssistant).catch(() => {});

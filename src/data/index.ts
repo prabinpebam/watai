@@ -1,6 +1,7 @@
 import { LocalRepository } from './local/localRepository';
 import type { Repository } from './repository';
 import { WataiApiClient } from './cloud/apiClient';
+import { RealtimeClient } from './cloud/realtime';
 import { SyncRepository } from './sync/syncRepository';
 import { idbKvStore } from './sync/kvStore';
 import { getCloudToken } from '../auth/cloudAuth';
@@ -18,6 +19,10 @@ export const repo: Repository = sync;
 
 /** Cloud API client for non-repository calls (access status + admin invite management). */
 export const cloudApi = cloud;
+
+/** Realtime push (SignalR) for server-authoritative runs — connects lazily on the first server
+ *  run and streams assistant/thread updates straight into the UI. */
+export const realtime = new RealtimeClient(() => cloud.negotiate());
 
 /** Push local changes + pull remote deltas (no-op unless sync is on and signed in). Resolves
  *  with the set of thread ids whose local state changed during the pull, so callers can refresh. */

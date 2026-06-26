@@ -9,6 +9,7 @@ import { AzureSasMinter } from './adapters/azure/sasMinter';
 import { KeyVaultWrapper } from './adapters/azure/keyVaultWrapper';
 import { LocalKeyWrapper } from './adapters/local/keyWrapper';
 import { QueueRunStarter } from './adapters/azure/queueRunStarter';
+import { AzureSignalR, type SignalRSender } from './adapters/azure/signalr';
 import { entraVerifierFromEnv } from './adapters/auth/entraTokenVerifier';
 import { ThreadService } from './application/threadService';
 import { ThreadLockService } from './application/threadLockService';
@@ -29,6 +30,7 @@ import { createMeController } from './http/meController';
 import { createInvitesController } from './http/invitesController';
 import { createCredentialsController } from './http/credentialsController';
 import { createRunsController } from './http/runsController';
+import { createNegotiateController } from './http/negotiateController';
 import { AppError } from './domain/errors';
 import type { TokenVerifier } from './ports/tokenVerifier';
 import type { KeyWrapper } from './ports/keyWrapper';
@@ -45,6 +47,7 @@ export interface ApiContainer {
   invites: ReturnType<typeof createInvitesController>;
   credentials: ReturnType<typeof createCredentialsController>;
   runs: ReturnType<typeof createRunsController>;
+  negotiate: ReturnType<typeof createNegotiateController>;
   /** Dependencies the queue-triggered run worker needs to process a job. */
   runWorker: RunWorkerDeps;
 }
@@ -94,6 +97,9 @@ export function container(): ApiContainer {
   const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
+  const signalr: SignalRSender | null = process.env.AzureSignalRConnectionString
+    ? new AzureSignalR(process.env.AzureSignalRConnectionString)
+    : null;
 
   cached = {
     verifier: buildVerifier(),
@@ -107,6 +113,7 @@ export function container(): ApiContainer {
     invites: createInvitesController(inviteStore, clock),
     credentials: createCredentialsController(credentialService),
     runs: createRunsController(runService),
+    negotiate: createNegotiateController(signalr),
     runWorker: {
       runStore,
       messageStore,
@@ -114,6 +121,7 @@ export function container(): ApiContainer {
       credentials: credentialService,
       settings: settingsService,
       uploadImage: makeUploadImage(assetService),
+      signalr: signalr ?? undefined,
       clock,
     },
   };

@@ -23,6 +23,13 @@ import type { Settings, ThreadLock } from '../../lib/types';
 
 export type TokenProvider = () => Promise<string | null>;
 
+/** SignalR connection info: the service client url and a short-lived access token scoped to the
+ *  caller. An empty url means realtime push isn't configured (client polls instead). */
+export interface NegotiateInfo {
+  url: string;
+  accessToken: string;
+}
+
 export type CloudErrorCode =
   | 'unauthorized'
   | 'forbidden'
@@ -242,6 +249,12 @@ export class WataiApiClient implements CloudApi {
     );
   }
 
+  // --- realtime (SignalR) ---
+  /** Get the realtime connection info for this user. Empty url ⇒ push not configured. */
+  negotiate(): Promise<NegotiateInfo> {
+    return this.request('POST', '/negotiate');
+  }
+
   // --- access / invites ---
   getMe(): Promise<MeInfo> {
     return this.request('GET', '/me');
@@ -308,6 +321,7 @@ export interface CloudApi {
   getRun(threadId: string, runId: string): Promise<RunRecord>;
   listActiveRuns(threadId: string): Promise<RunRecord[]>;
   cancelRun(threadId: string, runId: string): Promise<RunRecord>;
+  negotiate(): Promise<NegotiateInfo>;
   getMe(): Promise<MeInfo>;
   listInvites(): Promise<InviteRecord[]>;
   createInvite(email: string): Promise<InviteRecord>;

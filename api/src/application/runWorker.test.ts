@@ -112,6 +112,37 @@ describe('processRun', () => {
     expect((await ctx.threadStore.get('userA', 't1'))?.lastMessagePreview).toBe('Hi there');
   });
 
+  it('pushes message snapshots and a thread update over SignalR when configured', async () => {
+    await seed(ctx);
+    const calls: Array<{ userId: string; target: string; payload: unknown }> = [];
+    const signalr = {
+      negotiate: () => ({ url: '', accessToken: '' }),
+      sendToUser: async (userId: string, target: string, payload: unknown) => {
+        calls.push({ userId, target, payload });
+      },
+    };
+    await processRun(
+      { ...ctx.deps(script([{ type: 'text', delta: 'Hi' }, { type: 'done' }])), signalr },
+      't1',
+      'r1',
+    );
+
+    const messagePushes = calls.filter((c) => c.target === 'message');
+    expect(messagePushes.length).toBeGreaterThan(0);
+    expect(messagePushes.every((c) => c.userId === 'userA')).toBe(true);
+    const last = messagePushes.at(-1)!.payload as {
+      threadId: string;
+      message: { content: string; status: string };
+    };
+    expect(last.threadId).toBe('t1');
+    expect(last.message.content).toBe('Hi');
+    expect(last.message.status).toBe('complete');
+
+    const threadPush = calls.find((c) => c.target === 'thread');
+    expect(threadPush).toBeTruthy();
+    expect((threadPush!.payload as { thread: { id: string } }).thread.id).toBe('t1');
+  });
+
   it('builds turns: a system prompt then the prior user/assistant history (no in-progress msg)', async () => {
     await seed(ctx);
     const seen: RunAgentParams[] = [];
