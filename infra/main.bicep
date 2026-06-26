@@ -52,11 +52,14 @@ var cosmosContainers = [
   { name: 'memory', pk: '/userId' }
   { name: 'usage', pk: '/userId' }
   { name: 'invites', pk: '/pk' }
+  { name: 'credentials', pk: '/userId' }
+  { name: 'runs', pk: '/threadId' }
 ]
 
 // Built-in role definition ids.
 var roleStorageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var roleKeyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
+var roleKeyVaultCryptoUser = '12338af0-0e69-4776-bea7-57ae8d297424'
 var cosmosBuiltInDataContributor = '00000000-0000-0000-0000-000000000002'
 
 // ---------------------------------------------------------------- Monitoring
@@ -184,6 +187,18 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
+// Credential KEK: an RSA key that wraps each user's per-record data-encryption key
+// (envelope encryption for the credential vault). Never leaves Key Vault.
+resource credKek 'Microsoft.KeyVault/vaults/keys@2023-07-01' = {
+  parent: keyVault
+  name: 'watai-cred-kek'
+  properties: {
+    kty: 'RSA'
+    keySize: 3072
+    keyOps: [ 'wrapKey', 'unwrapKey' ]
+  }
+}
+
 // ---------------------------------------------------------------- Function App (Flex Consumption, Node 20)
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = if (deployFunctionApp) {
   name: 'plan-${namePrefix}-${env}'
@@ -239,6 +254,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
         { name: 'STORAGE_ACCOUNT', value: storage.name }
         { name: 'MEDIA_CONTAINER', value: 'media' }
         { name: 'KEY_VAULT_URI', value: keyVault.properties.vaultUri }
+        { name: 'CRED_KEK_NAME', value: 'watai-cred-kek' }
         { name: 'ADMIN_EMAIL', value: adminEmail }
         { name: 'ADMIN_OID', value: adminOids }
         { name: 'AUTH_ISSUER', value: authIssuer }
@@ -266,6 +282,18 @@ resource kvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deplo
   scope: keyVault
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
+    #disable-next-line BCP318
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Wrap/unwrap the credential KEK (envelope encryption) — Key Vault Crypto User.
+resource kvCryptoRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployFunctionApp) {
+  name: guid(keyVault.id, 'func', roleKeyVaultCryptoUser)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultCryptoUser)
     #disable-next-line BCP318
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'

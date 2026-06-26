@@ -70,6 +70,17 @@ app.http('settings', {
   handler: methodDispatch({ GET: (c) => c.settings.get, PATCH: (c) => c.settings.patch }, invited),
 });
 
+// Encrypted credential vault — write-only key, non-secret status read-back.
+app.http('credentials', {
+  methods: ['GET', 'PUT', 'DELETE'],
+  authLevel: 'anonymous',
+  route: 'credentials',
+  handler: methodDispatch(
+    { GET: (c) => c.credentials.get, PUT: (c) => c.credentials.put, DELETE: (c) => c.credentials.remove },
+    invited,
+  ),
+});
+
 app.http('assets-sas', {
   methods: ['POST'],
   authLevel: 'anonymous',

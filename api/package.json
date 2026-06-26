@@ -17,6 +17,7 @@
     "@azure/cosmos": "^4.9.3",
     "@azure/functions": "^4.16.1",
     "@azure/identity": "^4.13.1",
+    "@azure/keyvault-keys": "^4.10.2",
     "@azure/storage-blob": "^12.32.0",
     "jose": "^5.10.0",
     "zod": "^3.23.8"

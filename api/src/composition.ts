@@ -3,7 +3,10 @@ import { CosmosThreadStore } from './adapters/cosmos/threadStore';
 import { CosmosMessageStore } from './adapters/cosmos/messageStore';
 import { CosmosSettingsStore } from './adapters/cosmos/settingsStore';
 import { CosmosInviteStore } from './adapters/cosmos/inviteStore';
+import { CosmosCredentialStore } from './adapters/cosmos/credentialStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
+import { KeyVaultWrapper } from './adapters/azure/keyVaultWrapper';
+import { LocalKeyWrapper } from './adapters/local/keyWrapper';
 import { entraVerifierFromEnv } from './adapters/auth/entraTokenVerifier';
 import { ThreadService } from './application/threadService';
 import { ThreadLockService } from './application/threadLockService';
@@ -11,6 +14,7 @@ import { MessageService } from './application/messageService';
 import { SettingsService } from './application/settingsService';
 import { AssetService } from './application/assetService';
 import { AccessService } from './application/accessService';
+import { CredentialService } from './application/credentialService';
 import { createThreadsController } from './http/threadsController';
 import { createThreadLockController } from './http/threadLockController';
 import { createMessagesController } from './http/messagesController';
@@ -18,8 +22,10 @@ import { createSettingsController } from './http/settingsController';
 import { createAssetsController } from './http/assetsController';
 import { createMeController } from './http/meController';
 import { createInvitesController } from './http/invitesController';
+import { createCredentialsController } from './http/credentialsController';
 import { AppError } from './domain/errors';
 import type { TokenVerifier } from './ports/tokenVerifier';
+import type { KeyWrapper } from './ports/keyWrapper';
 
 export interface ApiContainer {
   verifier: TokenVerifier;
@@ -31,6 +37,13 @@ export interface ApiContainer {
   assets: ReturnType<typeof createAssetsController>;
   me: ReturnType<typeof createMeController>;
   invites: ReturnType<typeof createInvitesController>;
+  credentials: ReturnType<typeof createCredentialsController>;
+}
+
+/** Production uses an Azure Key Vault RSA key as the KEK; local dev falls back to an
+ *  app-setting master key. The credential domain is identical either way (KeyWrapper port). */
+function buildKeyWrapper(): KeyWrapper {
+  return process.env.KEY_VAULT_URI ? new KeyVaultWrapper() : new LocalKeyWrapper();
 }
 
 /**
@@ -59,6 +72,7 @@ export function container(): ApiContainer {
   const messageStore = new CosmosMessageStore();
   const settingsStore = new CosmosSettingsStore();
   const inviteStore = new CosmosInviteStore();
+  const credentialStore = new CosmosCredentialStore();
   const minter = new AzureSasMinter();
   const access = new AccessService(
     inviteStore,
@@ -76,6 +90,7 @@ export function container(): ApiContainer {
     assets: createAssetsController(new AssetService(threadStore, minter)),
     me: createMeController(access),
     invites: createInvitesController(inviteStore, clock),
+    credentials: createCredentialsController(new CredentialService(credentialStore, buildKeyWrapper(), clock)),
   };
   return cached;
 }
