@@ -4,6 +4,7 @@ import { InMemoryRunStore } from '../adapters/memory/runStore';
 import { InMemoryMessageStore } from '../adapters/memory/messageStore';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import type { RunRecord } from '../ports/runStore';
+import type { MessageRecord } from '../ports/messageStore';
 import type { RunStatus } from '../domain/run';
 import type { AgentEvent, RunAgentParams } from '../ai/orchestrator';
 import { DEFAULT_SETTINGS } from '../domain/settings';
@@ -275,6 +276,51 @@ describe('processRun', () => {
     expect(msg?.images?.[0].blobPath).toContain('.png');
     expect(uploads[0].len).toBeGreaterThan(0);
     expect(msg?.toolCalls?.find((t) => t.id === 'g1')?.kind).toBe('image');
+  });
+
+  it('streams an aspect-correct image placeholder, then yields it to the real image (no overlap)', async () => {
+    await seed(ctx);
+    const uploadImage = async (): Promise<string> => 'u/t1/img.png';
+    const snapshots: MessageRecord[] = [];
+    const signalr = {
+      negotiate: () => ({ url: '', accessToken: '' }),
+      sendToUser: async (_u: string, target: string, payload: unknown) => {
+        if (target === 'message') snapshots.push((payload as { message: MessageRecord }).message);
+      },
+    };
+    const runAgent: RunAgentFn = script([
+      { type: 'tool', name: 'generate_image', status: 'running', callId: 'g1', args: { size: '1024x1536' } },
+      {
+        type: 'image',
+        b64: Buffer.from('PNG').toString('base64'),
+        partial: false,
+        prompt: 'a cat',
+        size: '1024x1536',
+        callId: 'g1',
+      },
+      { type: 'tool', name: 'generate_image', status: 'done', callId: 'g1' },
+      { type: 'done' },
+    ]);
+    await processRun({ ...ctx.deps(runAgent), uploadImage, signalr }, 't1', 'r1');
+
+    // While generating: a snapshot carries the running image tool call + the requested size, and no
+    // real image yet (so the client renders the aspect-correct placeholder).
+    const generating = snapshots.find((m) =>
+      m.toolCalls?.some((t) => t.id === 'g1' && t.status === 'running' && t.imageSize === '1024x1536'),
+    );
+    expect(generating).toBeTruthy();
+    expect(generating?.images?.length ?? 0).toBe(0);
+
+    // Never a snapshot with the real image while the tool call is still 'running' (no placeholder
+    // and image side-by-side).
+    const overlap = snapshots.find(
+      (m) => (m.images?.length ?? 0) > 0 && m.toolCalls?.some((t) => t.id === 'g1' && t.status === 'running'),
+    );
+    expect(overlap).toBeUndefined();
+
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.images?.length).toBe(1);
+    expect(msg?.toolCalls?.find((t) => t.id === 'g1')?.status).toBe('done');
   });
 
   it('accumulates tool cards and citations onto the message', async () => {

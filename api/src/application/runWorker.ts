@@ -320,13 +320,21 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         await flush();
       } else if (ev.type === 'tool') {
         const id = ev.callId ?? ev.name;
+        const prev = toolCalls.get(id);
+        const kind = toolKind(ev.name);
         toolCalls.set(id, {
+          ...prev,
           id,
-          kind: toolKind(ev.name),
+          kind,
           name: ev.name,
           status: ev.status,
           ...(ev.detail ? { summary: ev.detail.slice(0, 400) } : {}),
           ...(ev.result ? { resultPreview: ev.result.slice(0, 4000) } : {}),
+          // Carry the requested image size so the client can show an aspect-correct placeholder
+          // while the image generates (the size only rides on the initial `running` event).
+          ...(kind === 'image' && typeof ev.args?.size === 'string'
+            ? { imageSize: ev.args.size.slice(0, 32) }
+            : {}),
         });
         await flush(true);
       } else if (ev.type === 'citation') {
@@ -355,6 +363,12 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
             outputFormat: 'png',
             createdAt: clock.now(),
           });
+          // The image landed — mark its tool call done so the placeholder yields to the real image
+          // in the same snapshot (no brief placeholder-plus-image overlap).
+          if (ev.callId) {
+            const tc = toolCalls.get(ev.callId);
+            if (tc) toolCalls.set(ev.callId, { ...tc, status: 'done' });
+          }
           await flush(true);
         } catch {
           /* image upload failed -> the text answer still completes without it */

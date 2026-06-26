@@ -84,6 +84,8 @@ export interface ToolCall {
   summary?: string;
   argsPreview?: string;
   resultPreview?: string;
+  /** Requested image size (`WxH`) for an image tool call (drives the generating placeholder). */
+  imageSize?: string;
   error?: AiError;
 }
 

@@ -27,6 +27,9 @@ const toolCallSchema = z
     status: z.enum(['running', 'awaiting-confirm', 'done', 'error']),
     summary: z.string().max(400).optional(),
     resultPreview: z.string().max(4000).optional(),
+    /** Requested image size (`WxH`) for an image tool call, so the client can render an
+     *  aspect-correct placeholder while the image generates. */
+    imageSize: z.string().max(32).optional(),
   })
   .strict();
 

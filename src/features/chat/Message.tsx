@@ -5,7 +5,7 @@ import { Avatar, IconButton, InlineAlert, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
 import { synthesize } from '../../ai/tts';
-import type { Citation, Message, ToolCall } from '../../lib/types';
+import type { Citation, Message, PendingImage, ToolCall } from '../../lib/types';
 
 function domainOf(url: string): string {
   try {
@@ -166,6 +166,22 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
   const mockAi = useUi((s) => s.mockAi);
   const isStreamingThis = streaming && message.status === 'streaming';
 
+  // An image tool call that is still running renders as an aspect-correct placeholder (optimistic
+  // preview) rather than a tool card; once the image lands the placeholder yields to the real one.
+  const imageGenerating = (message.toolCalls ?? []).filter(
+    (tc) => tc.kind === 'image' && (tc.status === 'running' || tc.status === 'awaiting-confirm'),
+  );
+  const derivedPending: PendingImage[] = imageGenerating.map((tc) => ({
+    id: tc.id,
+    size: tc.imageSize || '1024x1024',
+  }));
+  const pendingImages = derivedPending.length ? derivedPending : message.pendingImages;
+  // Image tool calls are conveyed by the placeholder / final image, so keep them out of the card
+  // strip — except a failure, which the user should see.
+  const toolCards = (message.toolCalls ?? []).filter(
+    (tc) => tc.kind !== 'image' || tc.status === 'error',
+  );
+
   const copy = () => {
     navigator.clipboard.writeText(message.content).then(() => {
       setCopied(true);
@@ -210,15 +226,15 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
           <span className="assistant__name">Watai</span>
         </div>
 
-        {message.toolCalls && message.toolCalls.length > 0 && (
+        {toolCards.length > 0 && (
           <div className="tool-cards" aria-live="polite">
-            {message.toolCalls.map((tc) => (
+            {toolCards.map((tc) => (
               <ToolCardView key={tc.id} tc={tc} />
             ))}
           </div>
         )}
 
-        <GeneratedImages images={message.images} pending={message.pendingImages} />
+        <GeneratedImages images={message.images} pending={pendingImages} />
 
         {message.content ? (
           <div className={isStreamingThis ? 'typing-caret' : ''}>

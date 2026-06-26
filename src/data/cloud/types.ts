@@ -73,6 +73,8 @@ export interface ToolCallRecord {
   summary?: string;
   /** Bounded tool output (e.g. code-interpreter result) shown in the tool card. */
   resultPreview?: string;
+  /** Requested image size (`WxH`) for an image tool call (drives the generating placeholder). */
+  imageSize?: string;
 }
 
 /** Grounding citation record synced with a message (full, so the source pane matches everywhere). */
@@ -339,6 +341,7 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
             status: t.status === 'done' || t.status === 'error' ? t.status : ('done' as const),
             ...(t.summary !== undefined ? { summary: t.summary } : {}),
             ...(t.resultPreview !== undefined ? { resultPreview: t.resultPreview } : {}),
+            ...(t.imageSize !== undefined ? { imageSize: t.imageSize } : {}),
           })),
         }
       : {}),
