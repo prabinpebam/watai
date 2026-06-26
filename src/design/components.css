@@ -55,7 +55,7 @@
 }
 .btn--danger {
   background: var(--color-danger);
-  color: #fff;
+  color: var(--color-text-on-accent);
 }
 .btn--danger:hover {
   background: var(--color-danger-hover);
@@ -72,6 +72,13 @@
 }
 .btn--full {
   width: 100%;
+}
+/* Left-aligned content (sidebar nav rows); centers when the sidebar is collapsed to icons. */
+.btn--align-start {
+  justify-content: flex-start;
+}
+.sidebar--collapsed .btn--align-start {
+  justify-content: center;
 }
 
 .icon-btn {
@@ -187,7 +194,7 @@
   left: 3px;
   width: 20px;
   height: 20px;
-  background: #fff;
+  background: var(--color-text-on-accent);
   border-radius: 50%;
   box-shadow: var(--elevation-1);
   transition: transform var(--motion-base) var(--ease-standard);
@@ -258,8 +265,8 @@
   justify-content: center;
   border-radius: 50%;
   background: var(--color-accent);
-  color: #fff;
-  font-weight: 600;
+  color: var(--color-text-on-accent);
+  font-weight: var(--font-weight-semibold);
   flex: 0 0 auto;
   overflow: hidden;
 }
@@ -272,20 +279,60 @@
   background: var(--color-primary);
   color: var(--color-primary-text);
 }
+/* Sizes: drive the box + initials type from tokens (icon children size via the Icon prop). */
+.avatar--sm {
+  width: var(--size-avatar-sm);
+  height: var(--size-avatar-sm);
+  font-size: var(--text-caption-size);
+}
+.avatar--md {
+  width: var(--size-avatar-md);
+  height: var(--size-avatar-md);
+  font-size: var(--text-body-size);
+}
+.avatar--lg {
+  width: var(--size-avatar-lg);
+  height: var(--size-avatar-lg);
+  font-size: var(--text-title-1-size);
+}
+.avatar--xl {
+  width: var(--size-avatar-xl);
+  height: var(--size-avatar-xl);
+  font-size: var(--text-display-size);
+}
+.avatar--danger {
+  background: color-mix(in srgb, var(--color-danger) 16%, transparent);
+  color: var(--color-danger);
+}
 
 /* Spinner */
 .spinner {
   display: inline-block;
-  width: 18px;
-  height: 18px;
+  width: var(--icon-20);
+  height: var(--icon-20);
   border: 2px solid var(--color-border-strong);
   border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
+.spinner--sm {
+  width: var(--icon-16);
+  height: var(--icon-16);
+  border-width: 2px;
+}
+.spinner--md {
+  width: var(--icon-20);
+  height: var(--icon-20);
+  border-width: 2px;
+}
 .spinner--lg {
-  width: 28px;
-  height: 28px;
+  width: var(--icon-24);
+  height: var(--icon-24);
+  border-width: 2.5px;
+}
+.spinner--xl {
+  width: var(--icon-32);
+  height: var(--icon-32);
   border-width: 3px;
 }
 @keyframes spin {
@@ -332,6 +379,14 @@
 .alert--warning {
   border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
   background: color-mix(in srgb, var(--color-warning) 8%, var(--color-bg));
+}
+.alert--success {
+  border-color: color-mix(in srgb, var(--color-success) 40%, transparent);
+  background: color-mix(in srgb, var(--color-success) 8%, var(--color-bg));
+}
+.alert--info {
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg));
 }
 .alert__icon {
   flex: 0 0 auto;
@@ -428,7 +483,7 @@
 .dialog__title {
   margin: 0;
   font-size: var(--text-title-3-size);
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   line-height: 1.3;
 }
 .dialog__message {
@@ -459,6 +514,13 @@
   animation: slide-up var(--motion-slow) var(--ease-spring);
   max-height: 85vh;
   overflow: auto;
+}
+/* The sheet hosts the shared modal header/footer with no extra inline padding. */
+.sheet .modal__header {
+  padding: 0 0 var(--space-4);
+}
+.sheet .modal__footer {
+  padding-inline: 0;
 }
 @keyframes slide-up {
   from {
@@ -657,6 +719,11 @@
   border-bottom: 1px solid var(--color-border);
 }
 .setting-row:last-child {
+  border-bottom: none;
+}
+/* Flush variant: no padding/border (used when a row is the sole content of a card). */
+.setting-row--flush {
+  padding: 0;
   border-bottom: none;
 }
 .setting-row__body {
@@ -964,7 +1031,7 @@ button.source-chip:hover {
   color: var(--color-text-secondary);
 }
 .source-pane__title {
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 .source-pane__count {
@@ -1087,9 +1154,9 @@ button.source-chip:hover {
   padding: 0 3px;
   border-radius: var(--radius-pill);
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-text-on-accent);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: var(--font-weight-semibold);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1501,6 +1568,13 @@ button.source-chip:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* In the dark image viewer, prompt + meta text are on-media (override the default dark tones). */
+.viewer__bar .image-card__prompt {
+  color: inherit;
+}
+.viewer__meta .muted {
+  color: var(--color-text-on-media-muted);
+}
 .gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -1531,7 +1605,7 @@ button.source-chip:hover {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-4);
-  color: #fff;
+  color: var(--color-text-on-media);
 }
 .viewer__stage {
   flex: 1;
@@ -1560,12 +1634,12 @@ button.source-chip:hover {
 }
 .viewer__prompt {
   max-width: min(720px, 92vw);
-  color: #ccc;
+  color: var(--color-text-on-media-secondary);
   font-size: var(--text-caption-size);
 }
 .viewer__prompt summary {
   cursor: pointer;
-  color: #aaa;
+  color: var(--color-text-on-media-muted);
   text-align: center;
 }
 .viewer__prompt p {
@@ -1573,10 +1647,10 @@ button.source-chip:hover {
   line-height: 1.5;
 }
 .viewer .icon-btn {
-  color: #fff;
+  color: var(--color-text-on-media);
 }
 .viewer .icon-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--color-on-media-hover);
 }
 .viewer__title {
   flex: 1;
@@ -1654,7 +1728,7 @@ button.source-chip:hover {
   color: var(--color-text-secondary);
 }
 .file-card__icon--pdf {
-  color: #e2483d;
+  color: var(--color-danger);
 }
 .file-card__meta {
   flex: 1;
@@ -1705,7 +1779,7 @@ button.source-chip:hover {
   width: 100%;
   max-height: 360px;
   border-radius: var(--radius-sm);
-  background: #000;
+  background: var(--color-media-bg);
 }
 
 /* Generated (assistant) images */
@@ -1848,6 +1922,9 @@ button.source-chip:hover {
 }
 .muted {
   color: var(--color-text-secondary);
+}
+.text-strong {
+  font-weight: var(--font-weight-semibold);
 }
 .center-screen {
   flex: 1;

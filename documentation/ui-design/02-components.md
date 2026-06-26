@@ -15,6 +15,18 @@ Conventions used in this doc:
 - "Hit target ≥ 44px" means visual size may be smaller but the tappable area is padded
   to 44px.
 
+## Implementation discipline (enforced)
+
+- **Tokens only.** Color, type, spacing, sizing, radius, elevation, motion, and z-index come
+  from `src/design/tokens.css`. No hardcoded hex or magic numbers in component CSS or in JSX
+  `style={{ }}`. `npm run lint:ds` (wired into `npm run build`) fails the build on hardcoded
+  color literals outside `tokens.css`.
+- **Variants, not inline overrides.** Size / tone / state are variant classes or component
+  props (`<Avatar size>`, `<Spinner size>`, `<InlineAlert tone>`), never per-call inline styles.
+- **One definition per component.** Markup + styles live once; feature code composes primitives.
+- **Shared behavior is a primitive.** Dismiss-on-outside-click/Escape is `useDismiss`; overlays
+  portal through the shared `Modal` / `Menu`.
+
 ---
 
 ## A. Primitives

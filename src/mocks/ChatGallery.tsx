@@ -228,7 +228,7 @@ export default function ChatGallery() {
           <span
             style={{
               fontSize: 11,
-              fontWeight: 700,
+              fontWeight: 'var(--font-weight-semibold)',
               letterSpacing: 0.5,
               padding: '2px 6px',
               marginLeft: 8,
@@ -254,7 +254,7 @@ export default function ChatGallery() {
                 borderBottom: '1px solid var(--color-border)',
               }}
             >
-              <div style={{ fontSize: 'var(--text-callout-size)', fontWeight: 700 }}>{s.title}</div>
+              <div className="text-strong" style={{ fontSize: 'var(--text-callout-size)' }}>{s.title}</div>
               {s.hint && (
                 <div className="muted" style={{ fontSize: 'var(--text-caption-size)', marginTop: 2 }}>
                   {s.hint}

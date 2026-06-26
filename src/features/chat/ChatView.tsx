@@ -4,7 +4,7 @@ import { Composer } from './Composer';
 import { AssistantMessage, UserMessage } from './Message';
 import { SourcePane } from './SourcePane';
 import { Icon } from '../../design/icons';
-import { Spinner } from '../../design/ui';
+import { Avatar, Spinner } from '../../design/ui';
 import { useUi } from '../../state/store';
 import { greeting } from '../../lib/format';
 
@@ -57,13 +57,13 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
         <div className="chat__scroll" ref={scrollRef} onScroll={onScroll}>
         {loading ? (
           <div className="center-screen">
-            <Spinner large />
+            <Spinner size="xl" />
           </div>
         ) : isEmpty ? (
           <div className="empty">
-            <span className="avatar avatar--assistant" style={{ width: 56, height: 56 }}>
+            <Avatar size="lg" variant="assistant">
               <Icon name="sparkle" size={28} />
-            </span>
+            </Avatar>
             <div>
               <div className="empty__greeting">{greeting()}</div>
               <div className="empty__sub">Ask anything, dictate with your voice, or generate an image.</div>
@@ -86,7 +86,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
                 <AssistantMessage key={m.id} message={m} streaming={streaming} onRegenerate={regenerate} />
               ),
             )}
-            <div style={{ height: 12 }} />
+            <div style={{ height: 'var(--space-4)' }} />
           </div>
         )}
 
@@ -99,13 +99,13 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
 
       {indexing && (
         <div className="composer-status" role="status">
-          <span className="spinner" style={{ width: 14, height: 14 }} />
+          <Spinner size="sm" />
           <span>Indexing your file… you can ask about it once it’s ready.</span>
         </div>
       )}
       {lockedBy && !streaming && (
         <div className="composer-status composer-status--lock" role="status">
-          <span className="spinner" style={{ width: 14, height: 14 }} />
+          <Spinner size="sm" />
           <span>
             Generating a response on {lockedBy.deviceLabel}… you can reply once it’s finished.
           </span>

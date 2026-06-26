@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../../design/icons';
 import { Switch } from '../../design/ui';
+import { useDismiss } from '../../lib/hooks';
 import { repo } from '../../data';
 import { getApiConfig, getTavilyKey, saveTavilyKey } from '../../data/secureStore';
 import { detectCapabilities } from '../../ai/capabilities';
@@ -106,20 +107,7 @@ export function ToolsMenu() {
     };
   }, [mockAi]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (popRef.current?.contains(e.target as Node) || btnRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    window.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  useDismiss(open, () => setOpen(false), [popRef, btnRef]);
 
   if (!caps?.responses) return null;
 

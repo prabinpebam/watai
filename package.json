@@ -6,7 +6,8 @@
   "description": "Watai — a ChatGPT-style web app powered by your own Azure OpenAI endpoint (BYO key).",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "lint:ds": "node scripts/check-design-system.mjs",
+    "build": "npm run lint:ds && tsc -b && vite build",
     "build:nocheck": "vite build",
     "preview": "vite preview",
     "test": "vitest run",

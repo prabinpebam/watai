@@ -56,7 +56,7 @@ function SidebarContent({
             navigate('/search');
             onNavigate?.();
           }}
-          style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}
+          className="btn--align-start"
         >
           {!collapsed && <span className="btn--full-label">Search</span>}
         </Button>
@@ -68,7 +68,7 @@ function SidebarContent({
             navigate('/images');
             onNavigate?.();
           }}
-          style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}
+          className="btn--align-start"
         >
           {!collapsed && <span className="btn--full-label">Images</span>}
         </Button>
@@ -85,7 +85,7 @@ function SidebarContent({
             navigate('/settings');
             onNavigate?.();
           }}
-          style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}
+          className="btn--align-start"
         >
           {!collapsed && <span className="btn--full-label">Settings</span>}
         </Button>

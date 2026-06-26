@@ -94,17 +94,6 @@ a:hover {
   border: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
 /* ============================ App frame ============================ */
 
 .app {
@@ -402,6 +391,10 @@ a:hover {
 .assistant {
   width: 100%;
 }
+/* Alerts inside an assistant block (e.g. an error in place of content) get top separation. */
+.assistant .alert {
+  margin-top: var(--space-3);
+}
 .assistant__role {
   display: flex;
   align-items: center;
@@ -561,8 +554,8 @@ a:hover {
   color: var(--color-text-tertiary);
 }
 .md mark {
-  background: #fde68a;
-  color: #1f2937;
+  background: var(--color-mark-bg);
+  color: var(--color-mark-text);
   padding: 0 0.2em;
   border-radius: var(--radius-xs);
 }
@@ -856,6 +849,9 @@ a:hover {
 .composer-file__remove:hover {
   background: var(--color-surface-3);
   color: var(--color-text-primary);
+}
+.composer__spinner {
+  margin: var(--space-3);
 }
 .composer-status {
   display: flex;

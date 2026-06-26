@@ -25,15 +25,15 @@ export function DevMenu() {
       {open &&
         createPortal(
           <>
-            <div className="scrim" style={{ background: 'transparent', zIndex: 590 }} onClick={() => setOpen(false)} />
+            <div className="scrim" style={{ background: 'transparent', zIndex: 'var(--z-modal-scrim)' }} onClick={() => setOpen(false)} />
             <div
               className="menu"
-              style={{ right: 16, bottom: 64, left: 'auto', top: 'auto', minWidth: 240, zIndex: 600 }}
+              style={{ right: 'var(--space-5)', bottom: 'var(--space-12)', left: 'auto', top: 'auto', minWidth: 240, zIndex: 'var(--z-modal)' }}
             >
-              <div className="nav-group__label" style={{ padding: '4px 8px' }}>
+              <div className="nav-group__label" style={{ padding: 'var(--space-2) var(--space-3)' }}>
                 Developer
               </div>
-              <div className="setting-row" style={{ padding: '8px', borderBottom: 'none' }}>
+              <div className="setting-row" style={{ padding: 'var(--space-3)', borderBottom: 'none' }}>
                 <div className="setting-row__body">
                   <div className="setting-row__title" style={{ fontSize: 'var(--text-callout-size)' }}>
                     Mock AI
@@ -77,7 +77,7 @@ export function DevMenu() {
                 <Icon name="image" size={18} /> Chat component gallery
               </button>
               <div className="menu__sep" />
-              <div style={{ padding: 8 }}>
+              <div style={{ padding: 'var(--space-3)' }}>
                 <Button
                   size="sm"
                   full

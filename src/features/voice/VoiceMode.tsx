@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { IconButton } from '../../design/ui';
+import { IconButton, Spinner } from '../../design/ui';
 import { startRecording, type Recorder } from '../../lib/audio';
 import { transcribe } from '../../ai/transcribe';
 import { streamChat, type ChatMessage } from '../../ai/chat';
@@ -175,7 +175,7 @@ export function VoiceMode() {
       <div className="col" style={{ alignItems: 'center', gap: 'var(--space-7)' }}>
         <div className="voice__status">{PHASE_LABEL[phase]}</div>
         <button className={orbClass} onClick={onOrbTap} aria-label="Tap to speak">
-          {phase === 'thinking' && <span className="spinner spinner--lg" />}
+          {phase === 'thinking' && <Spinner size="lg" />}
         </button>
         <div className="voice__caption">{caption}</div>
       </div>

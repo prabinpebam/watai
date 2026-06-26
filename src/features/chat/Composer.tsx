@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { IconButton } from '../../design/ui';
+import { IconButton, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { ToolsMenu } from './ToolsMenu';
 import { startRecording, type Recorder } from '../../lib/audio';
@@ -205,7 +205,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
           aria-label="Message"
         />
         {transcribing ? (
-          <span className="spinner" style={{ margin: 8 }} />
+          <Spinner size="sm" className="composer__spinner" />
         ) : (
           <IconButton
             name={recording ? 'mic-off' : 'mic'}
@@ -228,7 +228,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
           />
         )}
       </div>
-      <p className="muted" style={{ textAlign: 'center', fontSize: 'var(--text-caption-size)', margin: '8px 0 0' }}>
+      <p className="muted" style={{ textAlign: 'center', fontSize: 'var(--text-caption-size)', margin: 'var(--space-3) 0 0' }}>
         {mockAi ? (
           <>
             <Icon name="info" size={12} style={{ verticalAlign: '-2px' }} /> Mock mode — responses are simulated.

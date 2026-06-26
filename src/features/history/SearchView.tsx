@@ -70,7 +70,7 @@ export function SearchView({ onClose }: { onClose?: () => void }) {
                 onClose?.();
               }}
             >
-              <div style={{ fontWeight: 600, marginBottom: 2 }}>{highlight(h.thread.title, query)}</div>
+              <div className="text-strong" style={{ marginBottom: 'var(--space-1)' }}>{highlight(h.thread.title, query)}</div>
               <div className="muted" style={{ fontSize: 'var(--text-caption-size)' }}>
                 {highlight(h.snippet, query)}
               </div>

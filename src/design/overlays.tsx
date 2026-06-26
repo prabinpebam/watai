@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { IconButton, Button } from './ui';
 import { Icon } from './icons';
-import { useIsExpanded } from '../lib/hooks';
+import { useIsExpanded, useDismiss } from '../lib/hooks';
 
 function useEscape(onClose: () => void) {
   useEffect(() => {
@@ -35,13 +35,13 @@ export function Modal({ title, onClose, children, footer, adaptive = true }: Mod
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet__grip" />
         {title && (
-          <div className="modal__header" style={{ padding: '0 0 12px' }}>
+          <div className="modal__header">
             <div className="modal__title">{title}</div>
             <IconButton name="close" label="Close" onClick={onClose} />
           </div>
         )}
         <div>{children}</div>
-        {footer && <div className="modal__footer" style={{ paddingInline: 0 }}>{footer}</div>}
+        {footer && <div className="modal__footer">{footer}</div>}
       </div>
     </>
   ) : (
@@ -211,14 +211,7 @@ interface MenuProps {
 
 export function Menu({ x, y, items, onClose }: MenuProps) {
   const ref = useRef<HTMLDivElement>(null);
-  useEscape(onClose);
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
-  }, [onClose]);
+  useDismiss(true, onClose, [ref]);
 
   // Keep within viewport
   const left = Math.min(x, window.innerWidth - 220);

@@ -33,7 +33,7 @@ function ScreenBar({ title }: { title: string }) {
         <IconButton name="menu" label="Open menu" onClick={() => toggleDrawer(true)} />
       )}
       <div className="appbar__title">{title}</div>
-      <div style={{ width: 40 }} />
+      <div style={{ width: 'var(--size-control-md)' }} />
     </div>
   );
 }
@@ -52,7 +52,7 @@ function RootRedirect() {
   }, [navigate]);
   return (
     <div className="center-screen">
-      <Spinner large />
+      <Spinner size="xl" />
     </div>
   );
 }
@@ -118,7 +118,7 @@ function Protected({ children }: { children: ReactNode }) {
   if (state === 'loading') {
     return (
       <div className="center-screen">
-        <Spinner large />
+        <Spinner size="xl" />
       </div>
     );
   }
@@ -238,7 +238,7 @@ export function App() {
             <Suspense
               fallback={
                 <div className="center-screen">
-                  <Spinner large />
+                  <Spinner size="xl" />
                 </div>
               }
             >

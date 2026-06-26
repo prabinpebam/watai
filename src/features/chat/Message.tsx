@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import { AttachmentList, GeneratedImages } from './Attachments';
-import { IconButton } from '../../design/ui';
+import { Avatar, IconButton, InlineAlert, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
 import { synthesize } from '../../ai/tts';
@@ -32,7 +32,7 @@ function kindIcon(kind: ToolCall['kind']): string {
 
 function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
   if (status === 'running' || status === 'awaiting-confirm')
-    return <span className="spinner" style={{ width: 12, height: 12 }} />;
+    return <Spinner size="sm" />;
   if (status === 'error') return <Icon name="alert" size={14} />;
   return <Icon name="check" size={14} />;
 }
@@ -204,9 +204,9 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
     <div className="msg-group msg-group--assistant">
       <div className="assistant">
         <div className="assistant__role">
-          <span className="avatar avatar--assistant" style={{ width: 28, height: 28, fontSize: 13 }}>
+          <Avatar size="sm" variant="assistant">
             <Icon name="sparkle" size={15} />
-          </span>
+          </Avatar>
           <span className="assistant__name">Watai</span>
         </div>
 
@@ -237,12 +237,7 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
         <AttachmentList attachments={message.attachments} />
 
         {message.status === 'error' && message.error && (
-          <div className="alert alert--danger" style={{ marginTop: 8 }}>
-            <span className="alert__icon">
-              <Icon name="alert" size={18} />
-            </span>
-            <span>{message.error.message}</span>
-          </div>
+          <InlineAlert tone="danger">{message.error.message}</InlineAlert>
         )}
 
         {message.status === 'interrupted' && (

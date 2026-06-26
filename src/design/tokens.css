@@ -58,6 +58,15 @@
   --color-code-bg: var(--gray-100);
   --color-skeleton: var(--gray-100);
   --color-skeleton-shine: var(--gray-50);
+  /* Text/controls over media or a dark scrim (image viewer, overlays) — theme-independent. */
+  --color-text-on-media: #ffffff;
+  --color-text-on-media-secondary: #cccccc;
+  --color-text-on-media-muted: #aaaaaa;
+  --color-on-media-hover: rgba(255, 255, 255, 0.12);
+  --color-media-bg: #000000;
+  /* Text highlight (search match / <mark>) — theme-independent. */
+  --color-mark-bg: #fde68a;
+  --color-mark-text: #1f2937;
 
   /* --- Typography --- */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -83,6 +92,11 @@
   --text-label-lh: 0.875rem;
   --text-code-size: 0.84375rem;
   --text-code-lh: 1.25rem;
+
+  /* Font weights (the only three used in the UI; no 700+). */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
 
   /* --- Spacing (4px grid) --- */
   --space-0: 0;
@@ -111,6 +125,7 @@
   --size-avatar-sm: 28px;
   --size-avatar-md: 36px;
   --size-avatar-lg: 64px;
+  --size-avatar-xl: 72px;
   --icon-16: 16px;
   --icon-20: 20px;
   --icon-24: 24px;

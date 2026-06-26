@@ -1,7 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSettings } from './useSettings';
-import { Button, Field, IconButton, Segmented, Switch, TextAreaField } from '../../design/ui';
+import { Avatar, Button, Field, IconButton, Segmented, Spinner, Switch, TextAreaField } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { Logo } from '../../design/Logo';
 import { ConfirmDialog } from '../../design/overlays';
@@ -329,9 +329,7 @@ function AccountMiniCard({ ctx, active, onClick }: { ctx: SettingsCtx; active: b
   const name = account.name ?? account.email ?? 'Your account';
   return (
     <button className={`account-card ${active ? 'is-active' : ''}`} onClick={onClick}>
-      <span className="avatar" style={{ width: 44, height: 44, fontSize: 18 }}>
-        {name.slice(0, 1).toUpperCase()}
-      </span>
+      <Avatar size="md">{name.slice(0, 1).toUpperCase()}</Avatar>
       <span className="account-card__body">
         <span className="account-card__name">{name}</span>
         <span className="account-card__email">{me?.isAdmin ? 'Admin' : 'Member'} · Cloud account</span>
@@ -396,9 +394,7 @@ function SettingsHub({
       <div className="page">
         <div className="page__inner">
           <button className="account-hero" onClick={() => onOpen('account')}>
-            <span className="avatar" style={{ width: 56, height: 56, fontSize: 22 }}>
-              {name.slice(0, 1).toUpperCase()}
-            </span>
+            <Avatar size="lg">{name.slice(0, 1).toUpperCase()}</Avatar>
             <span className="account-hero__body">
               <span className="account-hero__name">{name}</span>
               <span className="account-hero__email">{account.email ?? 'Cloud account'}</span>
@@ -419,9 +415,9 @@ function SettingsHub({
                   const meta = SECTIONS[id];
                   return (
                     <button key={id} className="setting-row" onClick={() => onOpen(id)}>
-                      <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+                      <Avatar size="md" variant="assistant">
                         <Icon name={meta.icon} size={18} />
-                      </span>
+                      </Avatar>
                       <div className="setting-row__body">
                         <div className="setting-row__title">{meta.label}</div>
                         <div className="setting-row__sub">{summaryFor(id, ctx)}</div>
@@ -467,9 +463,7 @@ function AccountBody({ ctx }: { ctx: SettingsCtx }) {
   return (
     <>
       <div className="profile-hero">
-        <span className="avatar" style={{ width: 64, height: 64, fontSize: 24 }}>
-          {name.slice(0, 1).toUpperCase()}
-        </span>
+        <Avatar size="lg">{name.slice(0, 1).toUpperCase()}</Avatar>
         <div>
           <div className="profile-hero__name">{name}</div>
           <div className="profile-hero__email">{email}</div>
@@ -503,9 +497,9 @@ function AccountBody({ ctx }: { ctx: SettingsCtx }) {
         </div>
         <div className="settings-card" style={{ marginTop: 'var(--space-3)' }}>
           <div className="setting-row">
-            <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+            <Avatar size="md" variant="assistant">
               <Icon name="check-circle" size={18} />
-            </span>
+            </Avatar>
             <div className="setting-row__body">
               <div className="setting-row__title">Cloud sync</div>
               <div className="setting-row__sub">
@@ -1018,7 +1012,7 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
               onClick={testTavily}
               disabled={tavilyTesting}
             >
-              {tavilyTesting ? <span className="spinner" style={{ width: 16, height: 16 }} /> : null}
+              {tavilyTesting ? <Spinner size="sm" /> : null}
               <span>Test search</span>
             </button>
             <IconButton
@@ -1045,7 +1039,7 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
             </div>
             <label className="btn btn--outline" aria-disabled={uploading}>
               {uploading ? (
-                <span className="spinner" style={{ width: 16, height: 16 }} />
+                <Spinner size="sm" />
               ) : (
                 <Icon name="paperclip" size={18} />
               )}
@@ -1208,7 +1202,7 @@ function AppearanceBody({ ctx }: { ctx: SettingsCtx }) {
             ]}
           />
         </div>
-        <div className="setting-row" style={{ padding: 0, borderBottom: 'none' }}>
+        <div className="setting-row setting-row--flush">
           <div className="setting-row__body">
             <div className="setting-row__title">Reduce motion</div>
             <div className="setting-row__sub">Minimize animations.</div>
@@ -1242,9 +1236,9 @@ function DataBody({ ctx }: { ctx: SettingsCtx }) {
     <>
       <div className="settings-card">
         <div className="setting-row">
-          <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+          <Avatar size="md" variant="assistant">
             <Icon name="check-circle" size={18} />
-          </span>
+          </Avatar>
           <div className="setting-row__body">
             <div className="setting-row__title">Cloud sync</div>
             <div className="setting-row__sub">
@@ -1286,9 +1280,9 @@ function DataBody({ ctx }: { ctx: SettingsCtx }) {
 
       <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
         <button className="setting-row" onClick={exportData}>
-          <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+          <Avatar size="md" variant="assistant">
             <Icon name="download" size={18} />
-          </span>
+          </Avatar>
           <div className="setting-row__body">
             <div className="setting-row__title">Export all data</div>
             <div className="setting-row__sub">Download a JSON archive of your chats and settings.</div>
@@ -1296,17 +1290,9 @@ function DataBody({ ctx }: { ctx: SettingsCtx }) {
           <Icon name="chevron-right" size={18} className="muted" />
         </button>
         <button className="setting-row" onClick={() => setConfirm(true)}>
-          <span
-            className="avatar"
-            style={{
-              width: 36,
-              height: 36,
-              background: 'color-mix(in srgb, var(--color-danger) 16%, transparent)',
-              color: 'var(--color-danger)',
-            }}
-          >
+          <Avatar size="md" variant="danger">
             <Icon name="trash" size={18} />
-          </span>
+          </Avatar>
           <div className="setting-row__body">
             <div className="setting-row__title" style={{ color: 'var(--color-danger)' }}>
               Delete all conversations
@@ -1482,7 +1468,7 @@ function AboutBody() {
       >
         <Logo size={64} />
         <div>
-          <div style={{ fontSize: 'var(--text-title-2-size)', fontWeight: 600 }}>Watai</div>
+          <div className="text-strong" style={{ fontSize: 'var(--text-title-2-size)' }}>Watai</div>
           <div className="muted">Version {APP_VERSION}</div>
         </div>
         <p className="muted" style={{ maxWidth: '40ch' }}>
@@ -1496,9 +1482,9 @@ function AboutBody() {
           target="_blank"
           rel="noreferrer noopener"
         >
-          <span className="avatar avatar--assistant" style={{ width: 36, height: 36 }}>
+          <Avatar size="md" variant="assistant">
             <Icon name="external" size={18} />
-          </span>
+          </Avatar>
           <div className="setting-row__body">
             <div className="setting-row__title">Source code</div>
             <div className="setting-row__sub">github.com/prabinpebam/watai</div>

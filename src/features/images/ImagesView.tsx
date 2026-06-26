@@ -102,7 +102,7 @@ export function ImagesView() {
               style={{ minHeight: 72 }}
             />
           </div>
-          <div className="row" style={{ marginTop: 'var(--space-4)', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div className="row" style={{ marginTop: 'var(--space-4)', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
             <Segmented
               value={size}
               onChange={setSize}
@@ -138,7 +138,7 @@ export function ImagesView() {
         <div className="viewer" role="dialog" aria-label="Image viewer">
           <div className="viewer__bar">
             <IconButton name="close" label="Close" onClick={() => setViewer(null)} />
-            <span className="grow image-card__prompt" style={{ color: '#fff' }}>
+            <span className="grow image-card__prompt">
               {viewer.prompt}
             </span>
             <IconButton name="download" label="Download" onClick={() => download(viewer)} />
@@ -157,11 +157,11 @@ export function ImagesView() {
           </div>
           <div className="viewer__meta">
             <div className="viewer__meta-row">
-              <span className="muted" style={{ color: '#aaa' }}>
+              <span className="muted">
                 <Icon name="image" size={14} style={{ verticalAlign: '-2px' }} /> {viewer.size}
               </span>
               {viewer.model && (
-                <span className="muted" style={{ color: '#aaa' }}>
+                <span className="muted">
                   <Icon name="sparkle" size={14} style={{ verticalAlign: '-2px' }} /> {viewer.model}
                 </span>
               )}

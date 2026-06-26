@@ -29,7 +29,7 @@ export function Button({
     .join(' ');
   return (
     <button className={cls} disabled={disabled || loading} {...rest}>
-      {loading ? <span className="spinner" style={{ width: 16, height: 16 }} /> : icon ? <Icon name={icon} size={18} /> : null}
+      {loading ? <Spinner size="sm" /> : icon ? <Icon name={icon} size={18} /> : null}
       {children}
     </button>
   );
@@ -136,6 +136,66 @@ export function Segmented<T extends string>({ value, options, onChange }: Segmen
   );
 }
 
-export function Spinner({ large }: { large?: boolean }) {
-  return <span className={`spinner ${large ? 'spinner--lg' : ''}`} aria-label="Loading" role="status" />;
+type SpinnerSize = 'sm' | 'md' | 'lg' | 'xl';
+
+export function Spinner({ size = 'md', className = '' }: { size?: SpinnerSize; className?: string }) {
+  return (
+    <span
+      className={`spinner spinner--${size}${className ? ` ${className}` : ''}`}
+      aria-label="Loading"
+      role="status"
+    />
+  );
+}
+
+type AvatarSize = 'sm' | 'md' | 'lg' | 'xl';
+
+interface AvatarProps {
+  /** Box + initials size from the token scale (28 / 36 / 64 / 72). */
+  size?: AvatarSize;
+  /** `accent` (user, accent fill), `assistant` (primary fill), or `danger` (tinted). */
+  variant?: 'accent' | 'assistant' | 'danger';
+  className?: string;
+  /** An `<Icon>` or initials text. */
+  children?: ReactNode;
+}
+
+/** Circular avatar. Size + color come entirely from variant classes — never inline styles. */
+export function Avatar({ size = 'md', variant = 'accent', className = '', children }: AvatarProps) {
+  const cls = ['avatar', `avatar--${size}`, variant !== 'accent' && `avatar--${variant}`, className]
+    .filter(Boolean)
+    .join(' ');
+  return <span className={cls}>{children}</span>;
+}
+
+type AlertTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+
+const ALERT_ICON: Record<AlertTone, string> = {
+  neutral: 'info',
+  info: 'info',
+  success: 'check',
+  warning: 'alert',
+  danger: 'alert',
+};
+
+interface InlineAlertProps {
+  tone?: AlertTone;
+  /** Override the default per-tone status icon. */
+  icon?: string;
+  className?: string;
+  children: ReactNode;
+}
+
+/** Inline status / banner message with a leading tone icon. Tone sets color + ARIA role. */
+export function InlineAlert({ tone = 'neutral', icon, className = '', children }: InlineAlertProps) {
+  const cls = ['alert', tone !== 'neutral' && `alert--${tone}`, className].filter(Boolean).join(' ');
+  const role = tone === 'warning' || tone === 'danger' ? 'alert' : 'status';
+  return (
+    <div className={cls} role={role}>
+      <span className="alert__icon">
+        <Icon name={icon ?? ALERT_ICON[tone]} size={18} />
+      </span>
+      <span>{children}</span>
+    </div>
+  );
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
-import { Button, Field, Segmented, Spinner } from '../../design/ui';
+import { Avatar, Button, Field, InlineAlert, Segmented, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { signInRedirect } from '../../auth/cloudAuth';
 import { normalizeBaseUrl, saveApiConfig, saveApiKey } from '../../data/secureStore';
@@ -52,11 +52,11 @@ function Welcome() {
 function Feature({ icon, title, sub }: { icon: string; title: string; sub: string }) {
   return (
     <div className="row" style={{ alignItems: 'flex-start' }}>
-      <span className="avatar avatar--assistant" style={{ width: 36, height: 36, flex: '0 0 auto' }}>
+      <Avatar size="md" variant="assistant">
         <Icon name={icon} size={18} />
-      </span>
+      </Avatar>
       <div>
-        <div style={{ fontWeight: 600 }}>{title}</div>
+        <div className="text-strong">{title}</div>
         <div className="muted" style={{ fontSize: 'var(--text-caption-size)' }}>
           {sub}
         </div>
@@ -368,9 +368,9 @@ function MicPriming() {
 
   return (
     <div className="onboard">
-      <span className="avatar avatar--assistant" style={{ width: 72, height: 72 }}>
+      <Avatar size="xl" variant="assistant">
         <Icon name="mic" size={32} />
-      </span>
+      </Avatar>
       <div>
         <h1 className="onboard__title">Enable voice</h1>
         <p className="onboard__sub">
@@ -378,14 +378,10 @@ function MicPriming() {
         </p>
       </div>
       {status === 'granted' && (
-        <div className="alert">
-          <Icon name="check" size={18} /> Microphone enabled.
-        </div>
+        <InlineAlert icon="check">Microphone enabled.</InlineAlert>
       )}
       {status === 'denied' && (
-        <div className="alert alert--warning">
-          <Icon name="alert" size={18} /> Microphone blocked. You can enable it later in your browser.
-        </div>
+        <InlineAlert tone="warning">Microphone blocked. You can enable it later in your browser.</InlineAlert>
       )}
       <div className="onboard__actions">
         <Button variant="ghost" onClick={() => navigate('/')}>
