@@ -18,8 +18,9 @@ export const repo: Repository = sync;
 /** Cloud API client for non-repository calls (access status + admin invite management). */
 export const cloudApi = cloud;
 
-/** Push local changes + pull remote deltas (no-op unless sync is on and signed in). */
-export function syncNow(): Promise<void> {
+/** Push local changes + pull remote deltas (no-op unless sync is on and signed in). Resolves
+ *  with the set of thread ids whose local state changed during the pull, so callers can refresh. */
+export function syncNow(): Promise<Set<string>> {
   return sync.sync();
 }
 

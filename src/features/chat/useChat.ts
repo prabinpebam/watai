@@ -3,6 +3,7 @@ import { repo } from '../../data';
 import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
 import { useRuns } from './runStore';
+import { orderMessages } from './ordering';
 import { indexThreadDocuments } from '../../ai/fileSearch';
 import type { Attachment, Message } from '../../lib/types';
 
@@ -58,12 +59,9 @@ export function useChat(threadId: string, temporary = false) {
     };
   }, [threadId, threadRev]);
 
-  // Render persisted + the live run message (deduped once the run is persisted on completion).
-  const messages = useMemo(() => {
-    if (!run) return persisted;
-    const ids = new Set(persisted.map((m) => m.id));
-    return ids.has(run.message.id) ? persisted : [...persisted, run.message];
-  }, [persisted, run]);
+  // Render persisted + the in-flight run message as one stable, chronologically ordered list, so
+  // a streaming response keeps its slot even when a concurrent prompt arrives from another device.
+  const messages = useMemo(() => orderMessages(persisted, run?.message), [persisted, run]);
 
   const send = useCallback(
     async (text: string, files?: File[]) => {

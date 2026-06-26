@@ -144,8 +144,18 @@ export function App() {
   }, []);
 
   // Background cloud sync: a no-op unless Settings.data.sync is on and a user is signed in.
+  // After each pull, refresh the thread list + any chat whose messages changed, so a prompt or
+  // response from another device appears promptly and in correct chronological order.
   useEffect(() => {
-    const tick = () => void syncNow().catch(() => undefined);
+    const tick = () =>
+      void syncNow()
+        .then((changed) => {
+          if (!changed || changed.size === 0) return;
+          const ui = useUi.getState();
+          ui.bumpThreads();
+          changed.forEach((id) => ui.bumpThread(id));
+        })
+        .catch(() => undefined);
     tick();
     const onFocus = () => tick();
     window.addEventListener('focus', onFocus);
@@ -174,7 +184,13 @@ export function App() {
         await backfillSync().catch((e) => console.warn('[sync] backfill failed', e));
         localStorage.setItem('watai.backfilled.v2', '1');
       }
-      await syncNow().catch((e) => console.warn('[sync] initial sync failed', e));
+      await syncNow()
+        .then((changed) => {
+          const ui = useUi.getState();
+          ui.bumpThreads();
+          changed?.forEach((id) => ui.bumpThread(id));
+        })
+        .catch((e) => console.warn('[sync] initial sync failed', e));
     })();
   }, []);
 

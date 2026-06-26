@@ -194,11 +194,12 @@ export class SyncRepository implements Repository {
   }
 
   // ---- sync orchestration ----
-  /** Push local changes then pull remote deltas. No-op when sync is disabled. */
-  async sync(): Promise<void> {
-    if (!(await this.syncEnabled())) return;
+  /** Push local changes then pull remote deltas. Returns the thread ids whose local state
+   *  changed during the pull, so the UI can refresh them. No-op when sync is disabled. */
+  async sync(): Promise<Set<Id>> {
+    if (!(await this.syncEnabled())) return new Set();
     await this.push();
-    await this.pull();
+    return this.pull();
   }
 
   /** Enqueue every existing non-temporary local thread, its messages, and settings. */
@@ -237,8 +238,9 @@ export class SyncRepository implements Repository {
     }
   }
 
-  async pull(): Promise<void> {
-    if (!(await this.syncEnabled())) return;
+  async pull(): Promise<Set<Id>> {
+    const changed = new Set<Id>();
+    if (!(await this.syncEnabled())) return changed;
     const cursor = await this.kv.get<string>(THREAD_CURSOR_KEY);
     const records = await this.cloud.listThreads({
       includeArchived: true,
@@ -247,11 +249,12 @@ export class SyncRepository implements Repository {
     });
     let maxUpdated = cursor ?? '';
     for (const rec of records) {
-      await this.mergeThread(rec);
+      if (await this.mergeThread(rec)) changed.add(rec.id);
       if (rec.updatedAt > maxUpdated) maxUpdated = rec.updatedAt;
-      if (!rec.deletedAt) await this.pullMessages(rec.id);
+      if (!rec.deletedAt && (await this.pullMessages(rec.id))) changed.add(rec.id);
     }
     if (maxUpdated && maxUpdated !== cursor) await this.kv.set(THREAD_CURSOR_KEY, maxUpdated);
+    return changed;
   }
 
   // ---- internals ----
@@ -282,32 +285,44 @@ export class SyncRepository implements Repository {
     }
   }
 
-  private async mergeThread(rec: ThreadRecord): Promise<void> {
+  private async mergeThread(rec: ThreadRecord): Promise<boolean> {
     const incoming = threadFromRecord(rec);
     const existing = await this.local.getThread(rec.id);
     if (rec.deletedAt) {
-      if (existing) await this.local.deleteThread(rec.id);
-      return;
+      if (existing) {
+        await this.local.deleteThread(rec.id);
+        return true;
+      }
+      return false;
     }
     if (!existing) {
       await this.local.createThread(incoming);
-    } else if (incoming.updatedAt > existing.updatedAt) {
-      await this.local.updateThread(rec.id, incoming);
+      return true;
     }
+    if (incoming.updatedAt > existing.updatedAt) {
+      await this.local.updateThread(rec.id, incoming);
+      return true;
+    }
+    return false;
   }
 
-  private async pullMessages(threadId: Id): Promise<void> {
+  private async pullMessages(threadId: Id): Promise<boolean> {
     const key = MSG_CURSOR_PREFIX + threadId;
     const cursor = await this.kv.get<string>(key);
     const records = await this.cloud.listMessages(threadId, { since: cursor });
-    if (records.length === 0) return;
+    if (records.length === 0) return false;
     const known = new Set((await this.local.listMessages(threadId)).map((m) => m.id));
     let maxCreated = cursor ?? '';
+    let added = false;
     for (const rec of records) {
-      if (!known.has(rec.id)) await this.local.putMessageRaw(messageFromRecord(rec as MessageRecord));
+      if (!known.has(rec.id)) {
+        await this.local.putMessageRaw(messageFromRecord(rec as MessageRecord));
+        added = true;
+      }
       if (rec.createdAt > maxCreated) maxCreated = rec.createdAt;
     }
     if (maxCreated && maxCreated !== cursor) await this.kv.set(key, maxCreated);
+    return added;
   }
 
   /** On push, upload any local-only images of this message to Blob Storage (write SAS),

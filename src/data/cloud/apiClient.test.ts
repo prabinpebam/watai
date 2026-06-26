@@ -249,7 +249,27 @@ describe('cloud mappers', () => {
       attachments: [{ id: 'a', kind: 'image', mime: 'image/png', bytes: 1 }],
       usage: { promptTokens: 3 },
     };
-    expect(appendBodyFromMessage(m)).toEqual({ id: 'm1', role: 'user', content: 'hi' });
+    expect(appendBodyFromMessage(m)).toEqual({
+      id: 'm1',
+      role: 'user',
+      content: 'hi',
+      orderAt: '2026-01-01T00:00:00Z',
+    });
+  });
+
+  it('messageFromRecord orders by the preserved orderAt, not the server append createdAt', () => {
+    const rec: MessageRecord = {
+      id: 'm1',
+      threadId: 't1',
+      userId: 'u',
+      role: 'assistant',
+      content: 'a',
+      status: 'complete',
+      createdAt: '2026-01-01T00:00:30Z',
+      orderAt: '2026-01-01T00:00:00Z',
+      deletedAt: null,
+    };
+    expect(messageFromRecord(rec).createdAt).toBe('2026-01-01T00:00:00Z');
   });
 
   it('appendBodyFromMessage syncs full citations and tool result previews', () => {

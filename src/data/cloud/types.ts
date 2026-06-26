@@ -57,6 +57,8 @@ export interface MessageRecord {
   citations?: CitationRecord[];
   status: ServerMessageStatus;
   createdAt: string;
+  /** Logical creation time (chronology key); preserved from the originating device. */
+  orderAt?: string;
   deletedAt: string | null;
 }
 
@@ -107,6 +109,8 @@ export interface AppendMessageBody {
   content: string;
   model?: string;
   parentId?: string;
+  /** Logical creation time (chronology); the server preserves it. */
+  orderAt?: string;
   images?: ImageRecord[];
   attachments?: AttachmentRecord[];
   toolCalls?: ToolCallRecord[];
@@ -174,7 +178,8 @@ export function messageFromRecord(r: MessageRecord): Message {
     role: r.role,
     content: r.content,
     status: r.status,
-    createdAt: r.createdAt,
+    // Order by the preserved logical time; fall back to the server append time for old records.
+    createdAt: r.orderAt ?? r.createdAt,
     ...(r.model !== undefined ? { model: r.model } : {}),
     ...(r.parentId !== undefined ? { parentId: r.parentId } : {}),
     ...(r.images?.length
@@ -237,6 +242,8 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
     id: m.id,
     role: m.role,
     content: m.content,
+    // Stamp the logical creation time so chronology is preserved across devices.
+    orderAt: m.createdAt,
     ...(m.model !== undefined ? { model: m.model } : {}),
     ...(m.parentId != null ? { parentId: m.parentId } : {}),
     ...(uploaded.length ? { images: uploaded } : {}),

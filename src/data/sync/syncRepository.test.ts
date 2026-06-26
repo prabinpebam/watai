@@ -471,6 +471,19 @@ describe('SyncRepository — pull', () => {
 
     expect(await local.getThread('g')).toBeNull();
   });
+
+  it('reports the thread ids whose messages/record changed (drives the UI refresh)', async () => {
+    const { repo, cloud } = setup(true);
+    cloud.seedThread({ id: 't1', title: 'T', updatedAt: '2026-02-01T00:00:05Z' });
+    cloud.seedMessage({ id: 'sm1', threadId: 't1', content: 'hi', createdAt: '2026-02-01T00:00:01Z' });
+
+    const changed = await repo.pull();
+    expect(changed.has('t1')).toBe(true);
+
+    // A second pull with nothing new reports no changes (no spurious UI refresh).
+    const again = await repo.pull();
+    expect(again.size).toBe(0);
+  });
 });
 
 describe('SyncRepository — deleteAll', () => {
