@@ -194,15 +194,13 @@ the orchestration still runs to completion and Cosmos holds the result.
 
 ## 6. Live updates while the client is open
 
-Source of truth is Cosmos; "live" is an optimization layered on top:
+Source of truth is Cosmos; live token-level updates are pushed via **Azure SignalR Service**:
 
-- **Baseline (MVP, consumption-plan friendly):** while a run is active for the open
-  thread, the client polls `GET /threads/{id}/runs/{runId}` (or the message delta) every
-  ~1 s and renders the evolving assistant message. Reconnect/replay is automatic because
-  the state is in Cosmos.
-- **Enhancement (optional):** a push channel for token-level smoothness — **Azure SignalR
-  Service** or an SSE endpoint streaming from the orchestration's status. This is additive;
-  the product is correct without it.
+- **Push (primary):** run activities emit deltas to a per-run SignalR group; the open client
+  subscribes (via an auth-gated `negotiate`) and renders the evolving assistant message in
+  real time.
+- **Poll (fallback):** on reconnect/replay the client reads the run + message via the
+  existing delta sync, so nothing is lost — Cosmos stays authoritative.
 
 ---
 

@@ -172,11 +172,15 @@ server-side. Policy:
 
 ## 5. Live updates to the open client
 
-- **MVP (poll):** while a run is `running` for the open thread, the client polls
-  `GET /threads/{id}/runs/{runId}` (status + the incremental message via the existing delta
-  sync) every ~1 s. Correct on reconnect because Cosmos is the source of truth.
-- **Optional push:** **Azure SignalR Service** (or SSE from the orchestrator's custom
-  status) for token-level smoothness. Additive; not required for correctness.
+Source of truth is Cosmos; live streaming is delivered via **Azure SignalR Service**.
+
+- **Push (primary):** each run activity emits token/tool/image deltas to a per-run SignalR
+  group (`run:{runId}`); the open client subscribes via a negotiated SignalR connection and
+  renders the assistant message in real time. The client gets a connection from
+  `POST /signalr/negotiate` (auth-gated) and joins the groups for the threads it is viewing.
+- **Poll (reconnect/replay fallback):** on (re)open or if the socket drops, the client reads
+  `GET /threads/{id}/runs/{runId}` + message deltas via the existing sync, so no update is
+  ever lost — Cosmos remains authoritative.
 
 The existing `orderAt` chronology and message-merge logic on the client are reused verbatim
 — the assistant message simply arrives via sync instead of a local `runStore`.
@@ -292,16 +296,18 @@ Each phase ships behind a flag, is independently deployable, and has an eval/acc
 
 ---
 
-## 11. Open decisions (resolve in Phase 0)
+## 11. Decisions (locked 2026 — best-UX, no-compromise)
 
-| # | Decision | Options / default |
+All resolved toward the best experience supported by the subscription.
+
+| # | Decision | **Locked choice** |
 | --- | --- | --- |
-| K1 | KEK design | Key Vault KEK + per-record wrapped DEK (**default**) vs single KEK + per-record IV (simpler). |
-| K2 | Live updates | Poll-only MVP (**default**) vs add Azure SignalR for token streaming. |
-| K3 | Hosting tier | Functions **Consumption** w/ Durable (**default**) vs Flex/Premium if streaming-from-server (SSE) is wanted. |
-| K4 | Realtime voice | Server-minted ephemeral token (**default**) vs keep BYO for voice only. |
-| K5 | Run quotas | Per-user concurrent-run + daily-run caps (values TBD). |
-| K6 | Transcription | Run-time async transcription of attached audio (**default**) vs keep a quick client path for dictation-into-composer (no secret needed there if it stays a server call). |
+| K1 | Credential encryption | **Key Vault KEK + per-record wrapped DEK** (AES-256-GCM envelope). Strongest at-rest model. |
+| K2 | Live updates | **Azure SignalR Service** push for token-level streaming; polling kept only as a reconnect/replay fallback. |
+| K3 | Hosting tier | **Functions + Durable + SignalR Service** (SignalR output binding works on the existing plan; no SSE needed). |
+| K4 | Realtime voice | **Server-minted ephemeral token** (`POST /credentials/realtime-token`); the key never reaches the browser. |
+| K5 | Run quotas | **3 concurrent runs/user**, **200 runs/user/day** (configurable app settings); 1 active run per thread. |
+| K6 | Transcription | **Server transcription endpoint** for fast dictation-into-composer **and** run-time async transcription of attached audio — both server-side (no client key). |
 
 ---
 
