@@ -41,6 +41,7 @@ export class MessageService {
       ...(input.model ? { model: input.model } : {}),
       ...(input.parentId ? { parentId: input.parentId } : {}),
       ...(input.images && input.images.length ? { images: input.images } : {}),
+      ...(input.attachments && input.attachments.length ? { attachments: input.attachments } : {}),
       ...(input.toolCalls && input.toolCalls.length ? { toolCalls: input.toolCalls } : {}),
       ...(input.citations && input.citations.length ? { citations: input.citations } : {}),
       status: 'complete',
@@ -51,7 +52,10 @@ export class MessageService {
     await this.threadStore.put({
       ...thread,
       messageCount: thread.messageCount + 1,
-      lastMessagePreview: (input.content.trim() || (input.images?.length ? 'Image' : '')).slice(0, 140),
+      lastMessagePreview: (
+        input.content.trim() ||
+        (input.images?.length ? 'Image' : input.attachments?.length ? 'Attachment' : '')
+      ).slice(0, 140),
       updatedAt: ts,
     });
     return record;

@@ -8,6 +8,8 @@ export interface ThreadRecord {
   temporary: boolean;
   messageCount: number;
   lastMessagePreview?: string;
+  /** Vector store id holding the thread's uploaded documents (thread-scoped file search). */
+  vectorStoreId?: string;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

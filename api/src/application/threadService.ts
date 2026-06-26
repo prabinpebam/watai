@@ -37,6 +37,7 @@ export class ThreadService {
       createdAt: ts,
       updatedAt: ts,
       deletedAt: null,
+      ...(input.vectorStoreId ? { vectorStoreId: input.vectorStoreId } : {}),
     };
     return this.store.put(record);
   }
@@ -69,6 +70,7 @@ export class ThreadService {
       ...(patch.title !== undefined ? { title: patch.title } : {}),
       ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
       ...(patch.archived !== undefined ? { archived: patch.archived } : {}),
+      ...(patch.vectorStoreId !== undefined ? { vectorStoreId: patch.vectorStoreId } : {}),
       updatedAt: this.clock.now(),
     };
     return this.store.put(next);

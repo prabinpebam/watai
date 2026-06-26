@@ -92,6 +92,88 @@ describe('parseAppendMessage', () => {
     expect(parseAppendMessage(input)).toMatchObject({ citations: [{ source: 'file' }] });
   });
 
+  it('syncs a web citation with raw content, favicon, bing url, and offsets', () => {
+    const input = {
+      role: 'assistant',
+      content: 'x',
+      citations: [
+        {
+          url: 'https://example.com/',
+          title: 'Example',
+          source: 'web',
+          content: 'The raw search-result snippet shown in the source pane.',
+          favicon: 'https://example.com/favicon.ico',
+          bingQueryUrl: 'https://www.bing.com/search?q=example',
+          startIndex: 0,
+          endIndex: 5,
+        },
+      ],
+    };
+    expect(parseAppendMessage(input)).toMatchObject({
+      citations: [
+        {
+          content: 'The raw search-result snippet shown in the source pane.',
+          favicon: 'https://example.com/favicon.ico',
+          bingQueryUrl: 'https://www.bing.com/search?q=example',
+          startIndex: 0,
+          endIndex: 5,
+        },
+      ],
+    });
+  });
+
+  it('syncs a file citation fileId', () => {
+    const input = {
+      role: 'assistant',
+      content: 'x',
+      citations: [{ source: 'file', filename: 'report.pdf', fileId: 'file_123' }],
+    };
+    expect(parseAppendMessage(input)).toMatchObject({ citations: [{ fileId: 'file_123' }] });
+  });
+
+  it('rejects citation content over the bound', () => {
+    expect(
+      code(() =>
+        parseAppendMessage({
+          role: 'assistant',
+          content: 'x',
+          citations: [{ source: 'web', content: 'a'.repeat(4001) }],
+        }),
+      ),
+    ).toBe('validation');
+  });
+
+  it('syncs user-uploaded attachments (bytes in blob storage)', () => {
+    const input = {
+      role: 'user',
+      content: 'what is this?',
+      attachments: [
+        {
+          id: 'a1',
+          kind: 'image',
+          blobPath: 'u/x/threads/t/assets/a1.png',
+          mime: 'image/png',
+          bytes: 1234,
+          name: 'pic.png',
+          width: 800,
+          height: 600,
+        },
+      ],
+    };
+    expect(parseAppendMessage(input)).toMatchObject({
+      attachments: [{ id: 'a1', blobPath: 'u/x/threads/t/assets/a1.png', mime: 'image/png' }],
+    });
+  });
+
+  it('allows an attachment-only message (no text)', () => {
+    const input = {
+      role: 'user',
+      content: '',
+      attachments: [{ id: 'a1', kind: 'file', blobPath: 'p/q', mime: 'application/pdf', bytes: 9 }],
+    };
+    expect(parseAppendMessage(input)).toMatchObject({ attachments: [{ id: 'a1' }] });
+  });
+
   it('accepts a code-interpreter tool call with awaiting-confirm status and a bounded resultPreview', () => {
     const input = {
       role: 'assistant',
