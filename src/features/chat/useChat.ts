@@ -43,7 +43,6 @@ export function useChat(threadId: string, temporary = false) {
   const [indexing, setIndexing] = useState(false);
   const busyRef = useRef(false);
   const run = useRuns((s) => s.runs[threadId]);
-  const serverRun = useRuns((s) => s.serverRunning[threadId]);
   const threadRev = useUi((s) => s.threadRev[threadId] ?? 0);
   const mockAi = useUi((s) => s.mockAi);
   const setThreadLock = useUi((s) => s.setThreadLock);
@@ -199,5 +198,5 @@ export function useChat(threadId: string, temporary = false) {
 
   const stop = useCallback(() => useRuns.getState().stop(threadId), [threadId]);
 
-  return { messages, loading, send, regenerate, stop, streaming: !!run || !!serverRun || indexing, indexing, lockedBy };
+  return { messages, loading, send, regenerate, stop, streaming: !!run || indexing, indexing, lockedBy };
 }

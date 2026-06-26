@@ -21,7 +21,7 @@ export interface RunWorkerDeps {
   flushIntervalMs?: number;
 }
 
-const DEFAULT_FLUSH_MS = 700;
+const DEFAULT_FLUSH_MS = 250;
 
 /** Thread history for the model: user/assistant turns only, excluding soft-deleted rows and the
  *  assistant message this run is producing. */

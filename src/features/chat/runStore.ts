@@ -4,7 +4,7 @@
 // of the in-progress message is kept in IndexedDB so a browser close mid-stream is not fully
 // lost — orphaned snapshots are restored as `interrupted` messages on next load.
 import { create } from 'zustand';
-import { repo, cloudApi, syncNow } from '../../data';
+import { repo, cloudApi, syncNow, saveServerMessage } from '../../data';
 import { getApiConfig, getTavilyKey } from '../../data/secureStore';
 import { idbKvStore } from '../../data/sync/kvStore';
 import { newId } from '../../lib/ids';
@@ -17,6 +17,7 @@ import { assembleTools, executeTool, isDestructiveTool, resolveVectorStores } fr
 import { b64ToBlob } from '../../ai/image';
 import { runOnServer } from './serverRun';
 import { useUi } from '../../state/store';
+import { messageFromRecord } from '../../data/cloud/types';
 import type { SubmitRunBody } from '../../data/cloud/types';
 import type { AiError, CapabilityMatrix, Citation, ImageRef, Message, ToolCall } from '../../lib/types';
 
@@ -133,42 +134,77 @@ interface ActiveRun {
   /** The in-progress assistant message (status 'streaming'). */
   message: Message;
   controller: AbortController;
+  /** Server run id (set for server-authoritative runs) so Stop can cancel it server-side. */
+  runId?: string;
 }
 
 interface RunsStore {
   runs: Record<string, ActiveRun>;
-  /** Threads with an active server-authoritative run (generation owned by the backend). */
-  serverRunning: Record<string, true>;
   isRunning: (threadId: string) => boolean;
   stop: (threadId: string) => void;
   /** Begin generating the assistant reply for `history`. Fire-and-forget; renders via `runs`. */
   startRun: (threadId: string, history: Message[], mockAi: boolean) => Promise<void>;
   /** Submit a server-authoritative run; generation completes server-side even if this client
-   *  closes. Renders the reply by polling cloud sync. Fire-and-forget. */
+   *  closes. Renders the reply by streaming the run's message into the live overlay. */
   startServerRun: (threadId: string, body: SubmitRunBody) => Promise<void>;
 }
 
 export const useRuns = create<RunsStore>((set, get) => ({
   runs: {},
-  serverRunning: {},
 
-  isRunning: (threadId) => !!get().runs[threadId] || !!get().serverRunning[threadId],
+  isRunning: (threadId) => !!get().runs[threadId],
 
   stop: (threadId) => {
-    get().runs[threadId]?.controller.abort();
+    const run = get().runs[threadId];
+    if (!run) return;
+    // Server run: cancel it server-side too (best-effort) so the worker stops generating.
+    if (run.runId) void cloudApi.cancelRun(run.threadId, run.runId).catch(() => {});
+    run.controller.abort();
   },
 
   startServerRun: async (threadId, body) => {
     if (get().isRunning(threadId) || startingThreads.has(threadId)) return; // one run per thread
-    set((s) => ({ serverRunning: { ...s.serverRunning, [threadId]: true } }));
-    const ui = useUi.getState();
-    ui.setStream({ status: 'streaming', threadId, messageId: body.clientMessageId ?? '' });
+    const ctrl = new AbortController();
+
+    // Optimistic UI: show an assistant 'streaming' bubble immediately, before the server responds.
+    const seed: Message = {
+      id: `pending-${newId()}`,
+      threadId,
+      role: 'assistant',
+      content: '',
+      status: 'streaming',
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ runs: { ...s.runs, [threadId]: { threadId, message: seed, controller: ctrl } } }));
+    useUi.getState().setStream({ status: 'streaming', threadId, messageId: seed.id });
+
+    let finalAssistant: Message | null = null;
     try {
-      const run = await runOnServer(
+      const { run, assistant } = await runOnServer(
         {
           sync: syncNow,
-          submitRun: (tid, b) => cloudApi.submitRun(tid, b),
+          submitRun: async (tid, b) => {
+            const ack = await cloudApi.submitRun(tid, b);
+            // Record the run id so Stop can cancel it server-side.
+            set((s) => {
+              const r = s.runs[threadId];
+              return r ? { runs: { ...s.runs, [threadId]: { ...r, runId: ack.runId } } } : s;
+            });
+            return ack;
+          },
           getRun: (tid, rid) => cloudApi.getRun(tid, rid),
+          getAssistantMessage: async (tid, mid, since) => {
+            const recs = await cloudApi.listMessages(tid, { since });
+            const rec = recs.find((r) => r.id === mid);
+            return rec ? messageFromRecord(rec) : null;
+          },
+          // Stream the growing reply into the live overlay (instant, token-ish updates).
+          onAssistant: (msg) => {
+            set((s) => {
+              const r = s.runs[threadId];
+              return r ? { runs: { ...s.runs, [threadId]: { ...r, message: msg } } } : s;
+            });
+          },
           onThreadsChanged: (ids) => {
             if (ids.size === 0) return;
             const u = useUi.getState();
@@ -177,26 +213,33 @@ export const useRuns = create<RunsStore>((set, get) => ({
           },
           sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
           now: () => Date.now(),
+          signal: ctrl.signal,
         },
         threadId,
         body,
       );
-      if (run?.status === 'error') {
-        useUi.getState().pushToast(run.error?.message ?? 'The response failed on the server.', 'error');
+      finalAssistant = assistant;
+      if (run?.status === 'error' || assistant?.status === 'error') {
+        useUi
+          .getState()
+          .pushToast(run?.error?.message ?? 'The response failed on the server.', 'error');
       }
     } catch (e) {
       useUi
         .getState()
         .pushToast(e instanceof Error ? e.message : 'Could not start the response.', 'error');
     } finally {
+      // Land the finished reply locally so it survives the overlay clearing (the bulk sync cursor
+      // skips the streaming message), then clear the overlay and reload the persisted list.
+      if (finalAssistant) await saveServerMessage(finalAssistant).catch(() => {});
       set((s) => {
-        const next = { ...s.serverRunning };
+        const next = { ...s.runs };
         delete next[threadId];
-        return { serverRunning: next };
+        return { runs: next };
       });
       const u = useUi.getState();
       u.setStream({ status: 'idle' });
-      u.bumpThread(threadId); // final reload so the completed message is shown
+      u.bumpThread(threadId); // reload persisted (now includes the final assistant message)
     }
   },
 

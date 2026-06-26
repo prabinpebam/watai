@@ -162,6 +162,13 @@ export class SyncRepository implements Repository {
     return saved;
   }
 
+  /** Merge a server-authored message into the local store verbatim (no re-queue). Used by the
+   *  server-run streaming finalizer: the bulk pull cursor skips the streaming message (its
+   *  orderAt never advances), so the finished reply is written here directly instead. */
+  async mergeServerMessage(m: Message): Promise<void> {
+    await this.local.putMessageRaw(m);
+  }
+
   /** Take the thread's run lock before generating a reply, so two devices never generate at once.
    *  Best-effort: a network failure (offline) does NOT block local generation — only a live lock
    *  held by another device does. */

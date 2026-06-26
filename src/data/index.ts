@@ -4,6 +4,7 @@ import { WataiApiClient } from './cloud/apiClient';
 import { SyncRepository } from './sync/syncRepository';
 import { idbKvStore } from './sync/kvStore';
 import { getCloudToken } from '../auth/cloudAuth';
+import type { Message } from '../lib/types';
 
 // Local store is the source of truth for the UI; the sync engine wraps it and
 // mirrors changes to the cloud only when Settings.data.sync is on AND a user is
@@ -22,6 +23,12 @@ export const cloudApi = cloud;
  *  with the set of thread ids whose local state changed during the pull, so callers can refresh. */
 export function syncNow(): Promise<Set<string>> {
   return sync.sync();
+}
+
+/** Write a server-authored message into the local store verbatim (no re-queue). Used by the
+ *  server-run streaming finalizer to land the finished reply, since the bulk pull cursor skips it. */
+export function saveServerMessage(m: Message): Promise<void> {
+  return sync.mergeServerMessage(m);
 }
 
 /** Enqueue all existing local data for upload — call once when the user turns sync on. */
