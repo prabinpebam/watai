@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.cjs",
-  "description": "Watai persistence API (Azure Functions). Two-plane architecture: never handles the user's Azure OpenAI key.",
+  "description": "Watai API (Azure Functions): server-authoritative generation + encrypted credential vault. Persists threads/messages/runs in Cosmos and runs Azure OpenAI server-side.",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
@@ -19,6 +19,7 @@
     "@azure/identity": "^4.13.1",
     "@azure/keyvault-keys": "^4.10.2",
     "@azure/storage-blob": "^12.32.0",
+    "@azure/storage-queue": "^12.31.0",
     "jose": "^5.10.0",
     "zod": "^3.23.8"
   },

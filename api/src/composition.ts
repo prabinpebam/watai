@@ -4,9 +4,11 @@ import { CosmosMessageStore } from './adapters/cosmos/messageStore';
 import { CosmosSettingsStore } from './adapters/cosmos/settingsStore';
 import { CosmosInviteStore } from './adapters/cosmos/inviteStore';
 import { CosmosCredentialStore } from './adapters/cosmos/credentialStore';
+import { CosmosRunStore } from './adapters/cosmos/runStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
 import { KeyVaultWrapper } from './adapters/azure/keyVaultWrapper';
 import { LocalKeyWrapper } from './adapters/local/keyWrapper';
+import { QueueRunStarter } from './adapters/azure/queueRunStarter';
 import { entraVerifierFromEnv } from './adapters/auth/entraTokenVerifier';
 import { ThreadService } from './application/threadService';
 import { ThreadLockService } from './application/threadLockService';
@@ -15,6 +17,9 @@ import { SettingsService } from './application/settingsService';
 import { AssetService } from './application/assetService';
 import { AccessService } from './application/accessService';
 import { CredentialService } from './application/credentialService';
+import { RunService } from './application/runService';
+import type { RunWorkerDeps } from './application/runWorker';
+import { streamChat } from './ai/chat';
 import { createThreadsController } from './http/threadsController';
 import { createThreadLockController } from './http/threadLockController';
 import { createMessagesController } from './http/messagesController';
@@ -23,6 +28,7 @@ import { createAssetsController } from './http/assetsController';
 import { createMeController } from './http/meController';
 import { createInvitesController } from './http/invitesController';
 import { createCredentialsController } from './http/credentialsController';
+import { createRunsController } from './http/runsController';
 import { AppError } from './domain/errors';
 import type { TokenVerifier } from './ports/tokenVerifier';
 import type { KeyWrapper } from './ports/keyWrapper';
@@ -38,6 +44,9 @@ export interface ApiContainer {
   me: ReturnType<typeof createMeController>;
   invites: ReturnType<typeof createInvitesController>;
   credentials: ReturnType<typeof createCredentialsController>;
+  runs: ReturnType<typeof createRunsController>;
+  /** Dependencies the queue-triggered run worker needs to process a job. */
+  runWorker: RunWorkerDeps;
 }
 
 /** Production uses an Azure Key Vault RSA key as the KEK; local dev falls back to an
@@ -73,24 +82,37 @@ export function container(): ApiContainer {
   const settingsStore = new CosmosSettingsStore();
   const inviteStore = new CosmosInviteStore();
   const credentialStore = new CosmosCredentialStore();
+  const runStore = new CosmosRunStore();
   const minter = new AzureSasMinter();
   const access = new AccessService(
     inviteStore,
     process.env.ADMIN_EMAIL ?? '',
     (process.env.ADMIN_OID ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   );
+  const messageService = new MessageService(threadStore, messageStore, clock);
+  const credentialService = new CredentialService(credentialStore, buildKeyWrapper(), clock);
+  const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
 
   cached = {
     verifier: buildVerifier(),
     access,
     threads: createThreadsController(new ThreadService(threadStore, clock)),
     threadLock: createThreadLockController(new ThreadLockService(threadStore, clock)),
-    messages: createMessagesController(new MessageService(threadStore, messageStore, clock)),
+    messages: createMessagesController(messageService),
     settings: createSettingsController(new SettingsService(settingsStore)),
     assets: createAssetsController(new AssetService(threadStore, minter)),
     me: createMeController(access),
     invites: createInvitesController(inviteStore, clock),
-    credentials: createCredentialsController(new CredentialService(credentialStore, buildKeyWrapper(), clock)),
+    credentials: createCredentialsController(credentialService),
+    runs: createRunsController(runService),
+    runWorker: {
+      runStore,
+      messageStore,
+      threadStore,
+      credentials: credentialService,
+      streamChat,
+      clock,
+    },
   };
   return cached;
 }

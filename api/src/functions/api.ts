@@ -56,6 +56,22 @@ app.http('thread-lock', {
   ),
 });
 
+// Server-side runs: submit a prompt (202 + runId), track, cancel. Generation happens in the
+// queue-triggered worker, independently of the client.
+app.http('thread-runs', {
+  methods: ['POST', 'GET'],
+  authLevel: 'anonymous',
+  route: 'threads/{id}/runs',
+  handler: methodDispatch({ POST: (c) => c.runs.submit, GET: (c) => c.runs.listActive }, invited),
+});
+
+app.http('thread-run-item', {
+  methods: ['GET', 'DELETE'],
+  authLevel: 'anonymous',
+  route: 'threads/{id}/runs/{runId}',
+  handler: methodDispatch({ GET: (c) => c.runs.get, DELETE: (c) => c.runs.cancel }, invited),
+});
+
 app.http('messages', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',

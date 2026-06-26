@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { parseOrThrow } from './validate';
 
 export type Role = 'user' | 'assistant' | 'system';
-export type MessageStatus = 'complete' | 'interrupted' | 'error';
+export type MessageStatus = 'streaming' | 'complete' | 'interrupted' | 'error';
 
 /** A generated/attached image's cloud metadata (the bytes live in Blob Storage at `blobPath`). */
 const imageSchema = z
