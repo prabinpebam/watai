@@ -6,6 +6,7 @@ import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import type { RunRecord } from '../ports/runStore';
 import type { RunStatus } from '../domain/run';
 import type { AgentEvent, RunAgentParams } from '../ai/orchestrator';
+import { DEFAULT_SETTINGS } from '../domain/settings';
 import { AppError } from '../domain/errors';
 
 type RunAgentFn = NonNullable<RunWorkerDeps['runAgent']>;
@@ -123,6 +124,29 @@ describe('processRun', () => {
     expect(seen[0].turns[0].role).toBe('system');
     expect(seen[0].turns[1]).toEqual({ role: 'user', text: 'hello' });
     expect(seen[0].tools).toEqual([]); // no Tavily key -> no web_search tool
+  });
+
+  it('personalizes the system prompt from the user settings (about-you / response-style)', async () => {
+    await seed(ctx);
+    const settings = {
+      get: async () => ({
+        ...DEFAULT_SETTINGS,
+        personalization: {
+          ...DEFAULT_SETTINGS.personalization,
+          aboutYou: 'I am a chef.',
+          howRespond: 'Be terse.',
+        },
+      }),
+    };
+    const seen: RunAgentParams[] = [];
+    const runAgent: RunAgentFn = (p) => {
+      seen.push(p);
+      return script([{ type: 'text', delta: 'ok' }, { type: 'done' }])(p);
+    };
+    await processRun({ ...ctx.deps(runAgent), settings }, 't1', 'r1');
+    const sys = seen[0].turns[0].text;
+    expect(sys).toContain('I am a chef.');
+    expect(sys).toContain('Be terse.');
   });
 
   it('offers the web_search tool when a Tavily key is configured', async () => {

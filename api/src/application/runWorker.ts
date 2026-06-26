@@ -4,6 +4,7 @@ import type { DecryptedCredentials } from './credentialService';
 import type { RunStore } from '../ports/runStore';
 import type { MessageRecord, MessageStore } from '../ports/messageStore';
 import type { MessageToolCall, MessageCitation, MessageImage } from '../domain/message';
+import type { Settings } from '../domain/settings';
 import type { ThreadStore } from '../ports/threadStore';
 import {
   runAgent as defaultRunAgent,
@@ -20,11 +21,17 @@ export interface CredentialReader {
   getDecrypted(userId: string): Promise<DecryptedCredentials>;
 }
 
+export interface SettingsReader {
+  get(userId: string): Promise<Settings>;
+}
+
 export interface RunWorkerDeps {
   runStore: RunStore;
   messageStore: MessageStore;
   threadStore: ThreadStore;
   credentials: CredentialReader;
+  /** Per-user settings (personalization) for the system prompt. Optional. */
+  settings?: SettingsReader;
   /** The agentic loop (Responses API). Injectable for tests. */
   runAgent?: (p: RunAgentParams) => AsyncGenerator<AgentEvent>;
   clock: ServiceClock;
@@ -45,13 +52,18 @@ export interface RunWorkerDeps {
 
 const DEFAULT_FLUSH_MS = 250;
 
-/** Minimal system prompt. Personalization (about-you / response-style / memory) is a follow-up. */
-function systemPrompt(creds: DecryptedCredentials): string {
+/** Build the system prompt from the user's personalization (about-you / response-style) plus a
+ *  base persona and light tool guidance. */
+function systemPrompt(creds: DecryptedCredentials, settings?: Settings): string {
   const lines = ['You are Watai, a helpful AI assistant. Be accurate and concise.'];
-  if (creds.tavilyKey) {
-    lines.push('When current or factual web information is needed, use the web_search tool and cite the sources.');
-  }
-  return lines.join('\n');
+  const p = settings?.personalization;
+  if (p?.aboutYou?.trim()) lines.push(`About the user:\n${p.aboutYou.trim()}`);
+  if (p?.howRespond?.trim()) lines.push(`How the user wants you to respond:\n${p.howRespond.trim()}`);
+  const hints: string[] = [];
+  if (creds.tavilyKey) hints.push('use web_search for current or factual web information and cite the sources');
+  if (creds.models.image) hints.push('use generate_image when the user asks for an image, illustration, or diagram');
+  if (hints.length) lines.push(`When helpful, ${hints.join('; ')}.`);
+  return lines.join('\n\n');
 }
 
 /** Responses turns: system + the user/assistant history (excluding soft-deleted rows and the
@@ -250,8 +262,11 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   try {
     const creds = await credentials.getDecrypted(run.userId);
     model = creds.models.chat;
+    const settings = deps.settings
+      ? await deps.settings.get(run.userId).catch(() => undefined)
+      : undefined;
     const turns = buildTurns(
-      systemPrompt(creds),
+      systemPrompt(creds, settings),
       await messageStore.list(threadId),
       run.assistantMessageId,
     );

@@ -93,6 +93,7 @@ export function container(): ApiContainer {
   const credentialService = new CredentialService(credentialStore, buildKeyWrapper(), clock);
   const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
   const assetService = new AssetService(threadStore, minter);
+  const settingsService = new SettingsService(settingsStore);
 
   cached = {
     verifier: buildVerifier(),
@@ -100,7 +101,7 @@ export function container(): ApiContainer {
     threads: createThreadsController(new ThreadService(threadStore, clock)),
     threadLock: createThreadLockController(new ThreadLockService(threadStore, clock)),
     messages: createMessagesController(messageService),
-    settings: createSettingsController(new SettingsService(settingsStore)),
+    settings: createSettingsController(settingsService),
     assets: createAssetsController(assetService),
     me: createMeController(access),
     invites: createInvitesController(inviteStore, clock),
@@ -111,6 +112,7 @@ export function container(): ApiContainer {
       messageStore,
       threadStore,
       credentials: credentialService,
+      settings: settingsService,
       uploadImage: makeUploadImage(assetService),
       clock,
     },
