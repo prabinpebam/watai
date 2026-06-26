@@ -162,3 +162,42 @@ export async function* streamChat(p: StreamChatParams): AsyncGenerator<ChatStrea
     p.signal?.removeEventListener('abort', onAbort);
   }
 }
+
+export interface CompleteChatParams {
+  baseUrl: string;
+  key: string;
+  model: string;
+  messages: ChatMessage[];
+  maxCompletionTokens?: number;
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+}
+
+/**
+ * Non-streaming chat completion → the assistant message text. For short utility calls (e.g.
+ * generating a thread title). Returns '' on any failure so callers can fall back gracefully.
+ */
+export async function completeChat(p: CompleteChatParams): Promise<string> {
+  const fetchImpl = p.fetchImpl ?? fetch;
+  const body: Record<string, unknown> = { model: p.model, messages: p.messages };
+  if (p.maxCompletionTokens) body.max_completion_tokens = p.maxCompletionTokens;
+  if (p.reasoningEffort) body.reasoning_effort = p.reasoningEffort;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), p.timeoutMs ?? 30_000);
+  try {
+    const res = await fetchImpl(v1Url(p.baseUrl, '/chat/completions'), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return '';
+    const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    return json.choices?.[0]?.message?.content?.trim() ?? '';
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(timer);
+  }
+}

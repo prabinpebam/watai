@@ -16,6 +16,7 @@ import {
 import type { ResponsesCitation, ResponsesTool } from '../ai/responses';
 import { tavilySearch } from '../ai/tavily';
 import { generateImage } from '../ai/image';
+import { completeChat } from '../ai/chat';
 
 export interface CredentialReader {
   getDecrypted(userId: string): Promise<DecryptedCredentials>;
@@ -190,6 +191,39 @@ function b64ToBytes(b64: string): Uint8Array {
   return new Uint8Array(Buffer.from(b64, 'base64'));
 }
 
+/** Generate a concise 3-6 word title from the first exchange (mirrors the in-browser titler).
+ *  Returns the cleaned title, or the start of the user's prompt as a fallback. */
+async function generateTitle(
+  creds: DecryptedCredentials,
+  firstUser: string,
+  answer: string,
+  fetchImpl?: typeof fetch,
+): Promise<string | undefined> {
+  const fallback = firstUser.trim().slice(0, 40) || undefined;
+  const raw = await completeChat({
+    baseUrl: creds.baseUrl,
+    key: creds.key,
+    model: creds.models.chat,
+    maxCompletionTokens: 1000,
+    reasoningEffort: 'minimal',
+    fetchImpl,
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You write a concise, specific 3-6 word title for a chat conversation. ' +
+          'Output ONLY the title text — no quotes, no trailing punctuation, no preamble.',
+      },
+      {
+        role: 'user',
+        content: `Title this conversation:\n\nUser: ${firstUser.slice(0, 600)}\n\nAssistant: ${answer.slice(0, 600)}`,
+      },
+    ],
+  });
+  const clean = raw.replace(/^["'\s]+|["'\s.]+$/g, '').split('\n')[0].slice(0, 60);
+  return clean || fallback;
+}
+
 function mapCitation(c: ResponsesCitation): MessageCitation {
   return {
     ...(c.source ? { source: c.source } : {}),
@@ -233,6 +267,8 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   let flushed = false;
   let err: { code: string; message: string } | undefined;
   let model: string | undefined;
+  let creds: DecryptedCredentials | undefined;
+  let firstUser = '';
 
   const buildAssistant = (status: MessageRecord['status']): MessageRecord => ({
     id: run.assistantMessageId,
@@ -260,20 +296,19 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   };
 
   try {
-    const creds = await credentials.getDecrypted(run.userId);
-    model = creds.models.chat;
+    const c = await credentials.getDecrypted(run.userId);
+    creds = c;
+    model = c.models.chat;
     const settings = deps.settings
       ? await deps.settings.get(run.userId).catch(() => undefined)
       : undefined;
-    const turns = buildTurns(
-      systemPrompt(creds, settings),
-      await messageStore.list(threadId),
-      run.assistantMessageId,
-    );
-    const tools = assembleTools(creds, run, thread);
-    const execute = makeExecute(creds, deps.fetchImpl);
+    const history = await messageStore.list(threadId);
+    firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
+    const turns = buildTurns(systemPrompt(c, settings), history, run.assistantMessageId);
+    const tools = assembleTools(c, run, thread);
+    const execute = makeExecute(c, deps.fetchImpl);
 
-    for await (const ev of runAgent({ baseUrl: creds.baseUrl, key: creds.key, model, turns, tools, execute })) {
+    for await (const ev of runAgent({ baseUrl: c.baseUrl, key: c.key, model, turns, tools, execute })) {
       if (ev.type === 'text') {
         acc += ev.delta;
         await flush();
@@ -330,6 +365,13 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   const current = await runStore.get(threadId, runId);
   const canceled = current?.status === 'canceled';
 
+  // Auto-name the thread from the first exchange while the message is still 'streaming', so the
+  // client's terminal sync picks up the reply and the new title together.
+  let newTitle: string | undefined;
+  if (!err && !canceled && creds && thread && acc.trim() && (!thread.title || thread.title === 'New chat')) {
+    newTitle = await generateTitle(creds, firstUser, acc, deps.fetchImpl);
+  }
+
   const finalStatus: MessageRecord['status'] = canceled ? 'interrupted' : err ? 'error' : 'complete';
   await messageStore.append(buildAssistant(finalStatus));
 
@@ -337,6 +379,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   if (thread) {
     await threadStore.put({
       ...thread,
+      ...(newTitle ? { title: newTitle } : {}),
       lastMessagePreview: (acc.trim() || (err ? 'Error' : '')).slice(0, 140),
       updatedAt: clock.now(),
     });

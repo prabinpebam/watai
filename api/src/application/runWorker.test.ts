@@ -149,6 +149,39 @@ describe('processRun', () => {
     expect(sys).toContain('Be terse.');
   });
 
+  it('auto-names an untitled thread from the first exchange', async () => {
+    await seed(ctx);
+    const t = await ctx.threadStore.get('userA', 't1');
+    await ctx.threadStore.put({ ...t!, title: 'New chat' });
+    const fetchImpl = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: '"Greeting Exchange"' } }] }),
+    })) as unknown as typeof fetch;
+    await processRun(
+      { ...ctx.deps(script([{ type: 'text', delta: 'Hi!' }, { type: 'done' }])), fetchImpl },
+      't1',
+      'r1',
+    );
+    expect((await ctx.threadStore.get('userA', 't1'))?.title).toBe('Greeting Exchange');
+  });
+
+  it('does not rename a thread that already has a title', async () => {
+    await seed(ctx); // seeded title is 'T'
+    let titleCall = false;
+    const fetchImpl = (async () => {
+      titleCall = true;
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'X' } }] }) };
+    }) as unknown as typeof fetch;
+    await processRun(
+      { ...ctx.deps(script([{ type: 'text', delta: 'Hi!' }, { type: 'done' }])), fetchImpl },
+      't1',
+      'r1',
+    );
+    expect((await ctx.threadStore.get('userA', 't1'))?.title).toBe('T');
+    expect(titleCall).toBe(false);
+  });
+
   it('offers the web_search tool when a Tavily key is configured', async () => {
     const c = setup({ tavily: true });
     await seed(c);
