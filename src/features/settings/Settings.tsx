@@ -561,7 +561,6 @@ function Stat({ value, label }: { value: string; label: string }) {
 
 function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
   const pushToast = useUi((s) => s.pushToast);
-  const me = useMe();
   const [config, setConfig] = useState<ApiConfig | null>(null);
   const [key, setKey] = useState('');
   const [serverRuns, setServerRuns] = useState(isServerRunsEnabled());
@@ -642,11 +641,11 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
               checked={serverRuns}
               onChange={onToggleServerRuns}
               label="Server generation"
-              disabled={!me || !serverStatus?.configured}
+              disabled={!serverStatus?.configured}
             />
           </div>
-          {!me && (
-            <p className="muted">Sign in to your account in Data controls to use server generation.</p>
+          {!serverStatus?.configured && (
+            <p className="muted">Store your keys on the server below to turn this on.</p>
           )}
           <div className="setting-row">
             <div className="setting-row__body">
@@ -657,7 +656,7 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
                   : 'Not stored on the server yet. Uses the endpoint, models, and key below.'}
               </div>
             </div>
-            <Button variant="secondary" onClick={saveToServer} loading={pushingToServer} disabled={!me}>
+            <Button variant="secondary" onClick={saveToServer} loading={pushingToServer}>
               {serverStatus?.configured ? 'Update server keys' : 'Store on server'}
             </Button>
           </div>
