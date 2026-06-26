@@ -17,6 +17,8 @@ interface ComposerProps {
   placeholder?: string;
   /** Another device is generating a reply in this thread — sending is blocked until it finishes. */
   locked?: boolean;
+  /** Focus the input when this becomes true (e.g. a new/empty chat was opened). */
+  autoFocus?: boolean;
 }
 
 interface Pending {
@@ -25,7 +27,7 @@ interface Pending {
   url: string;
 }
 
-export function Composer({ value, onChange, onSend, streaming, onStop, placeholder, locked }: ComposerProps) {
+export function Composer({ value, onChange, onSend, streaming, onStop, placeholder, locked, autoFocus }: ComposerProps) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
@@ -44,6 +46,11 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
     ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }, [value]);
+
+  // Focus the input when a new/empty chat is opened, so the user can start typing immediately.
+  useEffect(() => {
+    if (autoFocus) taRef.current?.focus();
+  }, [autoFocus]);
 
   // Revoke preview object URLs on unmount.
   const pendingRef = useRef(pending);

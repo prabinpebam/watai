@@ -118,6 +118,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
         streaming={streaming}
         onStop={stop}
         locked={!!lockedBy && !streaming}
+        autoFocus={isEmpty}
       />
       </div>
       <SourcePane />
