@@ -78,6 +78,9 @@ const appendSchema = z
     content: z.string().max(200_000),
     model: z.string().min(1).max(100).optional(),
     parentId: z.string().min(1).max(64).optional(),
+    /** Logical creation time (chronology key), stamped by the originating device and preserved
+     *  here. Distinct from the server append-time `createdAt`, which is the delta-sync cursor. */
+    orderAt: z.string().min(1).max(40).optional(),
     images: z.array(imageSchema).max(16).optional(),
     attachments: z.array(attachmentSchema).max(16).optional(),
     toolCalls: z.array(toolCallSchema).max(32).optional(),

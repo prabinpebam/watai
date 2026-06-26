@@ -44,6 +44,26 @@ describe('MessageService.append', () => {
     expect(after.updatedAt > thread.updatedAt).toBe(true);
   });
 
+  it('preserves the client orderAt (chronology) while createdAt stays server-assigned (cursor)', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    // An assistant message finalized late but logically created earlier.
+    const msg = await ctx.messages.append('userA', thread.id, {
+      role: 'assistant',
+      content: 'answer',
+      orderAt: '2020-01-01T00:00:00.000Z',
+    });
+    expect(msg.orderAt).toBe('2020-01-01T00:00:00.000Z');
+    // createdAt is the server append time (used as the delta-sync cursor), NOT the client orderAt.
+    expect(msg.createdAt).not.toBe('2020-01-01T00:00:00.000Z');
+    expect(msg.createdAt).toMatch(/^2026-/);
+  });
+
+  it('defaults orderAt to the server time when the client omits it', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const msg = await ctx.messages.append('userA', thread.id, { role: 'user', content: 'hi' });
+    expect(msg.orderAt).toBe(msg.createdAt);
+  });
+
   it('is idempotent on a client-supplied id (no duplicate, no double count)', async () => {
     const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
     const a = await ctx.messages.append('userA', thread.id, { id: 'm1', role: 'user', content: 'x' });

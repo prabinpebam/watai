@@ -22,6 +22,8 @@ export interface MessageRecord {
   citations?: MessageCitation[];
   status: MessageStatus;
   createdAt: string;
+  /** Logical creation time (chronology key); preserved from the originating device. */
+  orderAt?: string;
   deletedAt: string | null;
 }
 

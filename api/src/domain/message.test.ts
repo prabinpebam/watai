@@ -174,6 +174,11 @@ describe('parseAppendMessage', () => {
     expect(parseAppendMessage(input)).toMatchObject({ attachments: [{ id: 'a1' }] });
   });
 
+  it('accepts a client orderAt (logical creation time for chronology)', () => {
+    const input = { role: 'assistant', content: 'x', orderAt: '2026-01-01T00:00:00.000Z' };
+    expect(parseAppendMessage(input)).toMatchObject({ orderAt: '2026-01-01T00:00:00.000Z' });
+  });
+
   it('accepts a code-interpreter tool call with awaiting-confirm status and a bounded resultPreview', () => {
     const input = {
       role: 'assistant',

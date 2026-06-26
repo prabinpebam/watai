@@ -45,7 +45,11 @@ export class MessageService {
       ...(input.toolCalls && input.toolCalls.length ? { toolCalls: input.toolCalls } : {}),
       ...(input.citations && input.citations.length ? { citations: input.citations } : {}),
       status: 'complete',
+      // `createdAt` is the server append time (delta-sync cursor). `orderAt` is the device's
+      // logical creation time (chronology), preserved as-sent so late-finalized assistant
+      // messages still sort right after their user message on every device.
       createdAt: ts,
+      orderAt: input.orderAt ?? ts,
       deletedAt: null,
     };
     await this.messageStore.append(record);
