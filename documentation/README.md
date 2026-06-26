@@ -9,6 +9,14 @@ This folder is the single source of truth for what we are building and how we wi
 build it. It elaborates the original [seed specification](seed-spec.md) into an
 exhaustive, buildable plan.
 
+> **Direction change (2026) — server-authoritative.** Watai moved from a BYO-key,
+> client-side model to a **server-authoritative** one: Azure OpenAI / Tavily credentials are
+> stored **encrypted on the server** and synced across devices, and **generation runs
+> server-side** so a response completes even if the client closes. The architecture and API
+> docs ([02](02-architecture.md), [03](03-api-integration.md)) were rewritten for this; the
+> originals are preserved in [archive/](archive/README.md). The build + migration plan is
+> [06-server-runs-and-migration.md](06-server-runs-and-migration.md).
+
 ---
 
 ## 1. Document map
@@ -18,10 +26,12 @@ exhaustive, buildable plan.
 | [seed-spec.md](seed-spec.md) | The original seed. Immutable source of intent. |
 | [README.md](README.md) | This file. Vision, scope, glossary, decisions, doc index. |
 | [01-product-spec.md](01-product-spec.md) | Exhaustive product, UX, UI, IA, navigation, and screen-by-screen specification. |
-| [02-architecture.md](02-architecture.md) | System architecture, hosting, Azure services, security, key management, IaC. |
-| [03-api-integration.md](03-api-integration.md) | Azure OpenAI integration for chat, transcription, image generation, and voice output. |
+| [02-architecture.md](02-architecture.md) | **Server-authoritative** system architecture: run engine, credential vault, hosting, security. |
+| [03-api-integration.md](03-api-integration.md) | **Server-side** Azure OpenAI call path (chat, image, transcription, TTS, realtime). |
 | [04-data-model.md](04-data-model.md) | Entities, Cosmos DB schema, Blob layout, local cache, sync strategy, data lifecycle. |
 | [05-execution-plan.md](05-execution-plan.md) | Phased roadmap, milestones, testing strategy, CI/CD, risks, decisions log, DoD. |
+| [06-server-runs-and-migration.md](06-server-runs-and-migration.md) | **Server runs & credentials** spec + the phased migration plan (the 2026 pivot). |
+| [archive/](archive/README.md) | Superseded v1 (BYO-key, client-side) architecture + API specs. |
 | [ui-design/](ui-design/README.md) | **Implementation-ready UI design spec** (frontend-first): tokens, components, every screen/state, interaction/motion/a11y, copy/assets, and frontend architecture. |
 | [azure-api-detail/azure-api-detail.md](azure-api-detail/azure-api-detail.md) | Source-of-truth Azure `/openai/v1` request examples the API spec is aligned to. |
 | [agentic/](agentic/README.md) | **Agentic capabilities spec** (post-v1 epic): Foundry Agent Service + Responses API integration for tool calling, web search, Deep Research, and intent-aware image generation. |
@@ -64,8 +74,14 @@ original assets and our own visual tokens.
 - Voice dictation into the composer, and a full-screen voice conversation mode.
 - Inline image generation with a per-conversation gallery.
 - Per-user accounts with chat history and images synced to Azure.
-- Bring-your-own-key (BYO-key) model: each user supplies their own Azure OpenAI
-  configuration, stored client-side.
+- Server-stored, encrypted, cross-device-synced credentials: each user supplies their own
+  Azure OpenAI configuration once; it is stored **encrypted server-side** (never returned to
+  a client) and used by the server to run generation. *(Updated 2026 — was client-side
+  BYO-key; see [02-architecture.md](02-architecture.md) and
+  [06-server-runs-and-migration.md](06-server-runs-and-migration.md).)*
+- Server-authoritative generation: once a prompt is submitted, the response is generated and
+  persisted server-side **independently of the client** — close the app and it still
+  completes.
 - Infrastructure provisioned and operated through Azure CLI / Bicep automation.
 - Light/dark theming, accessibility to WCAG 2.2 AA, and full keyboard support on desktop.
 
