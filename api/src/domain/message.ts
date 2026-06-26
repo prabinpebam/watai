@@ -56,7 +56,7 @@ const citationSchema = z
 export type MessageCitation = z.infer<typeof citationSchema>;
 
 /** A user-uploaded attachment synced with a message (bytes live in Blob Storage at `blobPath`). */
-const attachmentSchema = z
+export const attachmentSchema = z
   .object({
     id: z.string().min(1).max(64),
     kind: z.enum(['image', 'audio', 'file']),
