@@ -26,49 +26,9 @@ function Steps({ index, count }: { index: number; count: number }) {
 
 function Welcome() {
   const navigate = useNavigate();
-  return (
-    <div className="onboard">
-      <Logo />
-      <div>
-        <h1 className="onboard__title">Welcome to Watai</h1>
-        <p className="onboard__sub">
-          Chat and talk with AI using your own Azure OpenAI endpoint. Your key stays on your device.
-        </p>
-      </div>
-      <div className="col" style={{ width: '100%', textAlign: 'left', gap: 12 }}>
-        <Feature icon="shield" title="Bring your own key" sub="Calls go directly from your browser to your endpoint." />
-        <Feature icon="mic" title="Voice & dictation" sub="Speak your prompts, hear responses read aloud." />
-        <Feature icon="image" title="Generate images" sub="Create and save images locally." />
-      </div>
-      <div className="onboard__actions">
-        <Button variant="primary" full size="lg" onClick={() => navigate('/onboarding/auth')}>
-          Get started
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function Feature({ icon, title, sub }: { icon: string; title: string; sub: string }) {
-  return (
-    <div className="row" style={{ alignItems: 'flex-start' }}>
-      <Avatar size="md" variant="assistant">
-        <Icon name={icon} size={18} />
-      </Avatar>
-      <div>
-        <div className="text-strong">{title}</div>
-        <div className="muted" style={{ fontSize: 'var(--text-caption-size)' }}>
-          {sub}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Auth() {
-  const navigate = useNavigate();
   const setMockAi = useUi((s) => s.setMockAi);
   const [busy, setBusy] = useState(false);
+
   const signin = async () => {
     setBusy(true);
     try {
@@ -77,23 +37,15 @@ function Auth() {
       setBusy(false);
     }
   };
+
   return (
     <div className="onboard">
       <Logo />
       <div>
-        <h1 className="onboard__title">Sign in to Watai</h1>
-        <p className="onboard__sub">
-          Sign in with your account to securely sync your chats and images across all your devices.
-        </p>
-      </div>
-      <div className="col" style={{ width: '100%', textAlign: 'left', gap: 12 }}>
-        <Feature icon="database" title="Synced everywhere" sub="Your conversations and images follow you to every device." />
-        <Feature icon="shield" title="Private by design" sub="Your Azure OpenAI key never leaves your device." />
+        <h1 className="onboard__title">Welcome to Watai</h1>
+        <p className="onboard__sub">Sign in to start chatting.</p>
       </div>
       <div className="onboard__actions">
-        <Button variant="ghost" onClick={() => navigate('/onboarding/welcome')}>
-          Back
-        </Button>
         <Button variant="primary" full size="lg" loading={busy} onClick={signin}>
           Sign in
         </Button>
@@ -405,7 +357,6 @@ export function Onboarding() {
   return (
     <Routes>
       <Route path="welcome" element={<Welcome />} />
-      <Route path="auth" element={<Auth />} />
       <Route path="key" element={<KeyWizard />} />
       <Route path="mic" element={<MicPriming />} />
       <Route path="*" element={<Navigate to="welcome" replace />} />
