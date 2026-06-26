@@ -566,10 +566,12 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
   const [serverRuns, setServerRuns] = useState(isServerRunsEnabled());
   const [serverStatus, setServerStatus] = useState<CredentialStatus | null>(null);
   const [pushingToServer, setPushingToServer] = useState(false);
+  const [tavilyKey, setTavilyKey] = useState('');
 
   useEffect(() => {
     getApiConfig().then(setConfig);
     getApiKey().then((k) => setKey(k ?? ''));
+    getTavilyKey().then((k) => setTavilyKey(k ?? ''));
     // Server credential status requires sign-in; treat any failure as "not configured / signed out".
     cloudApi
       .getCredentialStatus()
@@ -600,6 +602,7 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
     }
     setPushingToServer(true);
     try {
+      const tavily = tavilyKey.trim();
       const status = await cloudApi.putCredentials({
         baseUrl: normalizeBaseUrl(config.baseUrl),
         models: {
@@ -609,7 +612,9 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
           ...(config.models.tts ? { tts: config.models.tts } : {}),
         },
         key: key.trim(),
+        ...(tavily ? { tavilyKey: tavily } : {}),
       });
+      await saveTavilyKey(tavily); // keep the local web-search key in sync with the vault
       setServerStatus(status);
       pushToast('Keys stored securely on the server', 'success');
     } catch (e) {
@@ -647,12 +652,22 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
           {!serverStatus?.configured && (
             <p className="muted">Store your keys on the server below to turn this on.</p>
           )}
+          <Field
+            label="Web search key (Tavily) — optional"
+            type="password"
+            hint="Stored encrypted, for server-side web search. Leave blank if you don't use it."
+            value={tavilyKey}
+            onChange={(e) => setTavilyKey(e.target.value)}
+            autoComplete="off"
+          />
           <div className="setting-row">
             <div className="setting-row__body">
               <div className="setting-row__title">Server keys</div>
               <div className="setting-row__sub">
                 {serverStatus?.configured
-                  ? `Stored on the server · key ••${serverStatus.keyHint ?? ''}`
+                  ? `Stored · key ••${serverStatus.keyHint ?? ''}${
+                      serverStatus.tavilyConfigured ? ` · Tavily ••${serverStatus.tavilyHint ?? ''}` : ''
+                    }`
                   : 'Not stored on the server yet. Uses the endpoint, models, and key below.'}
               </div>
             </div>
