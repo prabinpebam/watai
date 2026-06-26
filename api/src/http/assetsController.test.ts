@@ -56,7 +56,7 @@ describe('assetsController', () => {
     const thread = await threads.create('userA', { title: 'T', temporary: false });
     const res = await ctrl.requestSas({
       claims: { sub: 'userA' },
-      body: { threadId: thread.id, assetId: 'a1', op: 'write', contentType: 'application/pdf' },
+      body: { threadId: thread.id, assetId: 'a1', op: 'write', contentType: 'image/svg+xml' },
     });
     expect(res.status).toBe(400);
   });
