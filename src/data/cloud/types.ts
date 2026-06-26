@@ -31,6 +31,18 @@ export interface ImageRecord {
   createdAt: string;
 }
 
+/** Cloud attachment metadata (user-uploaded; bytes live in Blob Storage at `blobPath`). */
+export interface AttachmentRecord {
+  id: string;
+  kind: 'image' | 'audio' | 'file';
+  blobPath: string;
+  mime: string;
+  bytes: number;
+  name?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface MessageRecord {
   id: string;
   threadId: string;
@@ -40,6 +52,7 @@ export interface MessageRecord {
   model?: string;
   parentId?: string;
   images?: ImageRecord[];
+  attachments?: AttachmentRecord[];
   toolCalls?: ToolCallRecord[];
   citations?: CitationRecord[];
   status: ServerMessageStatus;
@@ -95,6 +108,7 @@ export interface AppendMessageBody {
   model?: string;
   parentId?: string;
   images?: ImageRecord[];
+  attachments?: AttachmentRecord[];
   toolCalls?: ToolCallRecord[];
   citations?: CitationRecord[];
 }
@@ -175,14 +189,28 @@ export function messageFromRecord(r: MessageRecord): Message {
           })),
         }
       : {}),
+    ...(r.attachments?.length
+      ? {
+          attachments: r.attachments.map((a) => ({
+            id: a.id,
+            kind: a.kind,
+            blobPath: a.blobPath,
+            mime: a.mime,
+            bytes: a.bytes,
+            ...(a.name !== undefined ? { name: a.name } : {}),
+            ...(a.width !== undefined ? { width: a.width } : {}),
+            ...(a.height !== undefined ? { height: a.height } : {}),
+          })),
+        }
+      : {}),
     ...(r.toolCalls?.length ? { toolCalls: r.toolCalls.map((t) => ({ ...t })) } : {}),
     ...(r.citations?.length ? { citations: r.citations.map((c) => ({ ...c })) } : {}),
   };
 }
 
 export function appendBodyFromMessage(m: Message): AppendMessageBody {
-  // Only images already uploaded to Blob Storage (blobPath set) are synced; local-only
-  // images are uploaded first by the sync engine, which then re-derives this body.
+  // Only assets already uploaded to Blob Storage (blobPath set) are synced; local-only ones
+  // are uploaded first by the sync engine, which then re-derives this body.
   const uploaded: ImageRecord[] = (m.images ?? [])
     .filter((i): i is typeof i & { blobPath: string } => !!i.blobPath)
     .map((i) => ({
@@ -193,6 +221,18 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
       outputFormat: i.outputFormat,
       createdAt: i.createdAt,
     }));
+  const uploadedAtts: AttachmentRecord[] = (m.attachments ?? [])
+    .filter((a): a is typeof a & { blobPath: string } => !!a.blobPath)
+    .map((a) => ({
+      id: a.id,
+      kind: a.kind,
+      blobPath: a.blobPath,
+      mime: a.mime,
+      bytes: a.bytes,
+      ...(a.name !== undefined ? { name: a.name } : {}),
+      ...(a.width !== undefined ? { width: a.width } : {}),
+      ...(a.height !== undefined ? { height: a.height } : {}),
+    }));
   return {
     id: m.id,
     role: m.role,
@@ -200,6 +240,7 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
     ...(m.model !== undefined ? { model: m.model } : {}),
     ...(m.parentId != null ? { parentId: m.parentId } : {}),
     ...(uploaded.length ? { images: uploaded } : {}),
+    ...(uploadedAtts.length ? { attachments: uploadedAtts } : {}),
     ...(m.toolCalls?.length
       ? {
           toolCalls: m.toolCalls.map((t) => ({

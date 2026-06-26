@@ -49,16 +49,21 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/** Resolve a user message's image attachments to data/remote URLs for vision input. */
+/** Resolve a user message's image attachments to data URLs for vision input (local or cloud). */
 async function imageUrlsForMessage(m: Message): Promise<string[]> {
   const atts = (m.attachments ?? []).filter((a) => a.mime.startsWith('image/'));
   const urls: string[] = [];
   for (const a of atts) {
-    if (a.blobPath && /^(data:|https?:)/.test(a.blobPath)) urls.push(a.blobPath);
-    else if (a.localBlobKey) {
-      const blob = await repo.getBlob(a.localBlobKey).catch(() => null);
-      if (blob) urls.push(await blobToDataUrl(blob));
+    const url = await repo.resolveAssetUrl(a).catch(() => '');
+    if (!url) continue;
+    if (url.startsWith('data:')) {
+      urls.push(url);
+      continue;
     }
+    const blob = await fetch(url)
+      .then((r) => r.blob())
+      .catch(() => null);
+    if (blob) urls.push(await blobToDataUrl(blob));
   }
   return urls;
 }
@@ -68,8 +73,13 @@ async function latestReferenceImage(history: Message[]): Promise<Blob | null> {
   for (let i = history.length - 1; i >= 0; i--) {
     const m = history[i];
     if (m.role !== 'user') continue;
-    const att = (m.attachments ?? []).find((a) => a.mime.startsWith('image/') && a.localBlobKey);
-    if (att?.localBlobKey) return repo.getBlob(att.localBlobKey).catch(() => null);
+    const att = (m.attachments ?? []).find((a) => a.mime.startsWith('image/'));
+    if (!att) continue;
+    const url = await repo.resolveAssetUrl(att).catch(() => '');
+    if (!url) return null;
+    return fetch(url)
+      .then((r) => r.blob())
+      .catch(() => null);
   }
   return null;
 }

@@ -115,6 +115,11 @@ class FakeLocal implements SyncLocalStore {
     if (image.blobPath && /^(data:|blob:|https?:)/.test(image.blobPath)) return image.blobPath;
     return '';
   }
+  async resolveAssetUrl(asset: { id: string; localBlobKey?: string; blobPath?: string }): Promise<string> {
+    if (asset.localBlobKey && this.blobs.has(asset.localBlobKey)) return `blob:fake/${asset.localBlobKey}`;
+    if (asset.blobPath && /^(data:|blob:|https?:)/.test(asset.blobPath)) return asset.blobPath;
+    return '';
+  }
   async listMemory(): Promise<MemoryItem[]> {
     return [];
   }
@@ -242,6 +247,9 @@ class FakeCloud implements CloudApi {
       ...(body.model ? { model: body.model } : {}),
       ...(body.parentId ? { parentId: body.parentId } : {}),
       ...(body.images?.length ? { images: body.images } : {}),
+      ...(body.attachments?.length ? { attachments: body.attachments } : {}),
+      ...(body.toolCalls?.length ? { toolCalls: body.toolCalls } : {}),
+      ...(body.citations?.length ? { citations: body.citations } : {}),
     };
     this.messages.set(id, rec);
     return rec;
@@ -517,6 +525,31 @@ describe('SyncRepository — image cloud storage', () => {
     // blobPath is persisted locally so a later push won't re-upload.
     const localMsg = (await local.listMessages('t1')).find((m) => m.id === 'm1');
     expect(localMsg?.images?.[0].blobPath).toBe('u/t1/img1.png');
+  });
+
+  it('uploads a message’s local attachments to Blob Storage on push and syncs their blobPath', async () => {
+    const { local, cloud, repo, uploaded } = setup(true);
+    await repo.createThread({ id: 't1', title: 'A' });
+    await local.putBlob('attkey', new Blob(['PDF']));
+    await repo.appendMessage({
+      id: 'm1',
+      threadId: 't1',
+      role: 'user',
+      content: 'see this',
+      status: 'complete',
+      createdAt: '2026-01-01T00:00:30Z',
+      attachments: [
+        { id: 'att1', kind: 'file', localBlobKey: 'attkey', mime: 'application/pdf', bytes: 3, name: 'd.pdf' },
+      ],
+    });
+
+    await repo.push();
+
+    expect(uploaded.size).toBe(1);
+    expect(cloud.calls).toContain('requestSas:write:t1:att1');
+    expect(cloud.messages.get('m1')?.attachments?.[0]).toMatchObject({ id: 'att1', blobPath: 'u/t1/att1.png' });
+    const localMsg = (await local.listMessages('t1')).find((m) => m.id === 'm1');
+    expect(localMsg?.attachments?.[0].blobPath).toBe('u/t1/att1.png');
   });
 
   it('does not re-upload an image that already has a blobPath', async () => {

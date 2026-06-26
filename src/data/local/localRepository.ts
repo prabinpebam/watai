@@ -117,13 +117,17 @@ export class LocalRepository implements SyncLocalStore {
 
   /** Local-only resolution: use the cached blob, or a direct-URL blobPath. A cloud
    *  storage path can't be resolved here (the SyncRepository overrides this). */
-  async resolveImageUrl(image: ImageRef): Promise<string> {
-    if (image.localBlobKey) {
-      const url = await this.getBlobUrl(image.localBlobKey);
+  async resolveAssetUrl(asset: { id: string; localBlobKey?: string; blobPath?: string }): Promise<string> {
+    if (asset.localBlobKey) {
+      const url = await this.getBlobUrl(asset.localBlobKey);
       if (url) return url;
     }
-    if (image.blobPath && /^(data:|blob:|https?:)/.test(image.blobPath)) return image.blobPath;
+    if (asset.blobPath && /^(data:|blob:|https?:)/.test(asset.blobPath)) return asset.blobPath;
     return '';
+  }
+
+  resolveImageUrl(image: ImageRef): Promise<string> {
+    return this.resolveAssetUrl(image);
   }
 
   async getSettings(): Promise<Settings> {

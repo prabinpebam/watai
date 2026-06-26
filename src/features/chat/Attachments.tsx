@@ -10,25 +10,19 @@ function isDirectUrl(s?: string): s is string {
   return !!s && /^(data:|blob:|https?:)/.test(s);
 }
 
-/** Resolve an attachment to a usable object URL (direct URL or IndexedDB blob). */
-function useObjectUrl(blobPath?: string, localBlobKey?: string): string | null {
-  const [url, setUrl] = useState<string | null>(isDirectUrl(blobPath) ? blobPath : null);
+/** Resolve an attachment to a usable object URL: local cache, direct URL, or cloud blob (SAS). */
+function useAttachmentUrl(att: Attachment): string | null {
+  const [url, setUrl] = useState<string | null>(isDirectUrl(att.blobPath) ? att.blobPath! : null);
   useEffect(() => {
     let live = true;
-    if (isDirectUrl(blobPath)) {
-      setUrl(blobPath);
-      return;
-    }
-    if (localBlobKey) {
-      repo
-        .getBlobUrl(localBlobKey)
-        .then((u) => live && setUrl(u))
-        .catch(() => undefined);
-    }
+    repo
+      .resolveAssetUrl(att)
+      .then((u) => live && setUrl(u || null))
+      .catch(() => undefined);
     return () => {
       live = false;
     };
-  }, [blobPath, localBlobKey]);
+  }, [att.id, att.blobPath, att.localBlobKey]);
   return url;
 }
 
@@ -55,7 +49,7 @@ function iconForMime(mime: string, name = ''): string {
 }
 
 function ImageAttachment({ att }: { att: Attachment }) {
-  const url = useObjectUrl(att.blobPath, att.localBlobKey);
+  const url = useAttachmentUrl(att);
   const [open, setOpen] = useState(false);
   if (!url)
     return (
@@ -81,7 +75,7 @@ function ImageAttachment({ att }: { att: Attachment }) {
 }
 
 function PdfAttachment({ att }: { att: Attachment }) {
-  const url = useObjectUrl(att.blobPath, att.localBlobKey);
+  const url = useAttachmentUrl(att);
   const [preview, setPreview] = useState(false);
   // data: URLs can't be opened top-level and some viewers won't embed them,
   // so resolve a blob: URL for both the inline <object> and the open/download links.
@@ -151,7 +145,7 @@ function PdfAttachment({ att }: { att: Attachment }) {
 }
 
 function MediaAttachment({ att }: { att: Attachment }) {
-  const url = useObjectUrl(att.blobPath, att.localBlobKey);
+  const url = useAttachmentUrl(att);
   if (!url) return <div className="file-card file-card--loading skeleton" />;
   return (
     <div className="file-card file-card--media">
@@ -166,7 +160,7 @@ function MediaAttachment({ att }: { att: Attachment }) {
 }
 
 function FileChip({ att }: { att: Attachment }) {
-  const url = useObjectUrl(att.blobPath, att.localBlobKey);
+  const url = useAttachmentUrl(att);
   return (
     <div className="file-card">
       <div className="file-card__row">

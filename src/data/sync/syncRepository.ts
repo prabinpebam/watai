@@ -62,17 +62,18 @@ export class SyncRepository implements Repository {
     return this.local.getBlobUrl(key);
   }
 
-  /** Resolve an image URL: prefer the local cache; otherwise download from Blob Storage
-   *  via a read SAS and cache it locally (so other devices and reloads work offline after). */
-  async resolveImageUrl(image: ImageRef): Promise<string> {
-    // The cache key is the explicit local key, else a stable per-image cloud key. Always check
-    // it FIRST so a once-downloaded cloud image is never re-fetched (faster + no repeat SAS/egress).
-    const cacheKey = image.localBlobKey ?? `cloud-${image.id}`;
+  /** Resolve an asset URL (generated image OR uploaded attachment): prefer the local cache;
+   *  otherwise download from Blob Storage via a read SAS and cache it locally so other devices
+   *  and reloads work offline after. */
+  async resolveAssetUrl(asset: { id: string; localBlobKey?: string; blobPath?: string }): Promise<string> {
+    // The cache key is the explicit local key, else a stable per-asset cloud key. Always check
+    // it FIRST so a once-downloaded cloud asset is never re-fetched (faster + no repeat SAS/egress).
+    const cacheKey = asset.localBlobKey ?? `cloud-${asset.id}`;
     const cached = await this.local.getBlobUrl(cacheKey);
     if (cached) return cached;
-    if (image.blobPath && /^(data:|blob:|https?:)/.test(image.blobPath)) return image.blobPath;
-    if (image.blobPath && (await this.syncEnabled())) {
-      const parsed = parseBlobPath(image.blobPath);
+    if (asset.blobPath && /^(data:|blob:|https?:)/.test(asset.blobPath)) return asset.blobPath;
+    if (asset.blobPath && (await this.syncEnabled())) {
+      const parsed = parseBlobPath(asset.blobPath);
       if (!parsed) return '';
       try {
         const sas = await this.cloud.requestSas({
@@ -91,6 +92,11 @@ export class SyncRepository implements Repository {
       }
     }
     return '';
+  }
+
+  /** Resolve a generated image's URL (delegates to the shared asset resolver). */
+  resolveImageUrl(image: ImageRef): Promise<string> {
+    return this.resolveAssetUrl(image);
   }
   getSettings(): Promise<Settings> {
     return this.local.getSettings();
@@ -312,9 +318,9 @@ export class SyncRepository implements Repository {
     fallback: AppendMessageBody,
   ): Promise<AppendMessageBody> {
     const message = (await this.local.listMessages(threadId)).find((m) => m.id === id);
-    if (!message || !message.images?.length) return fallback;
+    if (!message || (!message.images?.length && !message.attachments?.length)) return fallback;
     let changed = false;
-    for (const img of message.images) {
+    for (const img of message.images ?? []) {
       if (img.blobPath || !img.localBlobKey) continue;
       const blob = await this.local.getBlob(img.localBlobKey);
       if (!blob) continue;
@@ -324,7 +330,19 @@ export class SyncRepository implements Repository {
       img.blobPath = sas.blobPath;
       changed = true;
     }
-    if (changed) await this.local.updateMessage(id, { images: message.images });
+    for (const att of message.attachments ?? []) {
+      if (att.blobPath || !att.localBlobKey) continue;
+      // Only sync bytes for content types the asset endpoint allows; others stay local-only.
+      if (!SYNCABLE_CONTENT_TYPES.has(att.mime)) continue;
+      const blob = await this.local.getBlob(att.localBlobKey);
+      if (!blob) continue;
+      const sas = await this.cloud.requestSas({ threadId, assetId: att.id, op: 'write', contentType: att.mime });
+      await uploadBlobToSas(this.fetchImpl, sas.url, blob, att.mime);
+      att.blobPath = sas.blobPath;
+      changed = true;
+    }
+    if (changed)
+      await this.local.updateMessage(id, { images: message.images, attachments: message.attachments });
     return appendBodyFromMessage(message);
   }
 
@@ -378,6 +396,31 @@ function imageContentType(fmt: string): string {
   return fmt === 'jpeg' ? 'image/jpeg' : fmt === 'webp' ? 'image/webp' : 'image/png';
 }
 
+/** Blob-path extension -> content type. Mirrors the api asset allowlist (`api/src/domain/asset.ts`). */
+const CONTENT_TYPE_BY_EXT: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  pdf: 'application/pdf',
+  txt: 'text/plain',
+  md: 'text/markdown',
+  csv: 'text/csv',
+  json: 'application/json',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+
+/** Content types whose bytes the asset endpoint accepts (mirrors the api allowlist). */
+const SYNCABLE_CONTENT_TYPES = new Set<string>([
+  ...Object.values(CONTENT_TYPE_BY_EXT),
+  'audio/webm',
+  'audio/mpeg',
+  'audio/mp3',
+]);
+
 /** Derive the threadId, assetId, and content type from a `{userId}/{threadId}/{assetId}.{ext}` blob path. */
 function parseBlobPath(blobPath: string): { threadId: string; assetId: string; contentType: string } | null {
   const parts = blobPath.split('/').filter(Boolean);
@@ -387,7 +430,7 @@ function parseBlobPath(blobPath: string): { threadId: string; assetId: string; c
   const dot = file.lastIndexOf('.');
   const assetId = dot >= 0 ? file.slice(0, dot) : file;
   const ext = (dot >= 0 ? file.slice(dot + 1) : 'png').toLowerCase();
-  const contentType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
+  const contentType = CONTENT_TYPE_BY_EXT[ext] ?? 'image/png';
   return { threadId, assetId, contentType };
 }
 

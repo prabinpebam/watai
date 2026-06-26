@@ -312,4 +312,39 @@ describe('cloud mappers', () => {
     };
     expect(threadFromRecord(r).vectorStoreId).toBe('vs_1');
   });
+
+  it('appendBodyFromMessage syncs uploaded attachments and skips local-only ones', () => {
+    const m: Message = {
+      id: 'm1',
+      threadId: 't1',
+      role: 'user',
+      content: 'see',
+      status: 'complete',
+      createdAt: '2026-01-01T00:00:00Z',
+      attachments: [
+        { id: 'a1', kind: 'image', blobPath: 'u/t1/a1.png', mime: 'image/png', bytes: 10, name: 'p.png', width: 4, height: 4 },
+        { id: 'a2', kind: 'file', localBlobKey: 'k', mime: 'application/pdf', bytes: 20, name: 'd.pdf' },
+      ],
+    };
+    expect(appendBodyFromMessage(m).attachments).toEqual([
+      { id: 'a1', kind: 'image', blobPath: 'u/t1/a1.png', mime: 'image/png', bytes: 10, name: 'p.png', width: 4, height: 4 },
+    ]);
+  });
+
+  it('messageFromRecord surfaces synced attachments (resolved later via SAS)', () => {
+    const rec: MessageRecord = {
+      id: 'm1',
+      threadId: 't1',
+      userId: 'u',
+      role: 'user',
+      content: 'x',
+      status: 'complete',
+      createdAt: 'x',
+      deletedAt: null,
+      attachments: [{ id: 'a1', kind: 'file', blobPath: 'u/t1/a1.pdf', mime: 'application/pdf', bytes: 9, name: 'd.pdf' }],
+    };
+    expect(messageFromRecord(rec).attachments).toEqual([
+      { id: 'a1', kind: 'file', blobPath: 'u/t1/a1.pdf', mime: 'application/pdf', bytes: 9, name: 'd.pdf' },
+    ]);
+  });
 });

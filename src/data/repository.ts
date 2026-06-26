@@ -25,6 +25,9 @@ export interface Repository {
   /** Resolve a displayable URL for a generated/attached image, fetching from the cloud
    *  (read SAS) and caching locally when only a cloud `blobPath` is known. */
   resolveImageUrl(image: ImageRef): Promise<string>;
+  /** Resolve any asset (generated image OR uploaded attachment) to a usable URL; fetches +
+   *  caches from Blob Storage via a read SAS when only a cloud `blobPath` is known. */
+  resolveAssetUrl(asset: { id: string; localBlobKey?: string; blobPath?: string }): Promise<string>;
 
   getSettings(): Promise<Settings>;
   saveSettings(s: Settings): Promise<void>;
