@@ -1,9 +1,16 @@
-import type { Id, ImageRef, Message, Settings, Thread, MemoryItem } from '../lib/types';
+import type { Id, ImageRef, Message, Settings, Thread, ThreadLock, MemoryItem } from '../lib/types';
 
 export interface SearchHit {
   thread: Thread;
   messageId: Id;
   snippet: string;
+}
+
+/** Outcome of trying to take a thread's run lock before generating a reply. */
+export interface RunLockResult {
+  acquired: boolean;
+  /** When not acquired, the other device that currently holds the lock (for the UX). */
+  heldBy?: { deviceLabel: string; since: string };
 }
 
 export interface Repository {
@@ -17,6 +24,15 @@ export interface Repository {
   appendMessage(m: Message): Promise<Message>;
   updateMessage(id: Id, patch: Partial<Message>): Promise<Message>;
   deleteMessage(id: Id): Promise<void>;
+
+  /** Take the thread's run lock before generating a reply, so two devices never generate at once.
+   *  A no-op (always acquired) with sync off or for local-only threads. */
+  acquireRunLock(threadId: Id): Promise<RunLockResult>;
+  /** Release the thread's run lock once the run ends (best-effort; safe to call when not held). */
+  releaseRunLock(threadId: Id): Promise<void>;
+  /** Read the thread's current run lock from the server (null when free, sync off, or local-only).
+   *  Used to proactively show/clear the "another device is responding" UX on the open thread. */
+  getThreadLock(threadId: Id): Promise<ThreadLock | null>;
 
   putBlob(key: string, blob: Blob): Promise<void>;
   getBlobUrl(key: string): Promise<string>;

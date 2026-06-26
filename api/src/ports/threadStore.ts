@@ -1,3 +1,5 @@
+import type { ThreadLock } from '../domain/threadLock';
+
 /** Server-side thread document (mirrors the Cosmos `threads` container, partition key /userId). */
 export interface ThreadRecord {
   id: string;
@@ -10,6 +12,8 @@ export interface ThreadRecord {
   lastMessagePreview?: string;
   /** Vector store id holding the thread's uploaded documents (thread-scoped file search). */
   vectorStoreId?: string;
+  /** Active run lock (set while a device generates a reply); null/absent when free. */
+  lock?: ThreadLock | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -32,4 +36,15 @@ export interface ThreadStore {
   get(userId: string, id: string): Promise<ThreadRecord | null>;
   list(userId: string, opts?: ListOptions): Promise<ThreadRecord[]>;
   put(record: ThreadRecord): Promise<ThreadRecord>;
+}
+
+/**
+ * Atomic compare-and-set used by the run-lock flow. `getForUpdate` reads the record together
+ * with a concurrency token (the Cosmos `_etag`); `putIfMatch` writes only if that token is
+ * still current, returning null when another writer won the race. This makes "check the lock,
+ * then take it" a single atomic step, so two devices can never both acquire the same thread.
+ */
+export interface ThreadLockStore {
+  getForUpdate(userId: string, id: string): Promise<{ record: ThreadRecord; etag: string } | null>;
+  putIfMatch(record: ThreadRecord, etag: string): Promise<ThreadRecord | null>;
 }

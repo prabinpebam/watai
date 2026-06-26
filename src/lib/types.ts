@@ -15,11 +15,24 @@ export interface Thread {
   model?: string;
   /** Vector store id holding this thread's uploaded documents (thread-scoped file search). */
   vectorStoreId?: string;
+  /** Active run lock: set while a device is generating a reply here; null/absent when free. */
+  lock?: ThreadLock | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
   messageCount: number;
   lastMessagePreview?: string;
+}
+
+/** Per-thread run lock (server-coordinated) so two devices never generate a reply at once. */
+export interface ThreadLock {
+  /** Stable id of the holding device (distinct from the user id). */
+  deviceId: string;
+  /** Human-friendly holder label for the "locked" UX, e.g. "Chrome on Windows". */
+  deviceLabel: string;
+  acquiredAt: string;
+  /** Last heartbeat; the lock is considered stale (stealable) once this is old enough. */
+  heartbeatAt: string;
 }
 
 export type Role = 'user' | 'assistant' | 'system';

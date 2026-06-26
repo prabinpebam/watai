@@ -868,6 +868,14 @@ a:hover {
   font-size: var(--text-caption-size);
   color: var(--color-text-secondary);
 }
+/* "Another device is responding" — a pill so the reason the composer is locked reads clearly. */
+.composer-status--lock {
+  color: var(--color-text-primary);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill, 999px);
+  width: fit-content;
+}
 
 .attach-chip {
   display: flex;

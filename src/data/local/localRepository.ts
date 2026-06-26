@@ -93,6 +93,15 @@ export class LocalRepository implements SyncLocalStore {
     await (await db()).delete('messages', id);
   }
 
+  /** Local-only store: a single device, so there is never lock contention. */
+  async acquireRunLock(): Promise<{ acquired: boolean }> {
+    return { acquired: true };
+  }
+  async releaseRunLock(): Promise<void> {}
+  async getThreadLock(): Promise<null> {
+    return null;
+  }
+
   /** Sync-only: insert/replace a server message verbatim, without bumping the thread. */
   async putMessageRaw(message: Message): Promise<void> {
     await (await db()).put('messages', message);

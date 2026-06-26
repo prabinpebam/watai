@@ -2,7 +2,7 @@
 // plus boundary mappers that translate to/from the frontend domain types. The server
 // owns `userId`/`deletedAt` and never sees UI-ephemeral fields (attachments, images,
 // usage, error, or the sending/streaming statuses), so those are stripped/defaulted here.
-import type { Message, Role, Thread } from '../../lib/types';
+import type { Message, Role, Thread, ThreadLock } from '../../lib/types';
 
 export interface ThreadRecord {
   id: string;
@@ -14,6 +14,8 @@ export interface ThreadRecord {
   messageCount: number;
   lastMessagePreview?: string;
   vectorStoreId?: string;
+  /** Active run lock (set while a device generates a reply); null/absent when free. */
+  lock?: ThreadLock | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -156,6 +158,8 @@ export function threadFromRecord(r: ThreadRecord): Thread {
     updatedAt: r.updatedAt,
     deletedAt: r.deletedAt,
     messageCount: r.messageCount,
+    // Always present so a server-cleared lock overwrites a stale local one on merge.
+    lock: r.lock ?? null,
     ...(r.lastMessagePreview !== undefined ? { lastMessagePreview: r.lastMessagePreview } : {}),
     ...(r.vectorStoreId !== undefined ? { vectorStoreId: r.vectorStoreId } : {}),
   };

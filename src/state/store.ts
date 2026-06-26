@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { CapabilityMatrix, Citation, Density, TextScale, Theme, Toast } from '../lib/types';
+import type { CapabilityMatrix, Citation, Density, TextScale, Theme, ThreadLock, Toast } from '../lib/types';
 import { newId } from '../lib/ids';
 
 interface StreamState {
@@ -38,6 +38,8 @@ interface UiState {
   threadsVersion: number;
   /** Per-thread message revision; bumped when a thread's persisted messages change. */
   threadRev: Record<string, number>;
+  /** Per-thread run lock (another device is generating). Transient; never persisted/synced. */
+  threadLocks: Record<string, ThreadLock | null>;
   confirmRequest: ConfirmRequest | null;
   /** Open source-detail pane (web search results) — transient, never persisted. */
   sourcePane: { citations: Citation[]; index: number } | null;
@@ -59,6 +61,7 @@ interface UiState {
   dismissToast: (id: string) => void;
   bumpThreads: () => void;
   bumpThread: (threadId: string) => void;
+  setThreadLock: (threadId: string, lock: ThreadLock | null) => void;
   requestConfirm: (opts: Omit<ConfirmRequest, 'resolve'>) => Promise<boolean>;
   resolveConfirm: (ok: boolean) => void;
   openSourcePane: (citations: Citation[], index: number) => void;
@@ -87,6 +90,7 @@ export const useUi = create<UiState>()(
       toasts: [],
       threadsVersion: 0,
       threadRev: {},
+      threadLocks: {},
       confirmRequest: null,
       sourcePane: null,
 
@@ -111,6 +115,8 @@ export const useUi = create<UiState>()(
       bumpThreads: () => set((s) => ({ threadsVersion: s.threadsVersion + 1 })),
       bumpThread: (threadId) =>
         set((s) => ({ threadRev: { ...s.threadRev, [threadId]: (s.threadRev[threadId] ?? 0) + 1 } })),
+      setThreadLock: (threadId, lock) =>
+        set((s) => ({ threadLocks: { ...s.threadLocks, [threadId]: lock } })),
       requestConfirm: (opts) =>
         new Promise<boolean>((resolve) => set({ confirmRequest: { ...opts, resolve } })),
       resolveConfirm: (ok) => {

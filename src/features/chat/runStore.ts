@@ -23,6 +23,10 @@ export const DEFAULT_CHAT_MODEL = 'gpt-5.4';
 const kv = idbKvStore();
 const SNAPSHOT_PREFIX = 'run.active.';
 
+/** Threads whose run is mid-acquire (lock pending) — guards the async gap before `runs` is
+ *  seeded so a fast double-send can't start two generations on the same device. */
+const startingThreads = new Set<string>();
+
 /** Human labels for the tool-activity cards shown in the transcript. */
 const TOOL_LABELS: Record<string, string> = {
   search_history: 'Searched your chat history',
@@ -147,7 +151,31 @@ export const useRuns = create<RunsStore>((set, get) => ({
   },
 
   startRun: async (threadId, history, mockAi) => {
-    if (get().runs[threadId]) return; // one active run per thread
+    if (get().runs[threadId] || startingThreads.has(threadId)) return; // one active run per thread
+    startingThreads.add(threadId);
+
+    // Cross-device run lock: only one device may generate a reply in a thread at a time. Acquire
+    // before doing any work; if another live device holds it, reflect that (the composer explains
+    // why) and bail rather than start a second, order-scrambling generation. Acquire failures other
+    // than a genuine conflict resolve to `acquired` so offline/local use is never blocked.
+    const lockRes = await repo.acquireRunLock(threadId).catch(() => ({ acquired: true as const }));
+    if (!lockRes.acquired) {
+      startingThreads.delete(threadId);
+      const ui = useUi.getState();
+      const label = lockRes.heldBy?.deviceLabel ?? 'another device';
+      const nowIso = new Date().toISOString();
+      ui.setThreadLock(threadId, {
+        deviceId: 'remote',
+        deviceLabel: label,
+        acquiredAt: lockRes.heldBy?.since ?? nowIso,
+        heartbeatAt: nowIso,
+      });
+      ui.pushToast(`A response is already being generated on ${label}.`, 'info');
+      return;
+    }
+    // We hold the lock now — clear any stale "locked elsewhere" hint and keep it warm via heartbeat.
+    useUi.getState().setThreadLock(threadId, null);
+    const heartbeat = setInterval(() => void repo.acquireRunLock(threadId).catch(() => {}), 30_000);
 
     const assistantId = newId();
     const ctrl = new AbortController();
@@ -401,6 +429,9 @@ export const useRuns = create<RunsStore>((set, get) => ({
       await finalize(aiErr).catch(() => {});
     } finally {
       void kv.delete(SNAPSHOT_PREFIX + assistantId).catch(() => {});
+      clearInterval(heartbeat);
+      void repo.releaseRunLock(threadId); // free the thread for other devices
+      startingThreads.delete(threadId);
       set((s) => {
         const next = { ...s.runs };
         delete next[threadId];

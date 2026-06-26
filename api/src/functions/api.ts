@@ -46,6 +46,16 @@ app.http('thread-item', {
   ),
 });
 
+app.http('thread-lock', {
+  methods: ['POST', 'DELETE'],
+  authLevel: 'anonymous',
+  route: 'threads/{id}/lock',
+  handler: methodDispatch(
+    { POST: (c) => c.threadLock.acquire, DELETE: (c) => c.threadLock.release },
+    invited,
+  ),
+});
+
 app.http('messages', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',

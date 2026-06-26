@@ -15,6 +15,8 @@ interface ComposerProps {
   streaming: boolean;
   onStop: () => void;
   placeholder?: string;
+  /** Another device is generating a reply in this thread — sending is blocked until it finishes. */
+  locked?: boolean;
 }
 
 interface Pending {
@@ -23,7 +25,7 @@ interface Pending {
   url: string;
 }
 
-export function Composer({ value, onChange, onSend, streaming, onStop, placeholder }: ComposerProps) {
+export function Composer({ value, onChange, onSend, streaming, onStop, placeholder, locked }: ComposerProps) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
@@ -71,7 +73,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   };
 
   const submit = () => {
-    if (streaming) return;
+    if (streaming || locked) return;
     const text = value.trim();
     if (!text && pending.length === 0) return;
     onSend(
@@ -194,7 +196,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
           className="composer__textarea"
           rows={1}
           value={value}
-          placeholder={recording ? 'Listening…' : placeholder ?? 'Message Watai'}
+          placeholder={recording ? 'Listening…' : locked ? 'Waiting for the other device to finish…' : placeholder ?? 'Message Watai'}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
@@ -219,9 +221,9 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
             key="send"
             className="composer__primary"
             name="arrow-up"
-            label="Send"
+            label={locked ? 'Waiting for the other device' : 'Send'}
             variant="accent"
-            disabled={!canSend}
+            disabled={!canSend || locked}
             onClick={submit}
           />
         )}

@@ -4,9 +4,10 @@
 // All of this is gated on Settings.data.sync, so with sync off it is a pure
 // passthrough to the local store. The token provider is injected via the CloudApi,
 // so this whole engine is unit-testable without MSAL.
-import type { Id, ImageRef, Message, MemoryItem, Settings, Thread } from '../../lib/types';
-import type { Repository, SearchHit, SyncLocalStore } from '../repository';
+import type { Id, ImageRef, Message, MemoryItem, Settings, Thread, ThreadLock } from '../../lib/types';
+import type { Repository, RunLockResult, SearchHit, SyncLocalStore } from '../repository';
 import { CloudError, type CloudApi } from '../cloud/apiClient';
+import { getDeviceId, getDeviceLabel } from '../../lib/device';
 import {
   appendBodyFromMessage,
   messageFromRecord,
@@ -159,6 +160,55 @@ export class SyncRepository implements Repository {
       }
     }
     return saved;
+  }
+
+  /** Take the thread's run lock before generating a reply, so two devices never generate at once.
+   *  Best-effort: a network failure (offline) does NOT block local generation — only a live lock
+   *  held by another device does. */
+  async acquireRunLock(threadId: Id): Promise<RunLockResult> {
+    if (!(await this.syncEnabled())) return { acquired: true };
+    const thread = await this.local.getThread(threadId);
+    if (!thread || thread.temporary) return { acquired: true };
+    try {
+      await this.cloud.acquireThreadLock(threadId, {
+        deviceId: getDeviceId(),
+        deviceLabel: getDeviceLabel(),
+      });
+      return { acquired: true };
+    } catch (err) {
+      if (err instanceof CloudError && err.code === 'conflict') {
+        const lock = (err.details as { lock?: ThreadLock } | undefined)?.lock;
+        return {
+          acquired: false,
+          ...(lock ? { heldBy: { deviceLabel: lock.deviceLabel, since: lock.acquiredAt } } : {}),
+        };
+      }
+      // Offline / auth / server error: proceed (single-device best-effort; the server stays the
+      // ultimate guard, and a missed lock only matters when another device is genuinely active).
+      return { acquired: true };
+    }
+  }
+
+  /** Release the thread's run lock once the run ends. Best-effort and idempotent. */
+  async releaseRunLock(threadId: Id): Promise<void> {
+    if (!(await this.syncEnabled())) return;
+    const thread = await this.local.getThread(threadId);
+    if (!thread || thread.temporary) return;
+    await this.cloud.releaseThreadLock(threadId, getDeviceId()).catch(() => {});
+  }
+
+  /** Read the authoritative run lock for a thread (for the proactive "locked elsewhere" UX).
+   *  Returns null when sync is off, the thread is local-only, or the read fails. */
+  async getThreadLock(threadId: Id): Promise<ThreadLock | null> {
+    if (!(await this.syncEnabled())) return null;
+    const thread = await this.local.getThread(threadId);
+    if (!thread || thread.temporary) return null;
+    try {
+      const rec = await this.cloud.getThread(threadId);
+      return rec.lock ?? null;
+    } catch {
+      return null;
+    }
   }
 
   // No server endpoints for message edit/delete or blobs/memory — keep them local.

@@ -14,7 +14,7 @@ import type {
   ThreadRecord,
   UpdateThreadBody,
 } from './types';
-import type { Settings } from '../../lib/types';
+import type { Settings, ThreadLock } from '../../lib/types';
 
 export type TokenProvider = () => Promise<string | null>;
 
@@ -33,6 +33,8 @@ export class CloudError extends Error {
     readonly code: CloudErrorCode,
     message: string,
     readonly status: number,
+    /** Structured error payload from the server envelope (e.g. the current lock holder on 409). */
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = 'CloudError';
@@ -98,9 +100,16 @@ export class WataiApiClient implements CloudApi {
     }
 
     if (!res.ok) {
-      const envelope = (json as { error?: { code?: string; message?: string } } | undefined)?.error;
+      const envelope = (
+        json as { error?: { code?: string; message?: string; details?: unknown } } | undefined
+      )?.error;
       const code = (envelope?.code as CloudErrorCode | undefined) ?? statusToCode(res.status);
-      throw new CloudError(code, envelope?.message ?? `Request failed (${res.status}).`, res.status);
+      throw new CloudError(
+        code,
+        envelope?.message ?? `Request failed (${res.status}).`,
+        res.status,
+        envelope?.details,
+      );
     }
 
     return json as T;
@@ -155,6 +164,21 @@ export class WataiApiClient implements CloudApi {
 
   appendMessage(threadId: string, body: AppendMessageBody): Promise<MessageRecord> {
     return this.request('POST', `/threads/${encodeURIComponent(threadId)}/messages`, body);
+  }
+
+  // --- run lock ---
+  acquireThreadLock(
+    threadId: string,
+    body: { deviceId: string; deviceLabel: string },
+  ): Promise<{ thread: ThreadRecord; lock: ThreadLock }> {
+    return this.request('POST', `/threads/${encodeURIComponent(threadId)}/lock`, body);
+  }
+
+  releaseThreadLock(threadId: string, deviceId: string): Promise<void> {
+    return this.request(
+      'DELETE',
+      `/threads/${encodeURIComponent(threadId)}/lock?deviceId=${encodeURIComponent(deviceId)}`,
+    );
   }
 
   // --- settings ---
@@ -222,6 +246,11 @@ export interface CloudApi {
   deleteThread(id: string): Promise<void>;
   listMessages(threadId: string, opts?: { since?: string; limit?: number }): Promise<MessageRecord[]>;
   appendMessage(threadId: string, body: AppendMessageBody): Promise<MessageRecord>;
+  acquireThreadLock(
+    threadId: string,
+    body: { deviceId: string; deviceLabel: string },
+  ): Promise<{ thread: ThreadRecord; lock: ThreadLock }>;
+  releaseThreadLock(threadId: string, deviceId: string): Promise<void>;
   getSettings(): Promise<Settings>;
   patchSettings(patch: Partial<Settings>): Promise<Settings>;
   requestSas(body: SasRequestBody): Promise<SasResult>;

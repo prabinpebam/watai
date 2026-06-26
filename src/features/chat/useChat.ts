@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { repo } from '../../data';
 import { newId } from '../../lib/ids';
+import { getDeviceId } from '../../lib/device';
 import { useUi } from '../../state/store';
 import { useRuns } from './runStore';
 import { orderMessages } from './ordering';
+import { lockHeldByOther } from './lock';
 import { indexThreadDocuments } from '../../ai/fileSearch';
 import type { Attachment, Message } from '../../lib/types';
 
@@ -42,6 +44,9 @@ export function useChat(threadId: string, temporary = false) {
   const run = useRuns((s) => s.runs[threadId]);
   const threadRev = useUi((s) => s.threadRev[threadId] ?? 0);
   const mockAi = useUi((s) => s.mockAi);
+  const setThreadLock = useUi((s) => s.setThreadLock);
+  const lock = useUi((s) => s.threadLocks[threadId] ?? null);
+  const [lockTick, setLockTick] = useState(0);
 
   // Reload persisted messages on thread change and whenever this thread's revision bumps
   // (a run completed, regenerate trimmed history, etc.).
@@ -59,6 +64,43 @@ export function useChat(threadId: string, temporary = false) {
     };
   }, [threadId, threadRev]);
 
+  // Proactively reflect another device generating in this thread: poll the authoritative run lock
+  // while the thread is open and visible, so the composer locks/unlocks promptly (a crashed holder
+  // simply stops heartbeating and the lock goes stale). Resolves to null with sync off / local-only.
+  useEffect(() => {
+    let live = true;
+    const poll = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      repo
+        .getThreadLock(threadId)
+        .then((l) => {
+          if (live) setThreadLock(threadId, l);
+        })
+        .catch(() => {});
+    };
+    poll();
+    const id = window.setInterval(poll, 7000);
+    const onFocus = () => poll();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      live = false;
+      window.clearInterval(id);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [threadId, setThreadLock]);
+
+  // While a foreign lock is present, tick so its staleness is re-evaluated even without new data.
+  useEffect(() => {
+    if (!lock || lock.deviceId === getDeviceId()) return;
+    const id = window.setInterval(() => setLockTick((n) => n + 1), 5000);
+    return () => window.clearInterval(id);
+  }, [lock]);
+
+  // The other device that currently holds the lock (null when free / ours / stale): the composer
+  // disables sending and explains why while this is set.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const lockedBy = useMemo(() => lockHeldByOther(lock, Date.now()), [lock, lockTick]);
+
   // Render persisted + the in-flight run message as one stable, chronologically ordered list, so
   // a streaming response keeps its slot even when a concurrent prompt arrives from another device.
   const messages = useMemo(() => orderMessages(persisted, run?.message), [persisted, run]);
@@ -70,6 +112,16 @@ export function useChat(threadId: string, temporary = false) {
       if (!trimmed && !hasFiles) return;
       if (busyRef.current) return;
       if (useRuns.getState().isRunning(threadId)) return;
+      // Another device is mid-generation: block sending (the composer also disables it) so the
+      // two devices don't produce interleaved, concurrent replies.
+      const heldByOther = lockHeldByOther(useUi.getState().threadLocks[threadId] ?? null);
+      if (heldByOther) {
+        useUi.getState().pushToast(
+          `A response is being generated on ${heldByOther.deviceLabel}. Please wait until it finishes.`,
+          'info',
+        );
+        return;
+      }
       // Lazily create the thread on first message (so /new doesn't litter history).
       const existing = await repo.getThread(threadId);
       if (!existing) {
@@ -137,5 +189,5 @@ export function useChat(threadId: string, temporary = false) {
 
   const stop = useCallback(() => useRuns.getState().stop(threadId), [threadId]);
 
-  return { messages, loading, send, regenerate, stop, streaming: !!run || indexing, indexing };
+  return { messages, loading, send, regenerate, stop, streaming: !!run || indexing, indexing, lockedBy };
 }

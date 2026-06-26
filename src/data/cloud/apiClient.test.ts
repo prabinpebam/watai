@@ -159,6 +159,47 @@ describe('WataiApiClient', () => {
       'https://api.test/api/threads/a%2Fb/messages?since=2026-01-01T00%3A00%3A00Z&limit=50',
     );
   });
+
+  it('acquires the run lock with a POST body', async () => {
+    const { fetchImpl, calls } = stubFetch([
+      { status: 200, body: { thread: { id: 't1' }, lock: { deviceId: 'd1', deviceLabel: 'Chrome on Windows' } } },
+    ]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    const out = await client.acquireThreadLock('t1', { deviceId: 'd1', deviceLabel: 'Chrome on Windows' });
+
+    expect(calls[0].method).toBe('POST');
+    expect(calls[0].url).toBe('https://api.test/api/threads/t1/lock');
+    expect(calls[0].body).toEqual({ deviceId: 'd1', deviceLabel: 'Chrome on Windows' });
+    expect(out.lock.deviceLabel).toBe('Chrome on Windows');
+  });
+
+  it('releases the run lock via DELETE with the deviceId in the query', async () => {
+    const { fetchImpl, calls } = stubFetch([{ status: 200, body: { thread: { id: 't1' } } }]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    await client.releaseThreadLock('t1', 'd1');
+
+    expect(calls[0].method).toBe('DELETE');
+    expect(calls[0].url).toBe('https://api.test/api/threads/t1/lock?deviceId=d1');
+  });
+
+  it('carries the error details (lock holder) on a 409 conflict', async () => {
+    const holder = { deviceId: 'd2', deviceLabel: 'Safari on iPhone', acquiredAt: 'a', heartbeatAt: 'b' };
+    const { fetchImpl } = stubFetch([
+      { status: 409, body: { error: { code: 'conflict', message: 'busy', details: { lock: holder } } } },
+    ]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    let err: CloudError | undefined;
+    try {
+      await client.acquireThreadLock('t1', { deviceId: 'd1', deviceLabel: 'Chrome' });
+    } catch (e) {
+      err = e as CloudError;
+    }
+    expect(err?.code).toBe('conflict');
+    expect((err?.details as { lock: typeof holder }).lock.deviceLabel).toBe('Safari on iPhone');
+  });
 });
 
 describe('cloud mappers', () => {
@@ -186,6 +227,7 @@ describe('cloud mappers', () => {
       temporary: false,
       messageCount: 2,
       lastMessagePreview: 'hi there',
+      lock: null,
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-02T00:00:00Z',
       deletedAt: null,

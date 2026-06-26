@@ -6,11 +6,13 @@ import { CosmosInviteStore } from './adapters/cosmos/inviteStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
 import { entraVerifierFromEnv } from './adapters/auth/entraTokenVerifier';
 import { ThreadService } from './application/threadService';
+import { ThreadLockService } from './application/threadLockService';
 import { MessageService } from './application/messageService';
 import { SettingsService } from './application/settingsService';
 import { AssetService } from './application/assetService';
 import { AccessService } from './application/accessService';
 import { createThreadsController } from './http/threadsController';
+import { createThreadLockController } from './http/threadLockController';
 import { createMessagesController } from './http/messagesController';
 import { createSettingsController } from './http/settingsController';
 import { createAssetsController } from './http/assetsController';
@@ -23,6 +25,7 @@ export interface ApiContainer {
   verifier: TokenVerifier;
   access: AccessService;
   threads: ReturnType<typeof createThreadsController>;
+  threadLock: ReturnType<typeof createThreadLockController>;
   messages: ReturnType<typeof createMessagesController>;
   settings: ReturnType<typeof createSettingsController>;
   assets: ReturnType<typeof createAssetsController>;
@@ -67,6 +70,7 @@ export function container(): ApiContainer {
     verifier: buildVerifier(),
     access,
     threads: createThreadsController(new ThreadService(threadStore, clock)),
+    threadLock: createThreadLockController(new ThreadLockService(threadStore, clock)),
     messages: createMessagesController(new MessageService(threadStore, messageStore, clock)),
     settings: createSettingsController(new SettingsService(settingsStore)),
     assets: createAssetsController(new AssetService(threadStore, minter)),

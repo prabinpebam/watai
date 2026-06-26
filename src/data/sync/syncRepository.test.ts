@@ -11,6 +11,7 @@ import {
   type Message,
   type Settings,
   type Thread,
+  type ThreadLock,
 } from '../../lib/types';
 import type {
   AppendMessageBody,
@@ -94,6 +95,13 @@ class FakeLocal implements SyncLocalStore {
   }
   async deleteMessage(id: Id): Promise<void> {
     this.messages.delete(id);
+  }
+  async acquireRunLock(): Promise<{ acquired: boolean }> {
+    return { acquired: true };
+  }
+  async releaseRunLock(): Promise<void> {}
+  async getThreadLock(): Promise<null> {
+    return null;
   }
   async getSettings(): Promise<Settings> {
     return this.settings;
@@ -253,6 +261,37 @@ class FakeCloud implements CloudApi {
     };
     this.messages.set(id, rec);
     return rec;
+  }
+  async acquireThreadLock(
+    threadId: string,
+    body: { deviceId: string; deviceLabel: string },
+  ): Promise<{ thread: ThreadRecord; lock: ThreadLock }> {
+    this.calls.push(`acquireThreadLock:${threadId}:${body.deviceId}`);
+    const cur = this.threads.get(threadId);
+    if (!cur) throw new CloudError('not_found', 'missing', 404);
+    const existing = cur.lock ?? null;
+    const live =
+      !!existing &&
+      existing.deviceId !== body.deviceId &&
+      Date.now() - Date.parse(existing.heartbeatAt) <= 120_000;
+    if (live) throw new CloudError('conflict', 'busy', 409, { lock: existing });
+    const nowIso = this.now();
+    const lock: ThreadLock = {
+      deviceId: body.deviceId,
+      deviceLabel: body.deviceLabel,
+      acquiredAt: existing?.deviceId === body.deviceId ? existing.acquiredAt : nowIso,
+      heartbeatAt: nowIso,
+    };
+    const rec = { ...cur, lock, updatedAt: nowIso };
+    this.threads.set(threadId, rec);
+    return { thread: rec, lock };
+  }
+  async releaseThreadLock(threadId: string, deviceId: string): Promise<void> {
+    this.calls.push(`releaseThreadLock:${threadId}:${deviceId}`);
+    const cur = this.threads.get(threadId);
+    if (cur?.lock && cur.lock.deviceId === deviceId) {
+      this.threads.set(threadId, { ...cur, lock: null, updatedAt: this.now() });
+    }
   }
   async getSettings(): Promise<Settings> {
     this.calls.push('getSettings');
@@ -483,6 +522,69 @@ describe('SyncRepository — pull', () => {
     // A second pull with nothing new reports no changes (no spurious UI refresh).
     const again = await repo.pull();
     expect(again.size).toBe(0);
+  });
+});
+
+describe('SyncRepository — run lock', () => {
+  const freshLock = (over: Partial<ThreadLock>): ThreadLock => ({
+    deviceId: 'other-device',
+    deviceLabel: 'Safari on iPhone',
+    acquiredAt: new Date().toISOString(),
+    heartbeatAt: new Date().toISOString(),
+    ...over,
+  });
+
+  it('acquires the lock when the thread is free', async () => {
+    const { repo, local, cloud } = setup(true);
+    await local.createThread({ id: 't1', title: 'A' });
+    cloud.seedThread({ id: 't1' });
+    const res = await repo.acquireRunLock('t1');
+    expect(res.acquired).toBe(true);
+    expect(cloud.calls.some((c) => c.startsWith('acquireThreadLock:t1'))).toBe(true);
+    expect(cloud.threads.get('t1')?.lock).toBeTruthy();
+  });
+
+  it('reports the holder (does not acquire) when another live device holds it', async () => {
+    const { repo, local, cloud } = setup(true);
+    await local.createThread({ id: 't1', title: 'A' });
+    cloud.seedThread({ id: 't1', lock: freshLock({ deviceLabel: 'Edge on macOS' }) });
+    const res = await repo.acquireRunLock('t1');
+    expect(res.acquired).toBe(false);
+    expect(res.heldBy?.deviceLabel).toBe('Edge on macOS');
+  });
+
+  it('is a no-op (acquired) when sync is off — never blocks local generation', async () => {
+    const { repo, cloud } = setup(false);
+    expect(await repo.acquireRunLock('anything')).toEqual({ acquired: true });
+    expect(cloud.calls).toEqual([]);
+  });
+
+  it('is a no-op (acquired) for a local-only thread', async () => {
+    const { repo, local, cloud } = setup(true);
+    await local.createThread({ id: 'tmp', title: 'T', temporary: true });
+    expect(await repo.acquireRunLock('tmp')).toEqual({ acquired: true });
+    expect(cloud.calls).toEqual([]);
+  });
+
+  it('releaseRunLock clears the server lock held by this device', async () => {
+    const { repo, local, cloud } = setup(true);
+    await local.createThread({ id: 't1', title: 'A' });
+    cloud.seedThread({ id: 't1' });
+    await repo.acquireRunLock('t1');
+    await repo.releaseRunLock('t1');
+    expect(cloud.threads.get('t1')?.lock ?? null).toBeNull();
+  });
+
+  it('getThreadLock returns the current server lock', async () => {
+    const { repo, local, cloud } = setup(true);
+    await local.createThread({ id: 't1', title: 'A' });
+    cloud.seedThread({ id: 't1', lock: freshLock({ deviceLabel: 'Chrome on Windows' }) });
+    expect((await repo.getThreadLock('t1'))?.deviceLabel).toBe('Chrome on Windows');
+  });
+
+  it('getThreadLock is null with sync off', async () => {
+    const { repo } = setup(false);
+    expect(await repo.getThreadLock('t1')).toBeNull();
   });
 });
 
