@@ -5,9 +5,18 @@ export const ALLOWED_CONTENT_TYPES = [
   'image/png',
   'image/jpeg',
   'image/webp',
+  'image/gif',
   'audio/webm',
   'audio/mpeg',
   'audio/mp3',
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'application/json',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ] as const;
 
 export type AllowedContentType = (typeof ALLOWED_CONTENT_TYPES)[number];
@@ -16,9 +25,18 @@ const EXT: Record<AllowedContentType, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
+  'image/gif': 'gif',
   'audio/webm': 'webm',
   'audio/mpeg': 'mp3',
   'audio/mp3': 'mp3',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+  'text/markdown': 'md',
+  'text/csv': 'csv',
+  'application/json': 'json',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
 };
 
 export function extForContentType(ct: AllowedContentType): string {

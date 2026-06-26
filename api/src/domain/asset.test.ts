@@ -17,9 +17,27 @@ describe('parseSasRequest', () => {
     expect(parseSasRequest(input)).toEqual(input);
   });
 
-  it('rejects disallowed content types', () => {
+  it('accepts document content types (thread file upload)', () => {
+    for (const ct of [
+      'application/pdf',
+      'text/plain',
+      'text/markdown',
+      'text/csv',
+      'application/json',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]) {
+      expect(
+        parseSasRequest({ threadId: 't1', assetId: 'a1', op: 'write', contentType: ct }),
+      ).toMatchObject({ contentType: ct });
+    }
+  });
+
+  it('rejects unsafe/disallowed content types', () => {
     expect(
-      code(() => parseSasRequest({ threadId: 't1', assetId: 'a1', op: 'write', contentType: 'application/pdf' })),
+      code(() => parseSasRequest({ threadId: 't1', assetId: 'a1', op: 'write', contentType: 'image/svg+xml' })),
+    ).toBe('validation');
+    expect(
+      code(() => parseSasRequest({ threadId: 't1', assetId: 'a1', op: 'write', contentType: 'text/html' })),
     ).toBe('validation');
   });
 
@@ -35,5 +53,7 @@ describe('extForContentType', () => {
     expect(extForContentType('image/png')).toBe('png');
     expect(extForContentType('image/jpeg')).toBe('jpg');
     expect(extForContentType('audio/mpeg')).toBe('mp3');
+    expect(extForContentType('application/pdf')).toBe('pdf');
+    expect(extForContentType('text/markdown')).toBe('md');
   });
 });
