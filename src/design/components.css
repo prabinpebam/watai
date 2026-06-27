@@ -1503,7 +1503,21 @@ button.source-chip:hover {
   text-align: left;
   cursor: pointer;
 }
+/* The body holds inline spans (valid <button> content), so stack them like the
+   div-based settings rows do, and constrain width so the sub can truncate. */
+.skill-row__main .setting-row__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.skill-row .setting-row__title {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .skill-row .setting-row__sub {
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
