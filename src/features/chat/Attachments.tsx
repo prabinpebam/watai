@@ -4,7 +4,7 @@ import { Icon } from '../../design/icons';
 import { IconButton } from '../../design/ui';
 import { Lightbox } from './Lightbox';
 import { formatBytes } from '../../lib/format';
-import type { Attachment, ImageRef, PendingImage } from '../../lib/types';
+import type { Artifact, Attachment, ImageRef, PendingImage } from '../../lib/types';
 
 function isDirectUrl(s?: string): s is string {
   return !!s && /^(data:|blob:|https?:)/.test(s);
@@ -205,6 +205,32 @@ export function AttachmentList({ attachments }: { attachments?: Attachment[] }) 
       )}
       {rest.map((a) => (
         <AttachmentItem key={a.id} att={a} />
+      ))}
+    </div>
+  );
+}
+
+/** Map a generated artifact onto the attachment shape so it reuses the same file cards (including
+ *  inline PDF preview + download via the read-SAS flow). */
+function artifactToAttachment(a: Artifact): Attachment {
+  return {
+    id: a.id,
+    kind: a.mime.startsWith('image/') ? 'image' : a.mime.startsWith('audio/') ? 'audio' : 'file',
+    ...(a.blobPath ? { blobPath: a.blobPath } : {}),
+    ...(a.localBlobKey ? { localBlobKey: a.localBlobKey } : {}),
+    mime: a.mime,
+    bytes: a.bytes,
+    name: a.name,
+  };
+}
+
+/** Files the agent generated this message (code interpreter outputs) — downloadable artifact cards. */
+export function ArtifactList({ artifacts }: { artifacts?: Artifact[] }) {
+  if (!artifacts || artifacts.length === 0) return null;
+  return (
+    <div className="attachments artifacts">
+      {artifacts.map((a) => (
+        <AttachmentItem key={a.id} att={artifactToAttachment(a)} />
       ))}
     </div>
   );

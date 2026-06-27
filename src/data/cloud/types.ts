@@ -29,7 +29,7 @@ export interface ThreadFileRecord {
   bytes: number;
   status: 'indexing' | 'ready' | 'error';
   createdAt: string;
-  kind?: 'document' | 'image';
+  kind?: 'document' | 'image' | 'artifact';
   blobPath?: string;
   mime?: string;
 }
@@ -58,6 +58,18 @@ export interface AttachmentRecord {
   height?: number;
 }
 
+/** Generated-artifact record synced with a message (bytes in Blob Storage at `blobPath`). */
+export interface ArtifactRecord {
+  id: string;
+  name: string;
+  mime: string;
+  kind: 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'image' | 'data' | 'archive' | 'code' | 'text';
+  bytes: number;
+  blobPath: string;
+  sourceToolCallId?: string;
+  createdAt: string;
+}
+
 export interface MessageRecord {
   id: string;
   threadId: string;
@@ -70,6 +82,7 @@ export interface MessageRecord {
   attachments?: AttachmentRecord[];
   toolCalls?: ToolCallRecord[];
   citations?: CitationRecord[];
+  artifacts?: ArtifactRecord[];
   status: ServerMessageStatus;
   createdAt: string;
   /** Logical creation time (chronology key); preserved from the originating device. */
@@ -88,6 +101,8 @@ export interface ToolCallRecord {
   resultPreview?: string;
   /** Requested image size (`WxH`) for an image tool call (drives the generating placeholder). */
   imageSize?: string;
+  /** Ids of artifacts this tool call produced (code interpreter outputs). */
+  artifactIds?: string[];
 }
 
 /** Grounding citation record synced with a message (full, so the source pane matches everywhere). */
@@ -374,6 +389,20 @@ export function messageFromRecord(r: MessageRecord): Message {
       : {}),
     ...(r.toolCalls?.length ? { toolCalls: r.toolCalls.map((t) => ({ ...t })) } : {}),
     ...(r.citations?.length ? { citations: r.citations.map((c) => ({ ...c })) } : {}),
+    ...(r.artifacts?.length
+      ? {
+          artifacts: r.artifacts.map((a) => ({
+            id: a.id,
+            name: a.name,
+            mime: a.mime,
+            kind: a.kind,
+            bytes: a.bytes,
+            blobPath: a.blobPath,
+            ...(a.sourceToolCallId !== undefined ? { sourceToolCallId: a.sourceToolCallId } : {}),
+            createdAt: a.createdAt,
+          })),
+        }
+      : {}),
   };
 }
 

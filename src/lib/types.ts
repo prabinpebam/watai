@@ -34,8 +34,9 @@ export interface ThreadFile {
   bytes: number;
   status: 'indexing' | 'ready' | 'error';
   createdAt: string;
-  /** 'document' = searchable upload; 'image' = a generated artifact rendered from `blobPath`. */
-  kind?: 'document' | 'image';
+  /** 'document' = searchable upload; 'image' = a generated image; 'artifact' = a generated
+   *  downloadable file (code interpreter output), rendered from `blobPath`. */
+  kind?: 'document' | 'image' | 'artifact';
   blobPath?: string;
   mime?: string;
 }
@@ -91,6 +92,32 @@ export interface PendingImage {
 /** Kind of tool activity recorded on an assistant message. */
 export type ToolKind = 'function' | 'web_search' | 'code_interpreter' | 'file_search' | 'image';
 
+/** Artifact kinds drive the card icon + preview routing (derived from mime server-side). */
+export type ArtifactKind =
+  | 'pdf'
+  | 'document'
+  | 'spreadsheet'
+  | 'presentation'
+  | 'image'
+  | 'data'
+  | 'archive'
+  | 'code'
+  | 'text';
+
+/** A file the agent generated during a run (code interpreter output). Bytes live in Blob Storage
+ *  at `blobPath`; resolved to a downloadable URL via the read-SAS flow. */
+export interface Artifact {
+  id: Id;
+  name: string;
+  mime: string;
+  kind: ArtifactKind;
+  bytes: number;
+  blobPath?: string;
+  localBlobKey?: string;
+  sourceToolCallId?: Id;
+  createdAt: string;
+}
+
 /** A bounded, secret-free record of one tool invocation (for the transcript). */
 export interface ToolCall {
   id: Id;
@@ -102,6 +129,8 @@ export interface ToolCall {
   resultPreview?: string;
   /** Requested image size (`WxH`) for an image tool call (drives the generating placeholder). */
   imageSize?: string;
+  /** Ids of artifacts this tool call produced (code interpreter outputs). */
+  artifactIds?: Id[];
   error?: AiError;
 }
 
@@ -137,6 +166,8 @@ export interface Message {
   /** Agentic activity (additive/optional). */
   toolCalls?: ToolCall[];
   citations?: Citation[];
+  /** Files the agent generated this message (code interpreter outputs). */
+  artifacts?: Artifact[];
 }
 
 export type EndpointKind = 'aoai' | 'foundry-project';

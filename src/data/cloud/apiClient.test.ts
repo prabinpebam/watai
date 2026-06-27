@@ -534,4 +534,44 @@ describe('cloud mappers', () => {
       { id: 'a1', kind: 'file', blobPath: 'u/t1/a1.pdf', mime: 'application/pdf', bytes: 9, name: 'd.pdf' },
     ]);
   });
+
+  it('messageFromRecord surfaces generated artifacts (resolved later via SAS)', () => {
+    const rec: MessageRecord = {
+      id: 'm1',
+      threadId: 't1',
+      userId: 'u',
+      role: 'assistant',
+      content: 'Here is your report.',
+      status: 'complete',
+      createdAt: 'x',
+      deletedAt: null,
+      toolCalls: [{ id: 'ci1', kind: 'code_interpreter', status: 'done', artifactIds: ['art1'] }],
+      artifacts: [
+        {
+          id: 'art1',
+          name: 'Acme-Report.pdf',
+          mime: 'application/pdf',
+          kind: 'pdf',
+          bytes: 4528,
+          blobPath: 'u/t1/art1.pdf',
+          sourceToolCallId: 'ci1',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    };
+    const m = messageFromRecord(rec);
+    expect(m.artifacts).toEqual([
+      {
+        id: 'art1',
+        name: 'Acme-Report.pdf',
+        mime: 'application/pdf',
+        kind: 'pdf',
+        bytes: 4528,
+        blobPath: 'u/t1/art1.pdf',
+        sourceToolCallId: 'ci1',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ]);
+    expect(m.toolCalls?.[0].artifactIds).toEqual(['art1']);
+  });
 });

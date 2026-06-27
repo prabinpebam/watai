@@ -483,6 +483,7 @@ const CONTENT_TYPE_BY_EXT: Record<string, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  zip: 'application/zip',
 };
 
 /** Content types whose bytes the asset endpoint accepts (mirrors the api allowlist). */

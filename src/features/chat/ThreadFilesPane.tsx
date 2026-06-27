@@ -88,8 +88,9 @@ export function ThreadFilesPane() {
     setBusy(false);
   };
 
-  const docs = files.filter((f) => f.kind !== 'image');
+  const docs = files.filter((f) => (f.kind ?? 'document') === 'document');
   const imgs = files.filter((f) => f.kind === 'image');
+  const artifacts = files.filter((f) => f.kind === 'artifact');
 
   const aside = (
     <aside className={`source-pane ${expanded ? '' : 'source-pane--overlay'}`} aria-label="Chat files">
@@ -120,8 +121,8 @@ export function ThreadFilesPane() {
           <Icon name="plus" size={16} /> {busy ? 'Working…' : 'Add files'}
         </Button>
         <p className="muted files-pane__hint">
-          Documents are searched only within this chat. Images the assistant creates are saved here
-          automatically.
+          Documents are searched only within this chat. Images and files the assistant creates are
+          saved here automatically.
         </p>
         {loading && files.length === 0 ? (
           <div className="files-pane__loading">
@@ -159,6 +160,14 @@ export function ThreadFilesPane() {
                   <FileThumb key={f.fileId} file={f} />
                 ))}
               </div>
+            )}
+            {artifacts.length > 0 && (
+              <>
+                <div className="files-pane__section muted">Generated files</div>
+                {artifacts.map((f) => (
+                  <ArtifactRow key={f.fileId} file={f} />
+                ))}
+              </>
             )}
           </>
         )}
@@ -206,6 +215,54 @@ function FileThumb({ file }: { file: ThreadFile }) {
     >
       <img src={url} alt={file.name} loading="lazy" />
     </a>
+  );
+}
+
+function iconForArtifact(mime = '', name = ''): string {
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'file-pdf';
+  if (/zip|tar|compressed/.test(mime) || /\.(zip|tar)$/.test(name)) return 'file-zip';
+  if (mime.includes('spreadsheet') || /\.(xlsx|csv)$/.test(name) || mime === 'text/csv') return 'file-csv';
+  if (mime.startsWith('image/')) return 'file-image';
+  if (/json|xml|html|code/.test(mime) || /\.(json|js|ts|py|html|css)$/.test(name)) return 'file-code';
+  if (mime.startsWith('text/') || mime.includes('word') || mime.includes('presentation')) return 'file-text';
+  return 'file';
+}
+
+/** A generated, downloadable artifact row; resolves the blob to a URL (local cache, else read SAS). */
+function ArtifactRow({ file }: { file: ThreadFile }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    repo
+      .resolveAssetUrl({ id: file.fileId, blobPath: file.blobPath })
+      .then((u) => live && setUrl(u || null))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [file.fileId, file.blobPath]);
+
+  const download = () => {
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  return (
+    <div className="thread-files__item">
+      <Icon name={iconForArtifact(file.mime, file.name)} size={18} />
+      <div className="thread-files__meta">
+        <div className="thread-files__name" title={file.name}>
+          {file.name}
+        </div>
+        <div className="thread-files__sub muted">{formatBytes(file.bytes)}</div>
+      </div>
+      <IconButton name="download" label={`Download ${file.name}`} onClick={download} disabled={!url} />
+    </div>
   );
 }
 

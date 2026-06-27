@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Markdown } from './Markdown';
-import { AttachmentList, GeneratedImages } from './Attachments';
+import { AttachmentList, ArtifactList, GeneratedImages } from './Attachments';
 import { Avatar, IconButton, InlineAlert, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
@@ -251,6 +251,8 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
         ) : null}
 
         {!isStreamingThis && message.citations && <SourcesStrip citations={message.citations} />}
+
+        <ArtifactList artifacts={message.artifacts} />
 
         <AttachmentList attachments={message.attachments} />
 

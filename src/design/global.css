@@ -931,6 +931,15 @@ a:hover {
   gap: var(--space-2);
   margin-top: var(--space-3);
 }
+.files-pane__section {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-label-size);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.attachments.artifacts {
+  margin-top: var(--space-3);
+}
 .files-pane__thumb {
   display: block;
   aspect-ratio: 1;
