@@ -63,7 +63,6 @@ export function useChat(threadId: string, temporary = false) {
   const busyRef = useRef(false);
   const run = useRuns((s) => s.runs[threadId]);
   const threadRev = useUi((s) => s.threadRev[threadId] ?? 0);
-  const mockAi = useUi((s) => s.mockAi);
   const setThreadLock = useUi((s) => s.setThreadLock);
   const lock = useUi((s) => s.threadLocks[threadId] ?? null);
   const [lockTick, setLockTick] = useState(0);
@@ -163,7 +162,7 @@ export function useChat(threadId: string, temporary = false) {
       // Thread-scoped file search: index any non-image docs into the thread's vector store so the
       // model can answer questions about them via file_search. Blocks the run until indexed.
       const docs = (files ?? []).filter((f) => !f.type.startsWith('image/'));
-      if (docs.length && !mockAi) {
+      if (docs.length) {
         const toast = useUi.getState().pushToast;
         busyRef.current = true;
         setIndexing(true);
@@ -197,23 +196,18 @@ export function useChat(threadId: string, temporary = false) {
           setIndexing(false);
         }
       }
-      const history = await repo.listMessages(threadId);
-      if (mockAi) {
-        void useRuns.getState().startRun(threadId, history, true);
-      } else {
-        // Server-authoritative: the backend generates + persists the reply, which survives this
-        // client closing. Pass the local message id as the idempotency key so the server's copy of
-        // the user turn converges with the local one, and the enabled tool set for this run.
-        const tools = await serverRunTools();
-        void useRuns.getState().startServerRun(threadId, {
-          text: trimmed,
-          clientMessageId: userMsg.id,
-          ...(tools.length ? { tools } : {}),
-        });
-      }
+      // Server-authoritative: the backend generates + persists the reply, which survives this
+      // client closing. Pass the local message id as the idempotency key so the server's copy of
+      // the user turn converges with the local one, and the enabled tool set for this run.
+      const tools = await serverRunTools();
+      void useRuns.getState().startServerRun(threadId, {
+        text: trimmed,
+        clientMessageId: userMsg.id,
+        ...(tools.length ? { tools } : {}),
+      });
       useUi.getState().bumpThreads();
     },
-    [threadId, temporary, mockAi],
+    [threadId, temporary],
   );
 
   const regenerate = useCallback(async () => {
@@ -226,10 +220,7 @@ export function useChat(threadId: string, temporary = false) {
     }
     setPersisted(trimmed);
     const lastUser = [...trimmed].reverse().find((m) => m.role === 'user');
-    if (mockAi || !lastUser) {
-      void useRuns.getState().startRun(threadId, trimmed, mockAi);
-      return;
-    }
+    if (!lastUser) return;
     // Server-authoritative regenerate: reuse the existing user turn (idempotency key) and let the
     // backend produce a fresh reply.
     const tools = await serverRunTools();
@@ -238,7 +229,7 @@ export function useChat(threadId: string, temporary = false) {
       clientMessageId: lastUser.id,
       ...(tools.length ? { tools } : {}),
     });
-  }, [threadId, mockAi]);
+  }, [threadId]);
 
   const stop = useCallback(() => useRuns.getState().stop(threadId), [threadId]);
 

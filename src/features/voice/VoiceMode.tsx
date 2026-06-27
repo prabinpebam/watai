@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { IconButton, Spinner } from '../../design/ui';
 import { startRecording, type Recorder } from '../../lib/audio';
-import { mockStreamChat, mockTranscribe } from '../../ai/mockAi';
 import { cloudApi, repo } from '../../data';
 import { fileToBase64, base64ToBlob } from '../../lib/files';
 import { newId } from '../../lib/ids';
@@ -24,7 +23,6 @@ const PHASE_LABEL: Record<Phase, string> = {
 export function VoiceMode() {
   const navigate = useNavigate();
   const { threadId } = useParams();
-  const mockAi = useUi((s) => s.mockAi);
   const [phase, setPhase] = useState<Phase>('idle');
   const [caption, setCaption] = useState('');
   const recRef = useRef<Recorder | null>(null);
@@ -41,11 +39,6 @@ export function VoiceMode() {
     async (text: string) => {
       setPhase('speaking');
       setCaption(text);
-      if (mockAi) {
-        await new Promise((r) => setTimeout(r, Math.min(4000, 800 + text.length * 12)));
-        setPhase('idle');
-        return;
-      }
       try {
         const { audioBase64, mime } = await cloudApi.synthesizeSpeech({ input: text.slice(0, 4000) });
         if (!audioBase64) {
@@ -64,7 +57,7 @@ export function VoiceMode() {
         setPhase('idle');
       }
     },
-    [mockAi],
+    [],
   );
 
   const think = useCallback(
@@ -73,23 +66,14 @@ export function VoiceMode() {
       historyRef.current.push({ role: 'user', content: userText });
 
       let acc = '';
-      if (mockAi) {
-        for await (const ev of mockStreamChat({ messages: historyRef.current, model: 'mock' })) {
-          if (ev.type === 'delta' && ev.textDelta) {
-            acc += ev.textDelta;
-            setCaption(acc);
-          }
-        }
-      } else {
-        try {
-          const { text } = await cloudApi.chatComplete(historyRef.current);
-          acc = text;
-          setCaption(acc);
-        } catch (e) {
-          setPhase('error');
-          setCaption(e instanceof Error ? e.message : 'Error');
-          return;
-        }
+      try {
+        const { text } = await cloudApi.chatComplete(historyRef.current);
+        acc = text;
+        setCaption(acc);
+      } catch (e) {
+        setPhase('error');
+        setCaption(e instanceof Error ? e.message : 'Error');
+        return;
       }
       historyRef.current.push({ role: 'assistant', content: acc });
 
@@ -114,7 +98,7 @@ export function VoiceMode() {
       }
       await speak(acc);
     },
-    [mockAi, speak, threadId],
+    [speak, threadId],
   );
 
   const stopListening = useCallback(async () => {
@@ -124,12 +108,10 @@ export function VoiceMode() {
     setPhase('thinking');
     try {
       const blob = await rec.stop();
-      const { text } = mockAi
-        ? await mockTranscribe()
-        : await cloudApi.transcribeAudio({
-            audioBase64: await fileToBase64(blob),
-            mime: blob.type || 'audio/webm',
-          });
+      const { text } = await cloudApi.transcribeAudio({
+        audioBase64: await fileToBase64(blob),
+        mime: blob.type || 'audio/webm',
+      });
       if (!text.trim()) {
         setPhase('idle');
         return;
@@ -140,7 +122,7 @@ export function VoiceMode() {
       setPhase('error');
       setCaption(e instanceof Error ? e.message : 'Could not transcribe');
     }
-  }, [mockAi, think]);
+  }, [think]);
 
   const startListening = useCallback(async () => {
     try {
@@ -177,7 +159,7 @@ export function VoiceMode() {
   return (
     <div className="voice" role="dialog" aria-label="Voice mode">
       <div className="row" style={{ width: '100%', justifyContent: 'space-between' }}>
-        <span className="muted">Voice mode{mockAi ? ' · demo' : ''}</span>
+        <span className="muted">Voice mode</span>
         <IconButton name="close" label="Exit voice mode" onClick={exit} />
       </div>
 

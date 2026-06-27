@@ -29,7 +29,6 @@ interface UiState {
   activeModelByThread: Record<string, string>;
   composerDrafts: Record<string, string>;
   temporaryChat: boolean;
-  mockAi: boolean;
 
   stream: StreamState;
   capability: CapabilityMatrix | null;
@@ -55,7 +54,6 @@ interface UiState {
   setDraft: (threadId: string, text: string) => void;
   setModelForThread: (threadId: string, model: string) => void;
   setTemporaryChat: (v: boolean) => void;
-  setMockAi: (v: boolean) => void;
   setStream: (s: StreamState) => void;
   setCapability: (c: CapabilityMatrix | null) => void;
   setConnectivity: (c: 'online' | 'offline') => void;
@@ -86,7 +84,6 @@ export const useUi = create<UiState>()(
       activeModelByThread: {},
       composerDrafts: {},
       temporaryChat: false,
-      mockAi: false,
 
       stream: { status: 'idle' },
       capability: null,
@@ -110,7 +107,6 @@ export const useUi = create<UiState>()(
       setModelForThread: (threadId, model) =>
         set((s) => ({ activeModelByThread: { ...s.activeModelByThread, [threadId]: model } })),
       setTemporaryChat: (temporaryChat) => set({ temporaryChat }),
-      setMockAi: (mockAi) => set({ mockAi }),
       setStream: (stream) => set({ stream }),
       setCapability: (capability) => set({ capability }),
       setConnectivity: (connectivity) => set({ connectivity }),
@@ -146,13 +142,7 @@ export const useUi = create<UiState>()(
         sidebarCollapsed: s.sidebarCollapsed,
         composerDrafts: s.composerDrafts,
         activeModelByThread: s.activeModelByThread,
-        mockAi: s.mockAi,
       }),
-      onRehydrateStorage: () => (state) => {
-        // Mock AI is a dev-only affordance; never let a persisted value leak into production
-        // (covers users who toggled the old in-app demo switch before it was removed).
-        if (state && !import.meta.env.DEV) state.mockAi = false;
-      },
     },
   ),
 );

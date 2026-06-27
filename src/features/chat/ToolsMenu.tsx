@@ -49,22 +49,6 @@ const TOOL_DEFS: ToolDef[] = [
   },
 ];
 
-const MOCK_CAPS: CapabilityMatrix = {
-  chat: true,
-  chatStreaming: true,
-  vision: true,
-  transcribe: true,
-  transcribeStreaming: false,
-  image: true,
-  imageEdit: true,
-  tts: true,
-  responses: true,
-  functions: true,
-  codeInterpreter: true,
-  webSearch: true,
-  fileSearch: true,
-};
-
 /** In-composer tool toggles (image / code / web search / file search). Image/code/file are
  *  per-chat capability toggles writing Settings.tools; web search reflects the Tavily key (its
  *  single switch). The composer and Settings are never co-visible, so there is no drift, and the
@@ -77,7 +61,6 @@ export function ToolsMenu() {
   const [anchor, setAnchor] = useState<{ left: number; bottom: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const mockAi = useUi((s) => s.mockAi);
   const pushToast = useUi((s) => s.pushToast);
 
   useEffect(() => {
@@ -85,13 +68,6 @@ export function ToolsMenu() {
     void (async () => {
       const s = await repo.getSettings();
       if (live && s.tools) setTools(s.tools);
-      if (mockAi) {
-        if (live) {
-          setTavilyHasKey(true);
-          setCaps(MOCK_CAPS);
-        }
-        return;
-      }
       const status = await cloudApi.getCredentialStatus().catch(() => null);
       if (!live) return;
       setTavilyHasKey(!!status?.tavilyConfigured);
@@ -115,7 +91,7 @@ export function ToolsMenu() {
     return () => {
       live = false;
     };
-  }, [mockAi]);
+  }, []);
 
   useDismiss(open, () => setOpen(false), [popRef, btnRef]);
 

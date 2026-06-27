@@ -1,47 +1,18 @@
-// Local AI-credential storage has been retired: keys + endpoint config now live exclusively in
-// the server vault (see data/cloud credentials). These shims keep legacy call sites compiling
-// while storing nothing, and `clearLegacyCredentials` wipes any credentials an earlier build
-// saved on this device so nothing sensitive lingers locally.
+// Local AI-credential storage has been retired: keys + endpoint config live exclusively in the
+// server vault (see data/cloud credentials). `clearApiCredentials` wipes any credentials an earlier
+// build saved on this device so nothing sensitive lingers locally; `normalizeBaseUrl` is the shared
+// endpoint canonicalizer used by the cloud credential forms.
 import { kvSet } from './db';
-import type { ApiConfig } from '../lib/types';
 
 const CONFIG_KEY = 'apiConfig';
 const SECRET_KEY = 'apiKey';
 const TAVILY_KEY = 'tavilyKey';
-
-export async function getApiConfig(): Promise<ApiConfig | null> {
-  return null;
-}
-
-export async function saveApiConfig(_config: ApiConfig): Promise<void> {
-  /* no local storage — credentials live in the server vault */
-}
-
-export async function getApiKey(): Promise<string | null> {
-  return null;
-}
-
-export async function saveApiKey(_key: string): Promise<void> {
-  /* no local storage — the key lives encrypted in the server vault */
-}
-
-export async function getTavilyKey(): Promise<string | null> {
-  return null;
-}
-
-export async function saveTavilyKey(_key: string): Promise<void> {
-  /* no local storage — the web-search key lives in the server vault */
-}
 
 /** Wipe any AI credentials a pre-cloud build stored locally. Called once on startup. */
 export async function clearApiCredentials(): Promise<void> {
   await kvSet(CONFIG_KEY, undefined);
   await kvSet(SECRET_KEY, undefined);
   await kvSet(TAVILY_KEY, undefined);
-}
-
-export async function hasValidConfig(): Promise<boolean> {
-  return false;
 }
 
 /**

@@ -3,7 +3,6 @@ import { IconButton, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { ToolsMenu } from './ToolsMenu';
 import { startRecording, type Recorder } from '../../lib/audio';
-import { mockTranscribe } from '../../ai/mockAi';
 import { cloudApi } from '../../data';
 import { fileToBase64 } from '../../lib/files';
 import { newId } from '../../lib/ids';
@@ -37,7 +36,6 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   const [transcribing, setTranscribing] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
   const recRef = useRef<Recorder | null>(null);
-  const mockAi = useUi((s) => s.mockAi);
   const pushToast = useUi((s) => s.pushToast);
 
   // Auto-grow
@@ -109,12 +107,10 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
       setTranscribing(true);
       try {
         const blob = await rec.stop();
-        const { text } = mockAi
-          ? await mockTranscribe()
-          : await cloudApi.transcribeAudio({
-              audioBase64: await fileToBase64(blob),
-              mime: blob.type || 'audio/webm',
-            });
+        const { text } = await cloudApi.transcribeAudio({
+          audioBase64: await fileToBase64(blob),
+          mime: blob.type || 'audio/webm',
+        });
         onChange(value ? `${value} ${text}` : text);
         taRef.current?.focus();
       } catch (e) {
@@ -242,13 +238,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
         )}
       </div>
       <p className="muted" style={{ textAlign: 'center', fontSize: 'var(--text-caption-size)', margin: 'var(--space-3) 0 0' }}>
-        {mockAi ? (
-          <>
-            <Icon name="info" size={12} style={{ verticalAlign: '-2px' }} /> Mock mode — responses are simulated.
-          </>
-        ) : (
-          'Watai uses your own Azure OpenAI endpoint.'
-        )}
+        Watai can make mistakes. Check important info.
       </p>
     </div>
   );

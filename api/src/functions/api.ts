@@ -102,6 +102,13 @@ app.http('ai-chat', {
   handler: methodDispatch({ POST: (c) => c.aiProxy.chat }, invited),
 });
 
+app.http('ai-image', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'ai/image',
+  handler: methodDispatch({ POST: (c) => c.aiProxy.image }, invited),
+});
+
 app.http('messages', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',

@@ -4,11 +4,22 @@ import { Avatar, Button, Field, InlineAlert, Segmented, Spinner } from '../../de
 import { Icon } from '../../design/icons';
 import { signInRedirect } from '../../auth/cloudAuth';
 import { normalizeBaseUrl } from '../../data/secureStore';
-import { MODEL_LABELS, type ModelKey, type ProbeResult } from '../../ai/capabilities';
 import { useUi } from '../../state/store';
 import { DEFAULT_SETTINGS } from '../../lib/types';
 import { repo, cloudApi } from '../../data';
 import { Logo as BrandLogo } from '../../design/Logo';
+
+type ModelKey = 'chat' | 'transcribe' | 'image' | 'tts';
+interface ProbeResult {
+  ok: boolean;
+  detail?: string;
+}
+const MODEL_LABELS: Record<ModelKey, string> = {
+  chat: 'Chat',
+  transcribe: 'Transcription',
+  image: 'Image generation',
+  tts: 'Text-to-speech',
+};
 
 function Logo() {
   return <BrandLogo className="onboard__logo" size={72} />;
@@ -25,8 +36,6 @@ function Steps({ index, count }: { index: number; count: number }) {
 }
 
 function Welcome() {
-  const navigate = useNavigate();
-  const setMockAi = useUi((s) => s.setMockAi);
   const [busy, setBusy] = useState(false);
 
   const signin = async () => {
@@ -50,18 +59,6 @@ function Welcome() {
           Sign in
         </Button>
       </div>
-      {import.meta.env.DEV && (
-        <Button
-          variant="ghost"
-          onClick={() => {
-            setMockAi(true);
-            startMockProfile();
-            navigate('/');
-          }}
-        >
-          Continue in demo mode (dev)
-        </Button>
-      )}
     </div>
   );
 }
@@ -98,7 +95,6 @@ function shortError(detail?: string): string {
 
 function KeyWizard() {
   const navigate = useNavigate();
-  const setMockAi = useUi((s) => s.setMockAi);
   const pushToast = useUi((s) => s.pushToast);
   const [step, setStep] = useState(0);
   const [baseUrl, setBaseUrl] = useState('');
@@ -132,7 +128,6 @@ function KeyWizard() {
     try {
       await cloudApi.putCredentials(vaultBody());
       await repo.saveSettings(DEFAULT_SETTINGS);
-      setMockAi(false);
       navigate('/onboarding/mic');
     } catch (e) {
       pushToast(e instanceof Error ? e.message : 'Could not save your keys.', 'error');
@@ -165,12 +160,6 @@ function KeyWizard() {
     } finally {
       setTesting(false);
     }
-  };
-
-  const skipWithMock = () => {
-    setMockAi(true);
-    startMockProfile();
-    navigate('/onboarding/mic');
   };
 
   const modelNames: Record<ModelKey, string> = { chat, transcribe: transcribeModel, image, tts };
@@ -209,11 +198,6 @@ function KeyWizard() {
             />
           </div>
           <div className="onboard__actions">
-            {import.meta.env.DEV && (
-              <Button variant="ghost" onClick={skipWithMock}>
-                Explore in demo mode
-              </Button>
-            )}
             <Button variant="primary" full disabled={!baseUrl || !apiKey} onClick={() => setStep(1)}>
               Next
             </Button>
@@ -313,10 +297,6 @@ function KeyWizard() {
       )}
     </div>
   );
-}
-
-function startMockProfile() {
-  // Demo mode is gated by the dev `mockAi` flag in App's setup gate — no stored config needed.
 }
 
 function MicPriming() {

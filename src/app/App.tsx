@@ -61,40 +61,34 @@ type SetupState = 'loading' | 'no-session' | 'no-access' | 'no-config' | 'ready'
 
 function useSetupState(): SetupState {
   const [state, setState] = useState<SetupState>('loading');
-  const mockAi = useUi((s) => s.mockAi);
   const location = useLocation();
   useEffect(() => {
     let live = true;
     (async () => {
-      // Cloud-account-only: a signed-in Entra account is required (dev mock mode aside).
-      const devMock = import.meta.env.DEV && mockAi;
-      if (!devMock && !(await isSignedIn())) {
+      // Cloud-account-only: a signed-in Entra account is required.
+      if (!(await isSignedIn())) {
         if (live) setState('no-session');
         return;
       }
-      if (!devMock) {
-        // Invite-only: a definitive "not invited" blocks the UI. Transient API/network errors
-        // fall through (the backend still enforces access on every call).
-        const me = await loadMe();
-        if (me && !me.isInvited) {
-          if (live) setState('no-access');
-          return;
-        }
+      // Invite-only: a definitive "not invited" blocks the UI. Transient API/network errors
+      // fall through (the backend still enforces access on every call).
+      const me = await loadMe();
+      if (me && !me.isInvited) {
+        if (live) setState('no-access');
+        return;
       }
       // Credentials live in the server vault now; wipe anything a pre-cloud build stored locally.
       void clearApiCredentials();
-      const ok =
-        devMock ||
-        (await cloudApi
-          .getCredentialStatus()
-          .then((s) => s.configured)
-          .catch(() => false));
+      const ok = await cloudApi
+        .getCredentialStatus()
+        .then((s) => s.configured)
+        .catch(() => false);
       if (live) setState(ok ? 'ready' : 'no-config');
     })();
     return () => {
       live = false;
     };
-  }, [mockAi, location.pathname]);
+  }, [location.pathname]);
   return state;
 }
 
@@ -177,7 +171,6 @@ export function App() {
   // sync=false saved before cloud-only), backfill pre-existing local data once, then sync.
   useEffect(() => {
     (async () => {
-      if (import.meta.env.DEV && useUi.getState().mockAi) return;
       if (!(await isSignedIn())) return;
       const settings = await repo.getSettings();
       if (!settings.data.sync) {

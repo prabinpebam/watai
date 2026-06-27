@@ -298,6 +298,10 @@ export class WataiApiClient implements CloudApi {
     return this.request('POST', '/ai/chat', { messages });
   }
 
+  generateImage(body: { prompt: string; size?: string }): Promise<{ images: Array<{ b64: string }> }> {
+    return this.request('POST', '/ai/image', body);
+  }
+
   // --- access / invites ---
   getMe(): Promise<MeInfo> {
     return this.request('GET', '/me');
@@ -379,6 +383,7 @@ export interface CloudApi {
   }): Promise<{ text: string }>;
   synthesizeSpeech(body: { input: string; voice?: string }): Promise<{ audioBase64: string; mime: string }>;
   chatComplete(messages: Array<{ role: string; content: string }>): Promise<{ text: string }>;
+  generateImage(body: { prompt: string; size?: string }): Promise<{ images: Array<{ b64: string }> }>;
   getMe(): Promise<MeInfo>;
   listInvites(): Promise<InviteRecord[]>;
   createInvite(email: string): Promise<InviteRecord>;

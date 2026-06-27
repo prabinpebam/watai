@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { kvGet, kvSet } from '../../data/db';
-import { repo } from '../../data';
-import { generateImage, b64ToBlob } from '../../ai/image';
-import { mockGenerateImage } from '../../ai/mockAi';
+import { repo, cloudApi } from '../../data';
+import { base64ToBlob } from '../../lib/files';
 import { newId } from '../../lib/ids';
 import { Button, IconButton, Segmented } from '../../design/ui';
 import { Icon } from '../../design/icons';
@@ -24,7 +23,6 @@ async function removeImage(id: string): Promise<void> {
 }
 
 export function ImagesView() {
-  const mockAi = useUi((s) => s.mockAi);
   const pushToast = useUi((s) => s.pushToast);
   const [prompt, setPrompt] = useState('');
   const [size, setSize] = useState('1024x1024');
@@ -52,11 +50,11 @@ export function ImagesView() {
     if (!p) return;
     setBusy(true);
     try {
-      const results = mockAi ? await mockGenerateImage() : await generateImage({ prompt: p, size });
+      const { images: results } = await cloudApi.generateImage({ prompt: p, size });
       for (const r of results) {
         const id = newId();
         const blobKey = `img-${id}`;
-        await repo.putBlob(blobKey, b64ToBlob(r.b64));
+        await repo.putBlob(blobKey, base64ToBlob(r.b64, 'image/png'));
         await addImage({
           id,
           localBlobKey: blobKey,

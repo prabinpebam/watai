@@ -2,6 +2,7 @@ import { AppError } from '../domain/errors';
 import { aiFetch } from '../ai/http';
 import { normalizeHttpError } from '../ai/errors';
 import { completeChat, type ChatMessage } from '../ai/chat';
+import { generateImage } from '../ai/image';
 import type { CredentialDecryptor } from './threadFilesService';
 
 export interface TranscribeInput {
@@ -16,6 +17,10 @@ export interface SpeakInput {
 }
 export interface ChatProxyInput {
   messages: ChatMessage[];
+}
+export interface ImageProxyInput {
+  prompt: string;
+  size?: string;
 }
 
 function decodeBase64(data: string): Uint8Array {
@@ -90,5 +95,21 @@ export class AiProxyService {
       timeoutMs: 60_000,
     });
     return { text };
+  }
+
+  async image(userId: string, input: ImageProxyInput): Promise<{ images: Array<{ b64: string }> }> {
+    const c = await this.credentials.getDecrypted(userId);
+    if (!c.models.image) throw new AppError('validation', 'No image model is configured.');
+    const prompt = (input.prompt ?? '').trim();
+    if (!prompt) throw new AppError('validation', 'A prompt is required.');
+    const images = await generateImage({
+      baseUrl: c.baseUrl,
+      key: c.key,
+      model: c.models.image,
+      prompt,
+      ...(input.size ? { size: input.size } : {}),
+      fetchImpl: this.opts.fetchImpl,
+    });
+    return { images };
   }
 }

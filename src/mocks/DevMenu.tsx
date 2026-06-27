@@ -3,15 +3,13 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useUi } from '../state/store';
 import { Icon } from '../design/icons';
-import { Switch, Button } from '../design/ui';
+import { Button } from '../design/ui';
 import { seedMockDataIfEmpty, repo } from '../data';
 
 /** Lightweight dev menu: mock AI toggle, reseed demo data, theme jump. Dev builds only. */
 export function DevMenu() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const mockAi = useUi((s) => s.mockAi);
-  const setMockAi = useUi((s) => s.setMockAi);
   const setTheme = useUi((s) => s.setTheme);
   const theme = useUi((s) => s.theme);
   const bump = useUi((s) => s.bumpThreads);
@@ -32,14 +30,6 @@ export function DevMenu() {
             >
               <div className="nav-group__label" style={{ padding: 'var(--space-2) var(--space-3)' }}>
                 Developer
-              </div>
-              <div className="setting-row" style={{ padding: 'var(--space-3)', borderBottom: 'none' }}>
-                <div className="setting-row__body">
-                  <div className="setting-row__title" style={{ fontSize: 'var(--text-callout-size)' }}>
-                    Mock AI
-                  </div>
-                </div>
-                <Switch checked={mockAi} onChange={setMockAi} label="Mock AI" />
               </div>
               <button
                 className="menu__item"

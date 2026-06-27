@@ -396,6 +396,9 @@ class FakeCloud implements CloudApi {
   async chatComplete() {
     return { text: '' };
   }
+  async generateImage() {
+    return { images: [] };
+  }
 }
 
 function setup(sync = true) {

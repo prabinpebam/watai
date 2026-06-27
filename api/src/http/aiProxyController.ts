@@ -40,5 +40,13 @@ export function createAiProxyController(svc: AiProxyService) {
         const { userId } = identityFromClaims(req.claims);
         return svc.chat(userId, { messages: asMessages(req.body) });
       }),
+
+    image: (req: ApiRequest): Promise<HttpResult> =>
+      respond(200, async () => {
+        const { userId } = identityFromClaims(req.claims);
+        const b = (req.body ?? {}) as { prompt?: string; size?: string };
+        if (!b.prompt) throw new AppError('validation', 'prompt is required.');
+        return svc.image(userId, { prompt: b.prompt, size: b.size });
+      }),
   };
 }

@@ -4,7 +4,8 @@ import { AttachmentList, GeneratedImages } from './Attachments';
 import { Avatar, IconButton, InlineAlert, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
-import { synthesize } from '../../ai/tts';
+import { cloudApi } from '../../data';
+import { base64ToBlob } from '../../lib/files';
 import type { Citation, Message, PendingImage, ToolCall } from '../../lib/types';
 
 function domainOf(url: string): string {
@@ -163,7 +164,6 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pushToast = useUi((s) => s.pushToast);
-  const mockAi = useUi((s) => s.mockAi);
   const isStreamingThis = streaming && message.status === 'streaming';
 
   // An image tool call that is still running renders as an aspect-correct placeholder (optimistic
@@ -195,14 +195,16 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
       setSpeaking(false);
       return;
     }
-    if (mockAi) {
-      pushToast('Read-aloud uses your real endpoint', 'info');
-      return;
-    }
     setSpeaking(true);
     try {
-      const blob = await synthesize({ input: message.content.slice(0, 4000) });
-      const url = URL.createObjectURL(blob);
+      const { audioBase64, mime } = await cloudApi.synthesizeSpeech({
+        input: message.content.slice(0, 4000),
+      });
+      if (!audioBase64) {
+        setSpeaking(false);
+        return;
+      }
+      const url = URL.createObjectURL(base64ToBlob(audioBase64, mime));
       const audio = new Audio(url);
       audioRef.current = audio;
       audio.onended = () => {
