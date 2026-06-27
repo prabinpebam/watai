@@ -36,8 +36,14 @@ interface RunsStore {
   isRunning: (threadId: string) => boolean;
   stop: (threadId: string) => void;
   /** Submit a server-authoritative run; generation completes server-side even if this client
-   *  closes. Renders the reply by streaming the run's message into the live overlay. */
-  startServerRun: (threadId: string, body: SubmitRunBody) => Promise<void>;
+   *  closes. Renders the reply by streaming the run's message into the live overlay. The optimistic
+   *  assistant bubble appears synchronously; `prepare` runs AFTER it (deferred network work like
+   *  resolving the enabled tool set or flushing an image attachment) so the UI is never gated. */
+  startServerRun: (
+    threadId: string,
+    body: SubmitRunBody,
+    prepare?: () => Promise<Partial<SubmitRunBody>>,
+  ) => Promise<void>;
 }
 
 export const useRuns = create<RunsStore>((set, get) => ({
@@ -53,7 +59,7 @@ export const useRuns = create<RunsStore>((set, get) => ({
     run.controller.abort();
   },
 
-  startServerRun: async (threadId, body) => {
+  startServerRun: async (threadId, body, prepare) => {
     if (get().isRunning(threadId) || startingThreads.has(threadId)) return; // one run per thread
     const ctrl = new AbortController();
 
@@ -99,6 +105,30 @@ export const useRuns = create<RunsStore>((set, get) => ({
       });
     });
 
+    // Deferred preparation (enabled tool set, flushing an image attachment, indexing docs) runs
+    // AFTER the optimistic bubble is on screen, so the response UI is never gated by a network
+    // round-trip. Falls back to the base body (web search only) if it fails.
+    let runBody = body;
+    if (prepare) {
+      try {
+        runBody = { ...body, ...(await prepare()) };
+      } catch {
+        /* keep the base body */
+      }
+    }
+    // The user may have hit Stop while we were preparing — honor it before spending a server run.
+    if (ctrl.signal.aborted) {
+      offMessage();
+      offThread();
+      set((s) => {
+        const next = { ...s.runs };
+        delete next[threadId];
+        return { runs: next };
+      });
+      useUi.getState().setStream({ status: 'idle' });
+      return;
+    }
+
     let finalAssistant: Message | null = null;
     try {
       const { run, assistant } = await runOnServer(
@@ -137,7 +167,7 @@ export const useRuns = create<RunsStore>((set, get) => ({
           signal: ctrl.signal,
         },
         threadId,
-        body,
+        runBody,
       );
       finalAssistant = assistant;
       if (run?.status === 'error' || assistant?.status === 'error') {

@@ -8,6 +8,7 @@ import { orderMessages } from './ordering';
 import { lockHeldByOther } from './lock';
 import { fileToBase64 } from '../../lib/files';
 import type { Attachment, Message } from '../../lib/types';
+import type { SubmitRunBody } from '../../data/cloud/types';
 
 export { DEFAULT_CHAT_MODEL } from './runStore';
 
@@ -161,57 +162,63 @@ export function useChat(threadId: string, temporary = false) {
       };
       setPersisted((prev) => [...prev, userMsg]); // optimistic — reload dedupes by id
       await repo.appendMessage(userMsg);
-      // Image attachments must reach the server message BEFORE the run reads history (the run's
-      // own user-turn append is idempotent and would otherwise win with no image). Flush sync so
-      // the blob is uploaded and the synced message carries its blobPath the worker can read.
-      const hasImages = (files ?? []).some((f) => f.type.startsWith('image/'));
-      if (hasImages) await syncNow().catch(() => {});
-      // Thread-scoped file search: index any non-image docs into the thread's vector store so the
-      // model can answer questions about them via file_search. Blocks the run until indexed.
-      const docs = (files ?? []).filter((f) => !f.type.startsWith('image/'));
-      if (docs.length) {
-        const toast = useUi.getState().pushToast;
-        busyRef.current = true;
-        setIndexing(true);
-        toast(`Indexing ${docs.length} file${docs.length === 1 ? '' : 's'}…`, 'info');
-        try {
-          // The AI key lives in the server vault, so upload the docs to the thread's vector store
-          // via the API. The server creates the store on first upload and records it on the thread.
-          let indexed = 0;
-          for (const f of docs) {
-            try {
-              await cloudApi.uploadThreadFile(threadId, {
-                name: f.name,
-                mime: f.type || 'application/octet-stream',
-                dataBase64: await fileToBase64(f),
-              });
-              indexed++;
-            } catch {
-              /* counted as failed below */
+      // Start the run NOW so the assistant bubble appears alongside the prompt — never gated by a
+      // network round-trip. The pre-submit work (flushing an image attachment so the worker can
+      // read it, indexing any docs for file search, probing the enabled tool set) runs inside the
+      // run AFTER the bubble is on screen but BEFORE the server submit.
+      const prepare = async (): Promise<Partial<SubmitRunBody>> => {
+        // Image attachments must reach the server message before the run reads history (the run's
+        // own user-turn append is idempotent and would otherwise win with no image). Flush sync so
+        // the blob is uploaded and the synced message carries its blobPath the worker can read.
+        const hasImages = (files ?? []).some((f) => f.type.startsWith('image/'));
+        if (hasImages) await syncNow().catch(() => {});
+        // Thread-scoped file search: index any non-image docs into the thread's vector store so the
+        // model can answer questions about them via file_search. Blocks the submit until indexed.
+        const docs = (files ?? []).filter((f) => !f.type.startsWith('image/'));
+        if (docs.length) {
+          const toast = useUi.getState().pushToast;
+          busyRef.current = true;
+          setIndexing(true);
+          toast(`Indexing ${docs.length} file${docs.length === 1 ? '' : 's'}…`, 'info');
+          try {
+            // The AI key lives in the server vault, so upload the docs to the thread's vector store
+            // via the API. The server creates the store on first upload and records it on the thread.
+            let indexed = 0;
+            for (const f of docs) {
+              try {
+                await cloudApi.uploadThreadFile(threadId, {
+                  name: f.name,
+                  mime: f.type || 'application/octet-stream',
+                  dataBase64: await fileToBase64(f),
+                });
+                indexed++;
+              } catch {
+                /* counted as failed below */
+              }
             }
+            await syncNow().catch(() => {});
+            useUi.getState().bumpThread(threadId);
+            const failed = docs.length - indexed;
+            if (failed && !indexed) toast('Could not index the file(s)', 'error');
+            else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
+            else toast('File ready — you can ask about it', 'success');
+          } catch {
+            toast('Could not index the file(s)', 'error');
+          } finally {
+            busyRef.current = false;
+            setIndexing(false);
           }
-          await syncNow().catch(() => {});
-          useUi.getState().bumpThread(threadId);
-          const failed = docs.length - indexed;
-          if (failed && !indexed) toast('Could not index the file(s)', 'error');
-          else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
-          else toast('File ready — you can ask about it', 'success');
-        } catch {
-          toast('Could not index the file(s)', 'error');
-        } finally {
-          busyRef.current = false;
-          setIndexing(false);
         }
-      }
-      // Server-authoritative: the backend generates + persists the reply, which survives this
-      // client closing. Pass the local message id as the idempotency key so the server's copy of
-      // the user turn converges with the local one, and the enabled tool set for this run.
-      const tools = await serverRunTools();
-      void useRuns.getState().startServerRun(threadId, {
-        text: trimmed,
-        clientMessageId: userMsg.id,
-        ...(tools.length ? { tools } : {}),
-      });
+        // Server-authoritative: the backend generates + persists the reply, which survives this
+        // client closing. The enabled tool set for this run is probed from the saved config.
+        const tools = await serverRunTools();
+        return tools.length ? { tools } : {};
+      };
+      void useRuns.getState().startServerRun(
+        threadId,
+        { text: trimmed, clientMessageId: userMsg.id },
+        prepare,
+      );
       useUi.getState().bumpThreads();
     },
     [threadId, temporary],
@@ -229,13 +236,15 @@ export function useChat(threadId: string, temporary = false) {
     const lastUser = [...trimmed].reverse().find((m) => m.role === 'user');
     if (!lastUser) return;
     // Server-authoritative regenerate: reuse the existing user turn (idempotency key) and let the
-    // backend produce a fresh reply.
-    const tools = await serverRunTools();
-    void useRuns.getState().startServerRun(threadId, {
-      text: lastUser.content,
-      clientMessageId: lastUser.id,
-      ...(tools.length ? { tools } : {}),
-    });
+    // backend produce a fresh reply. The bubble shows at once; the tool probe runs after it.
+    void useRuns.getState().startServerRun(
+      threadId,
+      { text: lastUser.content, clientMessageId: lastUser.id },
+      async () => {
+        const tools = await serverRunTools();
+        return tools.length ? { tools } : {};
+      },
+    );
   }, [threadId]);
 
   const stop = useCallback(() => useRuns.getState().stop(threadId), [threadId]);
