@@ -68,6 +68,7 @@ interface UiState {
   setSourceIndex: (index: number) => void;
   closeSourcePane: () => void;
   openFilesPane: (threadId: string) => void;
+  toggleFilesPane: (threadId: string) => void;
   closeFilesPane: () => void;
 }
 
@@ -130,6 +131,8 @@ export const useUi = create<UiState>()(
         set((s) => (s.sourcePane ? { sourcePane: { ...s.sourcePane, index } } : {})),
       closeSourcePane: () => set({ sourcePane: null }),
       openFilesPane: (threadId) => set({ filesPane: threadId, sourcePane: null }),
+      toggleFilesPane: (threadId) =>
+        set((s) => ({ filesPane: s.filesPane === threadId ? null : threadId, sourcePane: null })),
       closeFilesPane: () => set({ filesPane: null }),
     }),
     {

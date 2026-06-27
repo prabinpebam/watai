@@ -979,6 +979,13 @@ a:hover {
 .thread-files__item:first-child {
   border-top: none;
 }
+.thread-files__item--openable {
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+.thread-files__item--openable:hover {
+  background: var(--color-surface-2);
+}
 .thread-files__meta {
   flex: 1;
   min-width: 0;

@@ -119,7 +119,9 @@ export function container(): ApiContainer {
   const imageService = new ImageService(imageStore, credentialService, new QueueImageStarter(), minter, clock);
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
-  const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock);
+  const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock, {
+    uploadOriginal: makeUploadImage(assetService),
+  });
   const aiProxyService = new AiProxyService(credentialService);
   const skillCatalog = new SkillCatalogService(new CosmosSkillStore(), new SasSkillBlobStore(minter), clock);
   const skillProvisioner = createSkillProvisioner(aoaiFiles);
@@ -137,7 +139,7 @@ export function container(): ApiContainer {
     threadLock: createThreadLockController(new ThreadLockService(threadStore, clock)),
     messages: createMessagesController(messageService),
     settings: createSettingsController(settingsService),
-    threadFiles: createThreadFilesController(threadFilesService),
+    threadFiles: createThreadFilesController(threadFilesService, signalr),
     assets: createAssetsController(assetService),
     me: createMeController(access),
     invites: createInvitesController(inviteStore, clock),

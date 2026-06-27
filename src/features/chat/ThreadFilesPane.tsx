@@ -5,7 +5,7 @@ import { Icon } from '../../design/icons';
 import { repo, cloudApi, syncNow } from '../../data';
 import { useUi } from '../../state/store';
 import { useIsExpanded } from '../../lib/hooks';
-import { fileToBase64, formatBytes, DOC_ACCEPT } from '../../lib/files';
+import { fileToBase64, formatBytes, DOC_ACCEPT, uploadMime } from '../../lib/files';
 import { AttachmentList } from './Attachments';
 import type { Attachment, ThreadFile } from '../../lib/types';
 
@@ -43,7 +43,7 @@ export function ThreadFilesPane() {
     setLoading(true);
     void load(threadId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threadId]);
+  }, [threadId, threadRev]);
 
   // User-uploaded attachments live on the messages (not thread.files); gather them so they are
   // visible here too. Re-reads when the thread revises (a new prompt with files lands).
@@ -77,7 +77,7 @@ export function ThreadFilesPane() {
       try {
         await cloudApi.uploadThreadFile(threadId, {
           name: f.name,
-          mime: f.type || 'application/octet-stream',
+          mime: uploadMime(f),
           dataBase64: await fileToBase64(f),
         });
         ok++;
@@ -153,24 +153,7 @@ export function ThreadFilesPane() {
         ) : (
           <>
             {docs.map((f) => (
-              <div key={f.fileId} className="thread-files__item">
-                <Icon name="file-text" size={18} />
-                <div className="thread-files__meta">
-                  <div className="thread-files__name" title={f.name}>
-                    {f.name}
-                  </div>
-                  <div className="thread-files__sub muted">
-                    {formatBytes(f.bytes)}
-                    {f.status === 'indexing' ? ' · indexing…' : f.status === 'error' ? ' · failed' : ''}
-                  </div>
-                </div>
-                <IconButton
-                  name="trash"
-                  label={`Remove ${f.name}`}
-                  onClick={() => void remove(f.fileId)}
-                  disabled={busy}
-                />
-              </div>
+              <FileRow key={f.fileId} file={f} busy={busy} onRemove={() => void remove(f.fileId)} />
             ))}
             {imgs.length > 0 && (
               <div className="files-pane__images">
@@ -209,8 +192,21 @@ export function ThreadFilesPane() {
   );
 }
 
-/** A generated-image tile; resolves the blob to a URL (local cache, else cloud read SAS). */
-function FileThumb({ file }: { file: ThreadFile }) {
+function openUrl(url: string, name: string) {
+  const opened = window.open(url, '_blank', 'noopener');
+  if (!opened) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noreferrer noopener';
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+}
+
+function useThreadFileUrl(file: ThreadFile): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
@@ -222,6 +218,49 @@ function FileThumb({ file }: { file: ThreadFile }) {
       live = false;
     };
   }, [file.fileId, file.blobPath]);
+  return url;
+}
+
+function FileRow({ file, busy, onRemove }: { file: ThreadFile; busy: boolean; onRemove: () => void }) {
+  const url = useThreadFileUrl(file);
+  const canOpen = !!url && file.status === 'ready';
+  return (
+    <div
+      className={`thread-files__item ${canOpen ? 'thread-files__item--openable' : ''}`}
+      role={canOpen ? 'button' : undefined}
+      tabIndex={canOpen ? 0 : undefined}
+      onClick={() => canOpen && openUrl(url, file.name)}
+      onKeyDown={(e) => {
+        if (!canOpen || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        openUrl(url, file.name);
+      }}
+      title={canOpen ? `Open ${file.name}` : file.name}
+    >
+      <Icon name="file-text" size={18} />
+      <div className="thread-files__meta">
+        <div className="thread-files__name" title={file.name}>{file.name}</div>
+        <div className="thread-files__sub muted">
+          {formatBytes(file.bytes)}
+          {file.status === 'indexing' ? ' · indexing…' : file.status === 'error' ? ' · failed' : ''}
+        </div>
+      </div>
+      <IconButton
+        name="trash"
+        label={`Remove ${file.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        disabled={busy}
+      />
+    </div>
+  );
+}
+
+/** A generated-image tile; resolves the blob to a URL (local cache, else cloud read SAS). */
+function FileThumb({ file }: { file: ThreadFile }) {
+  const url = useThreadFileUrl(file);
   if (!url) {
     return (
       <div className="files-pane__thumb files-pane__thumb--loading">
@@ -254,17 +293,7 @@ function iconForArtifact(mime = '', name = ''): string {
 
 /** A generated, downloadable artifact row; resolves the blob to a URL (local cache, else read SAS). */
 function ArtifactRow({ file }: { file: ThreadFile }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let live = true;
-    repo
-      .resolveAssetUrl({ id: file.fileId, blobPath: file.blobPath })
-      .then((u) => live && setUrl(u || null))
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [file.fileId, file.blobPath]);
+  const url = useThreadFileUrl(file);
 
   const download = () => {
     if (!url) return;
@@ -277,7 +306,18 @@ function ArtifactRow({ file }: { file: ThreadFile }) {
   };
 
   return (
-    <div className="thread-files__item">
+    <div
+      className={`thread-files__item ${url ? 'thread-files__item--openable' : ''}`}
+      role={url ? 'button' : undefined}
+      tabIndex={url ? 0 : undefined}
+      onClick={() => url && openUrl(url, file.name)}
+      onKeyDown={(e) => {
+        if (!url || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        openUrl(url, file.name);
+      }}
+      title={url ? `Open ${file.name}` : file.name}
+    >
       <Icon name={iconForArtifact(file.mime, file.name)} size={18} />
       <div className="thread-files__meta">
         <div className="thread-files__name" title={file.name}>
@@ -285,7 +325,15 @@ function ArtifactRow({ file }: { file: ThreadFile }) {
         </div>
         <div className="thread-files__sub muted">{formatBytes(file.bytes)}</div>
       </div>
-      <IconButton name="download" label={`Download ${file.name}`} onClick={download} disabled={!url} />
+      <IconButton
+        name="download"
+        label={`Download ${file.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          download();
+        }}
+        disabled={!url}
+      />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useUi } from '../../state/store';
 import { useRuns } from './runStore';
 import { orderMessages } from './ordering';
 import { lockHeldByOther } from './lock';
-import { fileToBase64 } from '../../lib/files';
+import { fileToBase64, uploadMime } from '../../lib/files';
 import type { Attachment, Message } from '../../lib/types';
 import type { SubmitRunBody } from '../../data/cloud/types';
 
@@ -202,7 +202,7 @@ export function useChat(threadId: string, temporary = false) {
               try {
                 await cloudApi.uploadThreadFile(threadId, {
                   name: f.name,
-                  mime: f.type || 'application/octet-stream',
+                  mime: uploadMime(f),
                   dataBase64: await fileToBase64(f),
                 });
                 indexed++;

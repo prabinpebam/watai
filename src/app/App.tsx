@@ -219,12 +219,17 @@ export function App() {
     (async () => {
       if (!(await isSignedIn())) return;
       void realtime.ensure();
-      off = realtime.on('thread', () => {
+      off = realtime.on('thread', (payload) => {
+        const threadId = (payload as { thread?: { id?: string } } | null)?.thread?.id;
+        const ui = useUi.getState();
+        ui.bumpThreads();
+        if (threadId) ui.bumpThread(threadId);
         void syncNow()
           .then((changed) => {
             const ui = useUi.getState();
             ui.bumpThreads();
             changed?.forEach((tid) => ui.bumpThread(tid));
+            if (threadId) ui.bumpThread(threadId);
           })
           .catch(() => undefined);
       });

@@ -16,7 +16,7 @@ export function ChatScreen() {
   const toggleSidebar = useUi((s) => s.toggleSidebar);
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const version = useUi((s) => s.threadsVersion);
-  const openFilesPane = useUi((s) => s.openFilesPane);
+  const toggleFilesPane = useUi((s) => s.toggleFilesPane);
 
   // The thread id is always in the URL (a fresh chat redirects /new -> /c/{newId} first), so the
   // thread is only persisted once the first prompt commits it. Until then getThread is null and we
@@ -48,7 +48,7 @@ export function ChatScreen() {
           <IconButton name="menu" label="Open menu" onClick={() => toggleDrawer(true)} />
         )}
         <div className="appbar__title">{title}</div>
-        <IconButton name="file-text" label="Chat files" onClick={() => openFilesPane(threadId)} />
+        <IconButton name="file-text" label="Chat files" onClick={() => toggleFilesPane(threadId)} />
         <ToolsMenu />
         <IconButton name="pen-square" label="New chat" onClick={() => navigate('/new')} />
         <IconButton name="speaker" label="Voice mode" onClick={() => navigate(`/voice/${threadId}`)} />

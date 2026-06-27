@@ -64,6 +64,7 @@ function setup() {
     sleep: async () => {},
     pollMs: 0,
     maxPolls: 3,
+    uploadOriginal: async (_userId, threadId, assetId, _bytes, contentType) => `${threadId}/${assetId}.${contentType}`,
   });
   return { store, svc, files, clock };
 }
@@ -98,6 +99,8 @@ describe('ThreadFilesService', () => {
 
     expect(meta.fileId).toBe('file-1');
     expect(meta.name).toBe('doc.pdf');
+    expect(meta.blobPath).toBe('t1/file-1.application/pdf');
+    expect(meta.mime).toBe('application/pdf');
     expect(meta.status).toBe('ready');
     expect(ctx.files.calls).toContain('createVs:thread:t1');
     expect(ctx.files.calls).toContain('add:vs-1:file-1');

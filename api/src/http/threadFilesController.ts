@@ -1,6 +1,7 @@
 import { identityFromClaims } from '../auth/identity';
 import { AppError } from '../domain/errors';
 import type { ThreadFilesService, ThreadFileUpload } from '../application/threadFilesService';
+import type { SignalRSender } from '../adapters/azure/signalr';
 import { respond } from './respond';
 import type { ApiRequest, HttpResult } from './types';
 
@@ -19,7 +20,13 @@ function parseUpload(body: unknown): ThreadFileUpload {
  * HTTP boundary for a thread's knowledge base (uploaded documents → file search). Identity comes
  * from the validated token claims; the thread id (and file id) come from the route.
  */
-export function createThreadFilesController(svc: ThreadFilesService) {
+export function createThreadFilesController(svc: ThreadFilesService, signalr?: SignalRSender | null) {
+  const pushThreadFiles = async (userId: string, threadId: string): Promise<void> => {
+    if (!signalr) return;
+    const files = await svc.list(userId, threadId).catch(() => undefined);
+    await signalr.sendToUser(userId, 'thread', { thread: { id: threadId, ...(files ? { files } : {}) } }).catch(() => undefined);
+  };
+
   return {
     list: (req: ApiRequest): Promise<HttpResult> =>
       respond(200, async () => {
@@ -30,13 +37,16 @@ export function createThreadFilesController(svc: ThreadFilesService) {
     upload: (req: ApiRequest): Promise<HttpResult> =>
       respond(201, async () => {
         const { userId } = identityFromClaims(req.claims);
-        return svc.upload(userId, req.params!.id, parseUpload(req.body));
+        const file = await svc.upload(userId, req.params!.id, parseUpload(req.body));
+        await pushThreadFiles(userId, req.params!.id);
+        return file;
       }),
 
     remove: (req: ApiRequest): Promise<HttpResult> =>
       respond(204, async () => {
         const { userId } = identityFromClaims(req.claims);
         await svc.remove(userId, req.params!.id, req.params!.fileId);
+        await pushThreadFiles(userId, req.params!.id);
       }),
   };
 }

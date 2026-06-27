@@ -656,6 +656,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
           id: nextThread.id,
           title: nextThread.title,
           lastMessagePreview: nextThread.lastMessagePreview,
+          ...(nextThread.files ? { files: nextThread.files } : {}),
           updatedAt: nextThread.updatedAt,
         },
       });

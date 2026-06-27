@@ -1,4 +1,5 @@
 import { AppError } from '../domain/errors';
+import { ALLOWED_CONTENT_TYPES, type AllowedContentType } from '../domain/asset';
 import type { ThreadRecord, ThreadStore, ThreadFileMeta } from '../ports/threadStore';
 import type { AoaiCreds, AoaiFiles, VectorFileStatus } from '../ai/files';
 import type { DecryptedCredentials } from './credentialService';
@@ -19,6 +20,13 @@ export interface ThreadFileUpload {
 export interface ThreadFilesOptions {
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
+  uploadOriginal?: (
+    userId: string,
+    threadId: string,
+    assetId: string,
+    bytes: Uint8Array,
+    contentType: AllowedContentType,
+  ) => Promise<string>;
   /** Indexing poll cadence + bound (defaults ~18s total). */
   pollMs?: number;
   maxPolls?: number;
@@ -30,6 +38,10 @@ const MAX_BYTES = 25 * 1024 * 1024;
 function decodeBase64(data: string): Uint8Array {
   const b64 = data.replace(/^data:[^;]*;base64,/, '');
   return new Uint8Array(Buffer.from(b64, 'base64'));
+}
+
+function allowedContentType(mime: string): AllowedContentType | null {
+  return (ALLOWED_CONTENT_TYPES as readonly string[]).includes(mime) ? mime as AllowedContentType : null;
 }
 
 /**
@@ -79,8 +91,20 @@ export class ThreadFilesService {
     const vectorStoreId = thread.vectorStoreId ?? (await this.files.createVectorStore(creds, `thread:${threadId}`));
     const attached = await this.files.addFile(creds, vectorStoreId, up.id);
     const status = await this.waitForReady(creds, vectorStoreId, up.id, attached);
+    const contentType = allowedContentType(input.mime || '');
+    const blobPath = contentType && this.opts.uploadOriginal
+      ? await this.opts.uploadOriginal(userId, threadId, up.id, bytes, contentType).catch(() => undefined)
+      : undefined;
 
-    const meta: ThreadFileMeta = { fileId: up.id, name, bytes: up.bytes, status, createdAt: this.clock.now() };
+    const meta: ThreadFileMeta = {
+      fileId: up.id,
+      name,
+      bytes: up.bytes,
+      status,
+      createdAt: this.clock.now(),
+      ...(blobPath ? { blobPath } : {}),
+      ...(contentType ? { mime: contentType } : {}),
+    };
     await this.threads.put({
       ...thread,
       vectorStoreId,
