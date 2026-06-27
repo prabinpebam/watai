@@ -35,7 +35,11 @@ const CODE_INTERPRETER_DIRECTIVE =
   'saved under /mnt/data/ are automatically delivered to the user as downloadable attachments in ' +
   'this chat — the user can download them directly. Never say you cannot create, attach, host, ' +
   'email, or deliver files; you can. Do not paste a long document as plain text when the user ' +
-  'asked for a file — produce the actual file, then briefly describe what you made.';
+  'asked for a file — produce the actual file, then briefly describe what you made. ' +
+  'IMPORTANT: do NOT put a download link, hyperlink, URL, markdown link, file path, or HTML ' +
+  'anchor for the generated file in your reply. There is no URL you can link to — the file ' +
+  'already appears as a downloadable attachment card directly beneath your message. Just state ' +
+  'that the file is ready and describe it in one or two sentences.';
 
 /** Build the code-interpreter system-prompt section: the directive plus any matched skill bodies. */
 export function codeInterpreterSection(skills: Skill[]): string {

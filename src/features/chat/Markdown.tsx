@@ -147,11 +147,19 @@ export const Markdown = memo(function Markdown({ content }: MarkdownProps) {
         urlTransform={safeUrl}
         components={{
           pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
-          a: ({ children, href }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer">
-              {children}
-            </a>
-          ),
+          a: ({ children, href }) => {
+            // The model sometimes fabricates "download" links for generated files with an empty or
+            // relative href (there is no real URL — files are delivered as artifact cards). Render
+            // those as plain text so a click doesn't navigate to the app root.
+            const external = typeof href === 'string' && /^(https?:|mailto:)/i.test(href.trim());
+            return external ? (
+              <a href={href} target="_blank" rel="noopener noreferrer">
+                {children}
+              </a>
+            ) : (
+              <span className="md-deadlink">{children}</span>
+            );
+          },
           table: ({ children }) => (
             <div className="md-table-wrap">
               <table>{children}</table>

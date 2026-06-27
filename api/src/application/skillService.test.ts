@@ -51,6 +51,7 @@ describe('codeInterpreterSection', () => {
     expect(s).toContain('downloadable');
     expect(s).toContain('/mnt/data/');
     expect(s.toLowerCase()).toContain('never say you cannot');
+    expect(s.toLowerCase()).toContain('do not put a download link');
   });
 
   it('embeds each selected skill body alongside the directive', () => {
