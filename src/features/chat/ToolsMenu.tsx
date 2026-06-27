@@ -3,9 +3,7 @@ import { createPortal } from 'react-dom';
 import { Icon } from '../../design/icons';
 import { Switch } from '../../design/ui';
 import { useDismiss } from '../../lib/hooks';
-import { repo } from '../../data';
-import { getApiConfig, getTavilyKey, saveTavilyKey } from '../../data/secureStore';
-import { detectCapabilities } from '../../ai/capabilities';
+import { repo, cloudApi } from '../../data';
 import { useUi } from '../../state/store';
 import type { CapabilityMatrix, Settings } from '../../lib/types';
 
@@ -81,26 +79,38 @@ export function ToolsMenu() {
   const popRef = useRef<HTMLDivElement>(null);
   const mockAi = useUi((s) => s.mockAi);
   const pushToast = useUi((s) => s.pushToast);
-  const requestConfirm = useUi((s) => s.requestConfirm);
 
   useEffect(() => {
     let live = true;
     void (async () => {
       const s = await repo.getSettings();
       if (live && s.tools) setTools(s.tools);
-      const key = await getTavilyKey().catch(() => null);
-      if (live) setTavilyHasKey(mockAi ? true : !!key);
       if (mockAi) {
-        if (live) setCaps(MOCK_CAPS);
+        if (live) {
+          setTavilyHasKey(true);
+          setCaps(MOCK_CAPS);
+        }
         return;
       }
-      const c = await getApiConfig();
+      const status = await cloudApi.getCredentialStatus().catch(() => null);
       if (!live) return;
-      if (c) {
-        detectCapabilities(c)
-          .then((m) => live && setCaps(m))
-          .catch(() => undefined);
-      }
+      setTavilyHasKey(!!status?.tavilyConfigured);
+      const cc = status?.capabilities;
+      setCaps({
+        chat: cc?.chat ?? false,
+        chatStreaming: true,
+        vision: true,
+        transcribe: cc?.transcribe ?? false,
+        transcribeStreaming: false,
+        image: cc?.image ?? false,
+        imageEdit: cc?.image ?? false,
+        tts: cc?.tts ?? false,
+        responses: cc?.agentic ?? false,
+        functions: cc?.agentic ?? false,
+        codeInterpreter: cc?.codeInterpreter ?? false,
+        webSearch: cc?.webSearch ?? false,
+        fileSearch: cc?.fileSearch ?? false,
+      });
     })();
     return () => {
       live = false;
@@ -131,23 +141,13 @@ export function ToolsMenu() {
     await save({ ...tools, [d.key]: !tools[d.key] });
   };
 
-  // Web search's switch is the Tavily key. Turning it on without a key points to Settings (the
-  // composer has no key field); turning it off removes the key (with confirmation).
+  // Web search reflects the vault Tavily key, which is managed in Settings (the composer has no key
+  // field). The switch here just points the user there.
   const toggleWebSearch = async (v: boolean) => {
-    if (v) {
-      if (!tavilyHasKey) pushToast('Add a Tavily key in Settings \u2192 Tools to turn on web search', 'info');
-      return;
-    }
-    if (!tavilyHasKey) return;
-    const ok = await requestConfirm({
-      title: 'Turn off web search',
-      message: 'This removes your saved Tavily key. You can add it again anytime.',
-      confirmLabel: 'Turn off',
-      danger: true,
-    });
-    if (ok) {
-      await saveTavilyKey('');
-      setTavilyHasKey(false);
+    if (v && !tavilyHasKey) {
+      pushToast('Add a web-search (Tavily) key in Settings to turn on web search', 'info');
+    } else if (!v && tavilyHasKey) {
+      pushToast('Manage the web-search key in Settings', 'info');
     }
   };
 

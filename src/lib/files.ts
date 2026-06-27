@@ -19,6 +19,14 @@ export function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Decode bare base64 into a Blob of the given mime type (e.g. proxied TTS audio). */
+export function base64ToBlob(base64: string, mime: string): Blob {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
 /** File types accepted for thread knowledge-base documents (Azure OpenAI file_search set). */
 export const DOC_ACCEPT =
   'application/pdf,text/plain,text/markdown,text/csv,application/json,.md,.markdown,.docx,.pptx,.xlsx';

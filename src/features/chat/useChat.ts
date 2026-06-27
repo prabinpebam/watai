@@ -6,36 +6,28 @@ import { useUi } from '../../state/store';
 import { useRuns } from './runStore';
 import { orderMessages } from './ordering';
 import { lockHeldByOther } from './lock';
-import { indexThreadDocuments } from '../../ai/fileSearch';
-import { detectCapabilities } from '../../ai/capabilities';
-import { getApiConfig } from '../../data/secureStore';
-import { isServerRunsEnabled } from '../../lib/flags';
 import { fileToBase64 } from '../../lib/files';
 import type { Attachment, Message } from '../../lib/types';
 
 export { DEFAULT_CHAT_MODEL } from './runStore';
 
 /**
- * Tools to offer a server run. `web_search` is always listed (the server gates it on the vault
- * Tavily key). The built-ins (code interpreter, file search) are listed only when the user enabled
- * them AND the endpoint is known to support them (capability matrix, probed once + cached), so an
- * endpoint that lacks a tool is never sent it (which would fail the whole run).
+ * Tools to offer a server run. `web_search` + `generate_image` are always listed (the server gates
+ * them on the vault Tavily key / image model). Code interpreter + file search are listed only when
+ * the user enabled them AND the configured endpoint supports them (capabilities derived server-side
+ * from the saved config), so an endpoint that lacks a tool is never sent it.
  */
 async function serverRunTools(): Promise<string[]> {
   const tools = ['web_search', 'generate_image'];
   const settings = await repo.getSettings().catch(() => null);
   const t = settings?.tools;
   if (!t || t.agenticMode === false) return tools;
-  let cap = useUi.getState().capability;
-  if (!cap) {
-    const cfg = await getApiConfig().catch(() => null);
-    if (cfg?.baseUrl) {
-      cap = await detectCapabilities(cfg).catch(() => null);
-      if (cap) useUi.getState().setCapability(cap);
-    }
-  }
-  if (t.codeInterpreter && cap?.codeInterpreter) tools.push('code_interpreter');
-  if (t.fileSearch && cap?.fileSearch) tools.push('file_search');
+  const caps = await cloudApi
+    .getCredentialStatus()
+    .then((s) => s.capabilities)
+    .catch(() => undefined);
+  if (t.codeInterpreter && caps?.codeInterpreter) tools.push('code_interpreter');
+  if (t.fileSearch && caps?.fileSearch) tools.push('file_search');
   return tools;
 }
 
@@ -177,43 +169,27 @@ export function useChat(threadId: string, temporary = false) {
         setIndexing(true);
         toast(`Indexing ${docs.length} file${docs.length === 1 ? '' : 's'}…`, 'info');
         try {
-          if (isServerRunsEnabled()) {
-            // Server-authoritative: the AOAI key lives in the server vault, so upload the docs to
-            // the thread's vector store via the API. The server creates the store on first upload
-            // and records it (vectorStoreId + files) on the thread; sync pulls that back.
-            let indexed = 0;
-            for (const f of docs) {
-              try {
-                await cloudApi.uploadThreadFile(threadId, {
-                  name: f.name,
-                  mime: f.type || 'application/octet-stream',
-                  dataBase64: await fileToBase64(f),
-                });
-                indexed++;
-              } catch {
-                /* counted as failed below */
-              }
+          // The AI key lives in the server vault, so upload the docs to the thread's vector store
+          // via the API. The server creates the store on first upload and records it on the thread.
+          let indexed = 0;
+          for (const f of docs) {
+            try {
+              await cloudApi.uploadThreadFile(threadId, {
+                name: f.name,
+                mime: f.type || 'application/octet-stream',
+                dataBase64: await fileToBase64(f),
+              });
+              indexed++;
+            } catch {
+              /* counted as failed below */
             }
-            await syncNow().catch(() => {});
-            useUi.getState().bumpThread(threadId);
-            const failed = docs.length - indexed;
-            if (failed && !indexed) toast('Could not index the file(s)', 'error');
-            else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
-            else toast('File ready — you can ask about it', 'success');
-          } else {
-            const existingStore = (await repo.getThread(threadId))?.vectorStoreId;
-            const { vectorStoreId, indexed, failed } = await indexThreadDocuments(
-              docs.map((f) => ({ file: f, name: f.name })),
-              existingStore,
-            );
-            // Persist the store id ON THE THREAD so it syncs across devices (file search travels).
-            if (vectorStoreId && vectorStoreId !== existingStore) {
-              await repo.updateThread(threadId, { vectorStoreId });
-            }
-            if (failed && !indexed) toast('Could not index the file(s)', 'error');
-            else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
-            else toast('File ready — you can ask about it', 'success');
           }
+          await syncNow().catch(() => {});
+          useUi.getState().bumpThread(threadId);
+          const failed = docs.length - indexed;
+          if (failed && !indexed) toast('Could not index the file(s)', 'error');
+          else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
+          else toast('File ready — you can ask about it', 'success');
         } catch {
           toast('Could not index the file(s)', 'error');
         } finally {
@@ -222,7 +198,9 @@ export function useChat(threadId: string, temporary = false) {
         }
       }
       const history = await repo.listMessages(threadId);
-      if (isServerRunsEnabled() && !mockAi) {
+      if (mockAi) {
+        void useRuns.getState().startRun(threadId, history, true);
+      } else {
         // Server-authoritative: the backend generates + persists the reply, which survives this
         // client closing. Pass the local message id as the idempotency key so the server's copy of
         // the user turn converges with the local one, and the enabled tool set for this run.
@@ -232,8 +210,6 @@ export function useChat(threadId: string, temporary = false) {
           clientMessageId: userMsg.id,
           ...(tools.length ? { tools } : {}),
         });
-      } else {
-        void useRuns.getState().startRun(threadId, history, mockAi);
       }
       useUi.getState().bumpThreads();
     },
@@ -249,7 +225,19 @@ export function useChat(threadId: string, temporary = false) {
       await repo.deleteMessage(last.id);
     }
     setPersisted(trimmed);
-    void useRuns.getState().startRun(threadId, trimmed, mockAi);
+    const lastUser = [...trimmed].reverse().find((m) => m.role === 'user');
+    if (mockAi || !lastUser) {
+      void useRuns.getState().startRun(threadId, trimmed, mockAi);
+      return;
+    }
+    // Server-authoritative regenerate: reuse the existing user turn (idempotency key) and let the
+    // backend produce a fresh reply.
+    const tools = await serverRunTools();
+    void useRuns.getState().startServerRun(threadId, {
+      text: lastUser.content,
+      clientMessageId: lastUser.id,
+      ...(tools.length ? { tools } : {}),
+    });
   }, [threadId, mockAi]);
 
   const stop = useCallback(() => useRuns.getState().stop(threadId), [threadId]);

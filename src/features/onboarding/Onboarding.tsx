@@ -3,11 +3,11 @@ import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { Avatar, Button, Field, InlineAlert, Segmented, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { signInRedirect } from '../../auth/cloudAuth';
-import { normalizeBaseUrl, saveApiConfig, saveApiKey } from '../../data/secureStore';
-import { probeModel, MODEL_LABELS, type ModelKey, type ProbeResult } from '../../ai/capabilities';
+import { normalizeBaseUrl } from '../../data/secureStore';
+import { MODEL_LABELS, type ModelKey, type ProbeResult } from '../../ai/capabilities';
 import { useUi } from '../../state/store';
-import { DEFAULT_SETTINGS, type ApiConfig } from '../../lib/types';
-import { repo } from '../../data';
+import { DEFAULT_SETTINGS } from '../../lib/types';
+import { repo, cloudApi } from '../../data';
 import { Logo as BrandLogo } from '../../design/Logo';
 
 function Logo() {
@@ -99,6 +99,7 @@ function shortError(detail?: string): string {
 function KeyWizard() {
   const navigate = useNavigate();
   const setMockAi = useUi((s) => s.setMockAi);
+  const pushToast = useUi((s) => s.pushToast);
   const [step, setStep] = useState(0);
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -115,34 +116,55 @@ function KeyWizard() {
     tts: 'idle',
   });
 
-  const buildConfig = (): ApiConfig => ({
+  const vaultBody = () => ({
     baseUrl: normalizeBaseUrl(baseUrl),
-    models: { chat, transcribe: transcribeModel, image, tts },
-    chatDefaults: { reasoningEffort: effort, maxCompletionTokens: 4096 },
-    keyEncrypted: false,
+    models: {
+      chat,
+      ...(transcribeModel ? { transcribe: transcribeModel } : {}),
+      ...(image ? { image } : {}),
+      ...(tts ? { tts } : {}),
+    },
+    key: apiKey.trim(),
   });
 
   const finish = async () => {
-    await saveApiConfig(buildConfig());
-    await saveApiKey(apiKey.trim());
-    await repo.saveSettings(DEFAULT_SETTINGS);
-    setMockAi(false);
-    navigate('/onboarding/mic');
+    setTesting(true);
+    try {
+      await cloudApi.putCredentials(vaultBody());
+      await repo.saveSettings(DEFAULT_SETTINGS);
+      setMockAi(false);
+      navigate('/onboarding/mic');
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Could not save your keys.', 'error');
+      setTesting(false);
+    }
   };
 
+  // Store the keys server-side, then confirm the chat model responds.
   const runTest = async () => {
     setTesting(true);
-    const cfg = buildConfig();
-    await saveApiConfig(cfg);
-    await saveApiKey(apiKey.trim());
-    setStatuses({ chat: 'testing', transcribe: 'testing', image: 'testing', tts: 'testing' });
-    await Promise.all(
-      MODEL_KEYS.map(async (key) => {
-        const r = await probeModel(key, cfg);
-        setStatuses((s) => ({ ...s, [key]: r }));
-      }),
-    );
-    setTesting(false);
+    setStatuses({ chat: 'testing', transcribe: 'idle', image: 'idle', tts: 'idle' });
+    try {
+      await cloudApi.putCredentials(vaultBody());
+      const { text } = await cloudApi.chatComplete([
+        { role: 'user', content: 'Reply with the single word OK.' },
+      ]);
+      setStatuses({
+        chat: text ? { ok: true } : { ok: false, detail: 'No response' },
+        transcribe: 'idle',
+        image: 'idle',
+        tts: 'idle',
+      });
+    } catch (e) {
+      setStatuses({
+        chat: { ok: false, detail: e instanceof Error ? e.message : 'failed' },
+        transcribe: 'idle',
+        image: 'idle',
+        tts: 'idle',
+      });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const skipWithMock = () => {
@@ -294,14 +316,7 @@ function KeyWizard() {
 }
 
 function startMockProfile() {
-  // Ensure a config exists so guards pass; key is a placeholder, mock AI is on.
-  saveApiConfig({
-    baseUrl: 'https://demo.invalid/openai/v1',
-    models: { chat: 'gpt-5.4', transcribe: 'gpt-4o-transcribe', image: 'gpt-image-2', tts: 'gpt-4o-mini-tts' },
-    chatDefaults: { reasoningEffort: 'medium', maxCompletionTokens: 4096 },
-    keyEncrypted: false,
-  });
-  saveApiKey('demo-mode');
+  // Demo mode is gated by the dev `mockAi` flag in App's setup gate — no stored config needed.
 }
 
 function MicPriming() {

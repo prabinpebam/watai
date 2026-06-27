@@ -80,6 +80,28 @@ app.http('negotiate', {
   handler: methodDispatch({ POST: (c) => c.negotiate.negotiate }, invited),
 });
 
+// AI proxies (dictation / voice) — forward to Azure OpenAI with the user's vault key.
+app.http('ai-transcribe', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'ai/transcribe',
+  handler: methodDispatch({ POST: (c) => c.aiProxy.transcribe }, invited),
+});
+
+app.http('ai-speech', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'ai/speech',
+  handler: methodDispatch({ POST: (c) => c.aiProxy.speak }, invited),
+});
+
+app.http('ai-chat', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'ai/chat',
+  handler: methodDispatch({ POST: (c) => c.aiProxy.chat }, invited),
+});
+
 app.http('messages', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',

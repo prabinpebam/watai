@@ -85,6 +85,18 @@ describe('CredentialService.save', () => {
   it('rejects invalid input', async () => {
     await expect(ctx.svc.save('userA', { baseUrl: 'r', models: {} })).rejects.toBeInstanceOf(AppError);
   });
+
+  it('requires a key on first save but keeps the stored key (and tavily) when an update omits it', async () => {
+    await expect(ctx.svc.save('userB', { baseUrl: 'r', models: { chat: 'c' } })).rejects.toBeInstanceOf(AppError);
+
+    await ctx.svc.save('userA', input);
+    const status = await ctx.svc.save('userA', { baseUrl: 'my-res', models: { chat: 'gpt-6' } });
+
+    expect(status.keyHint).toBe('…1234'); // original key preserved
+    expect(status.models?.chat).toBe('gpt-6'); // model updated
+    expect(status.tavilyConfigured).toBe(true); // tavily preserved (not provided)
+    expect((await ctx.svc.getDecrypted('userA')).key).toBe('sk-abcdef-1234');
+  });
 });
 
 describe('CredentialService.getStatus / getDecrypted / delete', () => {

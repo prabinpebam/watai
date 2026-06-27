@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSettings } from './useSettings';
 import { Avatar, Button, Field, IconButton, Segmented, Spinner, Switch, TextAreaField } from '../../design/ui';
@@ -12,34 +12,10 @@ import { repo, cloudApi } from '../../data';
 import { kvGet } from '../../data/db';
 import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import { useMe } from '../../auth/access';
-import type { CredentialStatus, InviteRecord, MeInfo } from '../../data/cloud/types';
-import { isServerRunsEnabled, setServerRunsEnabled } from '../../lib/flags';
-import {
-  getApiConfig,
-  saveApiConfig,
-  saveApiKey,
-  getApiKey,
-  getTavilyKey,
-  saveTavilyKey,
-  normalizeBaseUrl,
-} from '../../data/secureStore';
-import { detectCapabilities, endpointKind, resetAgenticCache } from '../../ai/capabilities';
-import { isFoundryHost } from '../../ai/http';
-import {
-  indexFileIntoStore,
-  listStoreFiles,
-  removeFileFromStore,
-  deleteVectorStore,
-} from '../../ai/fileSearch';
-import { tavilyUsage, tavilySearch } from '../../ai/tavily';
+import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo } from '../../data/cloud/types';
+import { normalizeBaseUrl } from '../../data/secureStore';
 import { DEFAULT_SETTINGS } from '../../lib/types';
-import type {
-  ApiConfig,
-  CapabilityMatrix,
-  ImageRef,
-  Settings as SettingsModel,
-  TextScale,
-} from '../../lib/types';
+import type { ImageRef, Settings as SettingsModel, TextScale } from '../../lib/types';
 
 const APP_VERSION = '0.1.0';
 
@@ -197,13 +173,12 @@ export function Settings() {
   const [chatModel, setChatModel] = useState<string | null>(null);
   const [tavilyConfigured, setTavilyConfigured] = useState(false);
   useEffect(() => {
-    getApiConfig()
-      .then((c) => c && setChatModel(c.models.chat))
-      .catch(() => undefined);
-  }, []);
-  useEffect(() => {
-    getTavilyKey()
-      .then((k) => setTavilyConfigured(!!k))
+    cloudApi
+      .getCredentialStatus()
+      .then((s) => {
+        setChatModel(s.models?.chat ?? null);
+        setTavilyConfigured(!!s.tavilyConfigured);
+      })
       .catch(() => undefined);
   }, [section]);
 
@@ -561,168 +536,132 @@ function Stat({ value, label }: { value: string; label: string }) {
 
 function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
   const pushToast = useUi((s) => s.pushToast);
-  const [config, setConfig] = useState<ApiConfig | null>(null);
+  const [status, setStatus] = useState<CredentialStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [baseUrl, setBaseUrl] = useState('');
   const [key, setKey] = useState('');
-  const [serverRuns, setServerRuns] = useState(isServerRunsEnabled());
-  const [serverStatus, setServerStatus] = useState<CredentialStatus | null>(null);
-  const [pushingToServer, setPushingToServer] = useState(false);
+  const [models, setModels] = useState<{ chat: string; image?: string; transcribe?: string; tts?: string }>({
+    chat: '',
+  });
   const [tavilyKey, setTavilyKey] = useState('');
+  const [kbStore, setKbStore] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    getApiConfig().then(setConfig);
-    getApiKey().then((k) => setKey(k ?? ''));
-    getTavilyKey().then((k) => setTavilyKey(k ?? ''));
-    // Server credential status requires sign-in; treat any failure as "not configured / signed out".
     cloudApi
       .getCredentialStatus()
-      .then(setServerStatus)
-      .catch(() => setServerStatus(null));
+      .then((s) => {
+        setStatus(s);
+        setBaseUrl(s.baseUrl ?? '');
+        setModels({
+          chat: s.models?.chat ?? '',
+          image: s.models?.image,
+          transcribe: s.models?.transcribe,
+          tts: s.models?.tts,
+        });
+        setKbStore(s.knowledgeBaseVectorStoreId ?? '');
+      })
+      .catch(() => setStatus(null))
+      .finally(() => setLoading(false));
   }, []);
 
-  if (!config) return <p className="muted">Loading…</p>;
+  if (loading) return <p className="muted">Loading…</p>;
 
-  const update = (patch: Partial<ApiConfig>) => setConfig({ ...config, ...patch });
-  const updateModels = (patch: Partial<ApiConfig['models']>) =>
-    setConfig({ ...config, models: { ...config.models, ...patch } });
+  const updateModels = (patch: Partial<typeof models>) => setModels((m) => ({ ...m, ...patch }));
 
+  // Everything is stored encrypted in the server vault; the key is write-only (never returned), so
+  // leaving it blank on an update keeps the saved key.
   const save = async () => {
-    const next = { ...config, baseUrl: normalizeBaseUrl(config.baseUrl) };
-    await saveApiConfig(next);
-    await saveApiKey(key.trim());
-    ctx.onModelSaved(next.models.chat);
-    pushToast('Saved', 'success');
-  };
-
-  // Encrypt + store the current endpoint/models/key in the server vault (write-only; the key is
-  // never returned). Required before server generation can run.
-  const saveToServer = async () => {
-    if (!key.trim()) {
-      pushToast('Enter an API key first.', 'error');
-      return;
-    }
-    setPushingToServer(true);
+    if (!baseUrl.trim()) return pushToast('Enter your endpoint.', 'error');
+    if (!models.chat.trim()) return pushToast('Enter a chat model.', 'error');
+    if (!status?.configured && !key.trim()) return pushToast('Enter your API key.', 'error');
+    setSaving(true);
     try {
-      const tavily = tavilyKey.trim();
-      const status = await cloudApi.putCredentials({
-        baseUrl: normalizeBaseUrl(config.baseUrl),
+      const next = await cloudApi.putCredentials({
+        baseUrl: normalizeBaseUrl(baseUrl),
         models: {
-          chat: config.models.chat,
-          ...(config.models.image ? { image: config.models.image } : {}),
-          ...(config.models.transcribe ? { transcribe: config.models.transcribe } : {}),
-          ...(config.models.tts ? { tts: config.models.tts } : {}),
+          chat: models.chat.trim(),
+          ...(models.image?.trim() ? { image: models.image.trim() } : {}),
+          ...(models.transcribe?.trim() ? { transcribe: models.transcribe.trim() } : {}),
+          ...(models.tts?.trim() ? { tts: models.tts.trim() } : {}),
         },
-        key: key.trim(),
-        ...(tavily ? { tavilyKey: tavily } : {}),
-        ...(config.tools?.vectorStoreId
-          ? { knowledgeBaseVectorStoreId: config.tools.vectorStoreId }
-          : {}),
+        ...(key.trim() ? { key: key.trim() } : {}),
+        ...(tavilyKey.trim() ? { tavilyKey: tavilyKey.trim() } : {}),
+        ...(kbStore.trim() ? { knowledgeBaseVectorStoreId: kbStore.trim() } : {}),
       });
-      await saveTavilyKey(tavily); // keep the local web-search key in sync with the vault
-      // Also persist the config locally so the capability probe (for server-run tools) + the
-      // in-browser path have the endpoint/key without a separate "Save changes".
-      await saveApiConfig({ ...config, baseUrl: normalizeBaseUrl(config.baseUrl) });
-      await saveApiKey(key.trim());
-      setServerStatus(status);
-      pushToast('Keys stored securely on the server', 'success');
+      setStatus(next);
+      setKey('');
+      setTavilyKey('');
+      ctx.onModelSaved(next.models?.chat ?? models.chat);
+      pushToast('Saved', 'success');
     } catch (e) {
-      pushToast(e instanceof Error ? e.message : 'Could not store keys on the server.', 'error');
+      pushToast(e instanceof Error ? e.message : 'Could not save.', 'error');
     } finally {
-      setPushingToServer(false);
+      setSaving(false);
     }
-  };
-
-  const onToggleServerRuns = (v: boolean) => {
-    setServerRuns(v);
-    setServerRunsEnabled(v);
-    pushToast(v ? 'Server generation on' : 'Server generation off');
   };
 
   return (
     <>
-      <div className="settings-card" style={{ padding: 'var(--space-5)', marginBottom: 'var(--space-5)' }}>
-        <div className="col" style={{ gap: 'var(--space-4)' }}>
-          <div className="setting-row">
-            <div className="setting-row__body">
-              <div className="setting-row__title">Generate on the server (preview)</div>
-              <div className="setting-row__sub">
-                Run generation in the cloud so a reply finishes and is saved even if you close the app
-                or lock your phone. Requires cloud sign-in and keys stored on the server below.
-              </div>
-            </div>
-            <Switch
-              checked={serverRuns}
-              onChange={onToggleServerRuns}
-              label="Server generation"
-              disabled={!serverStatus?.configured}
-            />
-          </div>
-          {!serverStatus?.configured && (
-            <p className="muted">Store your keys on the server below to turn this on.</p>
-          )}
-          <Field
-            label="Web search key (Tavily) — optional"
-            type="password"
-            hint="Stored encrypted, for server-side web search. Leave blank if you don't use it."
-            value={tavilyKey}
-            onChange={(e) => setTavilyKey(e.target.value)}
-            autoComplete="off"
-          />
-          <div className="setting-row">
-            <div className="setting-row__body">
-              <div className="setting-row__title">Server keys</div>
-              <div className="setting-row__sub">
-                {serverStatus?.configured
-                  ? `Stored · key ••${serverStatus.keyHint ?? ''}${
-                      serverStatus.tavilyConfigured ? ` · Tavily ••${serverStatus.tavilyHint ?? ''}` : ''
-                    }`
-                  : 'Not stored on the server yet. Uses the endpoint, models, and key below.'}
-              </div>
-            </div>
-            <Button variant="secondary" onClick={saveToServer} loading={pushingToServer}>
-              {serverStatus?.configured ? 'Update server keys' : 'Store on server'}
-            </Button>
-          </div>
-        </div>
-      </div>
-
       <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
         <div className="col" style={{ gap: 'var(--space-5)' }}>
           <Field
             label="Resource name or base URL"
             hint="Azure AI Foundry resource name or a full base URL."
-            value={config.baseUrl}
-            onChange={(e) => update({ baseUrl: e.target.value })}
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
             autoCapitalize="off"
             spellCheck={false}
           />
-          <Field label="API key" type="password" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" />
-          <Field label="Chat model" value={config.models.chat} onChange={(e) => updateModels({ chat: e.target.value })} />
+          <Field
+            label="API key"
+            type="password"
+            placeholder={status?.configured ? `Saved ·••${status.keyHint ?? ''} — leave blank to keep` : ''}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            autoComplete="off"
+          />
+          <Field label="Chat model" value={models.chat} onChange={(e) => updateModels({ chat: e.target.value })} />
           <Field
             label="Transcription model"
-            value={config.models.transcribe}
+            value={models.transcribe ?? ''}
             onChange={(e) => updateModels({ transcribe: e.target.value })}
           />
-          <Field label="Image model" value={config.models.image} onChange={(e) => updateModels({ image: e.target.value })} />
-          <Field label="TTS model" value={config.models.tts ?? ''} onChange={(e) => updateModels({ tts: e.target.value })} />
-          <div className="field">
-            <span className="field__label">Reasoning effort</span>
-            <Segmented
-              value={config.chatDefaults.reasoningEffort ?? 'medium'}
-              onChange={(v) => update({ chatDefaults: { ...config.chatDefaults, reasoningEffort: v } })}
-              options={[
-                { value: 'minimal', label: 'Minimal' },
-                { value: 'low', label: 'Low' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'high', label: 'High' },
-              ]}
-            />
-          </div>
+          <Field
+            label="Image model"
+            value={models.image ?? ''}
+            onChange={(e) => updateModels({ image: e.target.value })}
+          />
+          <Field
+            label="TTS model"
+            value={models.tts ?? ''}
+            onChange={(e) => updateModels({ tts: e.target.value })}
+          />
+          <Field
+            label="Web search key (Tavily) — optional"
+            type="password"
+            placeholder={
+              status?.tavilyConfigured ? `Saved ·••${status.tavilyHint ?? ''} — leave blank to keep` : ''
+            }
+            hint="Enables server-side web search."
+            value={tavilyKey}
+            onChange={(e) => setTavilyKey(e.target.value)}
+            autoComplete="off"
+          />
+          <Field
+            label="Account knowledge base (vector store id) — optional"
+            hint="Searched as a fallback alongside each chat's own files."
+            value={kbStore}
+            onChange={(e) => setKbStore(e.target.value)}
+            autoCapitalize="off"
+            spellCheck={false}
+          />
         </div>
       </div>
 
       <div className="row" style={{ marginTop: 'var(--space-6)', justifyContent: 'flex-end' }}>
-        <Button variant="primary" onClick={save}>
-          Save changes
+        <Button variant="primary" onClick={save} loading={saving}>
+          Save
         </Button>
       </div>
     </>
@@ -806,204 +745,17 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
   const { settings, setSettings } = ctx;
   const pushToast = useUi((s) => s.pushToast);
   const t = settings.tools ?? DEFAULT_SETTINGS.tools!;
-  const [caps, setCaps] = useState<CapabilityMatrix | null>(null);
-  const [config, setConfig] = useState<ApiConfig | null>(null);
-  const [detecting, setDetecting] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [busyFileId, setBusyFileId] = useState<string | null>(null);
-  const [tavilyKeyInput, setTavilyKeyInput] = useState('');
-  const [tavilyHasKey, setTavilyHasKey] = useState(false);
-  const [tavilyUsageData, setTavilyUsageData] = useState<{ used: number; limit: number | null } | null>(null);
-  const [tavilyBusy, setTavilyBusy] = useState(false);
-  const [tavilyTesting, setTavilyTesting] = useState(false);
-
-  const kbFiles = config?.tools?.kbFiles ?? [];
-  const mapStatus = (s: string): 'ready' | 'indexing' | 'failed' =>
-    s === 'completed' ? 'ready' : s === 'failed' || s === 'cancelled' ? 'failed' : 'indexing';
+  const [caps, setCaps] = useState<CredentialCapabilities | null>(null);
 
   useEffect(() => {
-    getApiConfig().then((c) => {
-      setConfig(c);
-      if (c) detectCapabilities(c).then(setCaps).catch(() => undefined);
-      // Reconcile the local file registry with the live store's indexing status.
-      const storeId = c?.tools?.vectorStoreId;
-      if (c && storeId && (c.tools?.kbFiles?.length ?? 0) > 0) {
-        listStoreFiles(storeId)
-          .then((live) => {
-            const byId = new Map(live.map((f) => [f.id, mapStatus(f.status)]));
-            const merged = (c.tools?.kbFiles ?? []).map((f) =>
-              byId.has(f.id) ? { ...f, status: byId.get(f.id)! } : f,
-            );
-            const next: ApiConfig = { ...c, tools: { ...c.tools, kbFiles: merged } };
-            setConfig(next);
-            void saveApiConfig(next);
-          })
-          .catch(() => undefined);
-      }
-    });
+    cloudApi
+      .getCredentialStatus()
+      .then((s) => setCaps(s.capabilities ?? null))
+      .catch(() => undefined);
   }, []);
 
   const setTool = (patch: Partial<NonNullable<SettingsModel['tools']>>) =>
     setSettings({ ...settings, tools: { ...t, ...patch } });
-
-  const detect = async () => {
-    if (!config) return;
-    setDetecting(true);
-    resetAgenticCache();
-    try {
-      setCaps(await detectCapabilities(config));
-      pushToast('Capabilities detected', 'success');
-    } finally {
-      setDetecting(false);
-    }
-  };
-
-  // Load the Tavily key presence + usage on open.
-  useEffect(() => {
-    let live = true;
-    getTavilyKey().then(async (k) => {
-      if (!live) return;
-      setTavilyHasKey(!!k);
-      if (k) {
-        try {
-          const u = await tavilyUsage();
-          if (live) setTavilyUsageData({ used: u.key?.usage ?? 0, limit: u.key?.limit ?? null });
-        } catch {
-          /* usage unavailable */
-        }
-      }
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  const refreshTavilyUsage = async () => {
-    setTavilyBusy(true);
-    try {
-      const u = await tavilyUsage();
-      setTavilyUsageData({ used: u.key?.usage ?? 0, limit: u.key?.limit ?? null });
-    } catch (err) {
-      setTavilyUsageData(null);
-      pushToast(err instanceof Error ? err.message : 'Could not load usage', 'error');
-    } finally {
-      setTavilyBusy(false);
-    }
-  };
-
-  const saveTavily = async () => {
-    const k = tavilyKeyInput.trim();
-    if (!k) return;
-    await saveTavilyKey(k);
-    setTavilyHasKey(true);
-    setTavilyKeyInput('');
-    pushToast('Tavily key saved', 'success');
-    void refreshTavilyUsage();
-  };
-
-  const removeTavily = async () => {
-    await saveTavilyKey('');
-    setTavilyHasKey(false);
-    setTavilyUsageData(null);
-    pushToast('Tavily key removed', 'info');
-  };
-
-  // The Tavily key IS the web-search switch. Toggling on without a key points the user at the
-  // key field below; toggling off removes the key (with confirmation) so there is one source of truth.
-  const onWebSearchToggle = async (v: boolean) => {
-    if (v) {
-      if (!tavilyHasKey) pushToast('Paste your Tavily key below to turn on web search', 'info');
-      return;
-    }
-    if (!tavilyHasKey) return;
-    const ok = await useUi.getState().requestConfirm({
-      title: 'Turn off web search',
-      message: 'This removes your saved Tavily key. You can add it again anytime.',
-      confirmLabel: 'Turn off',
-      danger: true,
-    });
-    if (ok) await removeTavily();
-  };
-
-  const testTavily = async () => {
-    setTavilyTesting(true);
-    try {
-      const r = await tavilySearch('Tavily connectivity test');
-      pushToast(`Web search works — ${r.results.length} results returned`, 'success');
-      void refreshTavilyUsage();
-    } catch (e) {
-      pushToast(e instanceof Error ? e.message : 'Search test failed', 'error');
-    } finally {
-      setTavilyTesting(false);
-    }
-  };
-
-  const foundry = config ? isFoundryHost(config.baseUrl) || endpointKind(config) === 'foundry-project' : false;
-  const projectHint = 'Needs an Azure AI Foundry endpoint.';
-
-  const onUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || !config) return;
-    setUploading(true);
-    try {
-      const { vectorStoreId, fileId, indexed } = await indexFileIntoStore(
-        file,
-        file.name,
-        config.tools?.vectorStoreId,
-      );
-      const status: 'ready' | 'indexing' = indexed ? 'ready' : 'indexing';
-      const entry = { id: fileId, name: file.name, status };
-      const files = [...(config.tools?.kbFiles ?? []).filter((f) => f.id !== fileId), entry];
-      const next: ApiConfig = { ...config, tools: { ...config.tools, vectorStoreId, kbFiles: files } };
-      setConfig(next);
-      await saveApiConfig(next);
-      pushToast(indexed ? 'File indexed' : 'Uploaded; indexing continues', indexed ? 'success' : 'info');
-    } catch (err) {
-      pushToast(err instanceof Error ? err.message : 'Upload failed', 'error');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const onRemoveFile = async (fileId: string) => {
-    const storeId = config?.tools?.vectorStoreId;
-    if (!config || !storeId) return;
-    setBusyFileId(fileId);
-    try {
-      await removeFileFromStore(storeId, fileId);
-      const files = (config.tools?.kbFiles ?? []).filter((f) => f.id !== fileId);
-      const next: ApiConfig = { ...config, tools: { ...config.tools, kbFiles: files } };
-      setConfig(next);
-      await saveApiConfig(next);
-      pushToast('File removed', 'success');
-    } catch (err) {
-      pushToast(err instanceof Error ? err.message : 'Could not remove file', 'error');
-    } finally {
-      setBusyFileId(null);
-    }
-  };
-
-  const onClearKb = async () => {
-    const storeId = config?.tools?.vectorStoreId;
-    if (!config || !storeId) return;
-    const ok = await useUi.getState().requestConfirm({
-      title: 'Clear knowledge base',
-      message: 'Delete all indexed documents? The assistant will no longer be able to search them.',
-      confirmLabel: 'Clear',
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await deleteVectorStore(storeId);
-    } catch {
-      /* store may already be gone; clear local state regardless */
-    }
-    const next: ApiConfig = { ...config, tools: { ...config.tools, vectorStoreId: undefined, kbFiles: [] } };
-    setConfig(next);
-    await saveApiConfig(next);
-    pushToast('Knowledge base cleared', 'success');
-  };
 
   return (
     <>
@@ -1012,7 +764,7 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
           <div className="setting-row__body">
             <div className="setting-row__title">Agentic mode</div>
             <div className="setting-row__sub">
-              Let the assistant use tools — search, code, images, and your saved data.
+              Let the assistant use tools — search, code, images, and your files.
             </div>
           </div>
           <Switch checked={t.agenticMode} onChange={(v) => setTool({ agenticMode: v })} label="Agentic mode" />
@@ -1025,7 +777,7 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
           sub="Create images from the conversation."
           checked={t.imageAgent}
           onChange={(v) => setTool({ imageAgent: v })}
-          available
+          available={caps?.image ?? true}
         />
         <ToolToggle
           label="Code interpreter"
@@ -1033,189 +785,30 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
           checked={t.codeInterpreter}
           onChange={(v) => setTool({ codeInterpreter: v })}
           available={caps?.codeInterpreter ?? false}
-          hint="Needs a Responses-capable endpoint."
+          hint="Needs an Azure AI Foundry endpoint."
         />
         <ToolToggle
           label="Web search"
-          sub="Search the web and cite sources. Your Tavily key is the on/off switch."
-          checked={tavilyHasKey}
-          onChange={(v) => void onWebSearchToggle(v)}
+          sub="Search the web and cite sources."
+          checked={caps?.webSearch ?? false}
+          onChange={() => pushToast('Manage the web-search key in Models & keys', 'info')}
           available
         />
         <ToolToggle
           label="File search"
-          sub="Answer from your uploaded documents."
+          sub="Answer from each chat's uploaded documents."
           checked={t.fileSearch}
           onChange={(v) => setTool({ fileSearch: v })}
           available={caps?.fileSearch ?? false}
-          hint={projectHint}
+          hint="Needs an Azure AI Foundry endpoint."
         />
       </div>
 
-      <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Web search (Tavily)</div>
-            <div className="setting-row__sub">
-              {tavilyHasKey
-                ? 'Your key is saved. The assistant can search the web and cite sources.'
-                : 'Add a Tavily API key to enable web search.'}
-            </div>
-          </div>
-          {tavilyHasKey && (
-            <button type="button" className="btn btn--ghost btn--danger" onClick={removeTavily}>
-              Remove key
-            </button>
-          )}
-        </div>
-
-        <div className="setting-row">
-          <input
-            className="input grow"
-            type="password"
-            autoComplete="off"
-            placeholder={tavilyHasKey ? '•••••••••••• (saved — paste to replace)' : 'tvly-...'}
-            value={tavilyKeyInput}
-            onChange={(e) => setTavilyKeyInput(e.target.value)}
-            aria-label="Tavily API key"
-          />
-          <Button onClick={saveTavily} disabled={!tavilyKeyInput.trim()}>
-            Save
-          </Button>
-        </div>
-
-        <div className="settings-note">
-          <p>
-            No key?{' '}
-            <a href="https://app.tavily.com" target="_blank" rel="noreferrer noopener">
-              Get a free one at app.tavily.com
-            </a>{' '}
-            — sign up, copy your key (starts with <code>tvly-</code>), and paste it above.
-          </p>
-          <p>Web searches send your query to Tavily.</p>
-        </div>
-
-        {tavilyHasKey && (
-          <div className="setting-row">
-            <div className="setting-row__body">
-              <div className="setting-row__title">Usage</div>
-              <div className="setting-row__sub">
-                {tavilyUsageData
-                  ? `${tavilyUsageData.used}${
-                      tavilyUsageData.limit != null ? ` / ${tavilyUsageData.limit}` : ''
-                    } credits used this billing cycle`
-                  : 'Usage unavailable.'}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn--outline"
-              onClick={testTavily}
-              disabled={tavilyTesting}
-            >
-              {tavilyTesting ? <Spinner size="sm" /> : null}
-              <span>Test search</span>
-            </button>
-            <IconButton
-              name="refresh"
-              label="Refresh usage"
-              size={18}
-              disabled={tavilyBusy}
-              onClick={refreshTavilyUsage}
-            />
-          </div>
-        )}
-      </div>
-
-      {caps?.fileSearch && (
-        <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
-          <div className="setting-row">
-            <div className="setting-row__body">
-              <div className="setting-row__title">Knowledge base</div>
-              <div className="setting-row__sub">
-                {kbFiles.length
-                  ? 'The assistant can search and cite these documents.'
-                  : 'Upload documents the assistant can search and cite.'}
-              </div>
-            </div>
-            <label className="btn btn--outline" aria-disabled={uploading}>
-              {uploading ? (
-                <Spinner size="sm" />
-              ) : (
-                <Icon name="paperclip" size={18} />
-              )}
-              <span>{uploading ? 'Indexing…' : 'Add file'}</span>
-              <input
-                type="file"
-                hidden
-                disabled={uploading}
-                onChange={onUpload}
-                accept=".pdf,.txt,.md,.markdown,.docx,.json,.csv"
-              />
-            </label>
-          </div>
-
-          {kbFiles.length > 0 && (
-            <ul className="kb-list">
-              {kbFiles.map((f) => (
-                <li key={f.id} className="kb-file">
-                  <Icon name="paperclip" size={15} className="kb-file__icon" />
-                  <span className="kb-file__name" title={f.name}>
-                    {f.name}
-                  </span>
-                  <span className={`kb-file__status kb-file__status--${f.status}`}>
-                    {f.status === 'ready' ? 'Ready' : f.status === 'failed' ? 'Failed' : 'Indexing…'}
-                  </span>
-                  <IconButton
-                    name="trash"
-                    label={`Remove ${f.name}`}
-                    size={16}
-                    disabled={busyFileId === f.id}
-                    onClick={() => onRemoveFile(f.id)}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {kbFiles.length > 0 && (
-            <div className="setting-row">
-              <div className="setting-row__body">
-                <div className="setting-row__sub">
-                  {kbFiles.length} {kbFiles.length === 1 ? 'document' : 'documents'} indexed.
-                </div>
-              </div>
-              <button type="button" className="btn btn--ghost btn--danger" onClick={onClearKb}>
-                Clear all
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Endpoint</div>
-            <div className="setting-row__sub">
-              {foundry
-                ? 'Azure AI Foundry — the full tool suite is available.'
-                : 'Azure OpenAI key — function calling, code, and images.'}
-            </div>
-          </div>
-          <div className="setting-row__value setting-row__value--strong">
-            {foundry ? 'Foundry' : 'Standard'}
-          </div>
-        </div>
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Detect capabilities</div>
-            <div className="setting-row__sub">Re-probe which tools this endpoint supports.</div>
-          </div>
-          <Button variant="outline" icon="refresh" loading={detecting} onClick={detect}>
-            Detect
-          </Button>
-        </div>
+      <div className="settings-note" style={{ marginTop: 'var(--space-5)' }}>
+        <p>
+          Your endpoint, keys, and account knowledge base live in <strong>Models &amp; keys</strong>. To
+          give a single chat its own documents, open that chat&apos;s <strong>Files</strong> panel.
+        </p>
       </div>
     </>
   );

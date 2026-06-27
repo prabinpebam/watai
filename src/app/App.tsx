@@ -10,9 +10,9 @@ import { VoiceMode } from '../features/voice/VoiceMode';
 import { IconButton, Spinner, Button } from '../design/ui';
 import { useIsExpanded } from '../lib/hooks';
 import { useUi } from '../state/store';
-import { repo, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync } from '../data';
+import { repo, cloudApi, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync } from '../data';
 import { restoreInterruptedRuns } from '../features/chat/runStore';
-import { hasValidConfig } from '../data/secureStore';
+import { clearApiCredentials } from '../data/secureStore';
 import { isSignedIn, signOut } from '../auth/cloudAuth';
 import { loadMe, cachedMe } from '../auth/access';
 
@@ -81,7 +81,14 @@ function useSetupState(): SetupState {
           return;
         }
       }
-      const ok = devMock || (await hasValidConfig());
+      // Credentials live in the server vault now; wipe anything a pre-cloud build stored locally.
+      void clearApiCredentials();
+      const ok =
+        devMock ||
+        (await cloudApi
+          .getCredentialStatus()
+          .then((s) => s.configured)
+          .catch(() => false));
       if (live) setState(ok ? 'ready' : 'no-config');
     })();
     return () => {

@@ -2,15 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { IconButton, Spinner } from '../../design/ui';
 import { startRecording, type Recorder } from '../../lib/audio';
-import { transcribe } from '../../ai/transcribe';
-import { streamChat, type ChatMessage } from '../../ai/chat';
-import { synthesize } from '../../ai/tts';
 import { mockStreamChat, mockTranscribe } from '../../ai/mockAi';
-import { getApiConfig } from '../../data/secureStore';
-import { repo } from '../../data';
+import { cloudApi, repo } from '../../data';
+import { fileToBase64, base64ToBlob } from '../../lib/files';
 import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
-import { DEFAULT_CHAT_MODEL } from '../chat/useChat';
+
+type VoiceTurn = { role: 'user' | 'assistant'; content: string };
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'muted' | 'error';
 
@@ -31,7 +29,7 @@ export function VoiceMode() {
   const [caption, setCaption] = useState('');
   const recRef = useRef<Recorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const historyRef = useRef<ChatMessage[]>([]);
+  const historyRef = useRef<VoiceTurn[]>([]);
 
   const exit = useCallback(() => {
     recRef.current?.cancel();
@@ -49,8 +47,12 @@ export function VoiceMode() {
         return;
       }
       try {
-        const blob = await synthesize({ input: text.slice(0, 4000) });
-        const url = URL.createObjectURL(blob);
+        const { audioBase64, mime } = await cloudApi.synthesizeSpeech({ input: text.slice(0, 4000) });
+        if (!audioBase64) {
+          setPhase('idle');
+          return;
+        }
+        const url = URL.createObjectURL(base64ToBlob(audioBase64, mime));
         const audio = new Audio(url);
         audioRef.current = audio;
         audio.onended = () => {
@@ -68,21 +70,24 @@ export function VoiceMode() {
   const think = useCallback(
     async (userText: string) => {
       setPhase('thinking');
-      const config = await getApiConfig();
-      const model = config?.models.chat ?? DEFAULT_CHAT_MODEL;
       historyRef.current.push({ role: 'user', content: userText });
 
       let acc = '';
-      const stream = mockAi
-        ? mockStreamChat({ messages: historyRef.current, model })
-        : streamChat({ messages: historyRef.current, model });
-      for await (const ev of stream) {
-        if (ev.type === 'delta' && ev.textDelta) {
-          acc += ev.textDelta;
+      if (mockAi) {
+        for await (const ev of mockStreamChat({ messages: historyRef.current, model: 'mock' })) {
+          if (ev.type === 'delta' && ev.textDelta) {
+            acc += ev.textDelta;
+            setCaption(acc);
+          }
+        }
+      } else {
+        try {
+          const { text } = await cloudApi.chatComplete(historyRef.current);
+          acc = text;
           setCaption(acc);
-        } else if (ev.type === 'error') {
+        } catch (e) {
           setPhase('error');
-          setCaption(ev.error?.message ?? 'Error');
+          setCaption(e instanceof Error ? e.message : 'Error');
           return;
         }
       }
@@ -103,7 +108,6 @@ export function VoiceMode() {
           threadId,
           role: 'assistant',
           content: acc,
-          model,
           status: 'complete',
           createdAt: new Date().toISOString(),
         });
@@ -120,7 +124,12 @@ export function VoiceMode() {
     setPhase('thinking');
     try {
       const blob = await rec.stop();
-      const { text } = mockAi ? await mockTranscribe() : await transcribe({ file: blob });
+      const { text } = mockAi
+        ? await mockTranscribe()
+        : await cloudApi.transcribeAudio({
+            audioBase64: await fileToBase64(blob),
+            mime: blob.type || 'audio/webm',
+          });
       if (!text.trim()) {
         setPhase('idle');
         return;

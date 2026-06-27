@@ -16,7 +16,8 @@ const credentialsInputSchema = z
   .object({
     baseUrl: z.string().min(1).max(300),
     models: modelsSchema,
-    key: z.string().min(1).max(400),
+    /** Optional on update: when omitted, the server keeps the already-stored key. */
+    key: z.string().max(400).optional(),
     tavilyKey: z.string().max(400).optional(),
     /** Optional account-wide knowledge base store, searched as a fallback alongside thread files. */
     knowledgeBaseVectorStoreId: z.string().max(100).optional(),
@@ -55,7 +56,7 @@ export function parseCredentialsInput(input: unknown): CredentialsInput {
   return {
     ...parsed,
     baseUrl: normalizeBaseUrl(parsed.baseUrl),
-    key: parsed.key.trim(),
+    key: parsed.key?.trim() || undefined,
     tavilyKey: parsed.tavilyKey?.trim() || undefined,
     knowledgeBaseVectorStoreId: parsed.knowledgeBaseVectorStoreId?.trim() || undefined,
   };

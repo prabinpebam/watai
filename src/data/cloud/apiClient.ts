@@ -280,6 +280,24 @@ export class WataiApiClient implements CloudApi {
     );
   }
 
+  // --- AI proxies (dictation / voice run through the server vault key) ---
+  transcribeAudio(body: {
+    audioBase64: string;
+    mime?: string;
+    language?: string;
+    prompt?: string;
+  }): Promise<{ text: string }> {
+    return this.request('POST', '/ai/transcribe', body);
+  }
+
+  synthesizeSpeech(body: { input: string; voice?: string }): Promise<{ audioBase64: string; mime: string }> {
+    return this.request('POST', '/ai/speech', body);
+  }
+
+  chatComplete(messages: Array<{ role: string; content: string }>): Promise<{ text: string }> {
+    return this.request('POST', '/ai/chat', { messages });
+  }
+
   // --- access / invites ---
   getMe(): Promise<MeInfo> {
     return this.request('GET', '/me');
@@ -353,6 +371,14 @@ export interface CloudApi {
     body: { name: string; mime: string; dataBase64: string },
   ): Promise<ThreadFileRecord>;
   deleteThreadFile(threadId: string, fileId: string): Promise<void>;
+  transcribeAudio(body: {
+    audioBase64: string;
+    mime?: string;
+    language?: string;
+    prompt?: string;
+  }): Promise<{ text: string }>;
+  synthesizeSpeech(body: { input: string; voice?: string }): Promise<{ audioBase64: string; mime: string }>;
+  chatComplete(messages: Array<{ role: string; content: string }>): Promise<{ text: string }>;
   getMe(): Promise<MeInfo>;
   listInvites(): Promise<InviteRecord[]>;
   createInvite(email: string): Promise<InviteRecord>;

@@ -387,6 +387,15 @@ class FakeCloud implements CloudApi {
     return { fileId: 'f1', name: body.name, bytes: 1, status: 'ready' as const, createdAt: this.now() };
   }
   async deleteThreadFile() {}
+  async transcribeAudio() {
+    return { text: '' };
+  }
+  async synthesizeSpeech() {
+    return { audioBase64: '', mime: 'audio/mpeg' };
+  }
+  async chatComplete() {
+    return { text: '' };
+  }
 }
 
 function setup(sync = true) {

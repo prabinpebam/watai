@@ -43,8 +43,8 @@ describe('parseCredentialsInput', () => {
     expect(parseCredentialsInput({ ...ok, tavilyKey: 'tvly-9' }).tavilyKey).toBe('tvly-9');
   });
 
-  it('requires a key and a chat deployment', () => {
-    expect(code(() => parseCredentialsInput({ baseUrl: 'r', models: { chat: 'c' } }))).toBe('validation');
+  it('treats the key as optional at parse (server keeps the stored key on update), requires a chat model', () => {
+    expect(parseCredentialsInput({ baseUrl: 'r', models: { chat: 'c' } }).key).toBeUndefined();
     expect(code(() => parseCredentialsInput({ baseUrl: 'r', models: {}, key: 'k' }))).toBe('validation');
   });
 

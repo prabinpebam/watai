@@ -1,9 +1,23 @@
 import { AppError } from '../domain/errors';
 import { parseCredentialsInput, type ModelDeployments } from '../domain/credentials';
 import { sealSecret, openSecret, keyHint } from '../domain/crypto';
+import { isFoundryHost } from '../ai/http';
 import type { CredentialRecord, CredentialStore } from '../ports/credentialStore';
 import type { KeyWrapper } from '../ports/keyWrapper';
 import type { ServiceClock } from './threadService';
+
+/** What the configured endpoint + models can do, derived from the saved config (no live probe).
+ *  Foundry hosts serve the agentic Responses suite; function tools gate on their own config. */
+export interface CredentialCapabilities {
+  chat: boolean;
+  image: boolean;
+  transcribe: boolean;
+  tts: boolean;
+  agentic: boolean;
+  codeInterpreter: boolean;
+  fileSearch: boolean;
+  webSearch: boolean;
+}
 
 /** Non-secret status returned to the client — NEVER includes ciphertext or any plaintext key. */
 export interface CredentialStatus {
@@ -14,6 +28,7 @@ export interface CredentialStatus {
   tavilyConfigured: boolean;
   tavilyHint?: string | null;
   knowledgeBaseVectorStoreId?: string | null;
+  capabilities?: CredentialCapabilities;
 }
 
 /** Decrypted credentials — INTERNAL ONLY (the run engine). Never serialized to a client. */
@@ -42,16 +57,34 @@ export class CredentialService {
     const parsed = parseCredentialsInput(input);
     const ts = this.clock.now();
     const existing = await this.store.get(userId);
+    if (!parsed.key && !existing) {
+      throw new AppError('validation', 'An API key is required.');
+    }
+    // Partial update: an omitted key/tavily/KB keeps whatever is already stored, so editing a
+    // model never forces the (write-only) key to be re-entered.
     const record: CredentialRecord = {
       id: 'cred',
       userId,
       baseUrl: parsed.baseUrl,
       models: parsed.models,
-      keyHint: keyHint(parsed.key),
-      aoai: await sealSecret(parsed.key, this.wrapper),
-      tavily: parsed.tavilyKey ? await sealSecret(parsed.tavilyKey, this.wrapper) : null,
-      tavilyHint: parsed.tavilyKey ? keyHint(parsed.tavilyKey) : null,
-      knowledgeBaseVectorStoreId: parsed.knowledgeBaseVectorStoreId ?? null,
+      keyHint: parsed.key ? keyHint(parsed.key) : existing!.keyHint,
+      aoai: parsed.key ? await sealSecret(parsed.key, this.wrapper) : existing!.aoai,
+      tavily:
+        parsed.tavilyKey !== undefined
+          ? parsed.tavilyKey
+            ? await sealSecret(parsed.tavilyKey, this.wrapper)
+            : null
+          : (existing?.tavily ?? null),
+      tavilyHint:
+        parsed.tavilyKey !== undefined
+          ? parsed.tavilyKey
+            ? keyHint(parsed.tavilyKey)
+            : null
+          : (existing?.tavilyHint ?? null),
+      knowledgeBaseVectorStoreId:
+        parsed.knowledgeBaseVectorStoreId !== undefined
+          ? parsed.knowledgeBaseVectorStoreId
+          : (existing?.knowledgeBaseVectorStoreId ?? null),
       createdAt: existing?.createdAt ?? ts,
       updatedAt: ts,
     };
@@ -81,6 +114,7 @@ export class CredentialService {
   }
 
   private toStatus(rec: CredentialRecord): CredentialStatus {
+    const foundry = isFoundryHost(rec.baseUrl);
     return {
       configured: true,
       baseUrl: rec.baseUrl,
@@ -89,6 +123,16 @@ export class CredentialService {
       tavilyConfigured: !!rec.tavily,
       tavilyHint: rec.tavilyHint ?? null,
       knowledgeBaseVectorStoreId: rec.knowledgeBaseVectorStoreId ?? null,
+      capabilities: {
+        chat: !!rec.models.chat,
+        image: !!rec.models.image,
+        transcribe: !!rec.models.transcribe,
+        tts: !!rec.models.tts,
+        agentic: foundry,
+        codeInterpreter: foundry,
+        fileSearch: foundry,
+        webSearch: !!rec.tavily,
+      },
     };
   }
 }

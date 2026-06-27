@@ -3,8 +3,9 @@ import { IconButton, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { ToolsMenu } from './ToolsMenu';
 import { startRecording, type Recorder } from '../../lib/audio';
-import { transcribe } from '../../ai/transcribe';
 import { mockTranscribe } from '../../ai/mockAi';
+import { cloudApi } from '../../data';
+import { fileToBase64 } from '../../lib/files';
 import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
 
@@ -108,7 +109,12 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
       setTranscribing(true);
       try {
         const blob = await rec.stop();
-        const { text } = mockAi ? await mockTranscribe() : await transcribe({ file: blob });
+        const { text } = mockAi
+          ? await mockTranscribe()
+          : await cloudApi.transcribeAudio({
+              audioBase64: await fileToBase64(blob),
+              mime: blob.type || 'audio/webm',
+            });
         onChange(value ? `${value} ${text}` : text);
         taRef.current?.focus();
       } catch (e) {

@@ -6,7 +6,6 @@ import { IconButton } from '../../design/ui';
 import { useIsExpanded } from '../../lib/hooks';
 import { useUi } from '../../state/store';
 import { repo } from '../../data';
-import { isServerRunsEnabled } from '../../lib/flags';
 import { newId } from '../../lib/ids';
 
 interface ChatScreenProps {
@@ -50,9 +49,7 @@ export function ChatScreen({ isNew }: ChatScreenProps) {
           <IconButton name="menu" label="Open menu" onClick={() => toggleDrawer(true)} />
         )}
         <div className="appbar__title">{title}</div>
-        {isServerRunsEnabled() && (
-          <IconButton name="file-text" label="Chat files" onClick={() => openFilesPane(threadId)} />
-        )}
+        <IconButton name="file-text" label="Chat files" onClick={() => openFilesPane(threadId)} />
         <IconButton name="pen-square" label="New chat" onClick={() => navigate('/new')} />
         <IconButton name="speaker" label="Voice mode" onClick={() => navigate(`/voice/${threadId}`)} />
       </div>

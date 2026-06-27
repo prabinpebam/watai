@@ -14,6 +14,7 @@ import { entraVerifierFromEnv } from './adapters/auth/entraTokenVerifier';
 import { ThreadService } from './application/threadService';
 import { ThreadLockService } from './application/threadLockService';
 import { ThreadFilesService } from './application/threadFilesService';
+import { AiProxyService } from './application/aiProxyService';
 import { aoaiFiles } from './ai/files';
 import { MessageService } from './application/messageService';
 import { SettingsService } from './application/settingsService';
@@ -34,6 +35,7 @@ import { createInvitesController } from './http/invitesController';
 import { createCredentialsController } from './http/credentialsController';
 import { createRunsController } from './http/runsController';
 import { createNegotiateController } from './http/negotiateController';
+import { createAiProxyController } from './http/aiProxyController';
 import { AppError } from './domain/errors';
 import type { TokenVerifier } from './ports/tokenVerifier';
 import type { KeyWrapper } from './ports/keyWrapper';
@@ -52,6 +54,7 @@ export interface ApiContainer {
   credentials: ReturnType<typeof createCredentialsController>;
   runs: ReturnType<typeof createRunsController>;
   negotiate: ReturnType<typeof createNegotiateController>;
+  aiProxy: ReturnType<typeof createAiProxyController>;
   /** Dependencies the queue-triggered run worker needs to process a job. */
   runWorker: RunWorkerDeps;
 }
@@ -102,6 +105,7 @@ export function container(): ApiContainer {
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
   const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock);
+  const aiProxyService = new AiProxyService(credentialService);
   const signalr: SignalRSender | null = process.env.AzureSignalRConnectionString
     ? new AzureSignalR(process.env.AzureSignalRConnectionString)
     : null;
@@ -123,6 +127,7 @@ export function container(): ApiContainer {
     credentials: createCredentialsController(credentialService),
     runs: createRunsController(runService),
     negotiate: createNegotiateController(signalr),
+    aiProxy: createAiProxyController(aiProxyService),
     runWorker: {
       runStore,
       messageStore,

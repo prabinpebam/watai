@@ -183,6 +183,20 @@ export interface CredentialStatus {
   keyHint?: string;
   tavilyConfigured: boolean;
   tavilyHint?: string | null;
+  knowledgeBaseVectorStoreId?: string | null;
+  capabilities?: CredentialCapabilities;
+}
+
+/** What the configured endpoint + models can do (derived server-side from the saved config). */
+export interface CredentialCapabilities {
+  chat: boolean;
+  image: boolean;
+  transcribe: boolean;
+  tts: boolean;
+  agentic: boolean;
+  codeInterpreter: boolean;
+  fileSearch: boolean;
+  webSearch: boolean;
 }
 
 /** Write payload for PUT /credentials. The key is encrypted server-side and never returned. */
@@ -190,7 +204,8 @@ export interface CredentialsInput {
   /** Bare resource name or full base URL; the server normalizes to the `…/openai/v1` base. */
   baseUrl: string;
   models: ModelDeployments;
-  key: string;
+  /** Optional on update — omit to keep the already-stored (write-only) key. */
+  key?: string;
   tavilyKey?: string;
   /** Account-wide knowledge base store, searched as a fallback alongside per-thread files. */
   knowledgeBaseVectorStoreId?: string;
