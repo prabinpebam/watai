@@ -43,6 +43,8 @@ interface UiState {
   confirmRequest: ConfirmRequest | null;
   /** Open source-detail pane (web search results) — transient, never persisted. */
   sourcePane: { citations: Citation[]; index: number } | null;
+  /** Open thread-files pane (the thread id whose knowledge base is shown) — transient. */
+  filesPane: string | null;
 
   setTheme: (t: Theme) => void;
   setTextScale: (s: TextScale) => void;
@@ -67,6 +69,8 @@ interface UiState {
   openSourcePane: (citations: Citation[], index: number) => void;
   setSourceIndex: (index: number) => void;
   closeSourcePane: () => void;
+  openFilesPane: (threadId: string) => void;
+  closeFilesPane: () => void;
 }
 
 export const useUi = create<UiState>()(
@@ -93,6 +97,7 @@ export const useUi = create<UiState>()(
       threadLocks: {},
       confirmRequest: null,
       sourcePane: null,
+      filesPane: null,
 
       setTheme: (theme) => set({ theme }),
       setTextScale: (textScale) => set({ textScale }),
@@ -124,10 +129,12 @@ export const useUi = create<UiState>()(
         if (req) req.resolve(ok);
         set({ confirmRequest: null });
       },
-      openSourcePane: (citations, index) => set({ sourcePane: { citations, index } }),
+      openSourcePane: (citations, index) => set({ sourcePane: { citations, index }, filesPane: null }),
       setSourceIndex: (index) =>
         set((s) => (s.sourcePane ? { sourcePane: { ...s.sourcePane, index } } : {})),
       closeSourcePane: () => set({ sourcePane: null }),
+      openFilesPane: (threadId) => set({ filesPane: threadId, sourcePane: null }),
+      closeFilesPane: () => set({ filesPane: null }),
     }),
     {
       name: 'watai.ui',

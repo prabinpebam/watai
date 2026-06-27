@@ -34,6 +34,10 @@ export interface ThreadFile {
   bytes: number;
   status: 'indexing' | 'ready' | 'error';
   createdAt: string;
+  /** 'document' = searchable upload; 'image' = a generated artifact rendered from `blobPath`. */
+  kind?: 'document' | 'image';
+  blobPath?: string;
+  mime?: string;
 }
 
 /** Per-thread run lock (server-coordinated) so two devices never generate a reply at once. */

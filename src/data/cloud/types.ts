@@ -29,6 +29,9 @@ export interface ThreadFileRecord {
   bytes: number;
   status: 'indexing' | 'ready' | 'error';
   createdAt: string;
+  kind?: 'document' | 'image';
+  blobPath?: string;
+  mime?: string;
 }
 
 export type ServerMessageStatus = 'complete' | 'interrupted' | 'error';

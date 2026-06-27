@@ -2,12 +2,18 @@ import type { ThreadLock } from '../domain/threadLock';
 
 /** A document uploaded into the thread's vector store (thread-scoped file search). */
 export interface ThreadFileMeta {
-  /** Azure OpenAI file id (also the vector-store file id) — the delete key. */
+  /** Azure OpenAI file id (also the vector-store file id) — the delete key. For generated
+   *  artifacts (kind 'image') this is a synthetic id. */
   fileId: string;
   name: string;
   bytes: number;
   status: 'indexing' | 'ready' | 'error';
   createdAt: string;
+  /** 'document' = uploaded to the vector store (searchable); 'image' = a generated artifact. */
+  kind?: 'document' | 'image';
+  /** Blob path for artifact files (e.g. generated images) so the client can render/download them. */
+  blobPath?: string;
+  mime?: string;
 }
 
 /** Server-side thread document (mirrors the Cosmos `threads` container, partition key /userId). */

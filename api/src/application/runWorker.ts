@@ -5,7 +5,7 @@ import type { RunStore } from '../ports/runStore';
 import type { MessageRecord, MessageStore } from '../ports/messageStore';
 import type { MessageToolCall, MessageCitation, MessageImage } from '../domain/message';
 import type { Settings } from '../domain/settings';
-import type { ThreadStore } from '../ports/threadStore';
+import type { ThreadStore, ThreadFileMeta } from '../ports/threadStore';
 import type { SignalRSender } from '../adapters/azure/signalr';
 import {
   runAgent as defaultRunAgent,
@@ -272,6 +272,8 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   const citations: MessageCitation[] = [];
   const seenCitations = new Set<string>();
   const images: MessageImage[] = [];
+  /** Artifacts generated this run (images) to record on the thread's file list. */
+  const generatedFiles: ThreadFileMeta[] = [];
   let acc = '';
   let lastFlush = 0;
   let flushed = false;
@@ -354,11 +356,12 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       } else if (ev.type === 'image' && !ev.partial && deps.uploadImage) {
         try {
           const imageId = `img${images.length + 1}-${run.assistantMessageId}`.slice(0, 64);
+          const bytes = b64ToBytes(ev.b64);
           const blobPath = await deps.uploadImage(
             run.userId,
             threadId,
             imageId,
-            b64ToBytes(ev.b64),
+            bytes,
             'image/png',
           );
           images.push({
@@ -368,6 +371,17 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
             size: ev.size ?? '1024x1024',
             outputFormat: 'png',
             createdAt: clock.now(),
+          });
+          // Surface the generated image in the thread's file list (synced across devices).
+          generatedFiles.push({
+            fileId: imageId,
+            name: (ev.prompt?.trim() || 'Generated image').slice(0, 80),
+            bytes: bytes.byteLength,
+            status: 'ready',
+            createdAt: clock.now(),
+            kind: 'image',
+            blobPath,
+            mime: 'image/png',
           });
           // The image landed — mark its tool call done so the placeholder yields to the real image
           // in the same snapshot (no brief placeholder-plus-image overlap).
@@ -408,6 +422,9 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     const nextThread = {
       ...thread,
       ...(newTitle ? { title: newTitle } : {}),
+      ...(generatedFiles.length
+        ? { files: [...(thread.files ?? []), ...generatedFiles] }
+        : {}),
       lastMessagePreview: (acc.trim() || (err ? 'Error' : '')).slice(0, 140),
       updatedAt: clock.now(),
     };

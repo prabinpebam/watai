@@ -3,6 +3,7 @@ import { useChat } from './useChat';
 import { Composer } from './Composer';
 import { AssistantMessage, UserMessage } from './Message';
 import { SourcePane } from './SourcePane';
+import { ThreadFilesPane } from './ThreadFilesPane';
 import { Icon } from '../../design/icons';
 import { Avatar, Spinner } from '../../design/ui';
 import { useUi } from '../../state/store';
@@ -20,11 +21,14 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   const draft = useUi((s) => s.composerDrafts[threadId] ?? '');
   const setDraft = useUi((s) => s.setDraft);
   const closeSourcePane = useUi((s) => s.closeSourcePane);
+  const closeFilesPane = useUi((s) => s.closeFilesPane);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
 
   // Close any open source pane when this thread view unmounts (e.g. switching threads).
   useEffect(() => () => closeSourcePane(), [closeSourcePane]);
+  // Close the files pane when leaving the thread too.
+  useEffect(() => () => closeFilesPane(), [closeFilesPane]);
 
   const isEmpty = !loading && messages.length === 0;
 
@@ -122,6 +126,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
       />
       </div>
       <SourcePane />
+      <ThreadFilesPane />
     </div>
   );
 }

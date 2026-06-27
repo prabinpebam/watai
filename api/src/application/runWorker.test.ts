@@ -297,6 +297,14 @@ describe('processRun', () => {
     expect(msg?.images?.[0].blobPath).toContain('.png');
     expect(uploads[0].len).toBeGreaterThan(0);
     expect(msg?.toolCalls?.find((t) => t.id === 'g1')?.kind).toBe('image');
+
+    // The generated image is also recorded on the thread's file list (synced across devices).
+    const thread = await ctx.threadStore.get('userA', 't1');
+    const imageFile = thread?.files?.find((f) => f.kind === 'image');
+    expect(imageFile).toBeTruthy();
+    expect(imageFile?.name).toBe('a cat');
+    expect(imageFile?.blobPath).toContain('.png');
+    expect(imageFile?.status).toBe('ready');
   });
 
   it('streams an aspect-correct image placeholder, then yields it to the real image (no overlap)', async () => {

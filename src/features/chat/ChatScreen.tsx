@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChatView } from './ChatView';
-import { ThreadFilesPanel } from './ThreadFilesPanel';
+
 import { IconButton } from '../../design/ui';
 import { useIsExpanded } from '../../lib/hooks';
 import { useUi } from '../../state/store';
@@ -21,13 +21,13 @@ export function ChatScreen({ isNew }: ChatScreenProps) {
   const toggleSidebar = useUi((s) => s.toggleSidebar);
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const version = useUi((s) => s.threadsVersion);
+  const openFilesPane = useUi((s) => s.openFilesPane);
 
   // For /new, mint a stable id for the lifetime of this screen instance.
   const generatedId = useRef<string>(newId());
   const threadId = isNew ? generatedId.current : params.threadId!;
   const [title, setTitle] = useState(isNew ? 'New chat' : '');
   const [scrolled, setScrolled] = useState(false);
-  const [filesOpen, setFilesOpen] = useState(false);
 
   useEffect(() => {
     if (!isNew) {
@@ -51,13 +51,12 @@ export function ChatScreen({ isNew }: ChatScreenProps) {
         )}
         <div className="appbar__title">{title}</div>
         {isServerRunsEnabled() && (
-          <IconButton name="file-text" label="Chat files" onClick={() => setFilesOpen(true)} />
+          <IconButton name="file-text" label="Chat files" onClick={() => openFilesPane(threadId)} />
         )}
         <IconButton name="pen-square" label="New chat" onClick={() => navigate('/new')} />
         <IconButton name="speaker" label="Voice mode" onClick={() => navigate(`/voice/${threadId}`)} />
       </div>
       <ChatView key={threadId} threadId={threadId} onScrolledChange={setScrolled} />
-      {filesOpen && <ThreadFilesPanel threadId={threadId} onClose={() => setFilesOpen(false)} />}
     </>
   );
 }
