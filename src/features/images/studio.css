@@ -1,0 +1,522 @@
+/* Image studio — server-authoritative generation workspace. Uses design tokens only. */
+
+.studio {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+}
+
+.studio__top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6) var(--space-4);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.studio__gallery {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6) var(--space-7);
+}
+
+/* ---------------------------------------------------------------- Composer */
+.studio-composer {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.studio-composer__input {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+  padding: var(--space-3) var(--space-4);
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+.studio-composer__input:focus-within {
+  border-color: var(--color-accent);
+}
+.studio-composer__textarea {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  resize: none;
+  outline: none;
+  min-height: 48px;
+  max-height: 200px;
+}
+.studio-composer__textarea::placeholder {
+  color: var(--color-text-tertiary);
+}
+.studio-composer__textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.studio-composer__controls {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.studio-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.studio-control__label {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.studio-composer__generate {
+  margin-left: auto;
+}
+.studio-composer__notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption-size);
+  margin: 0;
+}
+
+/* Remix banner */
+.studio-remix-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+.studio-remix-banner__thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex: none;
+}
+.studio-remix-banner__thumb--empty {
+  background: var(--color-surface-2);
+}
+.studio-remix-banner__body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex: 1;
+}
+.studio-remix-banner__title {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  font-size: var(--text-caption-size);
+}
+.studio-remix-banner__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption-size);
+  cursor: pointer;
+}
+.studio-remix-banner__clear {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.studio-remix-banner__clear:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+
+/* ---------------------------------------------------------------- Toolbar */
+.studio-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+}
+.studio-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 200px;
+}
+.studio-search__icon {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+}
+.studio-search__input {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  font: inherit;
+  padding: var(--space-2) var(--space-7) var(--space-2) calc(var(--space-6) + var(--space-2));
+  outline: none;
+}
+.studio-search__input:focus {
+  border-color: var(--color-accent);
+}
+.studio-search__clear {
+  position: absolute;
+  right: var(--space-2);
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.studio-search__clear:hover {
+  color: var(--color-text-primary);
+}
+
+/* ---------------------------------------------------------------- Gallery grid (masonry) */
+.studio-grid {
+  columns: 240px;
+  column-gap: var(--space-4);
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.studio-card {
+  position: relative;
+  break-inside: avoid;
+  width: 100%;
+  margin: 0 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface-1);
+}
+
+.studio-card--ready .studio-card__open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+}
+.studio-card--ready img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.studio-card__overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-standard);
+  pointer-events: none;
+}
+.studio-card:hover .studio-card__overlay,
+.studio-card:focus-within .studio-card__overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+.studio-card__prompt {
+  flex: 1;
+  font-size: var(--text-caption-size);
+  color: var(--color-text-on-media);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.studio-card__actions {
+  display: flex;
+  gap: var(--space-1);
+  flex: none;
+}
+.studio-card__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--color-text-on-media);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+.studio-card__action:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Pending (queued / generating) */
+.studio-card--pending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+}
+.studio-card--shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-skeleton) 25%,
+    var(--color-skeleton-shine) 37%,
+    var(--color-skeleton) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+.studio-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-medium);
+}
+.studio-card__pending-prompt {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-tertiary);
+  text-align: center;
+  max-width: 90%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Error */
+.studio-card--error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  text-align: center;
+}
+.studio-card__error-icon {
+  color: var(--color-danger);
+}
+.studio-card__error-text {
+  margin: 0;
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+}
+.studio-card__error-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.studio-card__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  font-size: var(--text-caption-size);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+.studio-card__retry:hover {
+  background: var(--color-surface-2);
+}
+
+/* ---------------------------------------------------------------- Empty states */
+.studio-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: var(--space-8) var(--space-5);
+  min-height: 50vh;
+}
+.studio-empty__icon {
+  color: var(--color-text-tertiary);
+}
+.studio-empty__title {
+  margin: 0;
+  font-size: var(--text-title-2-size);
+  color: var(--color-text-primary);
+}
+.studio-empty__hint {
+  margin: 0;
+  font-size: var(--text-body-size);
+}
+.studio-empty__examples {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  width: min(520px, 90vw);
+}
+.studio-empty__example {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  color: var(--color-text-secondary);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.studio-empty__example:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.studio-loadmore {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-5) 0 var(--space-3);
+}
+
+/* ---------------------------------------------------------------- Lightbox (extends .viewer) */
+.studio-lightbox__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: var(--space-4);
+  padding: 0 var(--space-5) var(--space-5);
+}
+.studio-lightbox .viewer__stage {
+  flex: 1;
+  padding: 0;
+}
+.studio-lightbox__meta {
+  width: 340px;
+  flex: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-4);
+  background: var(--color-surface-1);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-primary);
+}
+.studio-lightbox__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.studio-lightbox__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.studio-lightbox__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.studio-lightbox__label {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.studio-lightbox__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: none;
+  background: transparent;
+  color: var(--color-accent);
+  font-size: var(--text-caption-size);
+  cursor: pointer;
+}
+.studio-lightbox__prompt {
+  margin: 0;
+  font-size: var(--text-body-size);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+}
+.studio-lightbox__prompt--muted {
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption-size);
+}
+.studio-lightbox__facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+.studio-lightbox__facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+}
+.studio-lightbox__lineage {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  padding: var(--space-2);
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-text-secondary);
+}
+.studio-lightbox__lineage img {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex: none;
+}
+.studio-lightbox__lineage span {
+  font-size: var(--text-caption-size);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .studio-lightbox__body {
+    flex-direction: column;
+  }
+  .studio-lightbox__meta {
+    width: 100%;
+  }
+}

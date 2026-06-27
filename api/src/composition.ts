@@ -5,10 +5,12 @@ import { CosmosSettingsStore } from './adapters/cosmos/settingsStore';
 import { CosmosInviteStore } from './adapters/cosmos/inviteStore';
 import { CosmosCredentialStore } from './adapters/cosmos/credentialStore';
 import { CosmosRunStore } from './adapters/cosmos/runStore';
+import { CosmosImageStore } from './adapters/cosmos/imageStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
 import { KeyVaultWrapper } from './adapters/azure/keyVaultWrapper';
 import { LocalKeyWrapper } from './adapters/local/keyWrapper';
 import { QueueRunStarter } from './adapters/azure/queueRunStarter';
+import { QueueImageStarter } from './adapters/azure/queueImageStarter';
 import { AzureSignalR, type SignalRSender } from './adapters/azure/signalr';
 import { entraVerifierFromEnv } from './adapters/auth/entraTokenVerifier';
 import { ThreadService } from './application/threadService';
@@ -24,6 +26,8 @@ import { AccessService } from './application/accessService';
 import { CredentialService } from './application/credentialService';
 import { RunService } from './application/runService';
 import type { RunWorkerDeps } from './application/runWorker';
+import { ImageService } from './application/imageService';
+import type { ImageWorkerDeps } from './application/imageWorker';
 import { createThreadsController } from './http/threadsController';
 import { createThreadLockController } from './http/threadLockController';
 import { createMessagesController } from './http/messagesController';
@@ -34,6 +38,7 @@ import { createMeController } from './http/meController';
 import { createInvitesController } from './http/invitesController';
 import { createCredentialsController } from './http/credentialsController';
 import { createRunsController } from './http/runsController';
+import { createImagesController } from './http/imagesController';
 import { createNegotiateController } from './http/negotiateController';
 import { createAiProxyController } from './http/aiProxyController';
 import { AppError } from './domain/errors';
@@ -53,10 +58,13 @@ export interface ApiContainer {
   invites: ReturnType<typeof createInvitesController>;
   credentials: ReturnType<typeof createCredentialsController>;
   runs: ReturnType<typeof createRunsController>;
+  images: ReturnType<typeof createImagesController>;
   negotiate: ReturnType<typeof createNegotiateController>;
   aiProxy: ReturnType<typeof createAiProxyController>;
   /** Dependencies the queue-triggered run worker needs to process a job. */
   runWorker: RunWorkerDeps;
+  /** Dependencies the queue-triggered image worker needs to process a job. */
+  imageWorker: ImageWorkerDeps;
 }
 
 /** Production uses an Azure Key Vault RSA key as the KEK; local dev falls back to an
@@ -93,6 +101,7 @@ export function container(): ApiContainer {
   const inviteStore = new CosmosInviteStore();
   const credentialStore = new CosmosCredentialStore();
   const runStore = new CosmosRunStore();
+  const imageStore = new CosmosImageStore();
   const minter = new AzureSasMinter();
   const access = new AccessService(
     inviteStore,
@@ -102,6 +111,7 @@ export function container(): ApiContainer {
   const messageService = new MessageService(threadStore, messageStore, clock);
   const credentialService = new CredentialService(credentialStore, buildKeyWrapper(), clock);
   const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
+  const imageService = new ImageService(imageStore, credentialService, new QueueImageStarter(), minter, clock);
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
   const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock);
@@ -126,6 +136,7 @@ export function container(): ApiContainer {
     invites: createInvitesController(inviteStore, clock),
     credentials: createCredentialsController(credentialService),
     runs: createRunsController(runService),
+    images: createImagesController(imageService),
     negotiate: createNegotiateController(signalr),
     aiProxy: createAiProxyController(aiProxyService),
     runWorker: {
@@ -135,6 +146,13 @@ export function container(): ApiContainer {
       credentials: credentialService,
       settings: settingsService,
       uploadImage: makeUploadImage(assetService),
+      signalr: signalr ?? undefined,
+      clock,
+    },
+    imageWorker: {
+      imageStore,
+      credentials: credentialService,
+      minter,
       signalr: signalr ?? undefined,
       clock,
     },

@@ -1,8 +1,13 @@
 // Image generation (server-side port of the browser `ai/image.ts`). The caller passes the
-// vault-resolved baseUrl + key + image model. Returns the raw base64 PNG(s); the worker uploads
-// the bytes to Blob Storage and attaches the blob path to the assistant message.
+// vault-resolved baseUrl + key + image model. Returns the raw base64 image(s); the worker uploads
+// the bytes to Blob Storage. `editImage` powers remix (image-to-image) via /images/edits.
 import { aiFetch } from './http';
 import { normalizeHttpError } from './errors';
+
+export interface ImageResult {
+  b64: string;
+  revisedPrompt?: string;
+}
 
 export interface ImageGenParams {
   baseUrl: string;
@@ -16,8 +21,29 @@ export interface ImageGenParams {
   fetchImpl?: typeof fetch;
 }
 
+export interface ImageEditParams extends ImageGenParams {
+  /** The source image bytes used as the edit reference (image-to-image). */
+  image: Uint8Array;
+  /** MIME type of `image` (default image/png). */
+  imageContentType?: string;
+}
+
+interface RawImageData {
+  data?: Array<{ b64_json?: string; revised_prompt?: string }>;
+}
+
+function parseImages(json: RawImageData): ImageResult[] {
+  return (json.data ?? [])
+    .filter((d): d is { b64_json: string; revised_prompt?: string } => typeof d.b64_json === 'string')
+    .map((d) => ({ b64: d.b64_json, ...(d.revised_prompt ? { revisedPrompt: d.revised_prompt } : {}) }));
+}
+
+function extForType(ct: string): string {
+  return ct === 'image/jpeg' ? 'jpg' : ct === 'image/webp' ? 'webp' : 'png';
+}
+
 // POST <baseUrl>/images/generations { model, prompt, size, n, output_format } -> { data: [{ b64_json }] }
-export async function generateImage(p: ImageGenParams): Promise<Array<{ b64: string }>> {
+export async function generateImage(p: ImageGenParams): Promise<ImageResult[]> {
   const body: Record<string, unknown> = {
     model: p.model,
     prompt: p.prompt,
@@ -36,8 +62,28 @@ export async function generateImage(p: ImageGenParams): Promise<Array<{ b64: str
     fetchImpl: p.fetchImpl,
   });
   if (!res.ok) throw await normalizeHttpError(res, 'image');
-  const json = (await res.json()) as { data?: Array<{ b64_json?: string }> };
-  return (json.data ?? [])
-    .filter((d): d is { b64_json: string } => typeof d.b64_json === 'string')
-    .map((d) => ({ b64: d.b64_json }));
+  return parseImages((await res.json()) as RawImageData);
+}
+
+// POST <baseUrl>/images/edits (multipart: model, prompt, image, size, n) -> { data: [{ b64_json }] }
+export async function editImage(p: ImageEditParams): Promise<ImageResult[]> {
+  const ct = p.imageContentType ?? 'image/png';
+  const form = new FormData();
+  form.append('model', p.model);
+  form.append('prompt', p.prompt);
+  form.append('size', p.size ?? '1024x1024');
+  form.append('n', '1');
+  if (p.quality) form.append('quality', p.quality);
+  form.append('image', new Blob([p.image], { type: ct }), `source.${extForType(ct)}`);
+  const res = await aiFetch({
+    baseUrl: p.baseUrl,
+    key: p.key,
+    path: '/images/edits',
+    body: form,
+    signal: p.signal,
+    timeoutMs: 180_000,
+    fetchImpl: p.fetchImpl,
+  });
+  if (!res.ok) throw await normalizeHttpError(res, 'image');
+  return parseImages((await res.json()) as RawImageData);
 }

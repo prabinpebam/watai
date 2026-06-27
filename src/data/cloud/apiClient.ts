@@ -5,15 +5,19 @@
 import { apiBaseUrl } from './env';
 import type {
   AppendMessageBody,
+  CreateImagesBody,
   CreateThreadBody,
   CredentialStatus,
   CredentialsInput,
   InviteRecord,
+  ListImagesQuery,
+  ListImagesResult,
   MeInfo,
   MessageRecord,
   RunRecord,
   SasRequestBody,
   SasResult,
+  StudioImage,
   SubmitRunBody,
   SubmitRunResult,
   ThreadRecord,
@@ -302,6 +306,32 @@ export class WataiApiClient implements CloudApi {
     return this.request('POST', '/ai/image', body);
   }
 
+  // --- image studio (server-authoritative generation, CRUD + search) ---
+  /** Create N images; the server generates + stores them even if this client disconnects. */
+  async createImages(body: CreateImagesBody): Promise<StudioImage[]> {
+    const out = await this.request<{ images: StudioImage[] }>('POST', '/images', body);
+    return out.images;
+  }
+
+  listImages(query: ListImagesQuery = {}): Promise<ListImagesResult> {
+    const qs = new URLSearchParams();
+    if (query.q) qs.set('q', query.q);
+    if (query.size) qs.set('size', query.size);
+    if (query.sort) qs.set('sort', query.sort);
+    if (query.cursor) qs.set('cursor', query.cursor);
+    if (query.limit) qs.set('limit', String(query.limit));
+    const suffix = qs.toString();
+    return this.request('GET', `/images${suffix ? `?${suffix}` : ''}`);
+  }
+
+  getImage(id: string): Promise<StudioImage> {
+    return this.request('GET', `/images/${encodeURIComponent(id)}`);
+  }
+
+  deleteImage(id: string): Promise<void> {
+    return this.request('DELETE', `/images/${encodeURIComponent(id)}`);
+  }
+
   // --- access / invites ---
   getMe(): Promise<MeInfo> {
     return this.request('GET', '/me');
@@ -384,6 +414,10 @@ export interface CloudApi {
   synthesizeSpeech(body: { input: string; voice?: string }): Promise<{ audioBase64: string; mime: string }>;
   chatComplete(messages: Array<{ role: string; content: string }>): Promise<{ text: string }>;
   generateImage(body: { prompt: string; size?: string }): Promise<{ images: Array<{ b64: string }> }>;
+  createImages(body: CreateImagesBody): Promise<StudioImage[]>;
+  listImages(query?: ListImagesQuery): Promise<ListImagesResult>;
+  getImage(id: string): Promise<StudioImage>;
+  deleteImage(id: string): Promise<void>;
   getMe(): Promise<MeInfo>;
   listInvites(): Promise<InviteRecord[]>;
   createInvite(email: string): Promise<InviteRecord>;

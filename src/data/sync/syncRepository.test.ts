@@ -399,6 +399,16 @@ class FakeCloud implements CloudApi {
   async generateImage() {
     return { images: [] };
   }
+  async createImages() {
+    return [];
+  }
+  async listImages() {
+    return { images: [] };
+  }
+  getImage(): Promise<never> {
+    return Promise.reject(new Error('not implemented'));
+  }
+  async deleteImage() {}
 }
 
 function setup(sync = true) {

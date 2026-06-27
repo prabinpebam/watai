@@ -68,6 +68,7 @@ export class RealtimeClient {
     const conn = this.factory(info);
     conn.on('message', (p: unknown) => this.dispatch('message', p));
     conn.on('thread', (p: unknown) => this.dispatch('thread', p));
+    conn.on('image', (p: unknown) => this.dispatch('image', p));
     await conn.start();
     this.conn = conn;
   }

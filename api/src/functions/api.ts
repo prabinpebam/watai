@@ -109,6 +109,21 @@ app.http('ai-image', {
   handler: methodDispatch({ POST: (c) => c.aiProxy.image }, invited),
 });
 
+// Image studio: server-authoritative image generation (queue worker) + CRUD + search.
+app.http('images', {
+  methods: ['GET', 'POST'],
+  authLevel: 'anonymous',
+  route: 'images',
+  handler: methodDispatch({ GET: (c) => c.images.list, POST: (c) => c.images.create }, invited),
+});
+
+app.http('image-item', {
+  methods: ['GET', 'DELETE'],
+  authLevel: 'anonymous',
+  route: 'images/{id}',
+  handler: methodDispatch({ GET: (c) => c.images.get, DELETE: (c) => c.images.remove }, invited),
+});
+
 app.http('messages', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',

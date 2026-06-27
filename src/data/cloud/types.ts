@@ -256,6 +256,56 @@ export interface SubmitRunResult {
   status: RunStatus;
 }
 
+/** Image-generation lifecycle (server-authoritative image studio). */
+export type ImageGenStatus = 'queued' | 'generating' | 'ready' | 'error';
+
+/** Server image record (GET /images, GET /images/{id}). One row per image. */
+export interface StudioImage {
+  id: string;
+  userId: string;
+  batchId: string;
+  status: ImageGenStatus;
+  prompt: string;
+  revisedPrompt?: string;
+  size: string;
+  quality?: 'low' | 'medium' | 'high';
+  outputFormat: 'png' | 'jpeg' | 'webp';
+  model: string;
+  blobPath?: string;
+  sourceImageId?: string;
+  useReference?: boolean;
+  error?: { code: string; message: string } | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Short-lived read URL, present only when `ready` (never persisted server-side). */
+  url?: string;
+}
+
+/** Create images (POST /images). Generation continues server-side after the 202. */
+export interface CreateImagesBody {
+  prompt: string;
+  size?: string;
+  count?: number;
+  quality?: 'low' | 'medium' | 'high';
+  /** Remix lineage: generate from one of the caller's own images. */
+  sourceImageId?: string;
+  /** When remixing, use the source image as an edit reference (image-to-image). */
+  useReference?: boolean;
+}
+
+export interface ListImagesQuery {
+  q?: string;
+  size?: string;
+  sort?: 'newest' | 'oldest';
+  cursor?: string;
+  limit?: number;
+}
+
+export interface ListImagesResult {
+  images: StudioImage[];
+  cursor?: string;
+}
+
 export function threadFromRecord(r: ThreadRecord): Thread {
   return {
     id: r.id,

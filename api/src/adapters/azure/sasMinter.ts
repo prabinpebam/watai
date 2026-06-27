@@ -49,7 +49,7 @@ export class AzureSasMinter implements SasMinter {
 
   async mint(args: {
     blobPath: string;
-    op: 'read' | 'write';
+    op: 'read' | 'write' | 'delete';
     contentType?: string;
     ttlSeconds: number;
   }): Promise<SasGrant> {
@@ -58,9 +58,13 @@ export class AzureSasMinter implements SasMinter {
     const expiresOn = new Date(now + args.ttlSeconds * 1000);
     const key = await this.getDelegationKey();
 
-    // Least privilege: write => create+write only; read => read only.
+    // Least privilege: write => create+write only; delete => delete only; read => read only.
     const permissions =
-      args.op === 'write' ? BlobSASPermissions.parse('cw') : BlobSASPermissions.parse('r');
+      args.op === 'write'
+        ? BlobSASPermissions.parse('cw')
+        : args.op === 'delete'
+          ? BlobSASPermissions.parse('d')
+          : BlobSASPermissions.parse('r');
 
     const sas = generateBlobSASQueryParameters(
       {

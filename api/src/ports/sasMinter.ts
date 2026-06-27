@@ -11,7 +11,7 @@ export interface SasGrant {
 export interface SasMinter {
   mint(args: {
     blobPath: string;
-    op: 'read' | 'write';
+    op: 'read' | 'write' | 'delete';
     contentType?: string;
     ttlSeconds: number;
   }): Promise<SasGrant>;

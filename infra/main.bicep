@@ -54,6 +54,7 @@ var cosmosContainers = [
   { name: 'invites', pk: '/pk' }
   { name: 'credentials', pk: '/userId' }
   { name: 'runs', pk: '/threadId' }
+  { name: 'images', pk: '/userId' }
 ]
 
 // Built-in role definition ids.
