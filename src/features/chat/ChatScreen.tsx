@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChatView } from './ChatView';
+import { ToolsMenu } from './ToolsMenu';
 
 import { IconButton } from '../../design/ui';
 import { useIsExpanded } from '../../lib/hooks';
@@ -48,6 +49,7 @@ export function ChatScreen() {
         )}
         <div className="appbar__title">{title}</div>
         <IconButton name="file-text" label="Chat files" onClick={() => openFilesPane(threadId)} />
+        <ToolsMenu />
         <IconButton name="pen-square" label="New chat" onClick={() => navigate('/new')} />
         <IconButton name="speaker" label="Voice mode" onClick={() => navigate(`/voice/${threadId}`)} />
       </div>

@@ -58,7 +58,7 @@ export function ToolsMenu() {
   const [caps, setCaps] = useState<CapabilityMatrix | null>(null);
   const [tools, setTools] = useState<ToolsState>(DEFAULTS);
   const [tavilyHasKey, setTavilyHasKey] = useState(false);
-  const [anchor, setAnchor] = useState<{ left: number; bottom: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const pushToast = useUi((s) => s.pushToast);
@@ -102,7 +102,7 @@ export function ToolsMenu() {
 
   const openMenu = () => {
     const r = btnRef.current?.getBoundingClientRect();
-    if (r) setAnchor({ left: r.left, bottom: window.innerHeight - r.top + 8 });
+    if (r) setAnchor({ left: r.left, top: r.bottom + 8 });
     setOpen((o) => !o);
   };
 
@@ -148,7 +148,7 @@ export function ToolsMenu() {
           <div
             ref={popRef}
             className="tools-pop"
-            style={{ left: Math.min(anchor.left, window.innerWidth - 312), bottom: anchor.bottom }}
+            style={{ left: Math.min(anchor.left, window.innerWidth - 312), top: anchor.top }}
             role="menu"
             aria-label="Tools"
           >

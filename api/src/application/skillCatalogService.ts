@@ -122,6 +122,9 @@ export class SkillCatalogService {
     const pkg = this.validateUpload(filename, bytes);
     const records = await this.store.list(userId);
     const userSkills = records.filter(isUserSkill);
+    if (this.findDefault(pkg.name)) {
+      throw new AppError('conflict', `A default skill already uses the name "${pkg.name}".`);
+    }
     if (userSkills.some((r) => r.name === pkg.name)) {
       throw new AppError('conflict', `You already have a skill named "${pkg.name}".`);
     }
@@ -158,6 +161,9 @@ export class SkillCatalogService {
     const record = await this.requireUserSkill(userId, id);
     const pkg = this.validateUpload(filename, bytes);
     const records = await this.store.list(userId);
+    if (this.findDefault(pkg.name)) {
+      throw new AppError('conflict', `A default skill already uses the name "${pkg.name}".`);
+    }
     if (records.filter(isUserSkill).some((r) => r.id !== id && r.name === pkg.name)) {
       throw new AppError('conflict', `You already have a skill named "${pkg.name}".`);
     }

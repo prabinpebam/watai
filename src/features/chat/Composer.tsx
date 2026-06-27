@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconButton, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
-import { ToolsMenu } from './ToolsMenu';
 import { startRecording, type Recorder } from '../../lib/audio';
-import { cloudApi } from '../../data';
+import { cloudApi, skillsApi } from '../../data';
 import { fileToBase64 } from '../../lib/files';
 import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
+import type { SkillSummary } from '../../lib/types';
 
 interface ComposerProps {
   value: string;
   onChange: (v: string) => void;
-  onSend: (text: string, files?: File[]) => void;
+  onSend: (text: string, files?: File[], skillNames?: string[]) => void;
   streaming: boolean;
   onStop: () => void;
   placeholder?: string;
@@ -27,14 +27,67 @@ interface Pending {
   url: string;
 }
 
+interface SkillQuery {
+  start: number;
+  end: number;
+  query: string;
+}
+
+function skillQueryAt(value: string, caret: number): SkillQuery | null {
+  const before = value.slice(0, caret);
+  const match = /(?:^|\s)\/([a-z0-9-]*)$/i.exec(before);
+  if (!match) return null;
+  const start = caret - match[1].length - 1;
+  return { start, end: caret, query: match[1].toLowerCase() };
+}
+
+function skillNamesInText(value: string, skills: SkillSummary[]): string[] {
+  const valid = new Set(skills.map((skill) => skill.name));
+  const names = new Set<string>();
+  for (const match of value.matchAll(/(?:^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi)) {
+    const name = match[1].toLowerCase();
+    if (valid.has(name)) names.add(name);
+  }
+  return [...names];
+}
+
+function HighlightedValue({ value, skills }: { value: string; skills: SkillSummary[] }) {
+  const valid = new Set(skills.map((skill) => skill.name));
+  const parts: Array<{ text: string; skill?: boolean }> = [];
+  let cursor = 0;
+  for (const match of value.matchAll(/(?:^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi)) {
+    const full = match[0];
+    const name = match[1].toLowerCase();
+    const index = match.index ?? 0;
+    const prefixLength = full.startsWith('/') ? 0 : 1;
+    const tokenStart = index + prefixLength;
+    if (tokenStart > cursor) parts.push({ text: value.slice(cursor, tokenStart) });
+    const token = value.slice(tokenStart, index + full.length);
+    parts.push({ text: token, skill: valid.has(name) });
+    cursor = index + full.length;
+  }
+  if (cursor < value.length) parts.push({ text: value.slice(cursor) });
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.skill ? <span key={index} className="composer-skill-token">{part.text}</span> : <span key={index}>{part.text}</span>,
+      )}
+    </>
+  );
+}
+
 export function Composer({ value, onChange, onSend, streaming, onStop, placeholder, locked, autoFocus }: ComposerProps) {
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [skillQuery, setSkillQuery] = useState<SkillQuery | null>(null);
+  const [skillIndex, setSkillIndex] = useState(0);
   const recRef = useRef<Recorder | null>(null);
   const pushToast = useUi((s) => s.pushToast);
 
@@ -50,6 +103,24 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   useEffect(() => {
     if (autoFocus) taRef.current?.focus();
   }, [autoFocus]);
+
+  useEffect(() => {
+    let live = true;
+    skillsApi
+      .list()
+      .then((list) => {
+        if (!live) return;
+        const byName = new Map<string, SkillSummary>();
+        for (const skill of list) {
+          if (skill.enabled && skill.status === 'ready' && !byName.has(skill.name)) byName.set(skill.name, skill);
+        }
+        setSkills([...byName.values()].sort((a, b) => a.name.localeCompare(b.name)));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Revoke preview object URLs on unmount.
   const pendingRef = useRef(pending);
@@ -82,16 +153,71 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
     if (streaming || locked) return;
     const text = value.trim();
     if (!text && pending.length === 0) return;
+    const taggedSkills = skillNamesInText(text, skills);
     onSend(
       text,
       pending.map((p) => p.file),
+      taggedSkills,
     );
     onChange('');
+    setSkillQuery(null);
     pending.forEach((p) => p.url && URL.revokeObjectURL(p.url));
     setPending([]);
   };
 
+  const suggestions = useMemo(() => {
+    if (!skillQuery) return [];
+    return skills
+      .filter((skill) => skill.name.startsWith(skillQuery.query))
+      .slice(0, 8);
+  }, [skillQuery, skills]);
+
+  const updateSkillQuery = () => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const next = skillQueryAt(ta.value, ta.selectionStart);
+    setSkillQuery(next);
+    setSkillIndex(0);
+  };
+
+  const chooseSkill = (skill: SkillSummary) => {
+    const query = skillQuery;
+    if (!query) return;
+    const next = `${value.slice(0, query.start)}/${skill.name} ${value.slice(query.end)}`;
+    onChange(next);
+    setSkillQuery(null);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (!ta) return;
+      const pos = query.start + skill.name.length + 2;
+      ta.focus();
+      ta.setSelectionRange(pos, pos);
+    });
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (skillQuery && suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSkillIndex((index) => (index + 1) % suggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSkillIndex((index) => (index - 1 + suggestions.length) % suggestions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        chooseSkill(suggestions[skillIndex] ?? suggestions[0]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSkillQuery(null);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       submit();
@@ -143,6 +269,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   };
 
   const canSend = value.trim().length > 0 || pending.length > 0;
+  const hasHighlight = value.length > 0;
 
   return (
     <div className="composer-wrap">
@@ -199,20 +326,60 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
             e.target.value = '';
           }}
         />
-        <ToolsMenu />
-        <textarea
-          ref={taRef}
-          className="composer__textarea"
-          rows={1}
-          value={value}
-          placeholder={recording ? 'Listening…' : locked ? 'Waiting for the other device to finish…' : placeholder ?? 'Message Watai'}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          aria-label="Message"
-        />
+        <div className="composer__input">
+          {hasHighlight && (
+            <div ref={highlightRef} className="composer__highlights" aria-hidden="true">
+              <HighlightedValue value={value} skills={skills} />
+            </div>
+          )}
+          {skillQuery && suggestions.length > 0 && (
+            <div className="skill-suggest" role="listbox" aria-label="Skills">
+              {suggestions.map((skill, index) => (
+                <button
+                  key={skill.id}
+                  type="button"
+                  className={`skill-suggest__item ${index === skillIndex ? 'is-active' : ''}`}
+                  role="option"
+                  aria-selected={index === skillIndex}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    chooseSkill(skill);
+                  }}
+                >
+                  <span className="skill-suggest__name">/{skill.name}</span>
+                  <span className="skill-suggest__desc">{skill.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <textarea
+            ref={taRef}
+            className={`composer__textarea ${hasHighlight ? 'composer__textarea--highlighted' : ''}`}
+            rows={1}
+            value={value}
+            placeholder={recording ? 'Listening…' : locked ? 'Waiting for the other device to finish…' : placeholder ?? 'Message Watai'}
+            onChange={(e) => {
+              onChange(e.target.value);
+              requestAnimationFrame(updateSkillQuery);
+            }}
+            onClick={updateSkillQuery}
+            onKeyDown={onKeyDown}
+            onKeyUp={updateSkillQuery}
+            onPaste={onPaste}
+            onScroll={(e) => {
+              if (highlightRef.current) highlightRef.current.scrollTop = e.currentTarget.scrollTop;
+            }}
+            onFocus={() => {
+              setFocused(true);
+              updateSkillQuery();
+            }}
+            onBlur={() => {
+              setFocused(false);
+              window.setTimeout(() => setSkillQuery(null), 120);
+            }}
+            aria-label="Message"
+          />
+        </div>
         {transcribing ? (
           <Spinner size="sm" className="composer__spinner" />
         ) : (

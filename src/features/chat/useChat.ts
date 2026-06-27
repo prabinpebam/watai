@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { repo, cloudApi, syncNow } from '../../data';
+import { repo, cloudApi, skillsApi, syncNow } from '../../data';
 import { newId } from '../../lib/ids';
 import { getDeviceId } from '../../lib/device';
 import { useUi } from '../../state/store';
@@ -18,7 +18,7 @@ export { DEFAULT_CHAT_MODEL } from './runStore';
  * the user enabled them AND the configured endpoint supports them (capabilities derived server-side
  * from the saved config), so an endpoint that lacks a tool is never sent it.
  */
-async function serverRunTools(): Promise<string[]> {
+async function serverRunTools(forceCodeInterpreter = false): Promise<string[]> {
   const tools = ['web_search', 'generate_image'];
   const settings = await repo.getSettings().catch(() => null);
   const t = settings?.tools;
@@ -29,9 +29,23 @@ async function serverRunTools(): Promise<string[]> {
     .catch(() => undefined);
   // Default the per-tool flags on when settings are missing/partial (code interpreter ships on),
   // so an endpoint that supports the tool always gets it unless the user explicitly disabled it.
-  if ((t?.codeInterpreter ?? true) && caps?.codeInterpreter) tools.push('code_interpreter');
+  if (((t?.codeInterpreter ?? true) || forceCodeInterpreter) && caps?.codeInterpreter) tools.push('code_interpreter');
   if ((t?.fileSearch ?? false) && caps?.fileSearch) tools.push('file_search');
   return tools;
+}
+
+async function activeSkillNames(): Promise<Set<string>> {
+  const skills = await skillsApi.list().catch(() => []);
+  return new Set(skills.filter((skill) => skill.enabled && skill.status === 'ready').map((skill) => skill.name));
+}
+
+function taggedSkillNames(text: string, available: Set<string>): string[] {
+  const names = new Set<string>();
+  for (const match of text.matchAll(/(?:^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi)) {
+    const name = match[1].toLowerCase();
+    if (available.has(name)) names.add(name);
+  }
+  return [...names];
 }
 
 /** Persist uploaded files as local blobs and return their attachment records. */
@@ -128,7 +142,7 @@ export function useChat(threadId: string, temporary = false) {
   const messages = useMemo(() => orderMessages(persisted, run?.message), [persisted, run]);
 
   const send = useCallback(
-    async (text: string, files?: File[]) => {
+    async (text: string, files?: File[], skillNames?: string[]) => {
       const trimmed = text.trim();
       const hasFiles = !!files && files.length > 0;
       if (!trimmed && !hasFiles) return;
@@ -211,7 +225,8 @@ export function useChat(threadId: string, temporary = false) {
         }
         // Server-authoritative: the backend generates + persists the reply, which survives this
         // client closing. The enabled tool set for this run is probed from the saved config.
-        const tools = await serverRunTools();
+        const explicitSkills = skillNames?.length ? skillNames : taggedSkillNames(trimmed, await activeSkillNames());
+        const tools = await serverRunTools(explicitSkills.length > 0);
         return tools.length ? { tools } : {};
       };
       void useRuns.getState().startServerRun(
@@ -241,7 +256,8 @@ export function useChat(threadId: string, temporary = false) {
       threadId,
       { text: lastUser.content, clientMessageId: lastUser.id },
       async () => {
-        const tools = await serverRunTools();
+        const explicitSkills = taggedSkillNames(lastUser.content, await activeSkillNames());
+        const tools = await serverRunTools(explicitSkills.length > 0);
         return tools.length ? { tools } : {};
       },
     );

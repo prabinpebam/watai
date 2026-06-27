@@ -25,6 +25,14 @@ export function selectSkills(prompt: string, opts: { max?: number; skills?: Skil
     .map((x) => x.s);
 }
 
+export function slashSkillTags(prompt: string): string[] {
+  const names = new Set<string>();
+  for (const match of prompt.matchAll(/(?:^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi)) {
+    names.add(match[1].toLowerCase());
+  }
+  return [...names];
+}
+
 /** The forceful code-interpreter directive. The model otherwise assumes files it writes stay in
  *  its sandbox and refuses to "deliver" them; this tells it the truth — our worker captures
  *  /mnt/data/ outputs and surfaces them as downloadable attachments in the chat. */
@@ -65,11 +73,27 @@ function skillsDiscoveryBlock(mounts: MountedSkill[]): string {
   );
 }
 
+function explicitSkillBlock(names: string[]): string {
+  if (!names.length) return '';
+  const tags = names.map((name) => `/${name}`).join(', ');
+  return (
+    `The user explicitly tagged ${tags}. Treat these tags as routing instructions, not as ` +
+    'content to reproduce. You MUST use the tagged skill instructions for this request. Read the ' +
+    'matching SKILL.md before creating the final answer.'
+  );
+}
+
 /** Build the code-interpreter system-prompt section: the directive, the canonical-skill discovery
  *  block (for mounted skills), and any keyword-matched inline playbooks. */
-export function codeInterpreterSection(playbooks: Skill[], mounts: MountedSkill[] = []): string {
+export function codeInterpreterSection(
+  playbooks: Skill[],
+  mounts: MountedSkill[] = [],
+  explicitSkillNames: string[] = [],
+): string {
   const parts = [CODE_INTERPRETER_DIRECTIVE];
   if (mounts.length) parts.push(skillsDiscoveryBlock(mounts));
+  const validExplicit = explicitSkillNames.filter((name) => mounts.some((mount) => mount.name === name));
+  if (validExplicit.length) parts.push(explicitSkillBlock(validExplicit));
   if (playbooks.length) {
     const blocks = playbooks.map((s) => `### ${s.name}\n${s.body}`).join('\n\n');
     parts.push(`Apply these skills:\n\n${blocks}`);

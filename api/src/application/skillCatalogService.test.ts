@@ -151,11 +151,8 @@ describe('SkillCatalogService', () => {
     await expect(svc.upload(USER, 'greeter.zip', SAMPLE_ZIP)).rejects.toMatchObject({ code: 'conflict' });
   });
 
-  it('lets a user skill shadow a same-named default in the effective set', async () => {
-    await svc.upload(USER, 'pdf.zip', PDF_OVERRIDE_ZIP);
-    const eff = await svc.effective(USER);
-    expect(eff).toHaveLength(1);
-    expect(eff[0]).toMatchObject({ name: 'pdf', description: 'My own PDF tools.' });
+  it('rejects a user skill whose name collides with a default skill', async () => {
+    await expect(svc.upload(USER, 'pdf.zip', PDF_OVERRIDE_ZIP)).rejects.toMatchObject({ code: 'conflict' });
   });
 
   it('replace bumps the version and updates metadata', async () => {

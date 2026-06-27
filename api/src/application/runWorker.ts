@@ -21,7 +21,7 @@ import { tavilySearch } from '../ai/tavily';
 import { generateImage } from '../ai/image';
 import { listContainerFiles, getContainerFile, mimeForFilename } from '../ai/containerFiles';
 import type { ContainerFile } from '../ai/containerFiles';
-import { selectSkills, codeInterpreterSection } from './skillService';
+import { selectSkills, codeInterpreterSection, slashSkillTags } from './skillService';
 import type { SkillProvisioner } from './skillProvisioner';
 import type { MountedSkill, SkillPackage } from '../domain/skill';
 import { DEFAULT_SKILLS } from '../skills';
@@ -492,6 +492,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       : undefined;
     const history = await messageStore.list(threadId);
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
+    const explicitSkillNames = slashSkillTags(run.prompt?.text ?? firstUser);
     const codeOn = run.tools.includes('code_interpreter');
 
     // Canonical skills: provision the user's effective set onto their endpoint (zips + bootstrap),
@@ -518,7 +519,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     }
 
     const ciSection = codeOn
-      ? codeInterpreterSection(selectSkills(run.prompt?.text ?? firstUser), skillMounts)
+      ? codeInterpreterSection(selectSkills(run.prompt?.text ?? firstUser), skillMounts, explicitSkillNames)
       : '';
     const turns = await buildTurns(
       systemPrompt(c, settings, ciSection),

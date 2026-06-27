@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { selectSkills, codeInterpreterSection } from './skillService';
+import { selectSkills, codeInterpreterSection, slashSkillTags } from './skillService';
 import { SKILLS } from '../skills';
 import type { Skill } from '../domain/skill';
 
@@ -66,5 +66,15 @@ describe('codeInterpreterSection', () => {
     expect(section).toContain('pdf — Create, fill, and extract PDFs.');
     expect(section).toContain('/mnt/data/skills/pdf/');
     expect(section).toContain('SKILL.md');
+  });
+
+  it('calls out explicitly slash-tagged mounted skills', () => {
+    const section = codeInterpreterSection(
+      [],
+      [{ name: 'pdf', description: 'Create, fill, and extract PDFs.', path: '/mnt/data/skills/pdf/' }],
+      slashSkillTags('/pdf make the worksheet'),
+    );
+    expect(section).toContain('explicitly tagged /pdf');
+    expect(section).toContain('MUST use the tagged skill');
   });
 });
