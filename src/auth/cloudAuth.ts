@@ -64,6 +64,29 @@ function activeAccount(pca: IPublicClientApplication): AccountInfo | null {
   return pca.getActiveAccount() ?? pca.getAllAccounts()[0] ?? null;
 }
 
+/** One-time migration. Moving from the old local-account era to cloud (Entra) can leave a browser
+ *  with stale MSAL cache entries in localStorage that wedge sign-in — the symptom is "works in a
+ *  clean profile / incognito but not in my normal browser". Clear ONLY the auth cache (MSAL +
+ *  Entra-host keys) ONCE so an existing browser gets a clean sign-in, exactly like incognito,
+ *  while leaving the app's own settings/data intact. A no-op after the first run, and it must run
+ *  BEFORE MSAL initialises (it reads that cache on construction). */
+export function clearStaleAuthCacheOnce(): void {
+  const FLAG = 'watai.authReset.v1';
+  try {
+    if (typeof localStorage === 'undefined' || localStorage.getItem(FLAG)) return;
+    const markers = [CLIENT_ID, 'msal.', 'msal', 'ciamlogin', 'login.microsoftonline', 'login.windows'];
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && markers.some((m) => k.toLowerCase().includes(m.toLowerCase()))) doomed.push(k);
+    }
+    doomed.forEach((k) => localStorage.removeItem(k));
+    localStorage.setItem(FLAG, '1');
+  } catch {
+    /* storage unavailable — best effort */
+  }
+}
+
 /** Initialise MSAL and complete any returning sign-in redirect. Must run BEFORE the
  *  HashRouter mounts so the auth response in the URL hash is consumed first. */
 export async function initAuth(): Promise<void> {
