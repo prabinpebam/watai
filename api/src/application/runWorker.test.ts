@@ -91,6 +91,37 @@ function script(events: AgentEvent[]): RunAgentFn {
   };
 }
 
+/** Mock fetch for the code-interpreter container endpoints: one assistant-generated PDF + one
+ *  user-uploaded input (which must be ignored). */
+function artifactFetch(): typeof fetch {
+  return (async (url: string | URL): Promise<Response> => {
+    const u = String(url);
+    if (u.includes('/files/cfile_1/content')) {
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]).buffer, // %PDF-
+        headers: new Headers(),
+      } as unknown as Response;
+    }
+    if (u.includes('/containers/cntr_x/files')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [
+            { id: 'cfile_1', path: '/mnt/data/report.pdf', source: 'assistant' },
+            { id: 'cfile_in', path: '/mnt/data/input.pdf', source: 'user' },
+          ],
+        }),
+        text: async () => '',
+        headers: new Headers(),
+      } as unknown as Response;
+    }
+    throw new Error(`unexpected fetch: ${u}`);
+  }) as unknown as typeof fetch;
+}
+
 describe('processRun', () => {
   let ctx: ReturnType<typeof setup>;
   beforeEach(() => (ctx = setup()));
@@ -112,6 +143,75 @@ describe('processRun', () => {
     const run = await ctx.runStore.get('t1', 'r1');
     expect(run?.status).toBe('complete');
     expect((await ctx.threadStore.get('userA', 't1'))?.lastMessagePreview).toBe('Hi there');
+  });
+
+  it('captures a code-interpreter artifact onto the message, thread files, and tool call', async () => {
+    await seed(ctx);
+    const uploaded: Array<{ id: string; mime: string; bytes: number }> = [];
+    const uploadArtifact = async (
+      userId: string,
+      threadId: string,
+      artifactId: string,
+      bytes: Uint8Array,
+      mime: string,
+    ): Promise<string> => {
+      uploaded.push({ id: artifactId, mime, bytes: bytes.byteLength });
+      return `${userId}/${threadId}/${artifactId}.pdf`;
+    };
+
+    await processRun(
+      {
+        ...ctx.deps(
+          script([
+            { type: 'tool', name: 'code_interpreter', status: 'running', callId: 'ci1', containerId: 'cntr_x' },
+            { type: 'tool', name: 'code_interpreter', status: 'done', callId: 'ci1', containerId: 'cntr_x', result: 'code' },
+            { type: 'text', delta: 'Here is your PDF.' },
+            { type: 'done' },
+          ]),
+        ),
+        uploadArtifact,
+        fetchImpl: artifactFetch(),
+      },
+      't1',
+      'r1',
+    );
+
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.artifacts).toHaveLength(1); // only the assistant-sourced file, not the user input
+    expect(msg?.artifacts?.[0]).toMatchObject({ name: 'report.pdf', mime: 'application/pdf', kind: 'pdf', bytes: 5 });
+    const ci = msg?.toolCalls?.find((t) => t.id === 'ci1');
+    expect(ci?.artifactIds).toEqual([msg?.artifacts?.[0].id]);
+
+    const thread = await ctx.threadStore.get('userA', 't1');
+    const artifactFile = thread?.files?.find((f) => f.kind === 'artifact');
+    expect(artifactFile).toMatchObject({ name: 'report.pdf', mime: 'application/pdf', status: 'ready' });
+    expect(uploaded).toEqual([{ id: msg?.artifacts?.[0].id, mime: 'application/pdf', bytes: 5 }]);
+  });
+
+  it('mounts ready thread documents into the code-interpreter container', async () => {
+    await seed(ctx);
+    const t = await ctx.threadStore.get('userA', 't1');
+    await ctx.threadStore.put({
+      ...t!,
+      files: [
+        { fileId: 'file_doc1', name: 'spec.pdf', bytes: 10, status: 'ready', kind: 'document', createdAt: 'now' },
+        { fileId: 'img_skip', name: 'pic.png', bytes: 5, status: 'ready', kind: 'image', createdAt: 'now' },
+      ],
+    });
+    const r = await ctx.runStore.get('t1', 'r1');
+    await ctx.runStore.put({ ...r!, tools: ['code_interpreter'] });
+
+    let capturedTools: Array<{ type: string; container?: { file_ids?: string[] } }> | undefined;
+    const capturing: RunAgentFn = (p) => {
+      capturedTools = p.tools as typeof capturedTools;
+      return (async function* () {
+        yield { type: 'done' } as AgentEvent;
+      })();
+    };
+    await processRun(ctx.deps(capturing), 't1', 'r1');
+
+    const ci = capturedTools?.find((tool) => tool.type === 'code_interpreter');
+    expect(ci?.container?.file_ids).toEqual(['file_doc1']); // documents only, not the generated image
   });
 
   it('pushes message snapshots and a thread update over SignalR when configured', async () => {

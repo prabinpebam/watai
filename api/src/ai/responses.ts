@@ -11,7 +11,7 @@ export interface ResponsesTool {
   description?: string;
   parameters?: Record<string, unknown>;
   vector_store_ids?: string[];
-  container?: { type: string };
+  container?: { type: string; file_ids?: string[]; memory_limit?: string };
   user_location?: { type: 'approximate'; country?: string; city?: string; region?: string };
   search_context_size?: 'low' | 'medium' | 'high';
   [key: string]: unknown;
@@ -56,6 +56,8 @@ export type ResponsesEvent =
       status: 'running' | 'done';
       summary?: string;
       detail?: string;
+      /** Code-interpreter container id (present on code_interpreter_call items). */
+      containerId?: string;
     }
   | { type: 'citation'; citation: ResponsesCitation }
   | { type: 'completed' }
@@ -90,6 +92,7 @@ interface RawEvent {
     queries?: string[];
     code?: string;
     input?: string;
+    container_id?: string;
     outputs?: Array<{ type?: string; logs?: string; text?: string }>;
     content?: Array<{ annotations?: RawAnnotation[] }>;
   };
@@ -173,7 +176,13 @@ export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
     case 'response.output_item.added': {
       const kind = serverToolKind(ev.item?.type);
       if (kind && ev.item) {
-        return { type: 'serverTool', kind, callId: ev.item.id ?? ev.item.call_id ?? '', status: 'running' };
+        return {
+          type: 'serverTool',
+          kind,
+          callId: ev.item.id ?? ev.item.call_id ?? '',
+          status: 'running',
+          ...(ev.item.container_id ? { containerId: ev.item.container_id } : {}),
+        };
       }
       return null;
     }
@@ -196,6 +205,7 @@ export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
           status: 'done',
           ...(query ? { summary: query } : {}),
           ...(detail ? { detail } : {}),
+          ...(item.container_id ? { containerId: item.container_id } : {}),
         };
       }
       return null;

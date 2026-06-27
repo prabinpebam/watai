@@ -9,8 +9,9 @@ export interface ThreadFileMeta {
   bytes: number;
   status: 'indexing' | 'ready' | 'error';
   createdAt: string;
-  /** 'document' = uploaded to the vector store (searchable); 'image' = a generated artifact. */
-  kind?: 'document' | 'image';
+  /** 'document' = uploaded to the vector store (searchable); 'image' = a generated image;
+   *  'artifact' = a generated downloadable file (code interpreter output). */
+  kind?: 'document' | 'image' | 'artifact';
   /** Blob path for artifact files (e.g. generated images) so the client can render/download them. */
   blobPath?: string;
   mime?: string;

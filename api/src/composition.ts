@@ -146,6 +146,7 @@ export function container(): ApiContainer {
       credentials: credentialService,
       settings: settingsService,
       uploadImage: makeUploadImage(assetService),
+      uploadArtifact: makeUploadImage(assetService),
       signalr: signalr ?? undefined,
       clock,
     },

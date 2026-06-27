@@ -18,6 +18,52 @@ const imageSchema = z
 
 export type MessageImage = z.infer<typeof imageSchema>;
 
+/** Artifact kinds drive the client icon + preview routing (derived from mime). */
+export const ARTIFACT_KINDS = [
+  'pdf',
+  'document',
+  'spreadsheet',
+  'presentation',
+  'image',
+  'data',
+  'archive',
+  'code',
+  'text',
+] as const;
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
+
+/** A file the agent generated during a run (code interpreter output), persisted to Blob Storage
+ *  and surfaced as a downloadable card. The bytes live at `blobPath`. */
+const artifactSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    name: z.string().min(1).max(400),
+    mime: z.string().min(1).max(255),
+    kind: z.enum(ARTIFACT_KINDS),
+    bytes: z.number().int().nonnegative(),
+    blobPath: z.string().min(1).max(512),
+    /** The code-interpreter tool call this artifact came from (lineage). */
+    sourceToolCallId: z.string().max(64).optional(),
+    createdAt: z.string().min(1).max(40),
+  })
+  .strict();
+
+export type MessageArtifact = z.infer<typeof artifactSchema>;
+
+/** Map a mime type to an artifact kind for the client icon + preview. */
+export function artifactKindForMime(mime: string): ArtifactKind {
+  const m = mime.toLowerCase();
+  if (m === 'application/pdf') return 'pdf';
+  if (m.includes('wordprocessingml') || m === 'application/msword') return 'document';
+  if (m.includes('spreadsheetml')) return 'spreadsheet';
+  if (m.includes('presentationml')) return 'presentation';
+  if (m.startsWith('image/')) return 'image';
+  if (m === 'application/zip' || m === 'application/x-tar') return 'archive';
+  if (m === 'application/json' || m === 'text/csv' || m === 'application/csv') return 'data';
+  if (m.startsWith('text/')) return 'text';
+  return 'data';
+}
+
 /** Bounded, secret-free record of one tool invocation (agentic transcript). */
 const toolCallSchema = z
   .object({
@@ -30,6 +76,8 @@ const toolCallSchema = z
     /** Requested image size (`WxH`) for an image tool call, so the client can render an
      *  aspect-correct placeholder while the image generates. */
     imageSize: z.string().max(32).optional(),
+    /** Ids of artifacts this tool call produced (code interpreter outputs). */
+    artifactIds: z.array(z.string().min(1).max(64)).max(16).optional(),
   })
   .strict();
 
@@ -88,6 +136,7 @@ const appendSchema = z
     attachments: z.array(attachmentSchema).max(16).optional(),
     toolCalls: z.array(toolCallSchema).max(32).optional(),
     citations: z.array(citationSchema).max(64).optional(),
+    artifacts: z.array(artifactSchema).max(16).optional(),
   })
   .strict()
   // Allow image/attachment-only messages (no text), but reject fully-empty ones.

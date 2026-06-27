@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAppendMessage } from './message';
+import { parseAppendMessage, artifactKindForMime } from './message';
 import { AppError } from './errors';
 
 function code(fn: () => unknown): string | undefined {
@@ -244,5 +244,71 @@ describe('parseAppendMessage', () => {
         }),
       ),
     ).toBe('validation');
+  });
+
+  it('accepts a tool call with artifactIds and an assistant message with artifacts', () => {
+    const input = {
+      role: 'assistant',
+      content: 'Here is your PDF.',
+      toolCalls: [{ id: 'ci1', kind: 'code_interpreter', status: 'done', artifactIds: ['art1'] }],
+      artifacts: [
+        {
+          id: 'art1',
+          name: 'Acme-Report.pdf',
+          mime: 'application/pdf',
+          kind: 'pdf',
+          bytes: 4528,
+          blobPath: 'u/t/art1.pdf',
+          sourceToolCallId: 'ci1',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    };
+    expect(parseAppendMessage(input)).toMatchObject({
+      toolCalls: [{ id: 'ci1', artifactIds: ['art1'] }],
+      artifacts: [{ id: 'art1', kind: 'pdf', mime: 'application/pdf' }],
+    });
+  });
+
+  it('rejects an artifact with an unknown kind or missing blobPath (strict)', () => {
+    expect(
+      code(() =>
+        parseAppendMessage({
+          role: 'assistant',
+          content: 'x',
+          artifacts: [{ id: 'a', name: 'x.pdf', mime: 'application/pdf', kind: 'movie', bytes: 1, blobPath: 'p', createdAt: 'now' }],
+        }),
+      ),
+    ).toBe('validation');
+    expect(
+      code(() =>
+        parseAppendMessage({
+          role: 'assistant',
+          content: 'x',
+          artifacts: [{ id: 'a', name: 'x.pdf', mime: 'application/pdf', kind: 'pdf', bytes: 1, createdAt: 'now' }],
+        }),
+      ),
+    ).toBe('validation');
+  });
+});
+
+describe('artifactKindForMime', () => {
+  it('maps common mimes to artifact kinds', () => {
+    const cases: Array<[string, string]> = [
+      ['application/pdf', 'pdf'],
+      ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'document'],
+      ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'spreadsheet'],
+      ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'presentation'],
+      ['image/png', 'image'],
+      ['application/zip', 'archive'],
+      ['text/csv', 'data'],
+      ['application/json', 'data'],
+      ['text/plain', 'text'],
+      ['text/markdown', 'text'],
+      ['application/octet-stream', 'data'],
+    ];
+    for (const [mime, kind] of cases) {
+      expect(artifactKindForMime(mime)).toBe(kind);
+    }
   });
 });

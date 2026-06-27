@@ -17,6 +17,7 @@ export const ALLOWED_CONTENT_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/zip',
 ] as const;
 
 export type AllowedContentType = (typeof ALLOWED_CONTENT_TYPES)[number];
@@ -37,6 +38,7 @@ const EXT: Record<AllowedContentType, string> = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/zip': 'zip',
 };
 
 export function extForContentType(ct: AllowedContentType): string {

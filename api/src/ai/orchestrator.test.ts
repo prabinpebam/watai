@@ -44,6 +44,27 @@ describe('runAgent', () => {
     ]);
   });
 
+  it('forwards the code-interpreter container id on the tool event', async () => {
+    const events = await collect(
+      runAgent({
+        ...base,
+        turns: [{ role: 'user', text: 'make a pdf' }],
+        tools: [{ type: 'code_interpreter', container: { type: 'auto' } }],
+        execute: async () => ({ output: '' }),
+        streamFn: streamOf([
+          { type: 'created', responseId: 'r1' },
+          { type: 'serverTool', kind: 'code_interpreter', callId: 'ci1', status: 'running', containerId: 'cntr_abc' },
+          { type: 'serverTool', kind: 'code_interpreter', callId: 'ci1', status: 'done', containerId: 'cntr_abc', detail: 'code' },
+          { type: 'completed' },
+        ]),
+      }),
+    );
+    const toolEvents = events.filter((e): e is Extract<AgentEvent, { type: 'tool' }> => e.type === 'tool');
+    expect(toolEvents).toHaveLength(2);
+    expect(toolEvents[0]).toMatchObject({ name: 'code_interpreter', status: 'running', containerId: 'cntr_abc' });
+    expect(toolEvents[1]).toMatchObject({ name: 'code_interpreter', status: 'done', containerId: 'cntr_abc' });
+  });
+
   it('executes a function call, feeds the output back, and surfaces citations', async () => {
     const execute = vi.fn(async (_name: string, args: Record<string, unknown>) => ({
       output: `result for ${String(args.query)}`,

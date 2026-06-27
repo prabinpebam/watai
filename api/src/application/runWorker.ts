@@ -3,7 +3,9 @@ import type { ServiceClock } from './threadService';
 import type { DecryptedCredentials } from './credentialService';
 import type { RunStore } from '../ports/runStore';
 import type { MessageRecord, MessageStore } from '../ports/messageStore';
-import type { MessageToolCall, MessageCitation, MessageImage } from '../domain/message';
+import type { MessageToolCall, MessageCitation, MessageImage, MessageArtifact } from '../domain/message';
+import { artifactKindForMime } from '../domain/message';
+import { ALLOWED_CONTENT_TYPES } from '../domain/asset';
 import type { Settings } from '../domain/settings';
 import type { ThreadStore, ThreadFileMeta } from '../ports/threadStore';
 import type { SignalRSender } from '../adapters/azure/signalr';
@@ -17,6 +19,8 @@ import {
 import type { ResponsesCitation, ResponsesTool } from '../ai/responses';
 import { tavilySearch } from '../ai/tavily';
 import { generateImage } from '../ai/image';
+import { listContainerFiles, getContainerFile, mimeForFilename } from '../ai/containerFiles';
+import { selectSkills, skillsPromptSection } from './skillService';
 import { completeChat } from '../ai/chat';
 
 export interface CredentialReader {
@@ -53,13 +57,25 @@ export interface RunWorkerDeps {
     bytes: Uint8Array,
     contentType: string,
   ) => Promise<string>;
+  /** Upload a generated artifact (code interpreter output) to Blob Storage; returns the blob
+   *  path. Same SAS-write helper as `uploadImage`; without it, artifacts are skipped. */
+  uploadArtifact?: (
+    userId: string,
+    threadId: string,
+    artifactId: string,
+    bytes: Uint8Array,
+    contentType: string,
+  ) => Promise<string>;
 }
 
 const DEFAULT_FLUSH_MS = 250;
+/** Per-run artifact guards (code interpreter outputs persisted to Blob Storage). */
+const MAX_ARTIFACTS = 16;
+const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
 /** Build the system prompt from the user's personalization (about-you / response-style) plus a
  *  base persona and light tool guidance. */
-function systemPrompt(creds: DecryptedCredentials, settings?: Settings): string {
+function systemPrompt(creds: DecryptedCredentials, settings?: Settings, skillsSection?: string): string {
   const lines = ['You are Watai, a helpful AI assistant. Be accurate and concise.'];
   const p = settings?.personalization;
   if (p?.aboutYou?.trim()) lines.push(`About the user:\n${p.aboutYou.trim()}`);
@@ -68,6 +84,7 @@ function systemPrompt(creds: DecryptedCredentials, settings?: Settings): string 
   if (creds.tavilyKey) hints.push('use web_search for current or factual web information and cite the sources');
   if (creds.models.image) hints.push('use generate_image when the user asks for an image, illustration, or diagram');
   if (hints.length) lines.push(`When helpful, ${hints.join('; ')}.`);
+  if (skillsSection) lines.push(skillsSection);
   return lines.join('\n\n');
 }
 
@@ -90,7 +107,7 @@ function buildTurns(system: string, messages: MessageRecord[], assistantMessageI
 function assembleTools(
   creds: DecryptedCredentials,
   run: { tools: string[] },
-  thread: { vectorStoreId?: string } | null,
+  thread: { vectorStoreId?: string; files?: ThreadFileMeta[] } | null,
 ): ResponsesTool[] {
   const requested = run.tools.length > 0 ? new Set(run.tools) : null;
   const wants = (name: string): boolean =>
@@ -112,7 +129,15 @@ function assembleTools(
     });
   }
   if (wants('code_interpreter')) {
-    tools.push({ type: 'code_interpreter', container: { type: 'auto' } });
+    // Mount the thread's uploaded documents into the sandbox so code can read them (e.g. extract
+    // a PDF). `purpose=assistants` uploads expose their fileId here.
+    const fileIds = (thread?.files ?? [])
+      .filter((f) => (f.kind ?? 'document') === 'document' && f.status === 'ready')
+      .map((f) => f.fileId);
+    tools.push({
+      type: 'code_interpreter',
+      container: { type: 'auto', ...(fileIds.length ? { file_ids: fileIds } : {}) },
+    });
   }
   // file_search: search the thread's store (auto-enabled whenever it exists — the user uploaded
   // docs) plus an optional account-wide knowledge base as a fallback. The account store alone only
@@ -272,7 +297,9 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   const citations: MessageCitation[] = [];
   const seenCitations = new Set<string>();
   const images: MessageImage[] = [];
-  /** Artifacts generated this run (images) to record on the thread's file list. */
+  const artifacts: MessageArtifact[] = [];
+  const seenArtifactFiles = new Set<string>();
+  /** Artifacts generated this run (images + code-interpreter files) for the thread file list. */
   const generatedFiles: ThreadFileMeta[] = [];
   let acc = '';
   let lastFlush = 0;
@@ -296,6 +323,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     ...(toolCalls.size ? { toolCalls: [...toolCalls.values()] } : {}),
     ...(citations.length ? { citations } : {}),
     ...(images.length ? { images } : {}),
+    ...(artifacts.length ? { artifacts } : {}),
   });
 
   const flush = async (force = false): Promise<void> => {
@@ -309,6 +337,58 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     }
   };
 
+  /** Capture files the code interpreter wrote to its container: list the container, download each
+   *  new assistant-sourced file, persist it to Blob Storage, and record it as an artifact on the
+   *  message + thread. Best-effort — failures never fail the run. */
+  const captureArtifacts = async (containerId: string, toolCallId: string): Promise<void> => {
+    if (!creds || !deps.uploadArtifact) return;
+    let files;
+    try {
+      files = await listContainerFiles(creds, containerId, deps.fetchImpl);
+    } catch {
+      return;
+    }
+    for (const f of files) {
+      if (f.source !== 'assistant' || seenArtifactFiles.has(f.id)) continue;
+      if (artifacts.length >= MAX_ARTIFACTS) break;
+      const name = ((f.filename || f.path || 'artifact').split('/').pop() || 'artifact').slice(0, 400);
+      const mime = mimeForFilename(name);
+      if (!(ALLOWED_CONTENT_TYPES as readonly string[]).includes(mime)) continue; // mime allowlist
+      seenArtifactFiles.add(f.id);
+      try {
+        const bytes = await getContainerFile(creds, containerId, f.id, deps.fetchImpl);
+        if (!bytes.byteLength || bytes.byteLength > MAX_ARTIFACT_BYTES) continue;
+        const artifactId = `art${artifacts.length + 1}-${run.assistantMessageId}`.slice(0, 64);
+        const blobPath = await deps.uploadArtifact(run.userId, threadId, artifactId, bytes, mime);
+        artifacts.push({
+          id: artifactId,
+          name,
+          mime,
+          kind: artifactKindForMime(mime),
+          bytes: bytes.byteLength,
+          blobPath,
+          sourceToolCallId: toolCallId,
+          createdAt: clock.now(),
+        });
+        generatedFiles.push({
+          fileId: artifactId,
+          name: name.slice(0, 80),
+          bytes: bytes.byteLength,
+          status: 'ready',
+          createdAt: clock.now(),
+          kind: 'artifact',
+          blobPath,
+          mime,
+        });
+        const tc = toolCalls.get(toolCallId);
+        if (tc) toolCalls.set(toolCallId, { ...tc, artifactIds: [...(tc.artifactIds ?? []), artifactId] });
+        await flush(true);
+      } catch {
+        /* skip this file; the text answer still completes */
+      }
+    }
+  };
+
   try {
     const c = await credentials.getDecrypted(run.userId);
     creds = c;
@@ -318,7 +398,10 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       : undefined;
     const history = await messageStore.list(threadId);
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
-    const turns = buildTurns(systemPrompt(c, settings), history, run.assistantMessageId);
+    const skills = run.tools.includes('code_interpreter')
+      ? selectSkills(run.prompt?.text ?? firstUser)
+      : [];
+    const turns = buildTurns(systemPrompt(c, settings, skillsPromptSection(skills)), history, run.assistantMessageId);
     const tools = assembleTools(c, run, thread);
     const execute = makeExecute(c, deps.fetchImpl);
 
@@ -345,6 +428,10 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
             : {}),
         });
         await flush(true);
+        // When a code-interpreter call completes, capture any files it wrote to its container.
+        if (ev.name === 'code_interpreter' && ev.status === 'done' && ev.containerId) {
+          await captureArtifacts(ev.containerId, id);
+        }
       } else if (ev.type === 'citation') {
         const c = ev.citation;
         const key = c.url ?? c.fileId ?? c.title ?? '';

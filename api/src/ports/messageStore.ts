@@ -1,4 +1,5 @@
 import type {
+  MessageArtifact,
   MessageAttachment,
   MessageCitation,
   MessageImage,
@@ -20,6 +21,8 @@ export interface MessageRecord {
   attachments?: MessageAttachment[];
   toolCalls?: MessageToolCall[];
   citations?: MessageCitation[];
+  /** Files the agent generated this message (code interpreter outputs). */
+  artifacts?: MessageArtifact[];
   status: MessageStatus;
   createdAt: string;
   /** Logical creation time (chronology key); preserved from the originating device. */

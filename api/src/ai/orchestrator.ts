@@ -49,6 +49,8 @@ export type AgentEvent =
       result?: string;
       callId?: string;
       args?: Record<string, unknown>;
+      /** Code-interpreter container id (so the worker can capture generated artifacts). */
+      containerId?: string;
     }
   | { type: 'done' }
   | { type: 'error'; message: string; code?: AiErrorCode }
@@ -116,6 +118,7 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
             callId: ev.callId,
             ...(ev.summary ? { detail: ev.summary } : {}),
             ...(ev.detail ? { result: ev.detail } : {}),
+            ...(ev.containerId ? { containerId: ev.containerId } : {}),
           };
           break;
         case 'citation':
