@@ -16,6 +16,13 @@ export interface UploadedFile {
   bytes: number;
 }
 
+/** A file listed from the account's Files API (purpose=assistants). */
+export interface UploadedFileInfo {
+  id: string;
+  filename: string;
+  bytes: number;
+}
+
 /** Vector-store file indexing status, normalized to the values we persist. */
 export type VectorFileStatus = 'indexing' | 'ready' | 'error';
 
@@ -28,6 +35,7 @@ function mapStatus(raw: string | undefined): VectorFileStatus {
 /** Abstraction over the AOAI files/vector-store calls so the service is unit-testable. */
 export interface AoaiFiles {
   uploadFile(c: AoaiCreds, f: { bytes: Uint8Array; filename: string; mime: string }): Promise<UploadedFile>;
+  listFiles(c: AoaiCreds, opts?: { purpose?: string; limit?: number }): Promise<UploadedFileInfo[]>;
   createVectorStore(c: AoaiCreds, name: string): Promise<string>;
   addFile(c: AoaiCreds, vectorStoreId: string, fileId: string): Promise<VectorFileStatus>;
   fileStatus(c: AoaiCreds, vectorStoreId: string, fileId: string): Promise<VectorFileStatus>;
@@ -50,6 +58,22 @@ export const aoaiFiles: AoaiFiles = {
     const res = await aiFetch({ baseUrl, key, path: '/files', body: form, fetchImpl, timeoutMs: 180_000 });
     const json = await jsonOrThrow<{ id: string; bytes?: number }>(res);
     return { id: json.id, bytes: json.bytes ?? bytes.byteLength };
+  },
+
+  // GET <base>/files?purpose=assistants -> { data: [{ id, filename, bytes }] }
+  async listFiles({ baseUrl, key, fetchImpl }, opts) {
+    const q = new URLSearchParams();
+    q.set('purpose', opts?.purpose ?? 'assistants');
+    if (opts?.limit) q.set('limit', String(opts.limit));
+    const res = await aiFetch({
+      baseUrl,
+      key,
+      method: 'GET',
+      url: `${v1Url(baseUrl, '/files')}?${q.toString()}`,
+      fetchImpl,
+    });
+    const json = await jsonOrThrow<{ data?: Array<{ id: string; filename?: string; bytes?: number }> }>(res);
+    return (json.data ?? []).map((f) => ({ id: f.id, filename: f.filename ?? '', bytes: f.bytes ?? 0 }));
   },
 
   // POST <base>/vector_stores { name } -> { id }

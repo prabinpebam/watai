@@ -21,6 +21,9 @@ import { tavilySearch } from '../ai/tavily';
 import { generateImage } from '../ai/image';
 import { listContainerFiles, getContainerFile, mimeForFilename } from '../ai/containerFiles';
 import { selectSkills, codeInterpreterSection } from './skillService';
+import type { SkillProvisioner } from './skillProvisioner';
+import type { MountedSkill, SkillPackage } from '../domain/skill';
+import { DEFAULT_SKILLS } from '../skills';
 import { completeChat } from '../ai/chat';
 
 export interface CredentialReader {
@@ -69,6 +72,13 @@ export interface RunWorkerDeps {
   /** Mint a short-lived READ url for an uploaded attachment blob so a vision model can fetch it.
    *  Without it, user-uploaded images are omitted from the prompt (text-only history). */
   resolveImageUrl?: (blobPath: string) => Promise<string | null>;
+  /** Provisions canonical skills (zips + bootstrap) onto the user's Azure endpoint and returns the
+   *  file_ids to mount + the discovery info. Absent ⇒ no canonical skills this run (tests). */
+  skillProvisioner?: SkillProvisioner;
+  /** Resolve the user's effective canonical skill set (defaults−disabled ⊎ enabled user skills).
+   *  Absent ⇒ the bundled defaults. Only consulted when `skillProvisioner` is present and code
+   *  interpreter is on. */
+  resolveSkills?: (userId: string) => Promise<SkillPackage[]>;
 }
 
 const DEFAULT_FLUSH_MS = 250;
@@ -130,6 +140,7 @@ function assembleTools(
   creds: DecryptedCredentials,
   run: { tools: string[] },
   thread: { vectorStoreId?: string; files?: ThreadFileMeta[] } | null,
+  skillFileIds: string[] = [],
 ): ResponsesTool[] {
   const requested = run.tools.length > 0 ? new Set(run.tools) : null;
   const wants = (name: string): boolean =>
@@ -152,10 +163,12 @@ function assembleTools(
   }
   if (wants('code_interpreter')) {
     // Mount the thread's uploaded documents into the sandbox so code can read them (e.g. extract
-    // a PDF). `purpose=assistants` uploads expose their fileId here.
-    const fileIds = (thread?.files ?? [])
+    // a PDF). `purpose=assistants` uploads expose their fileId here. Skill packages (zips + the
+    // bootstrap script) are mounted first so the model sees them when it lists /mnt/data.
+    const docIds = (thread?.files ?? [])
       .filter((f) => (f.kind ?? 'document') === 'document' && f.status === 'ready')
       .map((f) => f.fileId);
+    const fileIds = [...skillFileIds, ...docIds];
     tools.push({
       type: 'code_interpreter',
       container: { type: 'auto', ...(fileIds.length ? { file_ids: fileIds } : {}) },
@@ -439,14 +452,40 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     const history = await messageStore.list(threadId);
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
     const codeOn = run.tools.includes('code_interpreter');
-    const ciSection = codeOn ? codeInterpreterSection(selectSkills(run.prompt?.text ?? firstUser)) : '';
+
+    // Canonical skills: provision the user's effective set onto their endpoint (zips + bootstrap),
+    // mount the file_ids, and describe them in the prompt. Best-effort — a failure here must not
+    // break the run (the model still has the inline playbooks + its own abilities).
+    let skillFileIds: string[] = [];
+    let skillMounts: MountedSkill[] = [];
+    if (codeOn && deps.skillProvisioner) {
+      try {
+        const effective = deps.resolveSkills
+          ? await deps.resolveSkills(run.userId)
+          : DEFAULT_SKILLS;
+        if (effective.length) {
+          const prov = await deps.skillProvisioner.ensure(
+            { baseUrl: c.baseUrl, key: c.key, fetchImpl: deps.fetchImpl },
+            effective,
+          );
+          skillFileIds = prov.fileIds;
+          skillMounts = prov.skills;
+        }
+      } catch (e) {
+        console.error('[skills] provisioning failed', e instanceof Error ? e.message : String(e));
+      }
+    }
+
+    const ciSection = codeOn
+      ? codeInterpreterSection(selectSkills(run.prompt?.text ?? firstUser), skillMounts)
+      : '';
     const turns = await buildTurns(
       systemPrompt(c, settings, ciSection),
       history,
       run.assistantMessageId,
       deps.resolveImageUrl,
     );
-    const tools = assembleTools(c, run, thread);
+    const tools = assembleTools(c, run, thread, skillFileIds);
     const execute = makeExecute(c, deps.fetchImpl);
 
     for await (const ev of runAgent({ baseUrl: c.baseUrl, key: c.key, model, turns, tools, execute })) {

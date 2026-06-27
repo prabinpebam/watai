@@ -1,34 +1,13 @@
 import type { Skill } from '../domain/skill';
+import type { SkillPackage } from '../domain/skill';
+import { PDF_SKILL } from './pdf';
 
 // Skill playbooks for the code interpreter. Bundled as a TypeScript module so esbuild compiles the
 // bodies into dist/index.cjs (it does not bundle .md). Every library referenced below is
 // preinstalled in the sandbox (verified) — no `pip install`, no internet.
-
-const professionalPdf: Skill = {
-  id: 'professional-pdf',
-  name: 'Professional PDF documents',
-  summary: 'Produce a clean, print-ready A4 PDF.',
-  keywords: ['pdf', 'a4', 'report', 'letter', 'document', 'brochure', 'resume', 'cv', 'invoice', 'formatted', 'professional'],
-  outputs: ['pdf'],
-  version: 1,
-  body: `When asked for a professional PDF, use the python tool with **ReportLab** (preferred for
-precise layout) or **WeasyPrint** (when an HTML/CSS layout is easier).
-
-ReportLab recipe:
-- \`from reportlab.lib.pagesizes import A4\`; \`from reportlab.lib.units import cm\`;
-  use \`SimpleDocTemplate(path, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)\`.
-- Build with Platypus flowables: \`Paragraph\`, \`Spacer\`, \`Table\`, \`Image\`. Define a \`ParagraphStyle\`
-  set: Title (~20pt bold), H2 (~13pt bold, space before), Body (~10.5pt, leading 14, justified).
-- Add a running header/footer with the document title and "Page X of Y" via \`onPage\` callbacks.
-- Tables: subtle 0.5pt grid, header row shaded, padding 6pt.
-- Save to \`/mnt/data/<concise-name>.pdf\`.
-
-WeasyPrint alternative: write semantic HTML + a CSS \`@page { size: A4; margin: 2cm }\` stylesheet,
-then \`HTML(string=html).write_pdf('/mnt/data/<name>.pdf')\`. Great for multi-column / rich text.
-
-Always: real margins, consistent type scale, page numbers, and a sensible filename. Never output a
-single wall of text. Confirm the saved path in your reply.`,
-};
+//
+// NOTE: PDF create/extract are intentionally NOT here — the canonical `pdf` skill (folder-based,
+// mounted into the sandbox) owns all PDF guidance to avoid duplicate/conflicting instructions.
 
 const wordDocx: Skill = {
   id: 'word-docx',
@@ -78,21 +57,6 @@ const slidesPptx: Skill = {
 - Save to \`/mnt/data/<name>.pptx\`.`,
 };
 
-const pdfExtract: Skill = {
-  id: 'pdf-extract',
-  name: 'Read & extract from PDFs',
-  summary: 'Pull text/tables out of an uploaded PDF reliably.',
-  keywords: ['extract', 'pdf', 'parse', 'read', 'scan', 'ocr', 'contents', 'from the pdf', 'uploaded', 'attached'],
-  outputs: ['text', 'data'],
-  version: 1,
-  body: `Uploaded files are mounted at \`/mnt/data/\`. To read a PDF use the python tool:
-- **pdfplumber** for text + tables: \`with pdfplumber.open(path) as pdf: for page in pdf.pages: page.extract_text(); page.extract_tables()\`.
-- **pypdf** (\`from pypdf import PdfReader\`) for quick page text, or **PyMuPDF** (\`import fitz\`) for
-  layout-aware extraction and embedded images.
-- First \`os.listdir('/mnt/data')\` to find the file. Preserve headings/sections when re-emitting
-  content. If the PDF is scanned (no extractable text), say so rather than inventing content.`,
-};
-
 const dataViz: Skill = {
   id: 'data-viz',
   name: 'Charts & data visualization',
@@ -124,11 +88,55 @@ const tabularClean: Skill = {
 };
 
 export const SKILLS: Skill[] = [
-  professionalPdf,
   wordDocx,
   excelXlsx,
   slidesPptx,
-  pdfExtract,
   dataViz,
   tabularClean,
 ];
+
+// ---------------------------------------------------------------------------
+// Canonical Agent Skills (folder skills mounted into the code-interpreter
+// sandbox). Default packages ship with the app; users can add their own.
+// ---------------------------------------------------------------------------
+
+/** The default, service-provided canonical skills (on by default, toggle-off). */
+export const DEFAULT_SKILLS: SkillPackage[] = [PDF_SKILL];
+
+/** The mounted bootstrap the model runs once to unpack mounted skill zips into
+ *  /mnt/data/skills/<name>/. Kept tiny + deterministic + idempotent. */
+export const SKILLS_SETUP_SCRIPT = {
+  filename: 'watai-skills-setup.py',
+  content: `#!/usr/bin/env python3
+"""Watai skills bootstrap. Unpack every mounted skill package into
+/mnt/data/skills/<name>/ so the agent can read SKILL.md and run bundled scripts.
+Idempotent: safe to run more than once. Run this once before using a skill."""
+import os, re, zipfile
+
+DATA = "/mnt/data"
+DEST = os.path.join(DATA, "skills")
+os.makedirs(DEST, exist_ok=True)
+pat = re.compile(r"^watai-skill\\.([a-z0-9-]+)\\.v\\d+\\.zip$")
+ready = []
+for fn in sorted(os.listdir(DATA)):
+    m = pat.match(fn)
+    if not m:
+        continue
+    name = m.group(1)
+    out = os.path.join(DEST, name)
+    if not os.path.isdir(out) or not os.listdir(out):
+        os.makedirs(out, exist_ok=True)
+        try:
+            with zipfile.ZipFile(os.path.join(DATA, fn)) as z:
+                z.extractall(out)
+        except Exception as e:
+            print("skipped", fn, "-", e)
+            continue
+    ready.append(name)
+if ready:
+    print("Skills ready in /mnt/data/skills/:", ", ".join(sorted(set(ready))))
+else:
+    print("No skill packages were mounted.")
+`,
+};
+

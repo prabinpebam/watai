@@ -171,6 +171,36 @@ app.http('assets-sas', {
   handler: methodDispatch({ POST: (c) => c.assets.requestSas }, invited),
 });
 
+// Agent Skills — user-scoped catalog (default toggles + uploaded skills, full CRUD).
+app.http('skills', {
+  methods: ['GET', 'POST'],
+  authLevel: 'anonymous',
+  route: 'skills',
+  handler: methodDispatch({ GET: (c) => c.skills.list, POST: (c) => c.skills.create }, invited),
+});
+
+app.http('skill-item', {
+  methods: ['GET', 'PUT', 'PATCH', 'DELETE'],
+  authLevel: 'anonymous',
+  route: 'skills/{id}',
+  handler: methodDispatch(
+    {
+      GET: (c) => c.skills.get,
+      PUT: (c) => c.skills.replace,
+      PATCH: (c) => c.skills.setEnabled,
+      DELETE: (c) => c.skills.remove,
+    },
+    invited,
+  ),
+});
+
+app.http('skill-download', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'skills/{id}/download',
+  handler: methodDispatch({ GET: (c) => c.skills.download }, invited),
+});
+
 // Caller's access status — requires auth but not an invite (so a non-invited user learns it).
 app.http('me', {
   methods: ['GET'],

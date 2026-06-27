@@ -6,7 +6,9 @@ import { CosmosInviteStore } from './adapters/cosmos/inviteStore';
 import { CosmosCredentialStore } from './adapters/cosmos/credentialStore';
 import { CosmosRunStore } from './adapters/cosmos/runStore';
 import { CosmosImageStore } from './adapters/cosmos/imageStore';
+import { CosmosSkillStore } from './adapters/cosmos/skillStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
+import { SasSkillBlobStore } from './adapters/azure/sasSkillBlobStore';
 import { KeyVaultWrapper } from './adapters/azure/keyVaultWrapper';
 import { LocalKeyWrapper } from './adapters/local/keyWrapper';
 import { QueueRunStarter } from './adapters/azure/queueRunStarter';
@@ -28,6 +30,8 @@ import { RunService } from './application/runService';
 import type { RunWorkerDeps } from './application/runWorker';
 import { ImageService } from './application/imageService';
 import type { ImageWorkerDeps } from './application/imageWorker';
+import { SkillCatalogService } from './application/skillCatalogService';
+import { createSkillProvisioner } from './application/skillProvisioner';
 import { createThreadsController } from './http/threadsController';
 import { createThreadLockController } from './http/threadLockController';
 import { createMessagesController } from './http/messagesController';
@@ -39,6 +43,7 @@ import { createInvitesController } from './http/invitesController';
 import { createCredentialsController } from './http/credentialsController';
 import { createRunsController } from './http/runsController';
 import { createImagesController } from './http/imagesController';
+import { createSkillsController } from './http/skillsController';
 import { createNegotiateController } from './http/negotiateController';
 import { createAiProxyController } from './http/aiProxyController';
 import { AppError } from './domain/errors';
@@ -59,6 +64,7 @@ export interface ApiContainer {
   credentials: ReturnType<typeof createCredentialsController>;
   runs: ReturnType<typeof createRunsController>;
   images: ReturnType<typeof createImagesController>;
+  skills: ReturnType<typeof createSkillsController>;
   negotiate: ReturnType<typeof createNegotiateController>;
   aiProxy: ReturnType<typeof createAiProxyController>;
   /** Dependencies the queue-triggered run worker needs to process a job. */
@@ -102,8 +108,7 @@ export function container(): ApiContainer {
   const credentialStore = new CosmosCredentialStore();
   const runStore = new CosmosRunStore();
   const imageStore = new CosmosImageStore();
-  const minter = new AzureSasMinter();
-  const access = new AccessService(
+  const minter = new AzureSasMinter();  const access = new AccessService(
     inviteStore,
     process.env.ADMIN_EMAIL ?? '',
     (process.env.ADMIN_OID ?? '').split(',').map((s) => s.trim()).filter(Boolean),
@@ -116,6 +121,8 @@ export function container(): ApiContainer {
   const settingsService = new SettingsService(settingsStore);
   const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock);
   const aiProxyService = new AiProxyService(credentialService);
+  const skillCatalog = new SkillCatalogService(new CosmosSkillStore(), new SasSkillBlobStore(minter), clock);
+  const skillProvisioner = createSkillProvisioner(aoaiFiles);
   const signalr: SignalRSender | null = process.env.AzureSignalRConnectionString
     ? new AzureSignalR(process.env.AzureSignalRConnectionString)
     : null;
@@ -137,6 +144,7 @@ export function container(): ApiContainer {
     credentials: createCredentialsController(credentialService),
     runs: createRunsController(runService),
     images: createImagesController(imageService),
+    skills: createSkillsController(skillCatalog),
     negotiate: createNegotiateController(signalr),
     aiProxy: createAiProxyController(aiProxyService),
     runWorker: {
@@ -148,6 +156,8 @@ export function container(): ApiContainer {
       uploadImage: makeUploadImage(assetService),
       uploadArtifact: makeUploadImage(assetService),
       resolveImageUrl: makeResolveImageUrl(minter),
+      skillProvisioner,
+      resolveSkills: (uid) => skillCatalog.effective(uid),
       signalr: signalr ?? undefined,
       clock,
     },

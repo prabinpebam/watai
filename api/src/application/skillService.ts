@@ -1,5 +1,5 @@
-import type { Skill } from '../domain/skill';
-import { SKILLS } from '../skills';
+import type { MountedSkill, Skill } from '../domain/skill';
+import { SKILLS, SKILLS_SETUP_SCRIPT } from '../skills';
 
 /**
  * Rank the bundled skills by keyword overlap with the user's request and return the top matches
@@ -41,9 +41,33 @@ const CODE_INTERPRETER_DIRECTIVE =
   'already appears as a downloadable attachment card directly beneath your message. Just state ' +
   'that the file is ready and describe it in one or two sentences.';
 
-/** Build the code-interpreter system-prompt section: the directive plus any matched skill bodies. */
-export function codeInterpreterSection(skills: Skill[]): string {
-  if (!skills.length) return CODE_INTERPRETER_DIRECTIVE;
-  const blocks = skills.map((s) => `### ${s.name}\n${s.body}`).join('\n\n');
-  return `${CODE_INTERPRETER_DIRECTIVE}\n\nApply these skills:\n\n${blocks}`;
+/** Build the level-1 discovery block for canonical skills mounted into the sandbox: their names +
+ *  descriptions, the one-time bootstrap command, and where each unpacks. This is *discovery* only —
+ *  the model reads each skill's SKILL.md (and bundled scripts/references) on demand at execution. */
+function skillsDiscoveryBlock(mounts: MountedSkill[]): string {
+  const list = mounts.map((m) => `- ${m.name} — ${m.description}  [folder: ${m.path}]`).join('\n');
+  return (
+    'AVAILABLE SKILLS. You have specialized, file-based skills bundled into your sandbox as zip ' +
+    'packages. Before using any skill in a session, run this once to unpack them (it is idempotent ' +
+    'and prints what is ready):\n\n' +
+    `    python /mnt/data/${SKILLS_SETUP_SCRIPT.filename}\n\n` +
+    'That extracts each skill into /mnt/data/skills/<name>/. Skills available now:\n\n' +
+    `${list}\n\n` +
+    "When a task matches one of these skills, FIRST open that folder's SKILL.md and read it, then " +
+    'follow its instructions using the helper scripts and reference files bundled inside the same ' +
+    'folder. SKILL.md tells you which preinstalled Python libraries and scripts to use. Prefer a ' +
+    'matching skill over improvising.'
+  );
+}
+
+/** Build the code-interpreter system-prompt section: the directive, the canonical-skill discovery
+ *  block (for mounted skills), and any keyword-matched inline playbooks. */
+export function codeInterpreterSection(playbooks: Skill[], mounts: MountedSkill[] = []): string {
+  const parts = [CODE_INTERPRETER_DIRECTIVE];
+  if (mounts.length) parts.push(skillsDiscoveryBlock(mounts));
+  if (playbooks.length) {
+    const blocks = playbooks.map((s) => `### ${s.name}\n${s.body}`).join('\n\n');
+    parts.push(`Apply these skills:\n\n${blocks}`);
+  }
+  return parts.join('\n\n');
 }

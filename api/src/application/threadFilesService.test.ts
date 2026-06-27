@@ -18,6 +18,10 @@ function fakeFiles() {
       calls.push(`upload:${f.filename}`);
       return { id: `file-${++fileN}`, bytes: f.bytes.byteLength };
     },
+    async listFiles() {
+      calls.push('listFiles');
+      return [];
+    },
     async createVectorStore(_c, name) {
       calls.push(`createVs:${name}`);
       return 'vs-1';

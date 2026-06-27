@@ -4,14 +4,9 @@ import { SKILLS } from '../skills';
 import type { Skill } from '../domain/skill';
 
 describe('selectSkills', () => {
-  it('picks the professional-pdf skill for a PDF formatting request', () => {
-    const out = selectSkills('extract the content and make a professional A4 PDF I can download');
-    expect(out[0].id).toBe('professional-pdf');
-  });
-
-  it('picks the pdf-extract skill when asked to read an uploaded PDF', () => {
-    const out = selectSkills('extract the contents from the uploaded pdf');
-    expect(out.map((s) => s.id)).toContain('pdf-extract');
+  it('picks the word-docx skill for an editable document request', () => {
+    const out = selectSkills('write me an editable word document memo');
+    expect(out[0].id).toBe('word-docx');
   });
 
   it('picks excel-xlsx for a spreadsheet with formulas', () => {
@@ -55,9 +50,20 @@ describe('codeInterpreterSection', () => {
   });
 
   it('embeds each selected skill body alongside the directive', () => {
-    const section = codeInterpreterSection(selectSkills('make a professional pdf'));
-    expect(section).toContain('Professional PDF');
-    expect(section).toContain('ReportLab');
+    const section = codeInterpreterSection(selectSkills('build an excel budget spreadsheet with formulas'));
+    expect(section).toContain('Excel spreadsheets');
+    expect(section).toContain('openpyxl');
     expect(section).toContain('/mnt/data/');
+  });
+
+  it('emits a level-1 discovery block for mounted canonical skills', () => {
+    const section = codeInterpreterSection(
+      [],
+      [{ name: 'pdf', description: 'Create, fill, and extract PDFs.', path: '/mnt/data/skills/pdf/' }],
+    );
+    expect(section).toContain('python /mnt/data/watai-skills-setup.py');
+    expect(section).toContain('pdf — Create, fill, and extract PDFs.');
+    expect(section).toContain('/mnt/data/skills/pdf/');
+    expect(section).toContain('SKILL.md');
   });
 });
