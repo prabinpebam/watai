@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChatView } from './ChatView';
+import { ThreadFilesPanel } from './ThreadFilesPanel';
 import { IconButton } from '../../design/ui';
 import { useIsExpanded } from '../../lib/hooks';
 import { useUi } from '../../state/store';
 import { repo } from '../../data';
+import { isServerRunsEnabled } from '../../lib/flags';
 import { newId } from '../../lib/ids';
 
 interface ChatScreenProps {
@@ -25,6 +27,7 @@ export function ChatScreen({ isNew }: ChatScreenProps) {
   const threadId = isNew ? generatedId.current : params.threadId!;
   const [title, setTitle] = useState(isNew ? 'New chat' : '');
   const [scrolled, setScrolled] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
 
   useEffect(() => {
     if (!isNew) {
@@ -47,10 +50,14 @@ export function ChatScreen({ isNew }: ChatScreenProps) {
           <IconButton name="menu" label="Open menu" onClick={() => toggleDrawer(true)} />
         )}
         <div className="appbar__title">{title}</div>
+        {isServerRunsEnabled() && (
+          <IconButton name="file-text" label="Chat files" onClick={() => setFilesOpen(true)} />
+        )}
         <IconButton name="pen-square" label="New chat" onClick={() => navigate('/new')} />
         <IconButton name="speaker" label="Voice mode" onClick={() => navigate(`/voice/${threadId}`)} />
       </div>
       <ChatView key={threadId} threadId={threadId} onScrolledChange={setScrolled} />
+      {filesOpen && <ThreadFilesPanel threadId={threadId} onClose={() => setFilesOpen(false)} />}
     </>
   );
 }

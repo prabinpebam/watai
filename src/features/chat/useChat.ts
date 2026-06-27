@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { repo } from '../../data';
+import { repo, cloudApi, syncNow } from '../../data';
 import { newId } from '../../lib/ids';
 import { getDeviceId } from '../../lib/device';
 import { useUi } from '../../state/store';
@@ -10,6 +10,7 @@ import { indexThreadDocuments } from '../../ai/fileSearch';
 import { detectCapabilities } from '../../ai/capabilities';
 import { getApiConfig } from '../../data/secureStore';
 import { isServerRunsEnabled } from '../../lib/flags';
+import { fileToBase64 } from '../../lib/files';
 import type { Attachment, Message } from '../../lib/types';
 
 export { DEFAULT_CHAT_MODEL } from './runStore';
@@ -176,18 +177,43 @@ export function useChat(threadId: string, temporary = false) {
         setIndexing(true);
         toast(`Indexing ${docs.length} file${docs.length === 1 ? '' : 's'}…`, 'info');
         try {
-          const existingStore = (await repo.getThread(threadId))?.vectorStoreId;
-          const { vectorStoreId, indexed, failed } = await indexThreadDocuments(
-            docs.map((f) => ({ file: f, name: f.name })),
-            existingStore,
-          );
-          // Persist the store id ON THE THREAD so it syncs across devices (file search travels).
-          if (vectorStoreId && vectorStoreId !== existingStore) {
-            await repo.updateThread(threadId, { vectorStoreId });
+          if (isServerRunsEnabled()) {
+            // Server-authoritative: the AOAI key lives in the server vault, so upload the docs to
+            // the thread's vector store via the API. The server creates the store on first upload
+            // and records it (vectorStoreId + files) on the thread; sync pulls that back.
+            let indexed = 0;
+            for (const f of docs) {
+              try {
+                await cloudApi.uploadThreadFile(threadId, {
+                  name: f.name,
+                  mime: f.type || 'application/octet-stream',
+                  dataBase64: await fileToBase64(f),
+                });
+                indexed++;
+              } catch {
+                /* counted as failed below */
+              }
+            }
+            await syncNow().catch(() => {});
+            useUi.getState().bumpThread(threadId);
+            const failed = docs.length - indexed;
+            if (failed && !indexed) toast('Could not index the file(s)', 'error');
+            else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
+            else toast('File ready — you can ask about it', 'success');
+          } else {
+            const existingStore = (await repo.getThread(threadId))?.vectorStoreId;
+            const { vectorStoreId, indexed, failed } = await indexThreadDocuments(
+              docs.map((f) => ({ file: f, name: f.name })),
+              existingStore,
+            );
+            // Persist the store id ON THE THREAD so it syncs across devices (file search travels).
+            if (vectorStoreId && vectorStoreId !== existingStore) {
+              await repo.updateThread(threadId, { vectorStoreId });
+            }
+            if (failed && !indexed) toast('Could not index the file(s)', 'error');
+            else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
+            else toast('File ready — you can ask about it', 'success');
           }
-          if (failed && !indexed) toast('Could not index the file(s)', 'error');
-          else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
-          else toast('File ready — you can ask about it', 'success');
         } catch {
           toast('Could not index the file(s)', 'error');
         } finally {

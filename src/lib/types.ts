@@ -15,6 +15,8 @@ export interface Thread {
   model?: string;
   /** Vector store id holding this thread's uploaded documents (thread-scoped file search). */
   vectorStoreId?: string;
+  /** Documents uploaded into this thread's knowledge base (vector store) for file search. */
+  files?: ThreadFile[];
   /** Active run lock: set while a device is generating a reply here; null/absent when free. */
   lock?: ThreadLock | null;
   createdAt: string;
@@ -22,6 +24,16 @@ export interface Thread {
   deletedAt?: string | null;
   messageCount: number;
   lastMessagePreview?: string;
+}
+
+/** A document uploaded into a thread's knowledge base (vector store) for file search. */
+export interface ThreadFile {
+  /** Azure OpenAI file id (also the vector-store file id) — the delete key. */
+  fileId: string;
+  name: string;
+  bytes: number;
+  status: 'indexing' | 'ready' | 'error';
+  createdAt: string;
 }
 
 /** Per-thread run lock (server-coordinated) so two devices never generate a reply at once. */

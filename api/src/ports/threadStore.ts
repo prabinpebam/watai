@@ -1,5 +1,15 @@
 import type { ThreadLock } from '../domain/threadLock';
 
+/** A document uploaded into the thread's vector store (thread-scoped file search). */
+export interface ThreadFileMeta {
+  /** Azure OpenAI file id (also the vector-store file id) — the delete key. */
+  fileId: string;
+  name: string;
+  bytes: number;
+  status: 'indexing' | 'ready' | 'error';
+  createdAt: string;
+}
+
 /** Server-side thread document (mirrors the Cosmos `threads` container, partition key /userId). */
 export interface ThreadRecord {
   id: string;
@@ -12,6 +22,8 @@ export interface ThreadRecord {
   lastMessagePreview?: string;
   /** Vector store id holding the thread's uploaded documents (thread-scoped file search). */
   vectorStoreId?: string;
+  /** Documents uploaded into this thread's knowledge base. */
+  files?: ThreadFileMeta[];
   /** Active run lock (set while a device generates a reply); null/absent when free. */
   lock?: ThreadLock | null;
   createdAt: string;

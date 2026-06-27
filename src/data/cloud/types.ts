@@ -14,11 +14,21 @@ export interface ThreadRecord {
   messageCount: number;
   lastMessagePreview?: string;
   vectorStoreId?: string;
+  files?: ThreadFileRecord[];
   /** Active run lock (set while a device generates a reply); null/absent when free. */
   lock?: ThreadLock | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+}
+
+/** A document in a thread's knowledge base (vector store), as returned by the API. */
+export interface ThreadFileRecord {
+  fileId: string;
+  name: string;
+  bytes: number;
+  status: 'indexing' | 'ready' | 'error';
+  createdAt: string;
 }
 
 export type ServerMessageStatus = 'complete' | 'interrupted' | 'error';
@@ -179,6 +189,8 @@ export interface CredentialsInput {
   models: ModelDeployments;
   key: string;
   tavilyKey?: string;
+  /** Account-wide knowledge base store, searched as a fallback alongside per-thread files. */
+  knowledgeBaseVectorStoreId?: string;
 }
 
 // --- runs (server-authoritative generation) ---
@@ -241,6 +253,7 @@ export function threadFromRecord(r: ThreadRecord): Thread {
     lock: r.lock ?? null,
     ...(r.lastMessagePreview !== undefined ? { lastMessagePreview: r.lastMessagePreview } : {}),
     ...(r.vectorStoreId !== undefined ? { vectorStoreId: r.vectorStoreId } : {}),
+    ...(r.files !== undefined ? { files: r.files } : {}),
   };
 }
 

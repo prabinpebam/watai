@@ -380,6 +380,13 @@ class FakeCloud implements CloudApi {
   async negotiate() {
     return { url: '', accessToken: '' };
   }
+  async listThreadFiles() {
+    return [];
+  }
+  async uploadThreadFile(_threadId: string, body: { name: string; mime: string; dataBase64: string }) {
+    return { fileId: 'f1', name: body.name, bytes: 1, status: 'ready' as const, createdAt: this.now() };
+  }
+  async deleteThreadFile() {}
 }
 
 function setup(sync = true) {

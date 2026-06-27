@@ -13,6 +13,7 @@ export interface CredentialStatus {
   keyHint?: string;
   tavilyConfigured: boolean;
   tavilyHint?: string | null;
+  knowledgeBaseVectorStoreId?: string | null;
 }
 
 /** Decrypted credentials — INTERNAL ONLY (the run engine). Never serialized to a client. */
@@ -21,6 +22,7 @@ export interface DecryptedCredentials {
   models: ModelDeployments;
   key: string;
   tavilyKey?: string;
+  knowledgeBaseVectorStoreId?: string;
 }
 
 /**
@@ -49,6 +51,7 @@ export class CredentialService {
       aoai: await sealSecret(parsed.key, this.wrapper),
       tavily: parsed.tavilyKey ? await sealSecret(parsed.tavilyKey, this.wrapper) : null,
       tavilyHint: parsed.tavilyKey ? keyHint(parsed.tavilyKey) : null,
+      knowledgeBaseVectorStoreId: parsed.knowledgeBaseVectorStoreId ?? null,
       createdAt: existing?.createdAt ?? ts,
       updatedAt: ts,
     };
@@ -73,6 +76,7 @@ export class CredentialService {
       models: rec.models,
       key: await openSecret(rec.aoai, this.wrapper),
       tavilyKey: rec.tavily ? await openSecret(rec.tavily, this.wrapper) : undefined,
+      knowledgeBaseVectorStoreId: rec.knowledgeBaseVectorStoreId ?? undefined,
     };
   }
 
@@ -84,6 +88,7 @@ export class CredentialService {
       keyHint: rec.keyHint,
       tavilyConfigured: !!rec.tavily,
       tavilyHint: rec.tavilyHint ?? null,
+      knowledgeBaseVectorStoreId: rec.knowledgeBaseVectorStoreId ?? null,
     };
   }
 }

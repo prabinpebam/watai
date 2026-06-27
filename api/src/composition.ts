@@ -13,6 +13,8 @@ import { AzureSignalR, type SignalRSender } from './adapters/azure/signalr';
 import { entraVerifierFromEnv } from './adapters/auth/entraTokenVerifier';
 import { ThreadService } from './application/threadService';
 import { ThreadLockService } from './application/threadLockService';
+import { ThreadFilesService } from './application/threadFilesService';
+import { aoaiFiles } from './ai/files';
 import { MessageService } from './application/messageService';
 import { SettingsService } from './application/settingsService';
 import { AssetService } from './application/assetService';
@@ -25,6 +27,7 @@ import { createThreadsController } from './http/threadsController';
 import { createThreadLockController } from './http/threadLockController';
 import { createMessagesController } from './http/messagesController';
 import { createSettingsController } from './http/settingsController';
+import { createThreadFilesController } from './http/threadFilesController';
 import { createAssetsController } from './http/assetsController';
 import { createMeController } from './http/meController';
 import { createInvitesController } from './http/invitesController';
@@ -42,6 +45,7 @@ export interface ApiContainer {
   threadLock: ReturnType<typeof createThreadLockController>;
   messages: ReturnType<typeof createMessagesController>;
   settings: ReturnType<typeof createSettingsController>;
+  threadFiles: ReturnType<typeof createThreadFilesController>;
   assets: ReturnType<typeof createAssetsController>;
   me: ReturnType<typeof createMeController>;
   invites: ReturnType<typeof createInvitesController>;
@@ -97,6 +101,7 @@ export function container(): ApiContainer {
   const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
+  const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock);
   const signalr: SignalRSender | null = process.env.AzureSignalRConnectionString
     ? new AzureSignalR(process.env.AzureSignalRConnectionString)
     : null;
@@ -104,10 +109,14 @@ export function container(): ApiContainer {
   cached = {
     verifier: buildVerifier(),
     access,
-    threads: createThreadsController(new ThreadService(threadStore, clock)),
+    threads: createThreadsController(
+      new ThreadService(threadStore, clock),
+      (userId, id) => threadFilesService.cleanup(userId, id),
+    ),
     threadLock: createThreadLockController(new ThreadLockService(threadStore, clock)),
     messages: createMessagesController(messageService),
     settings: createSettingsController(settingsService),
+    threadFiles: createThreadFilesController(threadFilesService),
     assets: createAssetsController(assetService),
     me: createMeController(access),
     invites: createInvitesController(inviteStore, clock),

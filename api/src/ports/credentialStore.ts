@@ -19,6 +19,8 @@ export interface CredentialRecord {
   /** Envelope-encrypted Tavily key (web search), if configured. */
   tavily?: SealedSecret | null;
   tavilyHint?: string | null;
+  /** Non-secret account-wide knowledge base vector store id (file-search fallback). */
+  knowledgeBaseVectorStoreId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

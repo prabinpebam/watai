@@ -613,6 +613,9 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
         },
         key: key.trim(),
         ...(tavily ? { tavilyKey: tavily } : {}),
+        ...(config.tools?.vectorStoreId
+          ? { knowledgeBaseVectorStoreId: config.tools.vectorStoreId }
+          : {}),
       });
       await saveTavilyKey(tavily); // keep the local web-search key in sync with the vault
       // Also persist the config locally so the capability probe (for server-run tools) + the

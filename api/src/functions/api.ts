@@ -87,6 +87,21 @@ app.http('messages', {
   handler: methodDispatch({ GET: (c) => c.messages.list, POST: (c) => c.messages.append }, invited),
 });
 
+// Thread knowledge base: upload/list documents (POST/GET) and remove one (DELETE) for file search.
+app.http('thread-files', {
+  methods: ['GET', 'POST'],
+  authLevel: 'anonymous',
+  route: 'threads/{id}/files',
+  handler: methodDispatch({ GET: (c) => c.threadFiles.list, POST: (c) => c.threadFiles.upload }, invited),
+});
+
+app.http('thread-file-item', {
+  methods: ['DELETE'],
+  authLevel: 'anonymous',
+  route: 'threads/{id}/files/{fileId}',
+  handler: methodDispatch({ DELETE: (c) => c.threadFiles.remove }, invited),
+});
+
 app.http('settings', {
   methods: ['GET', 'PATCH'],
   authLevel: 'anonymous',

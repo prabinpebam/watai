@@ -7,9 +7,13 @@ import type { ApiRequest, HttpResult } from './types';
 /**
  * HTTP boundary for thread endpoints. Identity always comes from the validated token
  * claims (never the body/params), validation runs before the service, and every error
- * flows through the shared envelope mapper.
+ * flows through the shared envelope mapper. `onDelete` runs best-effort after a soft delete
+ * (e.g. to clean up the thread's vector store + files on the AI provider).
  */
-export function createThreadsController(threads: ThreadService) {
+export function createThreadsController(
+  threads: ThreadService,
+  onDelete?: (userId: string, threadId: string) => Promise<void>,
+) {
   return {
     list: (req: ApiRequest): Promise<HttpResult> =>
       respond(200, async () => {
@@ -45,6 +49,7 @@ export function createThreadsController(threads: ThreadService) {
       respond(204, async () => {
         const { userId } = identityFromClaims(req.claims);
         await threads.softDelete(userId, req.params!.id);
+        if (onDelete) await onDelete(userId, req.params!.id).catch(() => {});
       }),
   };
 }

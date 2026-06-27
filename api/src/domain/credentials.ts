@@ -18,6 +18,8 @@ const credentialsInputSchema = z
     models: modelsSchema,
     key: z.string().min(1).max(400),
     tavilyKey: z.string().max(400).optional(),
+    /** Optional account-wide knowledge base store, searched as a fallback alongside thread files. */
+    knowledgeBaseVectorStoreId: z.string().max(100).optional(),
   })
   .strict();
 
@@ -55,5 +57,6 @@ export function parseCredentialsInput(input: unknown): CredentialsInput {
     baseUrl: normalizeBaseUrl(parsed.baseUrl),
     key: parsed.key.trim(),
     tavilyKey: parsed.tavilyKey?.trim() || undefined,
+    knowledgeBaseVectorStoreId: parsed.knowledgeBaseVectorStoreId?.trim() || undefined,
   };
 }

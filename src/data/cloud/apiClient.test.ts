@@ -302,6 +302,29 @@ describe('WataiApiClient', () => {
     expect(calls[0].url).toBe('https://api.test/api/negotiate');
     expect(info).toEqual({ url: 'https://sig/client/?hub=watai', accessToken: 'rt-tok' });
   });
+
+  it('uploads, lists, and deletes thread files', async () => {
+    const { fetchImpl, calls } = stubFetch([
+      { status: 201, body: { fileId: 'f1', name: 'a.pdf', bytes: 10, status: 'ready', createdAt: 't' } },
+      { status: 200, body: { files: [{ fileId: 'f1', name: 'a.pdf', bytes: 10, status: 'ready', createdAt: 't' }] } },
+      { status: 204 },
+    ]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    const up = await client.uploadThreadFile('t1', { name: 'a.pdf', mime: 'application/pdf', dataBase64: 'AAA' });
+    expect(calls[0].method).toBe('POST');
+    expect(calls[0].url).toBe('https://api.test/api/threads/t1/files');
+    expect(calls[0].body).toEqual({ name: 'a.pdf', mime: 'application/pdf', dataBase64: 'AAA' });
+    expect(up.fileId).toBe('f1');
+
+    const list = await client.listThreadFiles('t1');
+    expect(calls[1].url).toBe('https://api.test/api/threads/t1/files');
+    expect(list).toHaveLength(1);
+
+    await client.deleteThreadFile('t1', 'f1');
+    expect(calls[2].method).toBe('DELETE');
+    expect(calls[2].url).toBe('https://api.test/api/threads/t1/files/f1');
+  });
 });
 
 describe('cloud mappers', () => {

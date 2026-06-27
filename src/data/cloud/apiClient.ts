@@ -17,6 +17,7 @@ import type {
   SubmitRunBody,
   SubmitRunResult,
   ThreadRecord,
+  ThreadFileRecord,
   UpdateThreadBody,
 } from './types';
 import type { Settings, ThreadLock } from '../../lib/types';
@@ -255,6 +256,30 @@ export class WataiApiClient implements CloudApi {
     return this.request('POST', '/negotiate');
   }
 
+  // --- thread knowledge base (documents for file search) ---
+  async listThreadFiles(threadId: string): Promise<ThreadFileRecord[]> {
+    const out = await this.request<{ files: ThreadFileRecord[] }>(
+      'GET',
+      `/threads/${encodeURIComponent(threadId)}/files`,
+    );
+    return out.files;
+  }
+
+  /** Upload a document (base64) into the thread's vector store; the server indexes it. */
+  uploadThreadFile(
+    threadId: string,
+    body: { name: string; mime: string; dataBase64: string },
+  ): Promise<ThreadFileRecord> {
+    return this.request('POST', `/threads/${encodeURIComponent(threadId)}/files`, body);
+  }
+
+  deleteThreadFile(threadId: string, fileId: string): Promise<void> {
+    return this.request(
+      'DELETE',
+      `/threads/${encodeURIComponent(threadId)}/files/${encodeURIComponent(fileId)}`,
+    );
+  }
+
   // --- access / invites ---
   getMe(): Promise<MeInfo> {
     return this.request('GET', '/me');
@@ -322,6 +347,12 @@ export interface CloudApi {
   listActiveRuns(threadId: string): Promise<RunRecord[]>;
   cancelRun(threadId: string, runId: string): Promise<RunRecord>;
   negotiate(): Promise<NegotiateInfo>;
+  listThreadFiles(threadId: string): Promise<ThreadFileRecord[]>;
+  uploadThreadFile(
+    threadId: string,
+    body: { name: string; mime: string; dataBase64: string },
+  ): Promise<ThreadFileRecord>;
+  deleteThreadFile(threadId: string, fileId: string): Promise<void>;
   getMe(): Promise<MeInfo>;
   listInvites(): Promise<InviteRecord[]>;
   createInvite(email: string): Promise<InviteRecord>;

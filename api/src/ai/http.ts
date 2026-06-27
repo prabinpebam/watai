@@ -16,7 +16,7 @@ export interface AiRequest {
   /** Vault-resolved inference base URL (…/openai/v1) and key. */
   baseUrl: string;
   key: string;
-  path: AiPath;
+  path?: AiPath;
   /** Absolute URL override (bypasses baseUrl + path). */
   url?: string;
   method?: 'GET' | 'POST' | 'DELETE';
@@ -80,14 +80,18 @@ function withTimeout(
 /** Shared fetch: Bearer auth on the v1 host + path (or an absolute `url` override). */
 export async function aiFetch(req: AiRequest): Promise<Response> {
   const fetchImpl = req.fetchImpl ?? fetch;
-  const url = req.url ?? v1Url(req.baseUrl, req.path);
+  const url = req.url ?? v1Url(req.baseUrl, req.path!);
   const { signal, cleanup } = withTimeout(req.signal, req.timeoutMs ?? 120_000);
 
   const headers: Record<string, string> = { Authorization: `Bearer ${req.key}`, ...req.headers };
-  let payload: string | undefined;
+  let payload: string | FormData | undefined;
   if (req.body !== undefined) {
-    headers['Content-Type'] = 'application/json';
-    payload = JSON.stringify(req.body);
+    if (typeof FormData !== 'undefined' && req.body instanceof FormData) {
+      payload = req.body; // multipart upload — let fetch set the boundary Content-Type
+    } else {
+      headers['Content-Type'] = 'application/json';
+      payload = JSON.stringify(req.body);
+    }
   }
   if (req.stream) headers['Accept'] = 'text/event-stream';
 

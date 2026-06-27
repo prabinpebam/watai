@@ -12,7 +12,7 @@ import { AppError } from '../domain/errors';
 
 type RunAgentFn = NonNullable<RunWorkerDeps['runAgent']>;
 
-function setup(opts?: { credError?: boolean; tavily?: boolean }) {
+function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string }) {
   const runStore = new InMemoryRunStore();
   const messageStore = new InMemoryMessageStore();
   const threadStore = new InMemoryThreadStore();
@@ -29,6 +29,7 @@ function setup(opts?: { credError?: boolean; tavily?: boolean }) {
         key: 'k',
         models: { chat: 'gpt-5.4' },
         ...(opts?.tavily ? { tavilyKey: 'tav-key' } : {}),
+        ...(opts?.kbStore ? { knowledgeBaseVectorStoreId: opts.kbStore } : {}),
       };
     },
   };
@@ -156,6 +157,26 @@ describe('processRun', () => {
     expect(seen[0].turns[0].role).toBe('system');
     expect(seen[0].turns[1]).toEqual({ role: 'user', text: 'hello' });
     expect(seen[0].tools).toEqual([]); // no Tavily key -> no web_search tool
+  });
+
+  it('auto-enables file_search for the thread store plus the account knowledge-base fallback', async () => {
+    const local = setup({ kbStore: 'vs-account' });
+    await seed(local);
+    const thread = await local.threadStore.get('userA', 't1');
+    await local.threadStore.put({ ...thread!, vectorStoreId: 'vs-thread' });
+
+    const seen: RunAgentParams[] = [];
+    const runAgent: RunAgentFn = (p) => {
+      seen.push(p);
+      return script([{ type: 'text', delta: 'ok' }, { type: 'done' }])(p);
+    };
+    await processRun(local.deps(runAgent), 't1', 'r1');
+
+    const fs = seen[0].tools.find((t) => t.type === 'file_search') as
+      | { type: 'file_search'; vector_store_ids: string[] }
+      | undefined;
+    expect(fs).toBeTruthy();
+    expect(fs!.vector_store_ids).toEqual(['vs-thread', 'vs-account']);
   });
 
   it('personalizes the system prompt from the user settings (about-you / response-style)', async () => {

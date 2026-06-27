@@ -114,8 +114,14 @@ function assembleTools(
   if (wants('code_interpreter')) {
     tools.push({ type: 'code_interpreter', container: { type: 'auto' } });
   }
-  if (wants('file_search') && thread?.vectorStoreId) {
-    tools.push({ type: 'file_search', vector_store_ids: [thread.vectorStoreId] });
+  // file_search: search the thread's store (auto-enabled whenever it exists — the user uploaded
+  // docs) plus an optional account-wide knowledge base as a fallback. The account store alone only
+  // engages when the client explicitly requested file_search (capability-probed).
+  const storeIds = [thread?.vectorStoreId, creds.knowledgeBaseVectorStoreId].filter(
+    (x): x is string => !!x,
+  );
+  if (storeIds.length && (thread?.vectorStoreId || wants('file_search'))) {
+    tools.push({ type: 'file_search', vector_store_ids: storeIds });
   }
   if (wants('generate_image') && creds.models.image) {
     tools.push({
