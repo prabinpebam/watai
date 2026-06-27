@@ -299,6 +299,8 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   const images: MessageImage[] = [];
   const artifacts: MessageArtifact[] = [];
   const seenArtifactFiles = new Set<string>();
+  /** The most recent code-interpreter container seen this run (for an end-of-run capture fallback). */
+  let ciSeen: { id: string; callId: string } | undefined;
   /** Artifacts generated this run (images + code-interpreter files) for the thread file list. */
   const generatedFiles: ThreadFileMeta[] = [];
   let acc = '';
@@ -341,23 +343,38 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
    *  new assistant-sourced file, persist it to Blob Storage, and record it as an artifact on the
    *  message + thread. Best-effort — failures never fail the run. */
   const captureArtifacts = async (containerId: string, toolCallId: string): Promise<void> => {
-    if (!creds || !deps.uploadArtifact) return;
+    if (!creds || !deps.uploadArtifact) {
+      console.warn('[artifacts] skipped', { hasCreds: !!creds, hasUploadArtifact: !!deps.uploadArtifact });
+      return;
+    }
     let files;
     try {
       files = await listContainerFiles(creds, containerId, deps.fetchImpl);
-    } catch {
+    } catch (e) {
+      console.error('[artifacts] listContainerFiles failed', containerId, e instanceof Error ? e.message : String(e));
       return;
     }
+    console.log('[artifacts] listed container files', {
+      containerId,
+      count: files.length,
+      items: files.map((f) => `${f.source ?? '?'}:${f.filename ?? f.path ?? f.id}`),
+    });
     for (const f of files) {
       if (f.source !== 'assistant' || seenArtifactFiles.has(f.id)) continue;
       if (artifacts.length >= MAX_ARTIFACTS) break;
       const name = ((f.filename || f.path || 'artifact').split('/').pop() || 'artifact').slice(0, 400);
       const mime = mimeForFilename(name);
-      if (!(ALLOWED_CONTENT_TYPES as readonly string[]).includes(mime)) continue; // mime allowlist
+      if (!(ALLOWED_CONTENT_TYPES as readonly string[]).includes(mime)) {
+        console.warn('[artifacts] skipped (mime not allowed)', { name, mime });
+        continue;
+      }
       seenArtifactFiles.add(f.id);
       try {
         const bytes = await getContainerFile(creds, containerId, f.id, deps.fetchImpl);
-        if (!bytes.byteLength || bytes.byteLength > MAX_ARTIFACT_BYTES) continue;
+        if (!bytes.byteLength || bytes.byteLength > MAX_ARTIFACT_BYTES) {
+          console.warn('[artifacts] skipped (size)', { name, bytes: bytes.byteLength });
+          continue;
+        }
         const artifactId = `art${artifacts.length + 1}-${run.assistantMessageId}`.slice(0, 64);
         const blobPath = await deps.uploadArtifact(run.userId, threadId, artifactId, bytes, mime);
         artifacts.push({
@@ -382,9 +399,10 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         });
         const tc = toolCalls.get(toolCallId);
         if (tc) toolCalls.set(toolCallId, { ...tc, artifactIds: [...(tc.artifactIds ?? []), artifactId] });
+        console.log('[artifacts] persisted', { name, mime, bytes: bytes.byteLength, blobPath });
         await flush(true);
-      } catch {
-        /* skip this file; the text answer still completes */
+      } catch (e) {
+        console.error('[artifacts] persist failed', name, e instanceof Error ? e.message : String(e));
       }
     }
   };
@@ -427,9 +445,12 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
             : {}),
         });
         await flush(true);
-        // When a code-interpreter call completes, capture any files it wrote to its container.
-        if (ev.name === 'code_interpreter' && ev.status === 'done' && ev.containerId) {
-          await captureArtifacts(ev.containerId, id);
+        // Track the code-interpreter container; capture its files when the call completes.
+        if (ev.name === 'code_interpreter' && ev.containerId) {
+          ciSeen = { id: ev.containerId, callId: id };
+          if (ev.status === 'done') await captureArtifacts(ev.containerId, id);
+        } else if (ev.name === 'code_interpreter' && ev.status === 'done') {
+          console.warn('[artifacts] code_interpreter done with no containerId on the event');
         }
       } else if (ev.type === 'citation') {
         const c = ev.citation;
@@ -482,6 +503,12 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       } else if (ev.type === 'error') {
         err = { code: 'internal', message: ev.message };
       }
+    }
+    // Fallback: a code-interpreter container was seen but produced no captured artifact (e.g. the
+    // file landed after the done event) — try once more before finalizing.
+    if (ciSeen && artifacts.length === 0) {
+      console.log('[artifacts] end-of-run fallback capture', { containerId: ciSeen.id });
+      await captureArtifacts(ciSeen.id, ciSeen.callId);
     }
   } catch (e) {
     err = { code: 'internal', message: e instanceof Error ? e.message : 'Generation failed.' };
