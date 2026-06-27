@@ -857,6 +857,125 @@ button.tool-card__head:hover {
 .tool-card--error .tool-card__status {
   color: var(--color-danger);
 }
+.tool-group {
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start;
+  max-width: 100%;
+  min-width: 260px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+  animation: tool-card-in var(--motion-base) var(--ease-standard);
+}
+.tool-group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tool-group__head:hover {
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+}
+.tool-group__meta {
+  flex: none;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+.tool-group__steps {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--color-border);
+}
+.tool-group--done .tool-card__status {
+  color: var(--color-success);
+}
+.tool-group--done .tool-card__kind {
+  color: var(--color-accent);
+}
+.tool-group--error {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+.tool-step {
+  display: flex;
+  flex-direction: column;
+}
+.tool-step + .tool-step {
+  border-top: 1px solid var(--color-border-subtle);
+}
+.tool-step__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.tool-step__head {
+  cursor: pointer;
+}
+button.tool-step__head:hover {
+  background: var(--color-surface-2);
+}
+.tool-step__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+}
+.tool-step__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-step__chevron,
+.tool-step__status {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+.tool-step--done .tool-step__status {
+  color: var(--color-success);
+}
+.tool-step--error .tool-step__status {
+  color: var(--color-danger);
+}
+.tool-step__detail {
+  margin: 0;
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  max-height: 260px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--color-text-secondary);
+}
 
 /* File-search knowledge base list (Settings → Tools) */
 .kb-list {

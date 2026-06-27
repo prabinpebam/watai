@@ -91,8 +91,8 @@ function script(events: AgentEvent[]): RunAgentFn {
   };
 }
 
-/** Mock fetch for the code-interpreter container endpoints: one assistant-generated PDF + one
- *  user-uploaded input (which must be ignored). */
+/** Mock fetch for the code-interpreter container endpoints: one assistant-generated PDF, one
+ *  user-uploaded input, and several assistant reference/intermediate files that must be ignored. */
 function artifactFetch(): typeof fetch {
   return (async (url: string | URL): Promise<Response> => {
     const u = String(url);
@@ -111,6 +111,10 @@ function artifactFetch(): typeof fetch {
         json: async () => ({
           data: [
             { id: 'cfile_1', path: '/mnt/data/report.pdf', source: 'assistant' },
+            { id: 'cfile_skill', path: '/mnt/data/skills/pdf/SKILL.md', source: 'assistant' },
+            { id: 'cfile_ref', path: '/mnt/data/skills/pdf/reference.md', source: 'assistant' },
+            { id: 'cfile_note', path: '/mnt/data/colorful_kids_worksheet_design_philosophy.md', source: 'assistant' },
+            { id: 'cfile_preview', path: '/mnt/data/verify_images/page_1.png', source: 'assistant' },
             { id: 'cfile_in', path: '/mnt/data/input.pdf', source: 'user' },
           ],
         }),

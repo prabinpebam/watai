@@ -35,7 +35,12 @@ const CODE_INTERPRETER_DIRECTIVE =
   'saved under /mnt/data/ are automatically delivered to the user as downloadable attachments in ' +
   'this chat — the user can download them directly. Never say you cannot create, attach, host, ' +
   'email, or deliver files; you can. Do not paste a long document as plain text when the user ' +
-  'asked for a file — produce the actual file, then briefly describe what you made. ' +
+  'asked for a file — produce the actual file, then briefly describe what you made. Save only ' +
+  'final files the user explicitly asked to receive directly under /mnt/data/. If you need ' +
+  'scratch files, extracted references, validation images, notes, fonts, or process documents, ' +
+  'keep them under /mnt/data/.work/ or inside the skill folder and do not mention them in the ' +
+  'final reply. For consumer requests, attach the deliverable only, not reference or background ' +
+  'files used to make it. ' +
   'IMPORTANT: do NOT put a download link, hyperlink, URL, markdown link, file path, or HTML ' +
   'anchor for the generated file in your reply. There is no URL you can link to — the file ' +
   'already appears as a downloadable attachment card directly beneath your message. Just state ' +

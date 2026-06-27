@@ -77,6 +77,108 @@ function ToolCardView({ tc }: { tc: ToolCall }) {
   );
 }
 
+type ToolCardEntry =
+  | { type: 'tool'; tc: ToolCall }
+  | { type: 'code-group'; id: string; calls: ToolCall[] };
+
+function groupedToolCards(cards: ToolCall[]): ToolCardEntry[] {
+  const grouped: ToolCardEntry[] = [];
+  for (let index = 0; index < cards.length; index++) {
+    const current = cards[index];
+    if (current.kind !== 'code_interpreter') {
+      grouped.push({ type: 'tool', tc: current });
+      continue;
+    }
+    const calls = [current];
+    while (cards[index + 1]?.kind === 'code_interpreter') {
+      calls.push(cards[index + 1]);
+      index++;
+    }
+    if (calls.length === 1) grouped.push({ type: 'tool', tc: current });
+    else grouped.push({ type: 'code-group', id: `${calls[0].id}-${calls[calls.length - 1].id}`, calls });
+  }
+  return grouped;
+}
+
+function aggregateStatus(calls: ToolCall[]): ToolCall['status'] {
+  if (calls.some((tc) => tc.status === 'error')) return 'error';
+  if (calls.some((tc) => tc.status === 'running')) return 'running';
+  if (calls.some((tc) => tc.status === 'awaiting-confirm')) return 'awaiting-confirm';
+  return 'done';
+}
+
+function ToolStepView({ tc, index }: { tc: ToolCall; index: number }) {
+  const [open, setOpen] = useState(false);
+  const hasDetail = !!tc.resultPreview;
+  const body = (
+    <>
+      <span className="tool-step__index">{index + 1}</span>
+      <span className="tool-step__label">{tc.summary ?? tc.name}</span>
+      {hasDetail && (
+        <span className="tool-step__chevron" aria-hidden>
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />
+        </span>
+      )}
+      <span className="tool-step__status" aria-hidden>
+        <ToolStatusIcon status={tc.status} />
+      </span>
+    </>
+  );
+  return (
+    <div className={`tool-step tool-step--${tc.status}`}>
+      {hasDetail ? (
+        <button
+          type="button"
+          className="tool-step__head"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {body}
+        </button>
+      ) : (
+        <div className="tool-step__head">{body}</div>
+      )}
+      {hasDetail && open && <pre className="tool-step__detail">{tc.resultPreview}</pre>}
+    </div>
+  );
+}
+
+function CodeInterpreterGroup({ calls }: { calls: ToolCall[] }) {
+  const [open, setOpen] = useState(false);
+  const status = aggregateStatus(calls);
+  return (
+    <div className={`tool-group tool-group--${status}`}>
+      <button
+        type="button"
+        className="tool-group__head"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="tool-card__kind" aria-hidden>
+          <Icon name="code" size={15} />
+        </span>
+        <span className="tool-card__label">Code interpreter</span>
+        <span className="tool-group__meta">
+          {calls.length} call{calls.length === 1 ? '' : 's'}
+        </span>
+        <span className="tool-card__chevron" aria-hidden>
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />
+        </span>
+        <span className="tool-card__status" aria-hidden>
+          <ToolStatusIcon status={status} />
+        </span>
+      </button>
+      {open && (
+        <div className="tool-group__steps">
+          {calls.map((tc, index) => (
+            <ToolStepView key={tc.id} tc={tc} index={index} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Collapsed-by-default strip of grounding sources. Clicking a chip opens the source pane. */
 function SourcesStrip({ citations }: { citations: Citation[] }) {
   const [open, setOpen] = useState(false);
@@ -181,6 +283,7 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
   const toolCards = (message.toolCalls ?? []).filter(
     (tc) => tc.kind !== 'image' || tc.status === 'error',
   );
+  const toolEntries = groupedToolCards(toolCards);
 
   const copy = () => {
     navigator.clipboard.writeText(message.content).then(() => {
@@ -228,10 +331,14 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
           <span className="assistant__name">Watai</span>
         </div>
 
-        {toolCards.length > 0 && (
+        {toolEntries.length > 0 && (
           <div className="tool-cards" aria-live="polite">
-            {toolCards.map((tc) => (
-              <ToolCardView key={tc.id} tc={tc} />
+            {toolEntries.map((entry) => (
+              entry.type === 'code-group' ? (
+                <CodeInterpreterGroup key={entry.id} calls={entry.calls} />
+              ) : (
+                <ToolCardView key={entry.tc.id} tc={entry.tc} />
+              )
             ))}
           </div>
         )}

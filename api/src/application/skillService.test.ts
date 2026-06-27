@@ -46,6 +46,7 @@ describe('codeInterpreterSection', () => {
     expect(s).toContain('downloadable');
     expect(s).toContain('/mnt/data/');
     expect(s.toLowerCase()).toContain('never say you cannot');
+    expect(s.toLowerCase()).toContain('attach the deliverable only');
     expect(s.toLowerCase()).toContain('do not put a download link');
   });
 

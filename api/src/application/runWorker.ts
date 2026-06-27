@@ -3,7 +3,7 @@ import type { ServiceClock } from './threadService';
 import type { DecryptedCredentials } from './credentialService';
 import type { RunStore } from '../ports/runStore';
 import type { MessageRecord, MessageStore } from '../ports/messageStore';
-import type { MessageToolCall, MessageCitation, MessageImage, MessageArtifact } from '../domain/message';
+import type { ArtifactKind, MessageToolCall, MessageCitation, MessageImage, MessageArtifact } from '../domain/message';
 import { artifactKindForMime } from '../domain/message';
 import { ALLOWED_CONTENT_TYPES } from '../domain/asset';
 import type { Settings } from '../domain/settings';
@@ -20,6 +20,7 @@ import type { ResponsesCitation, ResponsesTool } from '../ai/responses';
 import { tavilySearch } from '../ai/tavily';
 import { generateImage } from '../ai/image';
 import { listContainerFiles, getContainerFile, mimeForFilename } from '../ai/containerFiles';
+import type { ContainerFile } from '../ai/containerFiles';
 import { selectSkills, codeInterpreterSection } from './skillService';
 import type { SkillProvisioner } from './skillProvisioner';
 import type { MountedSkill, SkillPackage } from '../domain/skill';
@@ -85,6 +86,40 @@ const DEFAULT_FLUSH_MS = 250;
 /** Per-run artifact guards (code interpreter outputs persisted to Blob Storage). */
 const MAX_ARTIFACTS = 16;
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
+
+const DEFAULT_VISIBLE_ARTIFACT_KINDS = new Set<ArtifactKind>(['pdf', 'document', 'spreadsheet', 'presentation']);
+
+function requestedArtifactKinds(text: string): Set<ArtifactKind> {
+  const requested = new Set<ArtifactKind>();
+  const lower = text.toLowerCase();
+  if (/\.pdf\b|\bpdfs?\b/.test(lower)) requested.add('pdf');
+  if (/\.docx?\b|\bword document\b|\bdocx\b/.test(lower)) requested.add('document');
+  if (/\.xlsx?\b|\bexcel\b|\bspreadsheet\b|\bworkbook\b/.test(lower)) requested.add('spreadsheet');
+  if (/\.pptx?\b|\bpowerpoint\b|\bslides?\b|\bdeck\b/.test(lower)) requested.add('presentation');
+  if (/\.png\b|\.jpe?g\b|\.webp\b|\bimage\b|\bpicture\b|\bchart\b|\bgraph\b/.test(lower)) requested.add('image');
+  if (/\.csv\b|\.tsv\b|\.json\b|\bdata file\b/.test(lower)) requested.add('data');
+  if (/\.md\b|\.txt\b|\.html?\b|\bmarkdown\b|\btext file\b|\bhtml file\b|\bweb page\b|\breadme\b/.test(lower)) requested.add('text');
+  if (/\.zip\b|\bzip file\b|\barchive\b/.test(lower)) requested.add('archive');
+  if (/\.py\b|\.js\b|\.ts\b|\bscript\b|\bsource code\b/.test(lower)) requested.add('code');
+  return requested;
+}
+
+function isInternalArtifactPath(path?: string): boolean {
+  if (!path) return false;
+  const normalized = path.replace(/\\/g, '/');
+  return (
+    /^\/mnt\/data\/skills\//i.test(normalized) ||
+    normalized.split('/').some((part) => part.startsWith('.') && part.length > 1)
+  );
+}
+
+function shouldExposeArtifact(file: ContainerFile, name: string, kind: ArtifactKind, requested: Set<ArtifactKind>): boolean {
+  if (isInternalArtifactPath(file.path)) return false;
+  const lowerName = name.toLowerCase();
+  if (['skill.md', 'reference.md', 'references.md', 'forms.md'].includes(lowerName)) return false;
+  if (requested.size > 0) return requested.has(kind);
+  return DEFAULT_VISIBLE_ARTIFACT_KINDS.has(kind);
+}
 
 /** Build the system prompt from the user's personalization (about-you / response-style) plus a
  *  base persona and light tool guidance. */
@@ -333,6 +368,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   const seenCitations = new Set<string>();
   const images: MessageImage[] = [];
   const artifacts: MessageArtifact[] = [];
+  const requestedKinds = requestedArtifactKinds(run.prompt?.text ?? '');
   const seenArtifactFiles = new Set<string>();
   /** The most recent code-interpreter container seen this run (for an end-of-run capture fallback). */
   let ciSeen: { id: string; callId: string } | undefined;
@@ -396,6 +432,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     });
     for (const f of files) {
       if (f.source !== 'assistant' || seenArtifactFiles.has(f.id)) continue;
+      seenArtifactFiles.add(f.id);
       if (artifacts.length >= MAX_ARTIFACTS) break;
       const name = ((f.filename || f.path || 'artifact').split('/').pop() || 'artifact').slice(0, 400);
       const mime = mimeForFilename(name);
@@ -403,7 +440,11 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         console.warn('[artifacts] skipped (mime not allowed)', { name, mime });
         continue;
       }
-      seenArtifactFiles.add(f.id);
+      const kind = artifactKindForMime(mime);
+      if (!shouldExposeArtifact(f, name, kind, requestedKinds)) {
+        console.log('[artifacts] skipped (not a requested deliverable)', { name, path: f.path, kind });
+        continue;
+      }
       try {
         const bytes = await getContainerFile(creds, containerId, f.id, deps.fetchImpl);
         if (!bytes.byteLength || bytes.byteLength > MAX_ARTIFACT_BYTES) {
@@ -416,7 +457,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
           id: artifactId,
           name,
           mime,
-          kind: artifactKindForMime(mime),
+          kind,
           bytes: bytes.byteLength,
           blobPath,
           sourceToolCallId: toolCallId,
