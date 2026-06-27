@@ -70,15 +70,54 @@ export async function initAuth(): Promise<void> {
   await getPca();
 }
 
-/** Token provider for the API client: silent-only, resolves to null when signed out. */
+/** Guard so a stale session triggers at most ONE automatic recovery redirect per browsing
+ *  session — set before redirecting, cleared on the next silent success — so a token that still
+ *  can't be minted after re-auth falls through to the sign-in screen instead of looping. */
+const REAUTH_FLAG = 'watai.reauth';
+
+/** Token provider for the API client. Silent-first; if the session can't be renewed silently
+ *  (an expired refresh token, or — on static hosts like GitHub Pages — the browser blocking the
+ *  third-party cookie the renewal iframe needs), recover with a top-level interactive redirect,
+ *  which reaches the session and mints a fresh refresh token. Resolves to null only when truly
+ *  signed out or already mid-recovery. */
 export async function getCloudToken(): Promise<string | null> {
   const pca = await getPca();
   const account = activeAccount(pca);
   if (!account) return null;
   try {
     const res = await pca.acquireTokenSilent({ account, scopes: [API_SCOPE] });
+    try {
+      sessionStorage.removeItem(REAUTH_FLAG);
+    } catch {
+      /* ignore */
+    }
     return res.accessToken;
-  } catch {
+  } catch (e) {
+    const { InteractionRequiredAuthError } = await import('@azure/msal-browser');
+    let alreadyTried = false;
+    try {
+      alreadyTried = sessionStorage.getItem(REAUTH_FLAG) === '1';
+    } catch {
+      /* ignore */
+    }
+    // Only an interaction-required failure is recoverable by redirect; network/other errors just
+    // resolve to null (the caller retries later). The guard prevents a redirect loop.
+    if (e instanceof InteractionRequiredAuthError && !alreadyTried) {
+      try {
+        sessionStorage.setItem(REAUTH_FLAG, '1');
+      } catch {
+        /* ignore */
+      }
+      try {
+        await pca.acquireTokenRedirect({ account, scopes: [API_SCOPE] });
+      } catch {
+        try {
+          sessionStorage.removeItem(REAUTH_FLAG);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     return null;
   }
 }
