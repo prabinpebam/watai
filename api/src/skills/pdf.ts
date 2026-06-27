@@ -1,288 +1,303 @@
+import { strFromU8, unzipSync } from 'fflate';
 import type { SkillPackage } from '../domain/skill';
 
-// An original, license-clean PDF skill in the canonical Agent Skills layout
-// (SKILL.md + references/ + scripts/). Content is embedded as TS strings so esbuild
-// bundles it (it does not bundle loose files). Markdown intentionally uses indented
-// code blocks (no backtick fences) so it embeds cleanly in a template literal.
+const PDF_DESCRIPTION =
+  'Use this skill whenever the user wants to do anything with PDF files. This includes reading or extracting text/tables from PDFs, combining or merging multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks, creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting images, and OCR on scanned PDFs to make them searchable. If the user mentions a .pdf file or asks to produce one, use this skill.';
 
-const SKILL_MD = `---
-name: pdf
-description: Create, read, combine, split, rotate, and fill PDF files with Python. Use this whenever a task involves a .pdf - producing a formatted PDF report, letter, or invoice; extracting text or tables from a PDF; merging, splitting, or rotating pages; or filling a fillable PDF form.
-license: MIT
-metadata:
-  author: watai
-  version: "1"
----
+const PDF_SKILL_ZIP_BASE64 =
+  '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';
 
-# PDF toolkit
-
-You are in a Python sandbox where the libraries reportlab, pypdf, and pdfplumber
-are already installed. Save every file you produce for the user under /mnt/data/.
-
-This skill lives at /mnt/data/skills/pdf/. It bundles deeper references and ready
-scripts you can run directly - prefer running a bundled script over re-deriving it,
-since scripts are deterministic and consistent.
-
-## 1. Pick the task
-
-- Create a PDF (report / letter / invoice): use reportlab - see "Create" below.
-- Read or extract text/tables from a PDF: use pdfplumber (text + tables) or pypdf
-  (quick text) - see references/REFERENCE.md.
-- Combine / split / rotate pages: use pypdf - see "Combine" below.
-- Fill a fillable form: read references/FORMS.md, then run scripts/pdf_fill_form.py.
-
-If you were given a PDF, inspect it first:
-
-    python /mnt/data/skills/pdf/scripts/pdf_inspect.py /mnt/data/your-file.pdf
-
-It prints the page count, metadata, whether text is extractable, and any fillable
-form fields (so you know if it is a form before trying to fill it).
-
-## 2. Create a clean PDF (reportlab)
-
-Use Platypus flowables for real layout - never one wall of text.
-
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.units import cm
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    from reportlab.lib import colors
-
-    styles = getSampleStyleSheet()
-    doc = SimpleDocTemplate("/mnt/data/report.pdf", pagesize=A4,
-                            leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
-    story = [Paragraph("Title", styles["Title"]), Spacer(1, 12),
-             Paragraph("Body text. " * 10, styles["BodyText"])]
-    doc.build(story)
-
-Guidelines: A4 with ~2cm margins; a clear type scale (Title ~20pt, headings bold,
-body ~10.5pt); shade table header rows with a subtle grid; add page numbers via an
-onPage callback for multi-page documents. For HTML/CSS-driven layout instead, see
-references/REFERENCE.md (WeasyPrint is NOT assumed - stick to reportlab).
-
-## 3. Combine / split / rotate (pypdf)
-
-    from pypdf import PdfReader, PdfWriter
-
-    # merge
-    w = PdfWriter()
-    for f in ["/mnt/data/a.pdf", "/mnt/data/b.pdf"]:
-        for page in PdfReader(f).pages:
-            w.add_page(page)
-    with open("/mnt/data/merged.pdf", "wb") as out:
-        w.write(out)
-
-    # rotate page 1 by 90 degrees, write a new file
-    r = PdfReader("/mnt/data/in.pdf"); w = PdfWriter()
-    for i, page in enumerate(r.pages):
-        if i == 0: page.rotate(90)
-        w.add_page(page)
-    with open("/mnt/data/rotated.pdf", "wb") as out:
-        w.write(out)
-
-## Rules
-
-- Always write outputs to /mnt/data/ with a sensible filename, and confirm the path
-  in your reply (do NOT paste a download link - the file is delivered automatically).
-- If a PDF is scanned and has no extractable text, say so rather than inventing
-  content. (OCR is not guaranteed in this sandbox - see references/REFERENCE.md.)
-- For advanced extraction, encryption, or troubleshooting read references/REFERENCE.md;
-  for filling forms read references/FORMS.md.
-`;
-
-const REFERENCE_MD = `# PDF reference (advanced)
-
-Read this only when the core SKILL.md recipes are not enough.
-
-## Extract text with layout (pdfplumber)
-
-    import pdfplumber
-    with pdfplumber.open("/mnt/data/in.pdf") as pdf:
-        for page in pdf.pages:
-            print(page.extract_text() or "")
-
-## Extract tables (pdfplumber)
-
-    import pandas as pd, pdfplumber
-    rows = []
-    with pdfplumber.open("/mnt/data/in.pdf") as pdf:
-        for page in pdf.pages:
-            for table in page.extract_tables():
-                if table and len(table) > 1:
-                    rows.append(pd.DataFrame(table[1:], columns=table[0]))
-    if rows:
-        pd.concat(rows, ignore_index=True).to_excel("/mnt/data/tables.xlsx", index=False)
-
-## Quick text + metadata (pypdf)
-
-    from pypdf import PdfReader
-    r = PdfReader("/mnt/data/in.pdf")
-    print(len(r.pages), "pages")
-    print(r.metadata)
-    text = "".join((p.extract_text() or "") for p in r.pages)
-
-## Encryption
-
-    from pypdf import PdfReader, PdfWriter
-    r = PdfReader("/mnt/data/in.pdf"); w = PdfWriter()
-    for p in r.pages: w.add_page(p)
-    w.encrypt("user-password")
-    with open("/mnt/data/protected.pdf", "wb") as out: w.write(out)
-
-To open an encrypted PDF: PdfReader(path).decrypt("password").
-
-## Page numbers (reportlab onPage)
-
-    def footer(canvas, doc):
-        canvas.saveState(); canvas.setFont("Helvetica", 8)
-        canvas.drawRightString(550, 20, "Page %d" % doc.page); canvas.restoreState()
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
-
-## Scanned PDFs / OCR
-
-pytesseract and poppler are NOT guaranteed in this sandbox. If extract_text() returns
-empty for every page, the PDF is likely scanned: tell the user it has no extractable
-text instead of guessing its contents.
-`;
-
-const FORMS_MD = `# Filling PDF forms
-
-A "fillable" PDF has AcroForm fields. Confirm it does before trying:
-
-    python /mnt/data/skills/pdf/scripts/pdf_inspect.py /mnt/data/form.pdf
-
-If it lists form fields, fill them with the bundled script. Build a JSON object whose
-keys are the exact field names from the inspection and whose values are what to enter
-(use true / false for checkboxes), then:
-
-    python /mnt/data/skills/pdf/scripts/pdf_fill_form.py /mnt/data/form.pdf /mnt/data/filled.pdf '{"full_name": "Ada Lovelace", "agree": true}'
-
-The script sets NeedAppearances so viewers render the values, and reports any field
-names you supplied that do not exist in the form (so you can correct them).
-
-If the PDF has NO form fields, it is not fillable - you cannot "type" into it. Either
-tell the user, or (if they want) overlay text at fixed positions by drawing onto each
-page with reportlab and merging the overlay with pypdf (see references/REFERENCE.md
-for the merge pattern).
-`;
-
-const INSPECT_PY = `#!/usr/bin/env python3
-"""Inspect a PDF: page count, metadata, extractable-text check, and AcroForm fields.
-Usage: python pdf_inspect.py <file.pdf>"""
-import sys, json
-
-def main():
-    if len(sys.argv) < 2:
-        print("usage: pdf_inspect.py <file.pdf>"); return 2
-    path = sys.argv[1]
-    try:
-        from pypdf import PdfReader
-    except Exception as e:
-        print("pypdf is required:", e); return 1
-    try:
-        reader = PdfReader(path)
-    except Exception as e:
-        print("could not open PDF:", e); return 1
-
-    info = {
-        "pages": len(reader.pages),
-        "encrypted": bool(getattr(reader, "is_encrypted", False)),
-        "metadata": {k: str(v) for k, v in (reader.metadata or {}).items()},
-    }
-    # extractable text?
-    sample = ""
-    try:
-        for p in reader.pages[:3]:
-            sample += p.extract_text() or ""
-    except Exception:
-        pass
-    info["has_extractable_text"] = bool(sample.strip())
-
-    # form fields
-    fields = []
-    try:
-        f = reader.get_fields() or {}
-        for name, fld in f.items():
-            fields.append({"name": name, "type": str(fld.get("/FT")), "value": str(fld.get("/V"))})
-    except Exception:
-        pass
-    info["form_fields"] = fields
-    info["is_fillable_form"] = len(fields) > 0
-
-    print(json.dumps(info, indent=2))
-    return 0
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-`;
-
-const FILL_FORM_PY = `#!/usr/bin/env python3
-"""Fill an AcroForm PDF from a JSON object of {field_name: value}.
-Usage: python pdf_fill_form.py <in.pdf> <out.pdf> '<json>'
-Checkbox values accept true/false. Reports unknown field names you supplied."""
-import sys, json
-
-def main():
-    if len(sys.argv) < 4:
-        print("usage: pdf_fill_form.py <in.pdf> <out.pdf> '<json>'"); return 2
-    in_path, out_path, raw = sys.argv[1], sys.argv[2], sys.argv[3]
-    try:
-        values = json.loads(raw)
-        assert isinstance(values, dict)
-    except Exception as e:
-        print("third argument must be a JSON object:", e); return 2
-    try:
-        from pypdf import PdfReader, PdfWriter
-        from pypdf.generic import NameObject, BooleanObject
-    except Exception as e:
-        print("pypdf is required:", e); return 1
-
-    reader = PdfReader(in_path)
-    existing = set((reader.get_fields() or {}).keys())
-    if not existing:
-        print("this PDF has no fillable form fields - it is not an AcroForm."); return 1
-    unknown = [k for k in values if k not in existing]
-
-    writer = PdfWriter()
-    writer.append(reader)
-    # render filled values in viewers
-    try:
-        writer.set_need_appearances_writer(True)
-    except Exception:
-        try:
-            writer._root_object["/AcroForm"][NameObject("/NeedAppearances")] = BooleanObject(True)
-        except Exception:
-            pass
-    # normalize booleans for checkboxes
-    norm = {k: ("/Yes" if v is True else "/Off" if v is False else v) for k, v in values.items()}
-    for page in writer.pages:
-        try:
-            writer.update_page_form_field_values(page, norm)
-        except Exception:
-            pass
-    with open(out_path, "wb") as f:
-        writer.write(f)
-
-    print(json.dumps({"wrote": out_path, "filled": [k for k in values if k in existing], "unknown_fields": unknown}, indent=2))
-    return 0
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-`;
+function filesFromZipBase64(value: string): SkillPackage['files'] {
+  const entries = unzipSync(Buffer.from(value, 'base64')); 
+  return Object.entries(entries)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([path, bytes]) => ({ path, text: strFromU8(bytes) }));
+}
 
 /** The bundled, license-clean PDF skill. */
 export const PDF_SKILL: SkillPackage = {
   name: 'pdf',
-  description:
-    'Create, read, combine, split, rotate, and fill PDF files with Python. Use this whenever a task involves a .pdf - producing a formatted PDF report, letter, or invoice; extracting text or tables from a PDF; merging, splitting, or rotating pages; or filling a fillable PDF form.',
+  description: PDF_DESCRIPTION,
   license: 'MIT',
-  metadata: { author: 'watai', version: '1' },
-  version: 1,
-  files: [
-    { path: 'SKILL.md', text: SKILL_MD },
-    { path: 'references/REFERENCE.md', text: REFERENCE_MD },
-    { path: 'references/FORMS.md', text: FORMS_MD },
-    { path: 'scripts/pdf_inspect.py', text: INSPECT_PY },
-    { path: 'scripts/pdf_fill_form.py', text: FILL_FORM_PY },
-  ],
+  metadata: { author: 'watai', version: '2' },
+  version: 2,
+  files: filesFromZipBase64(PDF_SKILL_ZIP_BASE64),
 };

@@ -266,7 +266,7 @@ controller `api/src/http/skillsController.ts`; store
 
 Server‑side, authoritative, on `POST`/`PUT`:
 
-1. **Envelope:** content‑type `application/zip`; size ≤ cap (e.g. **5 MB**); entry
+1. **Envelope:** content‑type `application/zip`; size ≤ cap (e.g. **50 MB**); entry
    count ≤ cap (e.g. **100**); per‑file size ≤ cap. Reject otherwise.
 2. **Locate `SKILL.md`:** at the zip root **or** under a single top‑level folder.
    Reject if missing or ambiguous (multiple candidate roots).
@@ -359,7 +359,7 @@ ahead of time.
 - **Trigger:** the **Upload skill** button (`Icon name="upload"`) and a drop zone
   over the *Your skills* card (drag‑over highlight). A hidden
   `<input type="file" accept=".zip,application/zip">`.
-- **Pre‑check (client, cheap):** extension `.zip` and size ≤ 5 MB; otherwise toast
+- **Pre‑check (client, cheap):** extension `.zip` and size ≤ 50 MB; otherwise toast
   the limit and stop. One file at a time (reject a multi‑select with *"Upload one
   skill at a time."*).
 - **Optimistic row:** insert a pending `SkillRow` (`Uploading <filename>…`,
@@ -397,7 +397,7 @@ A centered modal (existing overlay) — title = `name` + a source chip
     no leading/trailing or double hyphens.*
   - *Description is required* / *Description too long (1,200 / 1,024).*
   - *Unsafe path "../secrets" — files must stay inside the skill folder.*
-  - *Too large (7.2 MB) — the limit is 5 MB.* / *Too many files (143 / 100).*
+  - *Too large (52.0 MB) — the limit is 50 MB.* / *Too many files (143 / 100).*
 - Footer: **Download template** (a valid starter `.zip`) · **Close**.
 
 ### 7.8 Delete & disable

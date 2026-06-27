@@ -4,7 +4,7 @@ import { parseSkillFrontmatter, validateFrontmatter } from '../domain/skill';
 
 /** Upload caps (also enforced at the HTTP layer). */
 export const MAX_SKILL_FILES = 100;
-export const MAX_SKILL_UNPACKED_BYTES = 5 * 1024 * 1024;
+export const MAX_SKILL_UNPACKED_BYTES = 50 * 1024 * 1024;
 
 const TEXT_EXT = /\.(md|markdown|txt|py|js|mjs|cjs|ts|json|csv|tsv|html|htm|css|ya?ml|xml|sh|cfg|ini|toml)$/i;
 

@@ -13,11 +13,23 @@ describe('zipSkill + unzipToPackage round-trip', () => {
     expect(issues).toEqual([]);
     expect(pkg?.name).toBe('pdf');
     const paths = pkg!.files.map((f) => f.path).sort();
-    expect(paths).toContain('SKILL.md');
-    expect(paths).toContain('references/REFERENCE.md');
-    expect(paths).toContain('scripts/pdf_fill_form.py');
+    expect(paths).toEqual(
+      [
+        'SKILL.md',
+        'forms.md',
+        'reference.md',
+        'scripts/check_bounding_boxes.py',
+        'scripts/check_fillable_fields.py',
+        'scripts/convert_pdf_to_images.py',
+        'scripts/create_validation_image.py',
+        'scripts/extract_form_field_info.py',
+        'scripts/extract_form_structure.py',
+        'scripts/fill_fillable_fields.py',
+        'scripts/fill_pdf_form_with_annotations.py',
+      ].sort(),
+    );
     const skillMd = pkg!.files.find((f) => f.path === 'SKILL.md');
-    expect(skillMd?.text).toContain('# PDF toolkit');
+    expect(skillMd?.text).toContain('# PDF Processing Guide');
   });
 
   it('preserves a binary asset as base64', () => {

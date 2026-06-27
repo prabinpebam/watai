@@ -114,6 +114,24 @@ describe('SkillCatalogService', () => {
     expect(eff.map((p) => p.name).sort()).toEqual(['greeter', 'pdf']);
   });
 
+  it('accepts a valid skill zip over the old 5 MB upload cap', async () => {
+    const largeSkill: SkillPackage = {
+      name: 'large-skill',
+      description: 'Tests larger uploaded skill packages.',
+      version: 1,
+      files: [
+        {
+          path: 'SKILL.md',
+          text: '---\nname: large-skill\ndescription: Tests larger uploaded skill packages.\n---\nUse the data file.',
+        },
+        { path: 'data/payload.txt', text: 'x'.repeat(6 * 1024 * 1024) },
+      ],
+    };
+
+    const s = await svc.upload(USER, 'large-skill.zip', zipSkill(largeSkill));
+    expect(s).toMatchObject({ name: 'large-skill', source: 'user', status: 'ready', fileCount: 2 });
+  });
+
   it('rejects an invalid zip with a validation error carrying the issue list', async () => {
     await expect(svc.upload(USER, 'bad.zip', BAD_ZIP)).rejects.toMatchObject({ code: 'validation' });
     try {

@@ -41,7 +41,7 @@ describe('SkillProvisioner', () => {
     expect(r1.skills).toEqual([
       { name: 'pdf', description: PDF_SKILL.description, path: '/mnt/data/skills/pdf/' },
     ]);
-    expect(uploads.sort()).toEqual(['watai-skill.pdf.v1.zip', 'watai-skills-setup.py']);
+    expect(uploads.sort()).toEqual(['watai-skill.pdf.v2.zip', 'watai-skills-setup.py']);
 
     const r2 = await prov.ensure(CREDS, [PDF_SKILL]);
     expect(r2.fileIds).toHaveLength(2);
@@ -51,7 +51,7 @@ describe('SkillProvisioner', () => {
 
   it('reuses packages already present on the endpoint (no upload)', async () => {
     const { api, uploads } = fakeFiles([
-      { filename: 'watai-skill.pdf.v1.zip', id: 'zip' },
+      { filename: 'watai-skill.pdf.v2.zip', id: 'zip' },
       { filename: 'watai-skills-setup.py', id: 'setup' },
     ]);
     const prov = createSkillProvisioner(api);

@@ -47,7 +47,7 @@ export interface SkillDetail extends SkillSummary {
 
 const DEFAULT_PREFIX = 'default:';
 const MAX_USER_SKILLS = 10;
-const MAX_ZIP_BYTES = 5 * 1024 * 1024;
+const MAX_ZIP_BYTES = 50 * 1024 * 1024;
 
 function fileSize(f: SkillFile): number {
   if (typeof f.text === 'string') return Buffer.byteLength(f.text, 'utf8');
@@ -235,7 +235,7 @@ export class SkillCatalogService {
     }
     if (bytes.byteLength > MAX_ZIP_BYTES) {
       const mb = (bytes.byteLength / 1024 / 1024).toFixed(1);
-      throw validationError([{ rule: 'size', message: `Too large (${mb} MB) — the limit is 5 MB.` }]);
+      throw validationError([{ rule: 'size', message: `Too large (${mb} MB) — the limit is ${MAX_ZIP_BYTES / 1024 / 1024} MB.` }]);
     }
     const { package: pkg, issues } = unzipToPackage(bytes);
     if (!pkg) throw validationError(issues);

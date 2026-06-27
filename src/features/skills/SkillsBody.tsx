@@ -12,7 +12,7 @@ import { formatBytes } from '../../lib/format';
 import type { SkillSummary, SkillValidationError } from '../../lib/types';
 
 const ACCEPT = '.zip,application/zip';
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_BYTES = 50 * 1024 * 1024;
 
 /** Settings → Skills. Default skills (toggle off) + the user's uploaded skills
  *  (full CRUD). Empty until the catalog API is live — no mock data. */
