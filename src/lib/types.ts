@@ -296,3 +296,53 @@ export const DEFAULT_SETTINGS: Settings = {
     imageAgent: true,
   },
 };
+
+// ---------------------------------------------------------------------------
+// Agent Skills (canonical SKILL.md folders the assistant loads on demand).
+// `default` skills ship with the app and can be toggled off; `user` skills are
+// uploaded as zips and fully user-managed. See documentation/skills-system-spec.md.
+// ---------------------------------------------------------------------------
+export type SkillSource = 'default' | 'user';
+export type SkillStatus = 'ready' | 'invalid';
+
+/** Catalog row for the Skills settings list. */
+export interface SkillSummary {
+  id: Id;
+  /** Frontmatter `name` (== the skill folder). */
+  name: string;
+  /** Frontmatter `description` (what it does + when to use it). */
+  description: string;
+  source: SkillSource;
+  version: number;
+  enabled: boolean;
+  status: SkillStatus;
+  /** First validation problem when `status === 'invalid'`. */
+  error?: string;
+  /** Uploaded zip size (user skills). */
+  bytes?: number;
+  fileCount?: number;
+}
+
+/** One bundled file inside a skill (for the detail file tree). */
+export interface SkillFileEntry {
+  /** Relative path from the skill root, e.g. `references/REFERENCE.md`. */
+  path: string;
+  bytes: number;
+}
+
+/** Full skill detail for the preview dialog. */
+export interface SkillDetail extends SkillSummary {
+  license?: string;
+  files: SkillFileEntry[];
+  /** The SKILL.md markdown body (instructions), for read-only preview. */
+  body: string;
+}
+
+/** A single upload-validation failure (server-authoritative), surfaced in the UI. */
+export interface SkillValidationError {
+  /** Short rule id, e.g. `name`, `description`, `skill-md`, `path`, `size`. */
+  rule: string;
+  /** Human-readable explanation of what's wrong and how to fix it. */
+  message: string;
+}
+

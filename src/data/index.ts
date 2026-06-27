@@ -1,6 +1,7 @@
 import { LocalRepository } from './local/localRepository';
 import type { Repository } from './repository';
 import { WataiApiClient } from './cloud/apiClient';
+import { SkillsApiClient } from './cloud/skillsApi';
 import { RealtimeClient } from './cloud/realtime';
 import { SyncRepository } from './sync/syncRepository';
 import { idbKvStore } from './sync/kvStore';
@@ -19,6 +20,9 @@ export const repo: Repository = sync;
 
 /** Cloud API client for non-repository calls (access status + admin invite management). */
 export const cloudApi = cloud;
+
+/** Skills API client (`/api/skills`) — default + user-managed Agent Skills. */
+export const skillsApi = new SkillsApiClient({ getToken: getCloudToken });
 
 /** Realtime push (SignalR) for server-authoritative runs — connects lazily on the first server
  *  run and streams assistant/thread updates straight into the UI. */

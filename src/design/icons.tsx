@@ -45,6 +45,8 @@ const ICONS: Record<string, string> = {
   moon: 'dark_mode',
   paperclip: 'attach_file',
   download: 'download',
+  upload: 'upload',
+  puzzle: 'extension',
   share: 'share',
   external: 'open_in_new',
   user: 'person',

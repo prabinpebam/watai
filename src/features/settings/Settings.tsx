@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSettings } from './useSettings';
+import { SkillsBody } from '../skills/SkillsBody';
 import { Avatar, Button, Field, IconButton, Segmented, Spinner, Switch, TextAreaField } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { Logo } from '../../design/Logo';
@@ -42,6 +43,12 @@ const SECTIONS: Record<string, SectionMeta> = {
   },
   voice: { id: 'voice', label: 'Voice', icon: 'mic', sub: 'Dictation and read-aloud' },
   tools: { id: 'tools', label: 'Tools', icon: 'code', sub: 'Web search, code, files, and functions' },
+  skills: {
+    id: 'skills',
+    label: 'Skills',
+    icon: 'puzzle',
+    sub: 'Reusable, file-based abilities the assistant loads on demand',
+  },
   appearance: { id: 'appearance', label: 'Appearance', icon: 'palette', sub: 'Theme, text size, and density' },
   data: { id: 'data', label: 'Data controls', icon: 'database', sub: 'Sync, export, retention, and deletion' },
   invites: { id: 'invites', label: 'Invites', icon: 'user-add', sub: 'Manage who can sign in', adminOnly: true },
@@ -49,7 +56,7 @@ const SECTIONS: Record<string, SectionMeta> = {
 };
 
 const GROUPS: { label: string; ids: string[] }[] = [
-  { label: 'Assistant', ids: ['models', 'tools', 'personalization', 'voice'] },
+  { label: 'Assistant', ids: ['models', 'tools', 'skills', 'personalization', 'voice'] },
   { label: 'App', ids: ['appearance', 'data', 'about'] },
   { label: 'Admin', ids: ['invites'] },
 ];
@@ -340,6 +347,8 @@ function SectionBody({ id, ctx }: { id: string; ctx: SettingsCtx }) {
       return <VoiceBody ctx={ctx} />;
     case 'tools':
       return <ToolsBody ctx={ctx} />;
+    case 'skills':
+      return <SkillsBody codeInterpreterOff={ctx.settings.tools?.codeInterpreter === false} />;
     case 'appearance':
       return <AppearanceBody ctx={ctx} />;
     case 'data':
