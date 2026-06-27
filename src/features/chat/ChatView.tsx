@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from './useChat';
 import { Composer } from './Composer';
 import { AssistantMessage, UserMessage } from './Message';
@@ -23,7 +23,10 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   const closeSourcePane = useUi((s) => s.closeSourcePane);
   const closeFilesPane = useUi((s) => s.closeFilesPane);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [atBottom, setAtBottom] = useState(true);
+  const stickRef = useRef(true); // is the view pinned to the bottom?
+  const lastTopRef = useRef(0); // previous scrollTop, to detect user-driven upward scrolls
+  const roRef = useRef<ResizeObserver | null>(null);
+  const [showJump, setShowJump] = useState(false);
 
   // Close any open source pane when this thread view unmounts (e.g. switching threads).
   useEffect(() => () => closeSourcePane(), [closeSourcePane]);
@@ -32,27 +35,51 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
 
   const isEmpty = !loading && messages.length === 0;
 
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+  const STICK_THRESHOLD = 80; // px from the bottom that still counts as "at the bottom"
+
+  const jumpToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
-  };
+    if (!el) return;
+    stickRef.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    setShowJump(false);
+  }, []);
 
-  useLayoutEffect(() => {
-    if (atBottom) scrollToBottom('auto');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length]);
+  // Pin to the bottom whenever the message column's height changes — streamed tokens, tool cards
+  // expanding, images finishing layout, artifact cards rendering — but only while the user is
+  // stuck to the bottom. A ResizeObserver tracks the real rendered height, so we never scroll
+  // before async content has laid out (the old per-token effect did, landing at the wrong spot).
+  // A callback ref (re)attaches it exactly when the column mounts (it isn't rendered while empty).
+  const setColumnRef = useCallback((node: HTMLDivElement | null) => {
+    roRef.current?.disconnect();
+    roRef.current = null;
+    if (!node) return;
+    const ro = new ResizeObserver(() => {
+      const el = scrollRef.current;
+      if (el && stickRef.current) {
+        el.scrollTop = el.scrollHeight; // instant: smooth lags behind fast streaming
+        lastTopRef.current = el.scrollTop;
+      }
+    });
+    ro.observe(node);
+    roRef.current = ro;
+  }, []);
 
-  useEffect(() => {
-    if (atBottom && streaming) scrollToBottom('auto');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages]);
+  useEffect(() => () => roRef.current?.disconnect(), []);
 
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setAtBottom(distance < 80);
-    onScrolledChange?.(el.scrollTop > 4);
+    const top = el.scrollTop;
+    const distance = el.scrollHeight - top - el.clientHeight;
+    const atBottom = distance < STICK_THRESHOLD;
+    // A genuine upward move (scrollTop shrank) means the user is reading history → unpin. Returning
+    // to the bottom re-pins. Appending content keeps scrollTop put, so growth never unpins.
+    if (top < lastTopRef.current - 2) stickRef.current = false;
+    else if (atBottom) stickRef.current = true;
+    lastTopRef.current = top;
+    setShowJump(!atBottom);
+    onScrolledChange?.(top > 4);
   };
 
   return (
@@ -82,7 +109,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
             </div>
           </div>
         ) : (
-          <div className="chat__column">
+          <div className="chat__column" ref={setColumnRef}>
             {messages.map((m) =>
               m.role === 'user' ? (
                 <UserMessage key={m.id} message={m} />
@@ -94,8 +121,8 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
           </div>
         )}
 
-        {!atBottom && (
-          <button className="jump-pill" onClick={() => scrollToBottom()}>
+        {showJump && (
+          <button className="jump-pill" onClick={() => jumpToBottom('smooth')}>
             <Icon name="chevron-down" size={16} /> Jump to latest
           </button>
         )}

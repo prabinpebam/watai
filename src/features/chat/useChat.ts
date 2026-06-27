@@ -161,6 +161,11 @@ export function useChat(threadId: string, temporary = false) {
       };
       setPersisted((prev) => [...prev, userMsg]); // optimistic — reload dedupes by id
       await repo.appendMessage(userMsg);
+      // Image attachments must reach the server message BEFORE the run reads history (the run's
+      // own user-turn append is idempotent and would otherwise win with no image). Flush sync so
+      // the blob is uploaded and the synced message carries its blobPath the worker can read.
+      const hasImages = (files ?? []).some((f) => f.type.startsWith('image/'));
+      if (hasImages) await syncNow().catch(() => {});
       // Thread-scoped file search: index any non-image docs into the thread's vector store so the
       // model can answer questions about them via file_search. Blocks the run until indexed.
       const docs = (files ?? []).filter((f) => !f.type.startsWith('image/'));

@@ -259,6 +259,60 @@ describe('processRun', () => {
     expect(seen[0].tools).toEqual([]); // no Tavily key -> no web_search tool
   });
 
+  it('attaches user-uploaded images to the user turn as resolved read urls (vision)', async () => {
+    await seed(ctx);
+    await ctx.messageStore.append({
+      id: 'um2',
+      threadId: 't1',
+      userId: 'userA',
+      role: 'user',
+      content: 'what is this?',
+      status: 'complete',
+      attachments: [
+        { id: 'a1', kind: 'image', blobPath: 'userA/t1/a1.png', mime: 'image/png', bytes: 10 },
+        { id: 'a2', kind: 'file', blobPath: 'userA/t1/a2.pdf', mime: 'application/pdf', bytes: 20 },
+      ],
+      createdAt: '2026-06-01T00:00:03Z',
+      orderAt: '2026-06-01T00:00:03Z',
+      deletedAt: null,
+    });
+    const seen: RunAgentParams[] = [];
+    const runAgent: RunAgentFn = (p) => {
+      seen.push(p);
+      return script([{ type: 'text', delta: 'ok' }, { type: 'done' }])(p);
+    };
+    const resolveImageUrl = async (blobPath: string) => `https://blob/${blobPath}?read`;
+    await processRun({ ...ctx.deps(runAgent), resolveImageUrl }, 't1', 'r1');
+    const turn = seen[0].turns.find((t) => t.text === 'what is this?');
+    expect(turn?.images).toEqual(['https://blob/userA/t1/a1.png?read']); // only the image, not the pdf
+  });
+
+  it('omits images when no resolver is wired (history stays text-only)', async () => {
+    await seed(ctx);
+    await ctx.messageStore.append({
+      id: 'um2',
+      threadId: 't1',
+      userId: 'userA',
+      role: 'user',
+      content: 'what is this?',
+      status: 'complete',
+      attachments: [
+        { id: 'a1', kind: 'image', blobPath: 'userA/t1/a1.png', mime: 'image/png', bytes: 10 },
+      ],
+      createdAt: '2026-06-01T00:00:03Z',
+      orderAt: '2026-06-01T00:00:03Z',
+      deletedAt: null,
+    });
+    const seen: RunAgentParams[] = [];
+    const runAgent: RunAgentFn = (p) => {
+      seen.push(p);
+      return script([{ type: 'text', delta: 'ok' }, { type: 'done' }])(p);
+    };
+    await processRun(ctx.deps(runAgent), 't1', 'r1');
+    const turn = seen[0].turns.find((t) => t.text === 'what is this?');
+    expect(turn?.images).toBeUndefined();
+  });
+
   it('auto-enables file_search for the thread store plus the account knowledge-base fallback', async () => {
     const local = setup({ kbStore: 'vs-account' });
     await seed(local);

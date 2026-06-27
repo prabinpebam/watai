@@ -6,7 +6,8 @@ import { repo, cloudApi, syncNow } from '../../data';
 import { useUi } from '../../state/store';
 import { useIsExpanded } from '../../lib/hooks';
 import { fileToBase64, formatBytes, DOC_ACCEPT } from '../../lib/files';
-import type { ThreadFile } from '../../lib/types';
+import { AttachmentList } from './Attachments';
+import type { Attachment, ThreadFile } from '../../lib/types';
 
 /**
  * Right-docked (desktop) / slide-over (compact) panel showing a chat's files: documents uploaded
@@ -20,9 +21,11 @@ export function ThreadFilesPane() {
   const expanded = useIsExpanded();
   const pushToast = useUi((s) => s.pushToast);
   const [files, setFiles] = useState<ThreadFile[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const threadRev = useUi((s) => s.threadRev[threadId ?? ''] ?? 0);
 
   const load = async (tid: string) => {
     const local = (await repo.getThread(tid).catch(() => null))?.files;
@@ -41,6 +44,20 @@ export function ThreadFilesPane() {
     void load(threadId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId]);
+
+  // User-uploaded attachments live on the messages (not thread.files); gather them so they are
+  // visible here too. Re-reads when the thread revises (a new prompt with files lands).
+  useEffect(() => {
+    if (!threadId) return;
+    let live = true;
+    repo
+      .listMessages(threadId)
+      .then((msgs) => live && setAttachments(msgs.flatMap((m) => m.attachments ?? [])))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [threadId, threadRev]);
 
   useEffect(() => {
     if (!threadId) return;
@@ -91,13 +108,14 @@ export function ThreadFilesPane() {
   const docs = files.filter((f) => (f.kind ?? 'document') === 'document');
   const imgs = files.filter((f) => f.kind === 'image');
   const artifacts = files.filter((f) => f.kind === 'artifact');
+  const total = files.length + attachments.length;
 
   const aside = (
     <aside className={`source-pane ${expanded ? '' : 'source-pane--overlay'}`} aria-label="Chat files">
       <header className="source-pane__head">
         <Icon name="file-text" size={16} />
         <span className="source-pane__title">Chat files</span>
-        <span className="source-pane__count">{files.length}</span>
+        <span className="source-pane__count">{total}</span>
         <IconButton name="close" label="Close files" onClick={close} />
       </header>
       <div className="source-pane__list">
@@ -124,11 +142,11 @@ export function ThreadFilesPane() {
           Documents are searched only within this chat. Images and files the assistant creates are
           saved here automatically.
         </p>
-        {loading && files.length === 0 ? (
+        {loading && total === 0 ? (
           <div className="files-pane__loading">
             <Spinner />
           </div>
-        ) : files.length === 0 ? (
+        ) : total === 0 ? (
           <p className="muted source-pane__empty">
             No files yet. Add a PDF, Word, text, or data file to ground this chat.
           </p>
@@ -167,6 +185,12 @@ export function ThreadFilesPane() {
                 {artifacts.map((f) => (
                   <ArtifactRow key={f.fileId} file={f} />
                 ))}
+              </>
+            )}
+            {attachments.length > 0 && (
+              <>
+                <div className="files-pane__section muted">Shared in chat</div>
+                <AttachmentList attachments={attachments} />
               </>
             )}
           </>

@@ -147,6 +147,7 @@ export function container(): ApiContainer {
       settings: settingsService,
       uploadImage: makeUploadImage(assetService),
       uploadArtifact: makeUploadImage(assetService),
+      resolveImageUrl: makeResolveImageUrl(minter),
       signalr: signalr ?? undefined,
       clock,
     },
@@ -184,5 +185,18 @@ function makeUploadImage(assets: AssetService) {
     });
     if (!res.ok) throw new Error(`Image upload failed (${res.status}).`);
     return sas.blobPath;
+  };
+}
+
+/** Mint a short-lived READ url for an attachment blob so a vision model can fetch the bytes during
+ *  a run. Returns null on failure so the prompt simply omits the image rather than failing. */
+function makeResolveImageUrl(minter: AzureSasMinter) {
+  return async (blobPath: string): Promise<string | null> => {
+    try {
+      const { url } = await minter.mint({ blobPath, op: 'read', ttlSeconds: 600 });
+      return url;
+    } catch {
+      return null;
+    }
   };
 }

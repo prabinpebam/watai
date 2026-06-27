@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChatView } from './ChatView';
 
@@ -6,13 +6,8 @@ import { IconButton } from '../../design/ui';
 import { useIsExpanded } from '../../lib/hooks';
 import { useUi } from '../../state/store';
 import { repo } from '../../data';
-import { newId } from '../../lib/ids';
 
-interface ChatScreenProps {
-  isNew?: boolean;
-}
-
-export function ChatScreen({ isNew }: ChatScreenProps) {
+export function ChatScreen() {
   const params = useParams();
   const navigate = useNavigate();
   const expanded = useIsExpanded();
@@ -22,19 +17,22 @@ export function ChatScreen({ isNew }: ChatScreenProps) {
   const version = useUi((s) => s.threadsVersion);
   const openFilesPane = useUi((s) => s.openFilesPane);
 
-  // For /new, mint a stable id for the lifetime of this screen instance.
-  const generatedId = useRef<string>(newId());
-  const threadId = isNew ? generatedId.current : params.threadId!;
-  const [title, setTitle] = useState(isNew ? 'New chat' : '');
+  // The thread id is always in the URL (a fresh chat redirects /new -> /c/{newId} first), so the
+  // thread is only persisted once the first prompt commits it. Until then getThread is null and we
+  // show "New chat"; once it exists (and the server auto-names it) the version bump re-fetches.
+  const threadId = params.threadId!;
+  const [title, setTitle] = useState('New chat');
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    if (!isNew) {
-      repo.getThread(threadId).then((t) => setTitle(t?.title ?? 'Chat'));
-    } else {
-      setTitle('New chat');
-    }
-  }, [threadId, isNew, version]);
+    let live = true;
+    repo.getThread(threadId).then((t) => {
+      if (live) setTitle(t?.title?.trim() || 'New chat');
+    });
+    return () => {
+      live = false;
+    };
+  }, [threadId, version]);
 
   return (
     <>

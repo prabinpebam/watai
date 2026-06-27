@@ -10,11 +10,12 @@ import { VoiceMode } from '../features/voice/VoiceMode';
 import { IconButton, Spinner, Button } from '../design/ui';
 import { useIsExpanded } from '../lib/hooks';
 import { useUi } from '../state/store';
-import { repo, cloudApi, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync } from '../data';
+import { repo, cloudApi, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync, realtime } from '../data';
 import { restoreInterruptedRuns } from '../features/chat/runStore';
 import { clearApiCredentials } from '../data/secureStore';
 import { isSignedIn, signOut } from '../auth/cloudAuth';
 import { loadMe, cachedMe } from '../auth/access';
+import { newId } from '../lib/ids';
 
 // Dev-only chat component gallery. The dynamic import sits in a branch that is statically
 // false in production, so the chunk is tree-shaken out of the prod bundle entirely.
@@ -38,13 +39,22 @@ function ScreenBar({ title }: { title: string }) {
   );
 }
 
+/** Recency window: reopening within this of the last activity resumes the most recent chat;
+ *  beyond it, a fresh empty chat opens instead. */
+const RESUME_WINDOW_MS = 5 * 60 * 1000;
+
 function RootRedirect() {
   const navigate = useNavigate();
   useEffect(() => {
     let live = true;
     repo.listThreads().then((threads) => {
       if (!live) return;
-      navigate(threads.length > 0 ? `/c/${threads[0].id}` : '/new', { replace: true });
+      // threads[0] is the most recently active chat (listThreads sorts by updatedAt desc). Resume
+      // it only if its last activity is recent; otherwise start a fresh empty chat. updatedAt is
+      // server-synced, so "recent activity" reflects other tabs/devices too.
+      const recent = threads[0];
+      const fresh = recent && Date.now() - new Date(recent.updatedAt).getTime() < RESUME_WINDOW_MS;
+      navigate(fresh ? `/c/${recent.id}` : '/new', { replace: true });
     });
     return () => {
       live = false;
@@ -55,6 +65,14 @@ function RootRedirect() {
       <Spinner size="xl" />
     </div>
   );
+}
+
+/** A fresh chat: mint an id and redirect to /c/{id} so the thread id lives in the URL from the
+ *  start. The thread itself is only persisted once the first prompt commits it (lazy create), so
+ *  an abandoned welcome page never litters history. */
+function NewChatRedirect() {
+  const [id] = useState(() => newId());
+  return <Navigate to={`/c/${id}`} replace />;
 }
 
 type SetupState = 'loading' | 'no-session' | 'no-access' | 'no-config' | 'ready';
@@ -167,6 +185,28 @@ export function App() {
     };
   }, []);
 
+  // Global realtime: keep a persistent 'thread' handler so a title/preview push (emitted as the
+  // server auto-names a chat from its first exchange) refreshes the sidebar + header title in real
+  // time — even when it lands after a run's own short-lived handlers were torn down. This is what
+  // makes a fresh chat rename itself without a page refresh. Best-effort; sync polling is fallback.
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    (async () => {
+      if (!(await isSignedIn())) return;
+      void realtime.ensure();
+      off = realtime.on('thread', () => {
+        void syncNow()
+          .then((changed) => {
+            const ui = useUi.getState();
+            ui.bumpThreads();
+            changed?.forEach((tid) => ui.bumpThread(tid));
+          })
+          .catch(() => undefined);
+      });
+    })();
+    return () => off?.();
+  }, []);
+
   // Cloud-account-only: ensure sync is on for the signed-in user (migrating any stale
   // sync=false saved before cloud-only), backfill pre-existing local data once, then sync.
   useEffect(() => {
@@ -207,7 +247,7 @@ export function App() {
         }
       >
         <Route path="/" element={<RootRedirect />} />
-        <Route path="/new" element={<ChatScreen isNew />} />
+        <Route path="/new" element={<NewChatRedirect />} />
         <Route path="/c/:threadId" element={<ChatScreen />} />
         <Route
           path="/search"

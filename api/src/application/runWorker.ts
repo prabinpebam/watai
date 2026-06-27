@@ -66,6 +66,9 @@ export interface RunWorkerDeps {
     bytes: Uint8Array,
     contentType: string,
   ) => Promise<string>;
+  /** Mint a short-lived READ url for an uploaded attachment blob so a vision model can fetch it.
+   *  Without it, user-uploaded images are omitted from the prompt (text-only history). */
+  resolveImageUrl?: (blobPath: string) => Promise<string | null>;
 }
 
 const DEFAULT_FLUSH_MS = 250;
@@ -89,12 +92,31 @@ function systemPrompt(creds: DecryptedCredentials, settings?: Settings, skillsSe
 }
 
 /** Responses turns: system + the user/assistant history (excluding soft-deleted rows and the
- *  assistant message this run is producing). */
-function buildTurns(system: string, messages: MessageRecord[], assistantMessageId: string): Turn[] {
+ *  assistant message this run is producing). User-uploaded images are resolved to short-lived
+ *  read URLs so a vision model can see them; without a resolver the history stays text-only. */
+async function buildTurns(
+  system: string,
+  messages: MessageRecord[],
+  assistantMessageId: string,
+  resolveImageUrl?: (blobPath: string) => Promise<string | null>,
+): Promise<Turn[]> {
   const turns: Turn[] = [{ role: 'system', text: system }];
   for (const m of messages) {
     if (m.deletedAt || m.id === assistantMessageId) continue;
-    if (m.role === 'user' || m.role === 'assistant') turns.push({ role: m.role, text: m.content });
+    if (m.role !== 'user' && m.role !== 'assistant') continue;
+    const turn: Turn = { role: m.role, text: m.content };
+    // User-uploaded image attachments -> input_image (vision). Only user turns; assistant output
+    // images can't be replayed as input_image. Skip silently when a url can't be minted.
+    if (m.role === 'user' && resolveImageUrl && m.attachments?.length) {
+      const urls: string[] = [];
+      for (const att of m.attachments) {
+        if (att.kind !== 'image' || !att.blobPath) continue;
+        const url = await resolveImageUrl(att.blobPath).catch(() => null);
+        if (url) urls.push(url);
+      }
+      if (urls.length) turn.images = urls;
+    }
+    turns.push(turn);
   }
   return turns;
 }
@@ -418,7 +440,12 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
     const codeOn = run.tools.includes('code_interpreter');
     const ciSection = codeOn ? codeInterpreterSection(selectSkills(run.prompt?.text ?? firstUser)) : '';
-    const turns = buildTurns(systemPrompt(c, settings, ciSection), history, run.assistantMessageId);
+    const turns = await buildTurns(
+      systemPrompt(c, settings, ciSection),
+      history,
+      run.assistantMessageId,
+      deps.resolveImageUrl,
+    );
     const tools = assembleTools(c, run, thread);
     const execute = makeExecute(c, deps.fetchImpl);
 
