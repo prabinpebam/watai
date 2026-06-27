@@ -582,6 +582,15 @@
   z-index: var(--z-drawer-scrim);
   animation: fade-in var(--motion-base);
 }
+.drawer-scrim--closing {
+  pointer-events: none;
+  animation: fade-out var(--motion-base) var(--ease-standard) forwards;
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
 .drawer {
   position: fixed;
   top: 0;
@@ -1124,8 +1133,18 @@ button.source-chip:hover {
   border-left: 1px solid var(--color-border);
   animation: source-pane-in var(--motion-base) var(--ease-standard);
 }
+.source-pane--closing {
+  pointer-events: none;
+  animation: source-pane-out var(--motion-base) var(--ease-standard) forwards;
+}
 @keyframes source-pane-in {
   from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+}
+@keyframes source-pane-out {
+  to {
     opacity: 0;
     transform: translateX(10px);
   }
@@ -1139,8 +1158,16 @@ button.source-chip:hover {
   border-left: none;
   animation: source-pane-slide var(--motion-base) var(--ease-standard);
 }
+.source-pane--overlay.source-pane--closing {
+  animation: source-pane-slide-out var(--motion-base) var(--ease-standard) forwards;
+}
 @keyframes source-pane-slide {
   from {
+    transform: translateX(100%);
+  }
+}
+@keyframes source-pane-slide-out {
+  to {
     transform: translateX(100%);
   }
 }

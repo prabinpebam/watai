@@ -16,16 +16,34 @@ import type { Attachment, ThreadFile } from '../../lib/types';
  * thread's synced file record, refreshed from the authoritative server list when online.
  */
 export function ThreadFilesPane() {
-  const threadId = useUi((s) => s.filesPane);
+  const openThreadId = useUi((s) => s.filesPane);
   const close = useUi((s) => s.closeFilesPane);
   const expanded = useIsExpanded();
   const pushToast = useUi((s) => s.pushToast);
+  const [renderedThreadId, setRenderedThreadId] = useState<string | null>(openThreadId);
+  const [closing, setClosing] = useState(false);
   const [files, setFiles] = useState<ThreadFile[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const threadRev = useUi((s) => s.threadRev[threadId ?? ''] ?? 0);
+  const activeThreadId = openThreadId ?? renderedThreadId;
+  const threadRev = useUi((s) => s.threadRev[activeThreadId ?? ''] ?? 0);
+
+  useEffect(() => {
+    if (openThreadId) {
+      setRenderedThreadId(openThreadId);
+      setClosing(false);
+      return;
+    }
+    if (!renderedThreadId) return;
+    setClosing(true);
+    const timer = window.setTimeout(() => {
+      setRenderedThreadId(null);
+      setClosing(false);
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [openThreadId, renderedThreadId]);
 
   const load = async (tid: string) => {
     const local = (await repo.getThread(tid).catch(() => null))?.files;
@@ -39,34 +57,35 @@ export function ThreadFilesPane() {
   };
 
   useEffect(() => {
-    if (!threadId) return;
+    if (!activeThreadId || closing) return;
     setLoading(true);
-    void load(threadId);
+    void load(activeThreadId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threadId, threadRev]);
+  }, [activeThreadId, threadRev, closing]);
 
   // User-uploaded attachments live on the messages (not thread.files); gather them so they are
   // visible here too. Re-reads when the thread revises (a new prompt with files lands).
   useEffect(() => {
-    if (!threadId) return;
+    if (!activeThreadId || closing) return;
     let live = true;
     repo
-      .listMessages(threadId)
+      .listMessages(activeThreadId)
       .then((msgs) => live && setAttachments(msgs.flatMap((m) => m.attachments ?? [])))
       .catch(() => undefined);
     return () => {
       live = false;
     };
-  }, [threadId, threadRev]);
+  }, [activeThreadId, threadRev, closing]);
 
   useEffect(() => {
-    if (!threadId) return;
+    if (!activeThreadId || closing) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [threadId, close]);
+  }, [activeThreadId, close, closing]);
 
-  if (!threadId) return null;
+  if (!activeThreadId) return null;
+  const threadId = activeThreadId;
 
   const upload = async (list: FileList | File[]) => {
     const all = Array.from(list);
@@ -111,7 +130,7 @@ export function ThreadFilesPane() {
   const total = files.length + attachments.length;
 
   const aside = (
-    <aside className={`source-pane ${expanded ? '' : 'source-pane--overlay'}`} aria-label="Chat files">
+    <aside className={`source-pane ${expanded ? '' : 'source-pane--overlay'} ${closing ? 'source-pane--closing' : ''}`} aria-label="Chat files">
       <header className="source-pane__head">
         <Icon name="file-text" size={16} />
         <span className="source-pane__title">Chat files</span>
@@ -185,7 +204,7 @@ export function ThreadFilesPane() {
   if (expanded) return aside;
   return createPortal(
     <>
-      <div className="drawer-scrim" onClick={close} />
+      <div className={`drawer-scrim ${closing ? 'drawer-scrim--closing' : ''}`} onClick={close} />
       {aside}
     </>,
     document.body,
