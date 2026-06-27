@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { selectSkills, skillsPromptSection } from './skillService';
+import { selectSkills, codeInterpreterSection } from './skillService';
 import { SKILLS } from '../skills';
 import type { Skill } from '../domain/skill';
 
@@ -44,13 +44,17 @@ describe('selectSkills', () => {
   });
 });
 
-describe('skillsPromptSection', () => {
-  it('is empty when no skills', () => {
-    expect(skillsPromptSection([])).toBe('');
+describe('codeInterpreterSection', () => {
+  it('always states the file-delivery capability, even with no matched skills', () => {
+    const s = codeInterpreterSection([]);
+    expect(s).toContain('python tool');
+    expect(s).toContain('downloadable');
+    expect(s).toContain('/mnt/data/');
+    expect(s.toLowerCase()).toContain('never say you cannot');
   });
 
-  it('embeds each selected skill body and the /mnt/data instruction', () => {
-    const section = skillsPromptSection(selectSkills('make a professional pdf'));
+  it('embeds each selected skill body alongside the directive', () => {
+    const section = codeInterpreterSection(selectSkills('make a professional pdf'));
     expect(section).toContain('Professional PDF');
     expect(section).toContain('ReportLab');
     expect(section).toContain('/mnt/data/');

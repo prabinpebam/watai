@@ -20,7 +20,7 @@ import type { ResponsesCitation, ResponsesTool } from '../ai/responses';
 import { tavilySearch } from '../ai/tavily';
 import { generateImage } from '../ai/image';
 import { listContainerFiles, getContainerFile, mimeForFilename } from '../ai/containerFiles';
-import { selectSkills, skillsPromptSection } from './skillService';
+import { selectSkills, codeInterpreterSection } from './skillService';
 import { completeChat } from '../ai/chat';
 
 export interface CredentialReader {
@@ -398,10 +398,9 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       : undefined;
     const history = await messageStore.list(threadId);
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
-    const skills = run.tools.includes('code_interpreter')
-      ? selectSkills(run.prompt?.text ?? firstUser)
-      : [];
-    const turns = buildTurns(systemPrompt(c, settings, skillsPromptSection(skills)), history, run.assistantMessageId);
+    const codeOn = run.tools.includes('code_interpreter');
+    const ciSection = codeOn ? codeInterpreterSection(selectSkills(run.prompt?.text ?? firstUser)) : '';
+    const turns = buildTurns(systemPrompt(c, settings, ciSection), history, run.assistantMessageId);
     const tools = assembleTools(c, run, thread);
     const execute = makeExecute(c, deps.fetchImpl);
 

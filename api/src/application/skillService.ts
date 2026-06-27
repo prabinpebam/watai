@@ -25,14 +25,21 @@ export function selectSkills(prompt: string, opts: { max?: number; skills?: Skil
     .map((x) => x.s);
 }
 
-/** Render the selected skills as a system-prompt section (empty string when none selected). */
-export function skillsPromptSection(skills: Skill[]): string {
-  if (!skills.length) return '';
+/** The forceful code-interpreter directive. The model otherwise assumes files it writes stay in
+ *  its sandbox and refuses to "deliver" them; this tells it the truth — our worker captures
+ *  /mnt/data/ outputs and surfaces them as downloadable attachments in the chat. */
+const CODE_INTERPRETER_DIRECTIVE =
+  'You have a code interpreter (the "python tool") and you CAN create real, downloadable files. ' +
+  'When the user asks for a document, PDF, Word doc, spreadsheet, slide deck, chart, CSV, image, ' +
+  'or any file, you MUST use the python tool to generate it and save it under /mnt/data/. Files ' +
+  'saved under /mnt/data/ are automatically delivered to the user as downloadable attachments in ' +
+  'this chat — the user can download them directly. Never say you cannot create, attach, host, ' +
+  'email, or deliver files; you can. Do not paste a long document as plain text when the user ' +
+  'asked for a file — produce the actual file, then briefly describe what you made.';
+
+/** Build the code-interpreter system-prompt section: the directive plus any matched skill bodies. */
+export function codeInterpreterSection(skills: Skill[]): string {
+  if (!skills.length) return CODE_INTERPRETER_DIRECTIVE;
   const blocks = skills.map((s) => `### ${s.name}\n${s.body}`).join('\n\n');
-  return (
-    'You can run Python with the code interpreter (the "python tool") to create files. ' +
-    'Apply these skills when relevant:\n\n' +
-    blocks +
-    '\n\nSave every generated file under /mnt/data/ with a clear filename, and mention it in your reply.'
-  );
+  return `${CODE_INTERPRETER_DIRECTIVE}\n\nApply these skills:\n\n${blocks}`;
 }

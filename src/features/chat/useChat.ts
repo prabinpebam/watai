@@ -21,13 +21,15 @@ async function serverRunTools(): Promise<string[]> {
   const tools = ['web_search', 'generate_image'];
   const settings = await repo.getSettings().catch(() => null);
   const t = settings?.tools;
-  if (!t || t.agenticMode === false) return tools;
+  if (t?.agenticMode === false) return tools; // only bail when agentic mode is explicitly off
   const caps = await cloudApi
     .getCredentialStatus()
     .then((s) => s.capabilities)
     .catch(() => undefined);
-  if (t.codeInterpreter && caps?.codeInterpreter) tools.push('code_interpreter');
-  if (t.fileSearch && caps?.fileSearch) tools.push('file_search');
+  // Default the per-tool flags on when settings are missing/partial (code interpreter ships on),
+  // so an endpoint that supports the tool always gets it unless the user explicitly disabled it.
+  if ((t?.codeInterpreter ?? true) && caps?.codeInterpreter) tools.push('code_interpreter');
+  if ((t?.fileSearch ?? false) && caps?.fileSearch) tools.push('file_search');
   return tools;
 }
 
