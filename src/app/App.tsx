@@ -1,5 +1,5 @@
 import { useEffect, useState, lazy, Suspense, type ReactNode } from 'react';
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { ChatScreen } from '../features/chat/ChatScreen';
 import { SearchView } from '../features/history/SearchView';
@@ -13,7 +13,7 @@ import { useUi } from '../state/store';
 import { repo, cloudApi, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync, realtime } from '../data';
 import { restoreInterruptedRuns } from '../features/chat/runStore';
 import { clearApiCredentials } from '../data/secureStore';
-import { isSignedIn, signOut, getCloudToken } from '../auth/cloudAuth';
+import { isSignedIn, signOut } from '../auth/cloudAuth';
 import { loadMe, cachedMe } from '../auth/access';
 import { newId } from '../lib/ids';
 
@@ -98,22 +98,15 @@ function wasConfigured(): boolean {
 }
 
 function useSetupState(): SetupState {
-  const [state, setState] = useState<SetupState>('loading');
-  const location = useLocation();
+  // Optimistic boot: a browser that was configured before shows the app immediately while we
+  // re-verify in the background, so the home page never waits on an auth/credentials round-trip.
+  // Only a definitive negative (signed out / empty vault) corrects it.
+  const [state, setState] = useState<SetupState>(() => (wasConfigured() ? 'ready' : 'loading'));
   useEffect(() => {
     let live = true;
     (async () => {
       // Cloud-account-only: a signed-in Entra account is required.
       if (!(await isSignedIn())) {
-        if (live) setState('no-session');
-        return;
-      }
-      // A cached account is NOT enough: silent token renewal can fail (an expired refresh token,
-      // or — common on static hosts like GitHub Pages — the browser blocking the third-party
-      // cookie the renewal iframe needs). Without a token every API call 401s, so route to a fresh
-      // interactive sign-in (a top-level redirect that can reach the session) instead of dropping
-      // the user into onboarding, which only looked like "you're not configured".
-      if (!(await getCloudToken())) {
         if (live) setState('no-session');
         return;
       }
@@ -126,20 +119,19 @@ function useSetupState(): SetupState {
       }
       // Credentials live in the server vault now; wipe anything a pre-cloud build stored locally.
       void clearApiCredentials();
-      // `configured`: true (vault has keys), false (definitely empty), null (couldn't verify).
+      // `configured`: true (vault has keys), false (definitely empty), null (couldn't verify — do
+      // not downgrade a previously-configured account over a transient failure).
       const configured = await cloudApi
         .getCredentialStatus()
         .then((s) => s.configured)
         .catch(() => null);
       if (configured !== null) rememberConfigured(configured);
-      // Never send a previously-configured account to onboarding just because the check failed
-      // (token refresh, cold start, offline) — only a confirmed empty vault gets 'no-config'.
       if (live) setState((configured ?? wasConfigured()) ? 'ready' : 'no-config');
     })();
     return () => {
       live = false;
     };
-  }, [location.pathname]);
+  }, []);
   return state;
 }
 

@@ -40,8 +40,20 @@ async function getPca(): Promise<IPublicClientApplication> {
       await pca.initialize();
       // Complete a returning sign-in redirect (no-op on a normal load). The app's HashRouter
       // owns routing, so MSAL must not navigate or it fights the router over the URL hash.
-      const result = await pca.handleRedirectPromise({ navigateToLoginRequestUrl: false });
-      if (result?.account) pca.setActiveAccount(result.account);
+      // CRITICAL: a redirect we cannot redeem — a stale/duplicate auth code left in the URL, a
+      // wrong-issuer grant (AADSTS399266), clock skew, etc. — must NOT reject this *cached* promise,
+      // or every later auth call rejects and the app becomes permanently unusable. Swallow it,
+      // strip the dead auth response from the URL so it isn't retried on reload, and hand back a
+      // usable client the user can sign in with fresh.
+      try {
+        const result = await pca.handleRedirectPromise({ navigateToLoginRequestUrl: false });
+        if (result?.account) pca.setActiveAccount(result.account);
+      } catch (e) {
+        console.warn('[auth] could not complete the sign-in redirect; starting clean', e);
+        if (typeof window !== 'undefined' && /[#&]code=/.test(window.location.hash)) {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      }
       return pca;
     })();
   }
