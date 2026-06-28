@@ -711,7 +711,7 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
   );
 }
 
-function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
+export function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
   const { settings, setSettings } = ctx;
   const pushToast = useUi((s) => s.pushToast);
   const p = settings.personalization;
@@ -723,17 +723,23 @@ function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
   return (
     <>
       <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
-        <div className="col" style={{ gap: 'var(--space-5)' }}>
+        <div className="settings-group__label" style={{ marginTop: 0, paddingLeft: 0 }}>Custom instructions</div>
+        <p className="setting-row__sub" style={{ marginTop: 0, marginBottom: 'var(--space-4)' }}>
+          Explicit instructions you write here are applied directly. Memory below is learned or saved context you can inspect.
+        </p>
+        <div className="col" style={{ gap: 'var(--space-4)' }}>
           <TextAreaField
             label="About you"
             hint="What should Watai know about you?"
             value={p.aboutYou ?? ''}
+            rows={3}
             onChange={(e) => setSettings({ ...settings, personalization: { ...p, aboutYou: e.target.value } })}
           />
           <TextAreaField
             label="How should Watai respond?"
             hint="Tone, format, and style preferences."
             value={p.howRespond ?? ''}
+            rows={3}
             onChange={(e) => setSettings({ ...settings, personalization: { ...p, howRespond: e.target.value } })}
           />
         </div>
@@ -742,7 +748,7 @@ function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
         <div className="setting-row">
           <div className="setting-row__body">
             <div className="setting-row__title">Memory</div>
-            <div className="setting-row__sub">Let Watai remember useful details across chats.</div>
+            <div className="setting-row__sub">Saved and learned context, shown as a structured profile and evidence list.</div>
           </div>
           <Switch
             checked={memory.enabled}
