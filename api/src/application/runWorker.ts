@@ -80,12 +80,17 @@ export interface RunWorkerDeps {
    *  Absent ⇒ the bundled defaults. Only consulted when `skillProvisioner` is present and code
    *  interpreter is on. */
   resolveSkills?: (userId: string) => Promise<SkillPackage[]>;
+  /** Test hooks for artifact capture retry timing. */
+  artifactCaptureAttempts?: number;
+  artifactCaptureRetryMs?: number;
 }
 
 const DEFAULT_FLUSH_MS = 250;
 /** Per-run artifact guards (code interpreter outputs persisted to Blob Storage). */
 const MAX_ARTIFACTS = 16;
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
+const ARTIFACT_CAPTURE_ATTEMPTS = 4;
+const ARTIFACT_CAPTURE_RETRY_MS = 500;
 
 const DEFAULT_VISIBLE_ARTIFACT_KINDS = new Set<ArtifactKind>(['pdf', 'document', 'spreadsheet', 'presentation']);
 
@@ -424,8 +429,8 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   const artifacts: MessageArtifact[] = [];
   const requestedKinds = requestedArtifactKinds(run.prompt?.text ?? '');
   const seenArtifactFiles = new Set<string>();
-  /** The most recent code-interpreter container seen this run (for an end-of-run capture fallback). */
-  let ciSeen: { id: string; callId: string } | undefined;
+  /** Code-interpreter containers seen this run (for end-of-run capture retries). */
+  const ciContainers = new Map<string, string>();
   /** Artifacts generated this run (images + code-interpreter files) for the thread file list. */
   const generatedFiles: ThreadFileMeta[] = [];
   let acc = '';
@@ -467,41 +472,48 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   /** Capture files the code interpreter wrote to its container: list the container, download each
    *  new assistant-sourced file, persist it to Blob Storage, and record it as an artifact on the
    *  message + thread. Best-effort — failures never fail the run. */
-  const captureArtifacts = async (containerId: string, toolCallId: string): Promise<void> => {
+  const captureArtifacts = async (containerId: string, toolCallId: string): Promise<number> => {
     if (!creds || !deps.uploadArtifact) {
       console.warn('[artifacts] skipped', { hasCreds: !!creds, hasUploadArtifact: !!deps.uploadArtifact });
-      return;
+      return 0;
     }
     let files;
     try {
       files = await listContainerFiles(creds, containerId, deps.fetchImpl);
     } catch (e) {
       console.error('[artifacts] listContainerFiles failed', containerId, e instanceof Error ? e.message : String(e));
-      return;
+      return 0;
     }
     console.log('[artifacts] listed container files', {
       containerId,
       count: files.length,
       items: files.map((f) => `${f.source ?? '?'}:${f.filename ?? f.path ?? f.id}`),
     });
+    let persisted = 0;
     for (const f of files) {
-      if (f.source !== 'assistant' || seenArtifactFiles.has(f.id)) continue;
-      seenArtifactFiles.add(f.id);
+      if (f.source === 'user' || seenArtifactFiles.has(f.id)) continue;
       if (artifacts.length >= MAX_ARTIFACTS) break;
       const name = ((f.filename || f.path || 'artifact').split('/').pop() || 'artifact').slice(0, 400);
       const mime = mimeForFilename(name);
       if (!(ALLOWED_CONTENT_TYPES as readonly string[]).includes(mime)) {
+        seenArtifactFiles.add(f.id);
         console.warn('[artifacts] skipped (mime not allowed)', { name, mime });
         continue;
       }
       const kind = artifactKindForMime(mime);
       if (!shouldExposeArtifact(f, name, kind, requestedKinds)) {
+        seenArtifactFiles.add(f.id);
         console.log('[artifacts] skipped (not a requested deliverable)', { name, path: f.path, kind });
         continue;
       }
       try {
         const bytes = await getContainerFile(creds, containerId, f.id, deps.fetchImpl);
-        if (!bytes.byteLength || bytes.byteLength > MAX_ARTIFACT_BYTES) {
+        if (!bytes.byteLength) {
+          console.warn('[artifacts] skipped (empty, may retry)', { name });
+          continue;
+        }
+        if (bytes.byteLength > MAX_ARTIFACT_BYTES) {
+          seenArtifactFiles.add(f.id);
           console.warn('[artifacts] skipped (size)', { name, bytes: bytes.byteLength });
           continue;
         }
@@ -517,6 +529,8 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
           sourceToolCallId: toolCallId,
           createdAt: clock.now(),
         });
+        seenArtifactFiles.add(f.id);
+        persisted++;
         generatedFiles.push({
           fileId: artifactId,
           name: name.slice(0, 80),
@@ -533,6 +547,19 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         await flush(true);
       } catch (e) {
         console.error('[artifacts] persist failed', name, e instanceof Error ? e.message : String(e));
+      }
+    }
+    return persisted;
+  };
+
+  const captureArtifactsEventually = async (containerId: string, toolCallId: string): Promise<void> => {
+    const attempts = Math.max(1, deps.artifactCaptureAttempts ?? ARTIFACT_CAPTURE_ATTEMPTS);
+    const retryMs = Math.max(0, deps.artifactCaptureRetryMs ?? ARTIFACT_CAPTURE_RETRY_MS);
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const persisted = await captureArtifacts(containerId, toolCallId);
+      if (persisted > 0) return;
+      if (attempt < attempts - 1 && retryMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, retryMs));
       }
     }
   };
@@ -612,7 +639,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         await flush(true);
         // Track the code-interpreter container; capture its files when the call completes.
         if (ev.name === 'code_interpreter' && ev.containerId) {
-          ciSeen = { id: ev.containerId, callId: id };
+          ciContainers.set(ev.containerId, id);
           if (ev.status === 'done') await captureArtifacts(ev.containerId, id);
         } else if (ev.name === 'code_interpreter' && ev.status === 'done') {
           console.warn('[artifacts] code_interpreter done with no containerId on the event');
@@ -669,11 +696,12 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         err = { code: 'internal', message: ev.message };
       }
     }
-    // Fallback: a code-interpreter container was seen but produced no captured artifact (e.g. the
-    // file landed after the done event) — try once more before finalizing.
-    if (ciSeen && artifacts.length === 0) {
-      console.log('[artifacts] end-of-run fallback capture', { containerId: ciSeen.id });
-      await captureArtifacts(ciSeen.id, ciSeen.callId);
+    // Fallback: code-interpreter files can appear shortly after the done event, or content can be
+    // temporarily unavailable. Retry before finalizing so generated PDFs reliably become artifacts.
+    for (const [containerId, callId] of ciContainers) {
+      if (artifacts.some((artifact) => artifact.sourceToolCallId === callId)) continue;
+      console.log('[artifacts] end-of-run fallback capture', { containerId });
+      await captureArtifactsEventually(containerId, callId);
     }
   } catch (e) {
     err = { code: 'internal', message: e instanceof Error ? e.message : 'Generation failed.' };

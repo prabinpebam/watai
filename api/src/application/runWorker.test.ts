@@ -192,6 +192,109 @@ describe('processRun', () => {
     expect(uploaded).toEqual([{ id: msg?.artifacts?.[0].id, mime: 'application/pdf', bytes: 5 }]);
   });
 
+  it('retries code-interpreter capture when the generated PDF appears after the done event', async () => {
+    await seed(ctx);
+    const uploaded: string[] = [];
+    let lists = 0;
+    const fetchImpl = (async (url: string | URL): Promise<Response> => {
+      const u = String(url);
+      if (u.includes('/files/late_pdf/content')) {
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer,
+          headers: new Headers(),
+        } as unknown as Response;
+      }
+      if (u.includes('/containers/cntr_late/files')) {
+        lists++;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: lists < 2 ? [] : [{ id: 'late_pdf', path: '/mnt/data/late.pdf', source: 'assistant' }],
+          }),
+          text: async () => '',
+          headers: new Headers(),
+        } as unknown as Response;
+      }
+      throw new Error(`unexpected fetch: ${u}`);
+    }) as unknown as typeof fetch;
+
+    await processRun(
+      {
+        ...ctx.deps(script([
+          { type: 'tool', name: 'code_interpreter', status: 'running', callId: 'ci1', containerId: 'cntr_late' },
+          { type: 'tool', name: 'code_interpreter', status: 'done', callId: 'ci1', containerId: 'cntr_late' },
+          { type: 'text', delta: 'Done.' },
+          { type: 'done' },
+        ])),
+        fetchImpl,
+        artifactCaptureAttempts: 3,
+        artifactCaptureRetryMs: 0,
+        uploadArtifact: async (_userId, _threadId, artifactId) => {
+          uploaded.push(artifactId);
+          return `userA/t1/${artifactId}.pdf`;
+        },
+      },
+      't1',
+      'r1',
+    );
+
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.artifacts?.[0]).toMatchObject({ name: 'late.pdf', mime: 'application/pdf' });
+    expect(uploaded).toHaveLength(1);
+    expect(lists).toBeGreaterThanOrEqual(2);
+  });
+
+  it('retries code-interpreter capture when PDF content is temporarily unavailable', async () => {
+    await seed(ctx);
+    let downloads = 0;
+    const fetchImpl = (async (url: string | URL): Promise<Response> => {
+      const u = String(url);
+      if (u.includes('/files/retry_pdf/content')) {
+        downloads++;
+        if (downloads === 1) throw new Error('not ready yet');
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer,
+          headers: new Headers(),
+        } as unknown as Response;
+      }
+      if (u.includes('/containers/cntr_retry/files')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ id: 'retry_pdf', path: '/mnt/data/retry.pdf', source: 'assistant' }] }),
+          text: async () => '',
+          headers: new Headers(),
+        } as unknown as Response;
+      }
+      throw new Error(`unexpected fetch: ${u}`);
+    }) as unknown as typeof fetch;
+
+    await processRun(
+      {
+        ...ctx.deps(script([
+          { type: 'tool', name: 'code_interpreter', status: 'running', callId: 'ci1', containerId: 'cntr_retry' },
+          { type: 'tool', name: 'code_interpreter', status: 'done', callId: 'ci1', containerId: 'cntr_retry' },
+          { type: 'done' },
+        ])),
+        fetchImpl,
+        artifactCaptureAttempts: 3,
+        artifactCaptureRetryMs: 0,
+        uploadArtifact: async (_userId, _threadId, artifactId) => `userA/t1/${artifactId}.pdf`,
+      },
+      't1',
+      'r1',
+    );
+
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.artifacts?.[0]).toMatchObject({ name: 'retry.pdf', mime: 'application/pdf' });
+    expect(downloads).toBeGreaterThanOrEqual(2);
+  });
+
   it('mounts ready thread documents into the code-interpreter container', async () => {
     await seed(ctx);
     const t = await ctx.threadStore.get('userA', 't1');
