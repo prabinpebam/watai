@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryMemoryStore } from '../adapters/memory/memoryStore';
 import { MemoryService } from './memoryService';
 import { MemoryContextService } from './memoryContextService';
@@ -16,7 +16,7 @@ function makeServices(settings?: Partial<Settings>) {
   const ctx = new MemoryContextService(store, {
     get: async () => ({ ...DEFAULT_SETTINGS, ...settings, personalization: { ...DEFAULT_SETTINGS.personalization, ...settings?.personalization } }),
   });
-  return { memory, ctx };
+  return { memory, ctx, store };
 }
 
 describe('MemoryContextService', () => {
@@ -55,5 +55,53 @@ describe('MemoryContextService', () => {
     const block = await on.ctx.buildForRun({ userId: 'userA', threadId: 'thr_1', latestUserText: 'What is the weather?', now: '2026-01-01T00:01:00Z' });
     expect(block.retrievalMode).toBe('empty');
     expect(block.memories).toEqual([]);
+  });
+
+  it('does not touch memory storage for generic prompts without memory intent', async () => {
+    const { memory, ctx, store } = makeServices();
+    await memory.createManual('userA', { text: 'User prefers concise implementation plans.', kind: 'preference' });
+    const list = vi.spyOn(store, 'list');
+
+    const block = await ctx.buildForRun({
+      userId: 'userA',
+      threadId: 'thr_1',
+      latestUserText: 'Write a debounce hook in TypeScript.',
+      now: '2026-01-01T00:01:00Z',
+    });
+
+    expect(block.retrievalMode).toBe('empty');
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('retrieves personal memory only when the prompt asks for it', async () => {
+    const { memory, ctx } = makeServices();
+    const chopper = await memory.createManual('userA', { text: 'User has a dog named Chopper inspired by One Piece.', kind: 'fact' });
+
+    const block = await ctx.buildForRun({
+      userId: 'userA',
+      threadId: 'thr_1',
+      latestUserText: "What is my dog's name?",
+      now: '2026-01-01T00:01:00Z',
+    });
+
+    expect(block.retrievalMode).toBe('lexical');
+    expect(block.memories.map((m) => m.id)).toEqual([chopper.id]);
+  });
+
+  it('caps default memory context to a small relevant set', async () => {
+    const { memory, ctx } = makeServices();
+    for (let i = 0; i < 6; i++) {
+      await memory.createManual('userA', { text: `Watai Azure deploy note ${i}: use the dev resource group for deployment checks.`, kind: 'project_context' });
+    }
+
+    const block = await ctx.buildForRun({
+      userId: 'userA',
+      threadId: 'thr_1',
+      latestUserText: 'How should I deploy Watai on Azure?',
+      now: '2026-01-01T00:01:00Z',
+    });
+
+    expect(block.memories).toHaveLength(3);
+    expect(block.tokenEstimate).toBeLessThanOrEqual(400);
   });
 });

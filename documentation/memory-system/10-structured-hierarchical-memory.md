@@ -94,6 +94,8 @@ Storage views:
 
 The profile tree is a derived view over evidence and graph records. It is not a free-floating source of truth.
 
+Serving rule: the profile tree and graph are not dumped into every prompt. They are queried only after an intent/relevance gate passes, and the prompt receives a small context block rather than the whole tree.
+
 ## 4. Memory Tiers
 
 | Tier | Scope | Lifetime | Purpose |

@@ -6,7 +6,7 @@ Cross-references: [02-watai-memory-spec.md](02-watai-memory-spec.md), [04-evalua
 
 ## 1. Research Synthesis
 
-The relevant production and research patterns converge on the same architecture: ingest conversational events continuously, extract durable memories asynchronously, keep memory records source-linked and time-aware, then retrieve a compact context block on the hot path.
+The relevant production and research patterns converge on the same architecture: observe conversational events continuously, detect durable-memory opportunities cheaply, extract durable memories asynchronously only when warranted, keep memory records source-linked and time-aware, then retrieve a compact context block on the hot path.
 
 ### 1.1 Mem0
 
@@ -14,7 +14,7 @@ Mem0's add-memory flow accepts user/assistant messages, uses an LLM to extract k
 
 Design takeaways for Watai:
 
-- Add messages/turns to memory processing whenever the agent learns something useful.
+- Add messages/turns to memory processing when a cheap opportunity gate sees durable-memory signals.
 - Use LLM inference for extraction by default; raw transcript storage is a different mode and creates duplicate/noisy memory risk.
 - Keep long-lived user memory distinct from current turn context and session/task memory.
 - Treat add/update/delete/search as governed operations with metadata and visibility, not as hidden prompt stuffing.
@@ -53,11 +53,14 @@ Design takeaways for Watai:
 
 ## 2. Product Requirement
 
-Watai must run an active, asynchronous memory learner for every eligible user prompt and completed response.
+Watai must run an active, asynchronous memory learner without treating every prompt as memory-worthy. The system scans every eligible turn cheaply, but invokes the extractor LLM only when the turn contains explicit memory-control language or durable profile/project/preference/correction signals.
 
 Requirements:
 
-- Every non-temporary synced user turn receives at least one LLM extraction decision when automatic extraction is enabled, either in the command lane, the turn lane, or both.
+- Every non-temporary synced user turn receives a cheap extraction-opportunity decision when automatic extraction is enabled.
+- Turns with no durable-memory signal do not enqueue extractor LLM jobs.
+- Explicit remember/forget/correction commands enqueue the command lane.
+- Durable-looking completed turns enqueue the turn lane.
 - Extraction must never delay send-to-first-token or response completion.
 - LLM judgment is required for automatic memory creation/update/suppression/invalidation.
 - The service, not the LLM, owns storage decisions after strict validation.
@@ -77,7 +80,7 @@ Non-goals for the first automatic extraction release:
 
 Critical review constraints:
 
-- Do not rely on regex-only "remember" detection. Regex may choose which lane is urgent, but an LLM must make the durable update/no-update decision for eligible turns.
+- Do not rely on regex-only "remember" detection for storage decisions. Deterministic rules may skip obvious non-memory turns or choose which lane is urgent, but an LLM and service validation make durable update/no-update decisions for enqueued jobs.
 - Do not make extraction dependent on the frontend being open. The worker must run from server-side message/run persistence.
 - Do not enqueue content-bearing queue messages. Queue payloads carry ids only; the worker rehydrates content from stores.
 - Do not let the learner write faster than users can govern it. Every stored memory remains visible, suppressible, and deletable.
@@ -86,8 +89,10 @@ Critical review constraints:
 
 ```mermaid
 flowchart LR
-  UserPrompt[User message saved] --> CommandEnqueue[Optional immediate memory-command job]
-  AssistantComplete[Assistant message complete] --> TurnEnqueue[Turn extraction job]
+  UserPrompt[User message saved] --> Prefilter[Cheap opportunity gate]
+  Prefilter --> CommandEnqueue[Optional immediate memory-command job]
+  AssistantComplete[Assistant message complete] --> TurnGate[Cheap opportunity gate]
+  TurnGate --> TurnEnqueue[Optional turn extraction job]
   CommandEnqueue --> Queue[(memory-jobs queue)]
   TurnEnqueue --> Queue
   Queue --> Worker[memoryWorker]
@@ -113,11 +118,12 @@ Hot path:
 
 Background path:
 
-1. User prompt and completed assistant response enqueue memory jobs.
-2. Queue worker loads the bounded turn window.
-3. LLM extractor decides whether memory should change.
-4. Service validates, dedupes, invalidates, and writes memory records.
-5. Future runs retrieve the new memory.
+1. User prompt and completed assistant response pass through cheap opportunity gates.
+2. Only memory-looking turns enqueue memory jobs.
+3. Queue worker loads the bounded turn window.
+4. LLM extractor decides whether memory should change.
+5. Service validates, dedupes, invalidates, and writes memory records.
+6. Future runs retrieve the new memory.
 
 ## 4. Two-Lane Extraction
 
@@ -145,7 +151,7 @@ Allowed operations:
 - `invalidate` for explicit corrections.
 - `ignore` for no durable command.
 
-This lane should be fast and conservative. If it is unsure, it returns `ignore` and the turn lane can decide later. The command lane is allowed to be selectively enqueued by a cheap prefilter only when the turn lane will still run after completion. If there may be no terminal assistant response, such as explicit remember/forget in a sync-only append path, enqueue command lane unconditionally for that user message.
+This lane should be fast and conservative. If it is unsure, it returns `ignore` and the turn lane can decide later. The command lane is selectively enqueued by a cheap prefilter for explicit memory-control language and durable-looking statements.
 
 ### 4.2 Turn Reflection Lane
 
@@ -175,11 +181,12 @@ Allowed operations:
 - `suppress`
 - `ignore`
 
-This lane is the default active learner for normal usage.
+This lane is the default active learner for turns that pass the cheap opportunity gate. Generic prompts should not reach the extractor LLM.
 
 Coverage rule:
 
-- A completed eligible user/assistant turn must have exactly one turn-lane LLM decision unless a job with the same assistant-message dedupe key already completed or was ignored.
+- A completed eligible user/assistant turn must have exactly one cheap opportunity-gate decision.
+- A completed eligible user/assistant turn with durable-memory signals must have exactly one turn-lane LLM decision unless a job with the same assistant-message dedupe key already completed or was ignored.
 - A user message with explicit memory-control language must have a command-lane LLM decision even if the assistant response later fails.
 - If both lanes run, command-lane writes are visible to the turn lane as existing candidates so the turn lane can merge or ignore rather than duplicate.
 
@@ -422,7 +429,8 @@ Hard rejection gates:
 - Source message came from a temporary thread.
 - Candidate text is empty or over 2,000 chars.
 - Candidate contains secret-like values.
-- Candidate has `confidence < 0.65` unless it is explicit command-lane remember.
+- Command-lane add candidate has `confidence < 0.65` or `salience < 0.40`.
+- Turn-lane/rebuild add candidate has `confidence < 0.82` or `salience < 0.65`.
 - Candidate is an unsupported sensitive category.
 - Candidate is about a private third party and not clearly non-sensitive project context.
 - Candidate is a one-off instruction for the current response only.
@@ -438,8 +446,9 @@ The service may return `ignored` with structured reasons. Ignored candidates are
 Deterministic prevalidation before the LLM:
 
 - Skip LLM extraction for empty/whitespace messages, temporary threads, disabled/paused memory, or missing credentials.
+- Skip LLM extraction for ordinary prompts that lack durable-memory opportunity signals.
 - Reject or redact obvious secret-like source content before constructing the extractor prompt when possible.
-- Do not skip ordinary eligible prompts simply because they lack memory keywords; the turn-lane LLM is responsible for returning `ignore`.
+- Do not use the prefilter to write memory. It can only skip or enqueue; the extractor and service validation own storage decisions.
 
 ## 9. Apply Semantics
 

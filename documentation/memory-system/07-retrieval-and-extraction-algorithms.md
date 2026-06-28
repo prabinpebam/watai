@@ -4,6 +4,12 @@ This document defines the deterministic first-pass algorithms for serving and wr
 
 Cross-references: [02-watai-memory-spec.md](02-watai-memory-spec.md), [06-api-and-schema-contracts.md](06-api-and-schema-contracts.md), [04-evaluation-and-governance.md](04-evaluation-and-governance.md).
 
+## 0. Architecture Position
+
+Memory is not loaded for every prompt. The hot path first decides whether the latest prompt is likely to benefit from saved memory. If not, it returns an empty context block before querying memory storage.
+
+RAG/vector search is useful candidate retrieval once the memory set is large, but it is not the whole architecture. The serving path is: cheap intent/relevance gate, scoped candidate retrieval, thresholding/reranking, strict token budget, and one prompt-ready context block. Embeddings may later augment candidate retrieval, but they must not remove user/session filters, salience thresholds, source caps, or token caps.
+
 ## 1. Retrieval Eligibility
 
 ```ts
@@ -33,11 +39,12 @@ If ineligible, return:
 ## 2. Build Context Algorithm
 
 ```ts
-async function buildForRun({ userId, threadId, latestUserText, now, tokenBudget = 1200 }) {
+async function buildForRun({ userId, threadId, latestUserText, now, tokenBudget = 400 }) {
   const start = clock.nowMs();
   if (!eligible) return emptyBlock('ineligible');
 
   const query = normalizeQuery(latestUserText);
+  if (!query.hasMemoryIntent && !query.hasProjectContextIntent) return emptyBlock('no_intent');
   const cacheKey = hash(userId, threadId, query, settings.memoryVersion, memoryVersion);
   const cached = cache.get(cacheKey);
   if (cached && cached.ageMs < 120_000) {
@@ -47,7 +54,7 @@ async function buildForRun({ userId, threadId, latestUserText, now, tokenBudget 
   const [summary, pinned, lexicalCandidates, threadSummaries] = await Promise.all([
     store.getSummary(userId),
     store.list(userId, { status: 'active', visibility: 'top_of_mind', limit: 30 }),
-    store.list(userId, { status: 'active', q: query.lexical, limit: 150 }),
+    store.list(userId, { status: 'active', q: query.bestLexicalTerm, limit: 40 }),
     store.list(userId, { status: 'active', kind: 'thread_summary', limit: 30 }),
   ]);
 
@@ -88,6 +95,8 @@ MVP implementation:
 - Keep product/project tokens such as `watai`, `azure`, `storybook`, `pdf`, `deploy`.
 - Extract entities from capitalized/project-like tokens and known memory entities.
 - Detect personalization intent through phrases such as `my preference`, `how do I usually`, `what did we decide`, `remember`, `last time`, `previously`.
+- Detect project/work-context intent through project names, repository terms, deployment terms, and explicit prior-work questions.
+- Generic task prompts such as `write a debounce hook` or `explain promises` return empty memory context before hitting storage.
 
 ## 4. Scoring
 
@@ -159,15 +168,15 @@ Default final caps:
 
 ```ts
 const SOURCE_CAPS = {
-  preference: 3,
-  work_style: 3,
-  project_context: 4,
-  fact: 4,
+  preference: 2,
+  work_style: 2,
+  project_context: 3,
+  fact: 2,
   procedure: 2,
   avoidance: 2,
-  thread_summary: 3,
-  totalAtomic: 8,
-  totalThreadSummaries: 3,
+  thread_summary: 1,
+  totalAtomic: 3,
+  totalThreadSummaries: 1,
 };
 ```
 
@@ -182,6 +191,8 @@ Algorithm:
 ## 6. Token Budgeting
 
 Estimate token count as `ceil(chars / 4)` for MVP.
+
+Default serving budget is 400 tokens with a maximum of 3 atomic memories. Tests or explicit runtime overrides may raise this, but normal chat treats the context window as scarce.
 
 Budget order:
 
@@ -231,7 +242,10 @@ Automatic extraction is queued after terminal assistant turns when:
 - thread is not temporary,
 - assistant status is `complete`,
 - current turn window contains at least one user message,
+- a cheap opportunity gate detects explicit memory control language, stable profile language, project/repository/deployment context, preferences, avoidances, corrections, or similar durable signals,
 - no extraction job for the same assistant message exists.
+
+Generic prompts without durable-memory signals should not enqueue extraction jobs or invoke the memory extractor LLM.
 
 Do not enqueue on `error` or `interrupted` unless the interruption still completed a durable user-confirmed action.
 
@@ -255,6 +269,7 @@ System instruction:
 
 ```text
 You extract durable memory candidates for Watai. Store only useful future context.
+Be selective. Most one-off requests and casual comments should be ignored.
 Do not store secrets, credentials, one-off requests, private third-party details, or emotion guesses.
 Prefer source-linked, concise memories. Current user statements can invalidate older memories.
 Return strict JSON only.
@@ -284,7 +299,8 @@ Validation rejects:
 
 - unknown fields,
 - missing source message ids for automatic add/invalidate,
-- `confidence < 0.65`, except explicit manual remember,
+- command-lane adds below `confidence < 0.65` or `salience < 0.40`,
+- turn-lane/rebuild adds below `confidence < 0.82` or `salience < 0.65`,
 - secret-like values,
 - text over 2,000 chars,
 - unsupported kind.

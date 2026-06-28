@@ -31,6 +31,7 @@ The best current systems converge on these patterns:
 | Provide a user-visible **memory summary** plus lower-level retrieved facts. | Users need a reviewable surface, while retrieval needs atomic records. One alone is insufficient. |
 | Use **background extraction** for memory writing. | Avoids slowing down every assistant response and keeps generation logic focused. |
 | Use **bounded retrieval** on the hot path. | Retrieval must be fast and token-efficient; dumping all past chats does not scale and hurts model focus. |
+| Gate retrieval before storage access. | The cheapest memory lookup is the one skipped for prompts that have no personalization or prior-work intent. |
 | Preserve **source links** and show memory usage in responses. | Trust depends on users seeing why personalization happened and how to correct it. |
 | Treat memory changes as **time-aware**, not blind overwrites. | Real user facts change. The system should understand current vs old facts, not lose history. |
 | Distinguish **top-of-mind** memory from background memory. | The assistant needs a way to prioritize highly useful memories without deleting lower-priority ones. |
@@ -176,6 +177,7 @@ Watai takeaways:
 - Add lexical/entity signals alongside vector similarity.
 - Include assistant-generated facts, not only user-stated facts.
 - Expect temporal reasoning and contradiction resolution to need explicit eval coverage.
+- Treat vector search as candidate retrieval, not as the full memory architecture. It still needs user/session filters, top-k, thresholds, reranking, and token caps.
 
 ## 4. Academic Benchmarks
 
@@ -201,6 +203,7 @@ For Watai, BEAM is directionally important because it reflects what happens when
 - Do not store a single editable memory summary as the only source of truth; summaries lose source traceability and make deletion/correction ambiguous.
 - Do not ask the assistant to decide memory writes while also producing every normal response unless the user explicitly says "remember this".
 - Do not use embeddings alone. Benchmarks and production systems increasingly combine semantic, keyword, entity, recency, and salience signals.
+- Do not call retrieval or extraction LLMs on every normal prompt. Cheap intent gates protect latency, cost, and relevance.
 - Do not make deletion purely cosmetic. If a memory is deleted, suppressed, or source-deleted, retrieval must exclude it.
 - Do not store secrets or hidden reasoning as memory.
 

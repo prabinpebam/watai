@@ -91,8 +91,10 @@ export async function extractMemories(
   const system = [
     'You extract durable memories for Watai.',
     'Store durable facts, preferences, instructions, work style, project context, avoidances, procedures, or completed-work context that will be useful in future conversations.',
-    'Stable personal facts are memory-worthy when non-sensitive, for example pet names, recurring interests, project names, preferred tools, communication style, or durable fandom/context the user volunteers.',
-    'Example: if the user says "I have a dog called Chopper inspired by One Piece", add a fact memory that the user has a dog named Chopper inspired by One Piece.',
+    'Be selective. Most single-turn requests, casual comments, examples, jokes, temporary formatting requests, and transient task details should return ignore.',
+    'Only add memory when the detail is likely to improve future conversations, is explicitly requested, is repeated/confirmed, or is a high-salience stable profile/work fact.',
+    'Stable personal facts such as pet names can be memory-worthy, but only assign high salience when the fact is clearly durable and likely useful later.',
+    'Example high-salience memory: if the user says "Remember that my dog is called Chopper", add a fact memory. Example lower-salience or ignore: a casual one-off example unless future usefulness is clear.',
     'Do not store secrets, credentials, one-off requests, private third-party details, hidden reasoning, or guesses about emotions.',
     'Prefer concise source-linked memories. Current user corrections can invalidate older memories.',
     'Return strict JSON only with shape {"operations":[...]}. Valid ops are add, merge, invalidate, suppress, ignore.',

@@ -24,7 +24,7 @@ function setup(extractor: MemoryExtractorPort) {
   return { svc, memoryStore, jobStore, messageStore, threadStore, enqueued, sends };
 }
 
-async function seedThread(ctx: ReturnType<typeof setup>, temporary = false) {
+async function seedThread(ctx: ReturnType<typeof setup>, temporary = false, userContent = 'I prefer concise implementation plans.') {
   await ctx.threadStore.put({
     id: 't1',
     userId: 'userA',
@@ -37,7 +37,7 @@ async function seedThread(ctx: ReturnType<typeof setup>, temporary = false) {
     updatedAt: '2026-01-01T00:00:00Z',
     deletedAt: null,
   });
-  await ctx.messageStore.append({ id: 'u1', threadId: 't1', userId: 'userA', role: 'user', content: 'I prefer concise implementation plans.', status: 'complete', createdAt: '2026-01-01T00:00:01Z', orderAt: '2026-01-01T00:00:01Z', deletedAt: null });
+  await ctx.messageStore.append({ id: 'u1', threadId: 't1', userId: 'userA', role: 'user', content: userContent, status: 'complete', createdAt: '2026-01-01T00:00:01Z', orderAt: '2026-01-01T00:00:01Z', deletedAt: null });
   await ctx.messageStore.append({ id: 'a1', threadId: 't1', userId: 'userA', role: 'assistant', content: 'Got it.', status: 'complete', createdAt: '2026-01-01T00:00:02Z', orderAt: '2026-01-01T00:00:02Z', deletedAt: null });
 }
 
@@ -72,6 +72,34 @@ describe('MemoryExtractionService', () => {
     expect((await ctx.memoryStore.list('userA', { status: 'active' })).memories).toEqual([]);
     expect((await ctx.jobStore.get('userA', job!.id))?.status).toBe('ignored');
     expect(ctx.sends).toEqual([]);
+  });
+
+  it('requires stronger scores for automatic turn extraction than explicit command extraction', async () => {
+    const extractor: MemoryExtractorPort = async () => ({
+      operations: [{ op: 'add', kind: 'preference', text: 'User prefers occasional poetic phrasing.', confidence: 0.75, salience: 0.6, sourceMessageIds: ['u1'], reason: 'Moderate signal.' }],
+    });
+    const automatic = setup(extractor);
+    await seedThread(automatic);
+    const turnJob = await automatic.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    await automatic.svc.processJob('userA', turnJob!.id);
+    expect((await automatic.memoryStore.list('userA', { status: 'active' })).memories).toEqual([]);
+    expect((await automatic.jobStore.get('userA', turnJob!.id))?.status).toBe('ignored');
+
+    const explicit = setup(extractor);
+    await seedThread(explicit);
+    const commandJob = await explicit.svc.enqueueCommand('userA', 't1', 'u1', 'run1');
+    await explicit.svc.processJob('userA', commandJob!.id);
+    expect((await explicit.memoryStore.list('userA', { status: 'active' })).memories).toHaveLength(1);
+    expect((await explicit.jobStore.get('userA', commandJob!.id))?.status).toBe('completed');
+  });
+
+  it('does not enqueue extraction jobs for generic prompts without durable-memory signals', async () => {
+    const ctx = setup(async () => ({ operations: [{ op: 'ignore', reason: 'No durable memory.' }] }));
+    await seedThread(ctx, false, 'Write a debounce hook in TypeScript.');
+
+    await expect(ctx.svc.enqueueCommand('userA', 't1', 'u1', 'run1')).resolves.toBeNull();
+    await expect(ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1')).resolves.toBeNull();
+    expect(ctx.enqueued).toEqual([]);
   });
 
   it('does not enqueue for temporary threads', async () => {

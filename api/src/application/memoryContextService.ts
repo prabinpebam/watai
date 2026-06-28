@@ -23,6 +23,11 @@ const EMPTY: Omit<MemoryContextBlock, 'latencyBudgetMs'> = {
   retrievalMode: 'empty',
 };
 
+const DEFAULT_TOKEN_BUDGET = 400;
+const MAX_SELECTED_MEMORIES = 3;
+const MIN_MEMORY_SCORE = 0.45;
+const CANDIDATE_LIMIT = 40;
+
 function tokens(text: string): Set<string> {
   return new Set((text.toLowerCase().match(/[a-z0-9_-]{3,}/g) ?? []).filter((t) => !STOP.has(t)));
 }
@@ -41,7 +46,29 @@ const STOP = new Set([
   'would',
   'with',
   'user',
+  'about',
+  'know',
+  'tell',
+  'give',
+  'make',
+  'write',
 ]);
+
+function shouldConsiderMemory(raw: string, query: Set<string>): boolean {
+  if (!query.size) return false;
+  return /\b(my|mine|our|ours|remember|memory|profile|preference|prefer|usually|previously|last time|what did we|what do you know about me|wife|husband|son|daughter|family|pet|dog|cat|chopper|one piece|project|repo|repository|deploy|watai|azure|github)\b/i.test(raw);
+}
+
+function broadProfileQuery(raw: string): boolean {
+  return /\b(what do you know about me|my profile|remember about me|my memory|what have you remembered)\b/i.test(raw);
+}
+
+function candidateQuery(raw: string, query: Set<string>): string | undefined {
+  if (broadProfileQuery(raw)) return undefined;
+  const priority = ['watai', 'deploy', 'azure', 'github', 'repo', 'repository', 'project', 'dog', 'cat', 'pet', 'chopper', 'one', 'piece', 'preference', 'prefer'];
+  const terms = [...query];
+  return priority.find((term) => terms.includes(term)) ?? terms.sort((a, b) => b.length - a.length)[0];
+}
 
 function textFor(memory: MemoryRecord): string {
   return [memory.text, memory.summary, ...(memory.entities ?? []), ...(memory.topics ?? [])].filter(Boolean).join(' ');
@@ -77,19 +104,21 @@ export class MemoryContextService {
 
     const query = tokens(input.latestUserText);
     if (!query.size) return { ...EMPTY, latencyBudgetMs: 250 };
+    if (!shouldConsiderMemory(input.latestUserText, query)) return { ...EMPTY, latencyBudgetMs: 250 };
 
-    const page = await this.store.list(input.userId, { status: 'active', limit: 100 });
+    const q = candidateQuery(input.latestUserText, query);
+    const page = await this.store.list(input.userId, { status: 'active', ...(q ? { q } : {}), limit: broadProfileQuery(input.latestUserText) ? 20 : CANDIDATE_LIMIT });
     const scored = page.memories
       .map((memory) => ({ memory, score: lexicalScore(query, memory) }))
-      .filter((item) => item.score >= 0.2)
+      .filter((item) => item.score >= MIN_MEMORY_SCORE || item.memory.pinned || item.memory.visibility === 'top_of_mind')
       .sort((a, b) => b.score - a.score || b.memory.updatedAt.localeCompare(a.memory.updatedAt) || b.memory.id.localeCompare(a.memory.id));
 
-    const budget = input.tokenBudget ?? 1200;
+    const budget = input.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
     const selected: typeof scored = [];
     let tokenEstimate = 0;
     for (const item of scored) {
       const cost = estimateTokens(item.memory.text) + 12;
-      if (selected.length >= 8 || tokenEstimate + cost > budget) continue;
+      if (selected.length >= MAX_SELECTED_MEMORIES || tokenEstimate + cost > budget) continue;
       selected.push(item);
       tokenEstimate += cost;
     }

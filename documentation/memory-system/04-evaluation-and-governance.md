@@ -147,16 +147,19 @@ Expected:
 | --- | ---: | --- |
 | Retrieval p95 latency | <= 250 ms | Server-side memory context build, excluding model generation. |
 | Retrieval p99 latency | <= 500 ms | Slow memory must degrade to empty context rather than block generation. |
-| Memory context token budget | <= 1,200 tokens default | Configurable; eval should fail if exceeded without explicit override. |
-| Memory context hard max | <= 2,000 tokens | Requires explicit test/runtime override to exceed. |
-| Relevant recall@8 | >= 0.80 on local fixtures | At least one needed memory in top 8. |
-| Irrelevant precision@8 | >= 0.70 on local fixtures | Avoid prompt clutter. |
+| Memory context token budget | <= 400 tokens default | Configurable; eval should fail if exceeded without explicit override. |
+| Memory context hard max | <= 1,200 tokens | Requires explicit test/runtime override to exceed. |
+| Relevant recall@3 | >= 0.80 on local fixtures | At least one needed memory in top 3. |
+| Irrelevant precision@3 | >= 0.85 on local fixtures | Avoid prompt clutter. |
+| No-intent memory store calls | 0 | Generic prompts should return empty before querying memory storage. |
+| Memory context invocation rate | <= 0.35 on generic mixed fixtures | Memory should not be loaded for most ordinary prompts. |
 | Deleted memory leakage | 0 | Hard gate. |
 | Temporary chat leakage | 0 | Hard gate. |
 | Secret leakage | 0 | Hard gate. |
 | Source coverage | >= 0.95 | Used memories should have displayable source refs unless manually added. |
 | Extraction hot-path latency | 0 ms | Automatic extraction must not block response streaming. |
-| Over-insertion rate | <= 0.10 on local fixtures | One-off details should not become durable memory. |
+| Extraction LLM invocation rate | <= 0.40 on generic mixed fixtures | Cheap opportunity gates should skip obvious non-memory turns. |
+| Over-insertion rate | <= 0.05 on local fixtures | One-off details should not become durable memory. |
 | Abstention accuracy | >= 0.90 | Do not invent memory when no support exists. |
 
 ## 4. Benchmark Strategy
@@ -200,6 +203,7 @@ A change must fail CI or release validation if:
 - Server-run prompt assembly uses client-only memory state.
 - Retrieval p95 exceeds the release budget in benchmark mode.
 - Precision falls because the retriever widened memory without a source cap or threshold change approved by evals.
+- Generic prompts start querying memory storage or invoking the extraction LLM without durable-memory signals.
 
 ## 6. Observability
 
@@ -215,6 +219,7 @@ Log structured, non-content telemetry:
   "tokenEstimate": 812,
   "latencyMs": 74,
   "usedVector": false,
+  "skippedReason": null,
   "memoryEnabled": true
 }
 ```

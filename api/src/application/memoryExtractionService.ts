@@ -65,6 +65,11 @@ function turnDedupe(assistantMessageId: string): string {
   return `memory-turn:${assistantMessageId}`;
 }
 
+function hasExtractionSignal(text: string): boolean {
+  const value = text.toLowerCase();
+  return /\b(remember|forget|memory|preference|prefer|usually|always|never|avoid|correction|actually|from now on|do not|don't use|don't mention|my (dog|cat|pet|wife|husband|partner|son|daughter|child|children|team|company|repo|repository|project)|our (team|company|repo|repository|project)|i (have|own|work on|use|prefer|like|hate|am|live|work)|watai|deploy target|resource group)\b/i.test(value);
+}
+
 export class MemoryExtractionService {
   constructor(private readonly deps: MemoryExtractionDeps) {}
 
@@ -81,6 +86,7 @@ export class MemoryExtractionService {
     if (!thread) return null;
     const msg = await this.deps.messageStore.get(threadId, userMessageId);
     if (!msg || msg.userId !== userId || msg.role !== 'user' || !msg.content.trim()) return null;
+    if (!hasExtractionSignal(msg.content)) return null;
     return this.enqueueJob(userId, threadId, 'command', commandDedupe(userMessageId), { userMessageId, runId });
   }
 
@@ -89,6 +95,8 @@ export class MemoryExtractionService {
     if (!thread) return null;
     const msg = await this.deps.messageStore.get(threadId, assistantMessageId);
     if (!msg || msg.userId !== userId || msg.role !== 'assistant' || msg.status !== 'complete') return null;
+    const window = await this.messagesAround(threadId, assistantMessageId);
+    if (!window.some((message) => message.role === 'user' && hasExtractionSignal(message.content))) return null;
     return this.enqueueJob(userId, threadId, 'turn', turnDedupe(assistantMessageId), { assistantMessageId, runId });
   }
 
@@ -147,7 +155,7 @@ export class MemoryExtractionService {
         messages: messages.map((m) => ({ id: m.id, role: m.role as 'user' | 'assistant', content: m.content.slice(0, 4096), createdAt: chrono(m) })),
         existingMemories: candidates.map((m) => ({ id: m.id, kind: m.kind, status: m.status, text: m.text, entities: m.entities, topics: m.topics, validAt: m.validAt, invalidAt: m.invalidAt })),
       });
-      const result = await this.applyOperations(job.userId, job.threadId, messages, candidates, out);
+      const result = await this.applyOperations(job.userId, job.threadId, job.kind, messages, candidates, out);
       await this.finish(job, result.accepted > 0 ? 'completed' : 'ignored', result.counts, result.accepted, result.rejected);
     } catch (e) {
       await this.deps.jobStore.put({
@@ -193,10 +201,13 @@ export class MemoryExtractionService {
   }
 
   private async windowFor(job: import('../domain/memoryExtraction').MemoryExtractionJobRecord): Promise<MessageRecord[]> {
-    const all = (await this.deps.messageStore.list(job.threadId))
+    return this.messagesAround(job.threadId, job.assistantMessageId ?? job.userMessageId);
+  }
+
+  private async messagesAround(threadId: string, targetId?: string): Promise<MessageRecord[]> {
+    const all = (await this.deps.messageStore.list(threadId))
       .filter((m) => !m.deletedAt && (m.role === 'user' || m.role === 'assistant'))
       .sort((a, b) => chrono(a).localeCompare(chrono(b)));
-    const targetId = job.assistantMessageId ?? job.userMessageId;
     const index = all.findIndex((m) => m.id === targetId);
     if (index < 0) return [];
     return all.slice(Math.max(0, index - 4), index + 1);
@@ -215,6 +226,7 @@ export class MemoryExtractionService {
   private async applyOperations(
     userId: string,
     threadId: string,
+    mode: 'command' | 'turn' | 'rebuild',
     messages: MessageRecord[],
     candidates: MemoryRecord[],
     output: MemoryExtractionOutput,
@@ -229,7 +241,9 @@ export class MemoryExtractionService {
         const refs = this.sourceRefs(threadId, messages, op.sourceMessageIds);
         if (!refs) { rejected++; continue; }
         if (op.op === 'add') {
-          if (op.confidence < 0.65) { rejected++; continue; }
+          const minConfidence = mode === 'command' ? 0.65 : 0.82;
+          const minSalience = mode === 'command' ? 0.4 : 0.65;
+          if (op.confidence < minConfidence || op.salience < minSalience) { rejected++; continue; }
           const hash = sourceHash(op.text, op.kind, op.entities);
           const duplicate = candidates.find((m) => m.sourceHash === hash && m.status === 'active');
           if (duplicate) {
