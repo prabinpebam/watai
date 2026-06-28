@@ -19,12 +19,13 @@ function extractJson(text: string): unknown {
   return JSON.parse(trimmed.slice(start, end + 1));
 }
 
-function normalizeOperation(raw: unknown): unknown {
+function normalizeOperation(raw: unknown, fallbackSourceMessageIds: string[] = []): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const input = raw as Record<string, unknown>;
   const op = input.op ?? input.operation ?? input.action;
   const sourceMessageIds =
     input.sourceMessageIds ?? input.source_message_ids ?? input.sourceIds ?? input.source_ids ?? input.sourceMessageId;
+  const normalizedOp = typeof op === 'string' ? op.toLowerCase() : undefined;
   const {
     operation: _operation,
     action: _action,
@@ -39,24 +40,28 @@ function normalizeOperation(raw: unknown): unknown {
   } = input;
   return {
     ...rest,
-    ...(typeof op === 'string' ? { op: op.toLowerCase() } : {}),
+    ...(normalizedOp ? { op: normalizedOp } : {}),
     ...(input.memoryId === undefined && input.memory_id !== undefined ? { memoryId: input.memory_id } : {}),
     ...(input.replacementText === undefined && input.replacement_text !== undefined ? { replacementText: input.replacement_text } : {}),
     ...(input.validAt === undefined && input.valid_at !== undefined ? { validAt: input.valid_at } : {}),
     ...(sourceMessageIds !== undefined
       ? { sourceMessageIds: Array.isArray(sourceMessageIds) ? sourceMessageIds : [sourceMessageIds] }
+      : normalizedOp && normalizedOp !== 'ignore' && fallbackSourceMessageIds.length
+        ? { sourceMessageIds: fallbackSourceMessageIds }
       : {}),
     ...(typeof input.kind === 'string' ? { kind: input.kind.toLowerCase().replace(/[\s-]+/g, '_') } : {}),
+    ...(normalizedOp === 'add' && input.confidence === undefined ? { confidence: 0.75 } : {}),
+    ...(normalizedOp === 'add' && input.salience === undefined ? { salience: 0.6 } : {}),
     ...(input.reason === undefined ? { reason: 'Extractor proposed this operation.' } : {}),
   };
 }
 
-export function normalizeMemoryExtractionJson(raw: unknown): unknown {
+export function normalizeMemoryExtractionJson(raw: unknown, fallbackSourceMessageIds: string[] = []): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const input = raw as Record<string, unknown>;
   const operations = input.operations ?? input.memories ?? input.memory_updates ?? input.memoryUpdates;
   return {
-    operations: Array.isArray(operations) ? operations.map(normalizeOperation) : operations,
+    operations: Array.isArray(operations) ? operations.map((op) => normalizeOperation(op, fallbackSourceMessageIds)) : operations,
   };
 }
 
@@ -86,5 +91,6 @@ export async function extractMemories(
     ],
   });
   if (!raw) throw new Error('Memory extractor returned an empty response.');
-  return parseMemoryExtractionOutput(normalizeMemoryExtractionJson(extractJson(raw)));
+  const fallbackSourceMessageIds = [...input.messages].reverse().filter((message) => message.role === 'user').slice(0, 1).map((message) => message.id);
+  return parseMemoryExtractionOutput(normalizeMemoryExtractionJson(extractJson(raw), fallbackSourceMessageIds));
 }

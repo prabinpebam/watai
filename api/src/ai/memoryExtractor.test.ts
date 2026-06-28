@@ -23,4 +23,27 @@ describe('normalizeMemoryExtractionJson', () => {
       sourceMessageIds: ['u1'],
     });
   });
+
+  it('falls back to the latest user source id and default add scores when omitted', () => {
+    const normalized = normalizeMemoryExtractionJson(
+      {
+        operations: [
+          {
+            operation: 'add',
+            kind: 'fact',
+            text: 'User has a dog named Chopper inspired by One Piece.',
+          },
+        ],
+      },
+      ['u1'],
+    );
+
+    expect(parseMemoryExtractionOutput(normalized).operations[0]).toMatchObject({
+      op: 'add',
+      kind: 'fact',
+      confidence: 0.75,
+      salience: 0.6,
+      sourceMessageIds: ['u1'],
+    });
+  });
 });
