@@ -13,6 +13,6 @@ export function createAdminConfigController(memoryModel: MemoryModelService) {
     getMemoryModel: (_req: ApiRequest): Promise<HttpResult> => respond(200, () => memoryModel.getConfig()),
 
     setMemoryModel: (req: ApiRequest): Promise<HttpResult> =>
-      respond(200, () => memoryModel.setModel(req.body, emailFromClaims(req.claims) ?? 'admin')),
+      respond(200, () => memoryModel.setModels(req.body, emailFromClaims(req.claims) ?? 'admin')),
   };
 }

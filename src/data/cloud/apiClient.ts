@@ -390,13 +390,13 @@ export class WataiApiClient implements CloudApi {
     return this.request('DELETE', `/invites/${encodeURIComponent(email)}`);
   }
 
-  // --- admin: server-decided memory model ---
+  // --- admin: server-decided memory models ---
   getMemoryModelConfig(): Promise<MemoryModelConfig> {
     return this.request('GET', '/config/memory-model');
   }
 
-  setMemoryModel(memoryModel: string): Promise<MemoryModelConfig> {
-    return this.request('PUT', '/config/memory-model', { memoryModel });
+  setMemoryModels(body: { memoryModel?: string; memoryDeepModel?: string }): Promise<MemoryModelConfig> {
+    return this.request('PUT', '/config/memory-model', body);
   }
 }
 
@@ -478,5 +478,5 @@ export interface CloudApi {
   createInvite(email: string): Promise<InviteRecord>;
   deleteInvite(email: string): Promise<void>;
   getMemoryModelConfig(): Promise<MemoryModelConfig>;
-  setMemoryModel(memoryModel: string): Promise<MemoryModelConfig>;
+  setMemoryModels(body: { memoryModel?: string; memoryDeepModel?: string }): Promise<MemoryModelConfig>;
 }

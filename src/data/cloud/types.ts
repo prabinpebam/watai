@@ -412,14 +412,20 @@ export interface InviteRecord {
   createdAt: string;
 }
 
-/** Admin view of the server-decided model used for background memory extraction.
- *  `source` explains where the effective value comes from; `memoryModel === null`
- *  means it falls back to each user's own chat model. */
-export interface MemoryModelConfig {
-  memoryModel: string | null;
-  source: 'override' | 'env' | 'chat';
+/** Admin view of the server-decided models used for background memory work. Two tiers:
+ *  `base` is routine extraction (a lighter/faster model); `deep` is heavy operations
+ *  (rebuilds, merges, conflict resolution). `model === null` means it falls back to the
+ *  user's own chat model. */
+export interface MemoryModelSlot {
+  model: string | null;
+  source: 'override' | 'env' | 'chat' | 'base';
   envDefault: string | null;
   override: string | null;
+}
+
+export interface MemoryModelConfig {
+  base: MemoryModelSlot;
+  deep: MemoryModelSlot;
   updatedAt?: string;
   updatedBy?: string;
 }

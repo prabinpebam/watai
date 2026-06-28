@@ -39,6 +39,9 @@ param authJwksUri string = ''
 @description('Server-decided deployment used for background memory extraction (a lighter/faster model). Users never select this.')
 param memoryModel string = 'gpt-5.4-mini'
 
+@description('Server-decided deployment used for heavier memory operations — rebuilds, merges, conflict resolution. Users never select this.')
+param memoryDeepModel string = 'gpt-5.4'
+
 var suffix = uniqueString(resourceGroup().id)
 var tags = {
   app: 'watai'
@@ -267,6 +270,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
         { name: 'AUTH_AUDIENCE', value: authAudience }
         { name: 'AUTH_JWKS_URI', value: authJwksUri }
         { name: 'MEMORY_MODEL', value: memoryModel }
+        { name: 'MEMORY_DEEP_MODEL', value: memoryDeepModel }
       ]
     }
   }

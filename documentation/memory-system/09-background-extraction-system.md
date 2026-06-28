@@ -412,10 +412,14 @@ Return strict JSON only.
 
 Extractor model choice:
 
-- Memory operations use a server-decided model, not the user's chat selection. The server sets `MEMORY_MODEL` (a lighter/faster deployment such as `gpt-5.4-mini`) and the extractor uses it for all background memory work.
+- Memory operations use server-decided models, not the user's chat selection. Two tiers:
+  - Routine extraction (command + turn lanes) uses `MEMORY_MODEL` (a lighter/faster deployment such as `gpt-5.4-mini`).
+  - Deep operations (the rebuild/import lane, plus heavy merges and conflict resolution) use `MEMORY_DEEP_MODEL` (a stronger deployment such as `gpt-5.4`).
+- The lane (`command` / `turn` / `rebuild`) determines the tier: `rebuild` jobs get the deep model; all others get the routine model.
+- An admin can override either tier at runtime in Settings > Admin > Memory model (no redeploy). Precedence: admin override -> env default -> (deep falls back to the routine model; routine falls back to the user's chat model).
 - The user still chooses their own chat model for actual conversations; that selection drives generation only, never memory extraction.
-- The memory model runs against the user's saved endpoint and credentials (same Foundry resource), so no hidden platform key is introduced.
-- When `MEMORY_MODEL` is unset, the extractor falls back to the user's chat model so memory still works.
+- The memory models run against the user's saved endpoint and credentials (same Foundry resource), so no hidden platform key is introduced.
+- When `MEMORY_MODEL` is unset, routine extraction falls back to the user's chat model so memory still works.
 - If credentials are unavailable, mark job `failed` with `lastErrorCode = 'credentials_missing'`; do not fall back to a hidden platform key.
 - Because extraction is async and never on the response hot path, a smaller model is preferred for cost and latency; deterministic schema validation guards quality.
 

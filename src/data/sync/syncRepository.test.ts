@@ -467,10 +467,16 @@ class FakeCloud implements CloudApi {
   }
   async deleteInvite() {}
   async getMemoryModelConfig() {
-    return { memoryModel: 'gpt-5.4-mini', source: 'env' as const, envDefault: 'gpt-5.4-mini', override: null };
+    return {
+      base: { model: 'gpt-5.4-mini', source: 'env' as const, envDefault: 'gpt-5.4-mini', override: null },
+      deep: { model: 'gpt-5.4', source: 'env' as const, envDefault: 'gpt-5.4', override: null },
+    };
   }
-  async setMemoryModel(memoryModel: string) {
-    return { memoryModel: memoryModel || 'gpt-5.4-mini', source: (memoryModel ? 'override' : 'env') as 'override' | 'env', envDefault: 'gpt-5.4-mini', override: memoryModel || null };
+  async setMemoryModels(body: { memoryModel?: string; memoryDeepModel?: string }) {
+    return {
+      base: { model: body.memoryModel || 'gpt-5.4-mini', source: (body.memoryModel ? 'override' : 'env') as 'override' | 'env', envDefault: 'gpt-5.4-mini', override: body.memoryModel || null },
+      deep: { model: body.memoryDeepModel || 'gpt-5.4', source: (body.memoryDeepModel ? 'override' : 'env') as 'override' | 'env', envDefault: 'gpt-5.4', override: body.memoryDeepModel || null },
+    };
   }
   async negotiate() {
     return { url: '', accessToken: '' };

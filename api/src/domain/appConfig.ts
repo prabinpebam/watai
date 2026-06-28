@@ -5,11 +5,17 @@ import { parseOrThrow } from './validate';
 const deployment = z.string().trim().min(1).max(100);
 const iso = z.string().trim().min(1).max(40);
 
-/** Persisted global memory-model override, set by an admin. Absent `memoryModel` means
- *  "no override" — the server falls back to the MEMORY_MODEL env default, then the user's chat model. */
+/**
+ * Persisted global memory-model overrides, set by an admin. Two tiers:
+ *  - `memoryModel`: routine background extraction (a lighter/faster model).
+ *  - `memoryDeepModel`: heavier operations (rebuilds, merges, conflict resolution).
+ * An absent value means "no override" — the server falls back to the env default,
+ * then (for routine) the user's chat model, or (for deep) the routine model.
+ */
 const memoryModelConfigSchema = z
   .object({
     memoryModel: deployment.optional(),
+    memoryDeepModel: deployment.optional(),
     updatedAt: iso,
     updatedBy: z.string().trim().min(1).max(200).optional(),
   })
@@ -18,27 +24,37 @@ const memoryModelConfigSchema = z
 export type MemoryModelConfig = z.infer<typeof memoryModelConfigSchema>;
 
 /** Admin write: a non-empty deployment sets the override; an empty string clears it. */
-const setMemoryModelSchema = z
+const setMemoryModelsSchema = z
   .object({
     memoryModel: z.union([deployment, z.literal('')]).optional(),
+    memoryDeepModel: z.union([deployment, z.literal('')]).optional(),
   })
   .strict();
 
-export type SetMemoryModelInput = z.infer<typeof setMemoryModelSchema>;
+export type SetMemoryModelsInput = z.infer<typeof setMemoryModelsSchema>;
 
-/** Where the effective memory model comes from, for transparent admin UI. */
-export type MemoryModelSource = 'override' | 'env' | 'chat';
+/** Where an effective model value comes from, for transparent admin UI.
+ *  `chat` = falls back to the user's chat model (routine only).
+ *  `base` = falls back to the routine model (deep only). */
+export type MemoryModelSource = 'override' | 'env' | 'chat' | 'base';
+
+/** One resolved model tier (routine or deep). */
+export interface MemoryModelSlot {
+  /** Effective model for this tier, or null when it falls back to the user's chat model. */
+  model: string | null;
+  source: MemoryModelSource;
+  /** The env default for this tier, if any. */
+  envDefault: string | null;
+  /** The admin override for this tier, if set. */
+  override: string | null;
+}
 
 /** Resolved view returned to the admin UI. */
 export interface MemoryModelConfigView {
-  /** The effective model used for memory extraction, or null when it falls back to the user's chat model. */
-  memoryModel: string | null;
-  /** Whether the effective value comes from the admin override, the env default, or the per-user chat model. */
-  source: MemoryModelSource;
-  /** The MEMORY_MODEL env default, if any (shown as the fallback below an override). */
-  envDefault: string | null;
-  /** The admin override deployment, if set. */
-  override: string | null;
+  /** Routine background extraction model (command + turn lanes). */
+  base: MemoryModelSlot;
+  /** Heavy operations model (rebuild/import, merges, conflict resolution). */
+  deep: MemoryModelSlot;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -47,6 +63,6 @@ export function parseMemoryModelConfig(input: unknown): MemoryModelConfig {
   return parseOrThrow(memoryModelConfigSchema, input, 'Invalid memory model config.');
 }
 
-export function parseSetMemoryModel(input: unknown): SetMemoryModelInput {
-  return parseOrThrow(setMemoryModelSchema, input, 'Invalid memory model update.');
+export function parseSetMemoryModels(input: unknown): SetMemoryModelsInput {
+  return parseOrThrow(setMemoryModelsSchema, input, 'Invalid memory model update.');
 }

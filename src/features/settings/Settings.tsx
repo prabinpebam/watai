@@ -1496,13 +1496,15 @@ function InvitesBody() {
 function MemoryModelsBody() {
   const pushToast = useUi((s) => s.pushToast);
   const [config, setConfig] = useState<MemoryModelConfig | null>(null);
-  const [model, setModel] = useState('');
+  const [base, setBase] = useState('');
+  const [deep, setDeep] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const apply = (next: MemoryModelConfig) => {
     setConfig(next);
-    setModel(next.override ?? '');
+    setBase(next.base.override ?? '');
+    setDeep(next.deep.override ?? '');
   };
 
   const refresh = () => {
@@ -1517,10 +1519,10 @@ function MemoryModelsBody() {
     setBusy(true);
     setError(null);
     try {
-      apply(await cloudApi.setMemoryModel(model.trim()));
-      pushToast('Memory model updated', 'success');
+      apply(await cloudApi.setMemoryModels({ memoryModel: base.trim(), memoryDeepModel: deep.trim() }));
+      pushToast('Memory models updated', 'success');
     } catch {
-      setError('Could not update the memory model. Check the deployment name and try again.');
+      setError('Could not update the memory models. Check the deployment names and try again.');
     } finally {
       setBusy(false);
     }
@@ -1530,68 +1532,91 @@ function MemoryModelsBody() {
     setBusy(true);
     setError(null);
     try {
-      apply(await cloudApi.setMemoryModel(''));
-      pushToast('Reverted to the server default');
+      apply(await cloudApi.setMemoryModels({ memoryModel: '', memoryDeepModel: '' }));
+      pushToast('Reverted to the server defaults');
     } catch {
-      pushToast('Could not reset the memory model', 'error');
+      pushToast('Could not reset the memory models', 'error');
     } finally {
       setBusy(false);
     }
   };
 
-  const sourceLabel =
-    config?.source === 'override' ? 'Custom override' : config?.source === 'env' ? 'Server default' : 'Each user’s chat model';
-  const effective = config ? (config.memoryModel ?? 'Each user’s own chat model') : '…';
-  const dirty = (model.trim() || null) !== (config?.override ?? null);
-  const hint = config?.envDefault
-    ? `Leave blank to use the server default (${config.envDefault}).`
+  const slotBadge = (slot?: MemoryModelConfig['base']) =>
+    slot?.source === 'override'
+      ? 'Custom override'
+      : slot?.source === 'env'
+        ? 'Server default'
+        : slot?.source === 'base'
+          ? 'Same as routine'
+          : 'Each user’s chat model';
+  const slotValue = (slot?: MemoryModelConfig['base']) => slot?.model ?? 'Each user’s own chat model';
+
+  const dirty =
+    (base.trim() || null) !== (config?.base.override ?? null) || (deep.trim() || null) !== (config?.deep.override ?? null);
+  const hasOverride = !!(config?.base.override || config?.deep.override);
+  const baseHint = config?.base.envDefault
+    ? `Leave blank to use the server default (${config.base.envDefault}).`
     : 'Leave blank to fall back to each user’s own chat model.';
+  const deepHint = config?.deep.envDefault
+    ? `Used for rebuilds, merges, and conflict resolution. Leave blank to use the server default (${config.deep.envDefault}).`
+    : 'Used for rebuilds, merges, and conflict resolution. Leave blank to reuse the routine model.';
 
   return (
     <>
       <p className="muted" style={{ marginBottom: 'var(--space-5)' }}>
-        Memories are learned in the background by a separate, server-decided model so the experience
-        stays fast and economical. Members never choose this — it does not change the model they pick
-        for chat. Update it here as better or cheaper models become available.
+        Memories are learned in the background by separate, server-decided models so the experience
+        stays fast and economical. Members never choose these — they do not change the model used for
+        chat. A lighter model handles routine learning; a stronger model handles heavier work like
+        rebuilds and conflict resolution. Update them here as better or cheaper models become available.
       </p>
 
       <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
         <div className="setting-row" style={{ paddingTop: 0 }}>
           <div className="setting-row__body">
-            <div className="setting-row__title">Currently learning with</div>
-            <div className="setting-row__sub">{effective}</div>
+            <div className="setting-row__title">Routine learning</div>
+            <div className="setting-row__sub">{slotValue(config?.base)}</div>
           </div>
-          <span className={`badge ${config?.source === 'override' ? 'badge--accent' : ''}`}>{sourceLabel}</span>
+          <span className={`badge ${config?.base.source === 'override' ? 'badge--accent' : ''}`}>{slotBadge(config?.base)}</span>
         </div>
+        <Field
+          label="Routine model deployment"
+          placeholder={config?.base.envDefault ?? 'e.g. gpt-5.4-mini'}
+          value={base}
+          onChange={(e) => setBase(e.target.value)}
+          autoCapitalize="off"
+          autoComplete="off"
+          spellCheck={false}
+          hint={baseHint}
+        />
 
-        <div className="col" style={{ gap: 'var(--space-4)', marginTop: 'var(--space-4)' }}>
-          <Field
-            label="Memory model deployment"
-            placeholder={config?.envDefault ?? 'e.g. gpt-5.4-mini'}
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                if (dirty) void save();
-              }
-            }}
-            autoCapitalize="off"
-            autoComplete="off"
-            spellCheck={false}
-            error={error ?? undefined}
-            hint={hint}
-          />
-          <div className="row" style={{ gap: 'var(--space-3)' }}>
-            <Button icon="check" loading={busy} disabled={!dirty} onClick={() => void save()}>
-              Save model
-            </Button>
-            {config?.override ? (
-              <Button icon="refresh" variant="outline" loading={busy} onClick={() => void reset()}>
-                Reset to default
-              </Button>
-            ) : null}
+        <div className="setting-row" style={{ marginTop: 'var(--space-4)' }}>
+          <div className="setting-row__body">
+            <div className="setting-row__title">Deep operations</div>
+            <div className="setting-row__sub">{slotValue(config?.deep)}</div>
           </div>
+          <span className={`badge ${config?.deep.source === 'override' ? 'badge--accent' : ''}`}>{slotBadge(config?.deep)}</span>
+        </div>
+        <Field
+          label="Deep model deployment"
+          placeholder={config?.deep.envDefault ?? config?.base.model ?? 'e.g. gpt-5.4'}
+          value={deep}
+          onChange={(e) => setDeep(e.target.value)}
+          autoCapitalize="off"
+          autoComplete="off"
+          spellCheck={false}
+          error={error ?? undefined}
+          hint={deepHint}
+        />
+
+        <div className="row" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
+          <Button icon="check" loading={busy} disabled={!dirty} onClick={() => void save()}>
+            Save models
+          </Button>
+          {hasOverride ? (
+            <Button icon="refresh" variant="outline" loading={busy} onClick={() => void reset()}>
+              Reset to defaults
+            </Button>
+          ) : null}
         </div>
       </div>
 

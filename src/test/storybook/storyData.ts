@@ -282,12 +282,13 @@ export function installStoryData(): void {
     deleteInvite: async (email: string) => {
       invites = invites.filter((invite) => invite.email !== email);
     },
-    getMemoryModelConfig: async () => ({ memoryModel: 'gpt-5.4-mini', source: 'env' as const, envDefault: 'gpt-5.4-mini', override: null }),
-    setMemoryModel: async (memoryModel: string) => ({
-      memoryModel: memoryModel || 'gpt-5.4-mini',
-      source: (memoryModel ? 'override' : 'env') as 'override' | 'env',
-      envDefault: 'gpt-5.4-mini',
-      override: memoryModel || null,
+    getMemoryModelConfig: async () => ({
+      base: { model: 'gpt-5.4-mini', source: 'env' as const, envDefault: 'gpt-5.4-mini', override: null },
+      deep: { model: 'gpt-5.4', source: 'env' as const, envDefault: 'gpt-5.4', override: null },
+    }),
+    setMemoryModels: async (body: { memoryModel?: string; memoryDeepModel?: string }) => ({
+      base: { model: body.memoryModel || 'gpt-5.4-mini', source: (body.memoryModel ? 'override' : 'env') as 'override' | 'env', envDefault: 'gpt-5.4-mini', override: body.memoryModel || null },
+      deep: { model: body.memoryDeepModel || 'gpt-5.4', source: (body.memoryDeepModel ? 'override' : 'env') as 'override' | 'env', envDefault: 'gpt-5.4', override: body.memoryDeepModel || null },
     }),
   });
 

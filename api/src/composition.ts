@@ -134,7 +134,12 @@ export function container(): ApiContainer {
   const credentialService = new CredentialService(credentialStore, buildKeyWrapper(), clock);
   const imageService = new ImageService(imageStore, credentialService, new QueueImageStarter(), minter, clock);
   const memoryService = new MemoryService(memoryStore, clock);
-  const memoryModelService = new MemoryModelService(appConfigStore, () => process.env.MEMORY_MODEL, clock);
+  const memoryModelService = new MemoryModelService(
+    appConfigStore,
+    () => process.env.MEMORY_MODEL,
+    () => process.env.MEMORY_DEEP_MODEL,
+    clock,
+  );
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
   const memoryContextService = new MemoryContextService(memoryStore, settingsService);
@@ -149,7 +154,7 @@ export function container(): ApiContainer {
     queue: new QueueMemoryStarter(),
     settings: settingsService,
     credentials: credentialService,
-    extractor: async (creds, input) => extractMemories(creds, input, { model: await memoryModelService.effectiveModel() }),
+    extractor: async (creds, input) => extractMemories(creds, input, { model: await memoryModelService.effectiveModel(input.mode) }),
     signalr: signalr ?? undefined,
     clock,
   });
