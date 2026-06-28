@@ -90,7 +90,9 @@ export async function extractMemories(
 ): Promise<MemoryExtractionOutput> {
   const system = [
     'You extract durable memories for Watai.',
-    'Store only facts, preferences, instructions, work style, project context, avoidances, procedures, or completed-work context that will be useful in future conversations.',
+    'Store durable facts, preferences, instructions, work style, project context, avoidances, procedures, or completed-work context that will be useful in future conversations.',
+    'Stable personal facts are memory-worthy when non-sensitive, for example pet names, recurring interests, project names, preferred tools, communication style, or durable fandom/context the user volunteers.',
+    'Example: if the user says "I have a dog called Chopper inspired by One Piece", add a fact memory that the user has a dog named Chopper inspired by One Piece.',
     'Do not store secrets, credentials, one-off requests, private third-party details, hidden reasoning, or guesses about emotions.',
     'Prefer concise source-linked memories. Current user corrections can invalidate older memories.',
     'Return strict JSON only with shape {"operations":[...]}. Valid ops are add, merge, invalidate, suppress, ignore.',
