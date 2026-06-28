@@ -157,32 +157,48 @@ Acceptance:
 
 ## Slice 6 — Background Extraction Worker
 
-Goal: automatic memory extraction runs after responses without blocking generation.
+Goal: automatic memory extraction learns from every eligible turn without blocking generation. This slice implements the active memory learner specified in [09-background-extraction-system.md](09-background-extraction-system.md).
 
 Files:
 
 - `api/src/domain/memoryExtraction.ts`
+- `api/src/ports/memoryJobStore.ts`
+- `api/src/ports/memoryQueue.ts`
 - `api/src/ai/memoryExtractor.ts`
 - `api/src/application/memoryExtractionService.ts`
+- `api/src/adapters/memory/memoryJobStore.ts`
+- `api/src/adapters/cosmos/memoryJobStore.ts`
 - `api/src/adapters/azure/queueMemoryStarter.ts`
 - `api/src/functions/memoryWorker.ts`
 - `api/src/index.ts`
-- `infra/main.bicep`
+- `api/src/application/runService.ts`
+- `api/src/application/runWorker.ts`
+- `api/src/application/messageService.ts`
 
 Work:
 
-- Enqueue extraction after terminal complete assistant messages.
-- Implement strict JSON extractor contract.
-- Validate/redact/dedupe/invalidate.
-- Refresh summary when thresholds pass.
+- Add command-lane extraction jobs after eligible user messages for explicit remember/forget/correction commands.
+- Add turn-lane extraction jobs after terminal complete assistant messages.
+- Store idempotent job records with dedupe keys.
+- Queue identifiers only; worker loads message content from stores.
+- Implement strict LLM JSON extractor contract.
+- Validate/redact/dedupe/merge/invalidate/suppress in `MemoryExtractionService`.
+- Reject secrets, one-off requests, temporary-chat content, unsupported sensitive categories, and missing source refs.
+- Refresh summary when changed-memory thresholds pass.
+- Emit content-free telemetry for enqueue/completion/rejection/failure.
 
 Acceptance:
 
+- Every eligible completed server-run turn creates or dedupes a memory extraction job.
+- Explicit remember/forget/correction prompts create command-lane jobs immediately after user message persistence.
 - Extraction is never on send-to-first-token path.
+- Response completion does not wait for extraction.
 - Secret-like values rejected.
 - One-off prompts rejected.
+- Temporary threads never enqueue or write memory.
 - Corrections invalidate older memories.
 - Assistant-confirmed durable work can become episodic memory.
+- Job replay is idempotent.
 - Queue retry/decode tests follow existing run worker pattern.
 
 ## Slice 7 — Import, Export, Rebuild, Retention

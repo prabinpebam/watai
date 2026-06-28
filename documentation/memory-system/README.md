@@ -50,6 +50,7 @@ This means the MVP should be intentionally simple but not simplistic: start with
 | [06-api-and-schema-contracts.md](06-api-and-schema-contracts.md) | Exact wire/domain contracts: schemas, endpoints, store/service interfaces, message refs, settings migration, and API errors. |
 | [07-retrieval-and-extraction-algorithms.md](07-retrieval-and-extraction-algorithms.md) | Deterministic MVP retrieval, scoring, budgeting, extraction, redaction, dedupe, invalidation, summary refresh, and feedback algorithms. |
 | [08-build-slices-and-acceptance.md](08-build-slices-and-acceptance.md) | PR-sized implementation slices with touched files, work items, and acceptance criteria. |
+| [09-background-extraction-system.md](09-background-extraction-system.md) | Implementation-ready design for the active asynchronous memory learner: triggers, queue jobs, LLM extraction contract, validation gates, apply semantics, and tests. |
 
 ## What "Implementation-Ready" Means Here
 
@@ -80,11 +81,8 @@ If any implementation choice would affect user trust, response quality, latency,
 
 As of 2026-06-28:
 
-- Product/data docs mention memory as optional personalization.
-- The frontend has `Settings.personalization.memoryEnabled` and a Settings toggle.
-- `Repository` exposes `listMemory`, `addMemory`, and `removeMemory`.
-- `LocalRepository` stores memories locally in IndexedDB key-value storage.
-- `SyncRepository` explicitly keeps memory local because there are no server endpoints.
-- Server runs are now the architectural direction, so this local-only memory layer is insufficient for durable cross-device personalization.
-
-The implementation plan treats existing local memory as a migration source, not the final architecture.
+- Manual memory CRUD is implemented with server-owned records and cloud-backed repository methods.
+- Settings > Personalization has a memory manager for manual memories.
+- Server runs retrieve active saved memories and persist response-level `memoryRefs`.
+- Chat renders a Memory Used disclosure with Hide/Delete controls.
+- The missing core capability is the active background learner: LLM-based extraction from every eligible turn. [09-background-extraction-system.md](09-background-extraction-system.md) is the implementation contract for that next slice.

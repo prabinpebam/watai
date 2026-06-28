@@ -507,3 +507,36 @@ Use existing API envelope style with these codes:
 - API pagination is deterministic.
 - `memoryRefs` on messages are round-tripped by cloud mappers.
 - Local memory migration can run idempotently.
+
+## 12. Automatic Extraction Contracts
+
+The active learner is specified in [09-background-extraction-system.md](09-background-extraction-system.md). The key additional contracts are:
+
+```ts
+export interface MemoryJobMessage {
+  jobId: string;
+  userId: string;
+  threadId: string;
+  kind: 'command' | 'turn' | 'rebuild';
+}
+
+export interface MemoryExtractionJobRecord {
+  id: string;
+  userId: string;
+  threadId: string;
+  kind: 'command' | 'turn' | 'rebuild';
+  status: 'queued' | 'running' | 'completed' | 'ignored' | 'failed';
+  userMessageId?: string;
+  assistantMessageId?: string;
+  runId?: string;
+  dedupeKey: string;
+  attempts: number;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+```
+
+Extractor output is strict JSON with operations `add`, `merge`, `invalidate`, `suppress`, and `ignore`. Model output is never stored directly; `MemoryExtractionService` validates source ownership, temporary-thread eligibility, confidence, safety, dedupe, and contradiction rules before writing `MemoryRecord` changes.

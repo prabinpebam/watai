@@ -6,16 +6,16 @@ The implementation must optimize for four outcomes together: fast hot-path retri
 
 ## 1. Current Code Facts
 
-As of 2026-06-27:
+As of 2026-06-28:
 
-- Frontend type: `MemoryItem { id, text, source, createdAt }` in `src/lib/types.ts`.
-- Repository methods: `listMemory`, `addMemory`, `removeMemory` in `src/data/repository.ts`.
-- Local storage: `src/data/local/localRepository.ts` stores memory in local key-value storage.
-- Sync behavior: `src/data/sync/syncRepository.ts` explicitly keeps memory local because there are no server endpoints.
-- Settings: `Settings.personalization.memoryEnabled` and a Settings toggle exist.
-- Backend: no memory domain, service, port, adapter, controller, or Cosmos store exists yet.
+- Backend manual memory CRUD exists: domain schemas, service, Cosmos/in-memory stores, controller, and `/api/memory` routes.
+- Frontend repository memory methods are cloud-backed when sync is enabled and local-backed when sync is off.
+- Settings > Personalization includes manual memory management.
+- Server runs retrieve active saved memories and persist response-level `memoryRefs`.
+- Chat renders a compact Memory Used disclosure with Hide/Delete actions.
+- Missing core capability: automatic LLM-based background extraction from every eligible turn. This is now specified in [09-background-extraction-system.md](09-background-extraction-system.md).
 
-The migration should preserve existing local memories by importing them into server memory when the user signs in and enables sync.
+Existing local memories should still be treated as a migration source for users who created memory before cloud-backed memory shipped.
 
 ## 2. Phase 0 — Contracts And Documentation
 
@@ -146,18 +146,25 @@ Validation:
 - Latency tests or synthetic benchmarks for p95 under the MVP budget.
 - Tests proving low-score candidates produce an empty memory block rather than irrelevant prompt context.
 
-## 6. Phase 4 — Background Extraction
+## 6. Phase 4 — Active Background Extraction
 
-Goal: Watai automatically learns useful memories after turns complete.
+Goal: Watai automatically learns useful memories from every eligible turn without slowing response generation. This phase implements [09-background-extraction-system.md](09-background-extraction-system.md).
 
 Backend files likely added/touched:
 
 - `api/src/domain/memoryExtraction.ts`
+- `api/src/ports/memoryJobStore.ts`
+- `api/src/ports/memoryQueue.ts`
 - `api/src/application/memoryExtractionService.ts`
 - `api/src/functions/memoryWorker.ts`
 - `api/src/adapters/azure/queueMemoryStarter.ts`
+- `api/src/adapters/cosmos/memoryJobStore.ts`
+- `api/src/adapters/memory/memoryJobStore.ts`
 - `api/src/ai/memoryExtractor.ts`
 - `api/src/index.ts` imports the new worker
+- `api/src/application/runService.ts`
+- `api/src/application/runWorker.ts`
+- `api/src/application/messageService.ts`
 
 Infrastructure:
 
@@ -167,20 +174,25 @@ Infrastructure:
 
 Implementation:
 
-1. On terminal assistant message, enqueue `{ userId, threadId, runId, assistantMessageId }`.
-2. Worker loads recent turn window and eligible existing memories.
-3. Calls extraction model with strict JSON output.
-4. Validates candidates and source refs.
-5. Applies redaction/sensitive filters.
-6. Stores additive records and invalidations.
-7. Refreshes memory summary when changed memory count or age threshold is reached.
+1. Enqueue command-lane jobs after eligible user messages for explicit remember/forget/correction commands.
+2. Enqueue turn-lane jobs after terminal complete assistant messages.
+3. Persist idempotent job records with dedupe keys; queue payloads carry identifiers only.
+4. Worker loads bounded turn window and eligible existing memories.
+5. Calls extraction model with strict JSON output.
+6. Validates source refs, ownership, confidence, durability, and safety.
+7. Applies redaction/sensitive filters.
+8. Dedupes, merges, suppresses, invalidates, and stores additive records.
+9. Refreshes memory summary when changed memory count or age threshold is reached.
+10. Emits content-free telemetry for enqueue/completion/rejection/failure.
 
 Validation:
 
 - Extraction tests with deterministic fake model output.
 - Sensitive/secret rejection tests.
+- Temporary-thread no-enqueue/no-write tests.
 - Contradiction tests: new memory invalidates old one, old one no longer retrieves as current.
 - Queue decode/retry tests following the existing run queue pattern.
+- Idempotent replay tests by job dedupe key and source hash.
 - Over-insertion tests: one-off requests should not become memory.
 - Assistant-fact tests: useful completed work can become episodic memory with assistant-message source refs.
 
