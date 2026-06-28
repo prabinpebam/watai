@@ -16,3 +16,9 @@ export function normalizeChatModelOptions(primary?: string, options: readonly st
   }
   return out;
 }
+
+export function chatModelOverride(model?: string): string | undefined {
+  const value = model?.trim();
+  if (!value || value === AUTO_CHAT_MODEL) return undefined;
+  return value;
+}

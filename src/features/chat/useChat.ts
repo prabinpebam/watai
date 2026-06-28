@@ -7,6 +7,7 @@ import { DEFAULT_CHAT_MODEL, useRuns } from './runStore';
 import { orderMessages } from './ordering';
 import { lockHeldByOther } from './lock';
 import { fileToBase64, uploadMime } from '../../lib/files';
+import { chatModelOverride } from '../../lib/modelOptions';
 import type { Attachment, Message } from '../../lib/types';
 import type { SubmitRunBody } from '../../data/cloud/types';
 
@@ -229,9 +230,14 @@ export function useChat(threadId: string, temporary = false) {
         const tools = await serverRunTools(explicitSkills.length > 0);
         return tools.length ? { tools } : {};
       };
+      const model = chatModelOverride(useUi.getState().activeModelByThread[threadId] ?? DEFAULT_CHAT_MODEL);
       void useRuns.getState().startServerRun(
         threadId,
-        { text: trimmed, clientMessageId: userMsg.id, model: useUi.getState().activeModelByThread[threadId] ?? DEFAULT_CHAT_MODEL },
+        {
+          text: trimmed,
+          clientMessageId: userMsg.id,
+          ...(model ? { model } : {}),
+        },
         prepare,
       );
       useUi.getState().bumpThreads();
@@ -252,9 +258,14 @@ export function useChat(threadId: string, temporary = false) {
     if (!lastUser) return;
     // Server-authoritative regenerate: reuse the existing user turn (idempotency key) and let the
     // backend produce a fresh reply. The bubble shows at once; the tool probe runs after it.
+    const model = chatModelOverride(useUi.getState().activeModelByThread[threadId] ?? DEFAULT_CHAT_MODEL);
     void useRuns.getState().startServerRun(
       threadId,
-      { text: lastUser.content, clientMessageId: lastUser.id, model: useUi.getState().activeModelByThread[threadId] ?? DEFAULT_CHAT_MODEL },
+      {
+        text: lastUser.content,
+        clientMessageId: lastUser.id,
+        ...(model ? { model } : {}),
+      },
       async () => {
         const explicitSkills = taggedSkillNames(lastUser.content, await activeSkillNames());
         const tools = await serverRunTools(explicitSkills.length > 0);
