@@ -14,6 +14,12 @@ export interface ProfilePet {
   confidence: number;
 }
 
+export interface ProfileChild extends ProfileItem {
+  name: string;
+  relationship: 'daughter' | 'son' | 'child';
+  age?: number;
+}
+
 export interface ProfileInterest {
   name: string;
   sourceMemoryIds: string[];
@@ -33,7 +39,7 @@ export interface MemoryProfileView {
       details: Record<string, ProfileItem>;
       family: {
         spouse: ProfileItem[];
-        children: ProfileItem[];
+        children: ProfileChild[];
         pets: ProfilePet[];
       };
       preferences: {
@@ -118,6 +124,73 @@ function addInterest(profile: MemoryProfileView, name: string, memory: MemoryRec
   addUnique(profile.profile.user.interests.media, { name, sourceMemoryIds: [memory.id] });
 }
 
+function evidenceText(memory: MemoryRecord): string {
+  return [memory.text, memory.summary, ...memory.sourceRefs.map((ref) => ref.quote)].filter(Boolean).join(' ');
+}
+
+function extractAge(text: string): number | undefined {
+  const raw = /\b(?:age\s*(?:is\s*)?|(?:is|she(?:'|’)?s|he(?:'|’)?s|they(?:'|’)?re)\s+)?(\d{1,2})\s*(?:years?\s*old|yrs?\s*old|yo|y\/o)\b/i.exec(text)?.[1]
+    ?? /\bage\s*(?:is\s*)?(\d{1,2})\b/i.exec(text)?.[1];
+  if (!raw) return undefined;
+  const age = Number(raw);
+  return age >= 0 && age <= 120 ? age : undefined;
+}
+
+function childText(child: { name: string; relationship: string; age?: number }): string {
+  return `${child.name} · ${child.relationship}${child.age !== undefined ? ` · age ${child.age}` : ''}`;
+}
+
+function extractChild(memory: MemoryRecord): ProfileChild | null {
+  const text = evidenceText(memory);
+  const match = /\b(?:user(?:'s)?|the user's|my)\s+(daughter|son|child)\s+(?:is\s+)?(?:named|called)\s+([A-Z][A-Za-z0-9_-]+)/i.exec(text)
+    ?? /\b(?:user(?:'s)?|the user's|my)\s+(daughter|son|child)(?:'|’)?s\s+name\s+is\s+([A-Z][A-Za-z0-9_-]+)/i.exec(text)
+    ?? /\b(?:user\s+)?(?:has|have)\s+(?:a|an)\s+(daughter|son|child)\s+(?:named|called)\s+([A-Z][A-Za-z0-9_-]+)/i.exec(text)
+    ?? /\b([A-Z][A-Za-z0-9_-]+)\b.*?\b(?:is|as)\s+(?:user(?:'s)?|the user's|my)\s+(daughter|son|child)\b/i.exec(text);
+  if (!match) return null;
+  let relationship: ProfileChild['relationship'];
+  let name: string;
+  if (/daughter|son|child/i.test(match[1]) && /^[A-Z]/.test(match[2])) {
+    relationship = match[1].toLowerCase() as ProfileChild['relationship'];
+    name = match[2];
+  } else {
+    name = match[1];
+    relationship = match[2].toLowerCase() as ProfileChild['relationship'];
+  }
+  const age = extractAge(text);
+  return { name, relationship, ...(age !== undefined ? { age } : {}), text: childText({ name, relationship, age }), sourceMemoryIds: [memory.id], confidence: memory.confidence };
+}
+
+function mergeChild(children: ProfileChild[], next: ProfileChild, options?: { replaceAge?: boolean }): void {
+  const existing = children.find((child) => child.name.toLowerCase() === next.name.toLowerCase());
+  if (!existing) {
+    children.push(next);
+    return;
+  }
+  if (existing.relationship === 'child' && next.relationship !== 'child') existing.relationship = next.relationship;
+  if (next.age !== undefined && (options?.replaceAge || existing.age === undefined)) existing.age = next.age;
+  existing.confidence = Math.max(existing.confidence, next.confidence);
+  existing.sourceMemoryIds = [...new Set([...existing.sourceMemoryIds, ...next.sourceMemoryIds])];
+  existing.text = childText(existing);
+}
+
+function mergeChildAgeFromMemory(children: ProfileChild[], memory: MemoryRecord, ageUpdatedFor: Set<string>): void {
+  const text = evidenceText(memory);
+  const age = extractAge(text);
+  if (age === undefined) return;
+  for (const child of children) {
+    if (!new RegExp(`\\b${escapeRegExp(child.name)}\\b`, 'i').test(text)) continue;
+    const key = child.name.toLowerCase();
+    if (ageUpdatedFor.has(key)) return;
+    mergeChild(children, { ...child, age, sourceMemoryIds: [memory.id], confidence: memory.confidence, text: childText({ ...child, age }) }, { replaceAge: true });
+    ageUpdatedFor.add(key);
+    return;
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function bucketFor(memory: MemoryRecord): Array<'today' | 'week' | 'month'> {
   const ageMs = Date.now() - Date.parse(memory.updatedAt || memory.createdAt);
   const day = 24 * 60 * 60 * 1000;
@@ -156,8 +229,12 @@ export function buildMemoryProfile(userId: string, now: string, memories: Memory
     temporal: { today: { items: [] }, week: { items: [] }, month: { items: [] } },
   };
 
-  for (const memory of memories.filter((memory) => memory.status === 'active')) {
+  const activeMemories = memories.filter((memory) => memory.status === 'active');
+
+  for (const memory of activeMemories) {
     for (const bucket of bucketFor(memory)) profile.temporal[bucket].items.push({ memoryId: memory.id, text: memory.text, kind: memory.kind, updatedAt: memory.updatedAt });
+    const child = extractChild(memory);
+    if (child) mergeChild(profile.profile.user.family.children, child);
     const pet = extractPet(memory);
     if (pet) {
       addUnique(profile.profile.user.family.pets, pet);
@@ -179,6 +256,9 @@ export function buildMemoryProfile(userId: string, now: string, memories: Memory
       addUnique(profile.profile.work.currentFocus, item(memory));
     }
   }
+
+  const childAgesUpdated = new Set<string>();
+  for (const memory of activeMemories) mergeChildAgeFromMemory(profile.profile.user.family.children, memory, childAgesUpdated);
 
   return profile;
 }

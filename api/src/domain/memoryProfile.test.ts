@@ -38,6 +38,60 @@ describe('buildMemoryProfile', () => {
     expect(profile.temporal.today.items.map((item) => item.memoryId)).toEqual(['mem_pet']);
   });
 
+  it('projects a daughter fact with age into User > Family > Children', () => {
+    const profile = buildMemoryProfile('userA', '2026-06-28T12:00:00.000Z', [
+      memory({ id: 'mem_child', kind: 'fact', text: 'User has a daughter named Laija who is 9 years old.' }),
+    ]);
+
+    expect(profile.profile.user.family.children).toEqual([
+      expect.objectContaining({
+        name: 'Laija',
+        relationship: 'daughter',
+        age: 9,
+        text: 'Laija · daughter · age 9',
+        sourceMemoryIds: ['mem_child'],
+      }),
+    ]);
+  });
+
+  it('merges a child age update into an existing child profile item', () => {
+    const profile = buildMemoryProfile('userA', '2026-06-28T12:00:00.000Z', [
+      memory({ id: 'mem_age', kind: 'fact', text: 'Laija is 9 years old.', updatedAt: '2026-06-28T00:01:00.000Z' }),
+      memory({ id: 'mem_child', kind: 'fact', text: 'User has a daughter named Laija.', updatedAt: '2026-06-27T00:00:00.000Z' }),
+    ]);
+
+    expect(profile.profile.user.family.children).toEqual([
+      expect.objectContaining({
+        name: 'Laija',
+        relationship: 'daughter',
+        age: 9,
+        text: 'Laija · daughter · age 9',
+        sourceMemoryIds: ['mem_child', 'mem_age'],
+      }),
+    ]);
+  });
+
+  it('uses source quotes to recover child age omitted from memory text', () => {
+    const profile = buildMemoryProfile('userA', '2026-06-28T12:00:00.000Z', [
+      memory({
+        id: 'mem_child',
+        kind: 'fact',
+        text: 'User has a daughter named Laija.',
+        sourceRefs: [{ type: 'message', threadId: 't1', messageId: 'm1', createdAt: '2026-06-28T00:00:00.000Z', quote: "My daughter's name is Laija and she’s 9 years old." }],
+      }),
+    ]);
+
+    expect(profile.profile.user.family.children).toEqual([
+      expect.objectContaining({
+        name: 'Laija',
+        relationship: 'daughter',
+        age: 9,
+        text: 'Laija · daughter · age 9',
+        sourceMemoryIds: ['mem_child'],
+      }),
+    ]);
+  });
+
   it('groups preferences, project context, and avoidances into structured branches', () => {
     const profile = buildMemoryProfile('userA', '2026-06-28T12:00:00.000Z', [
       memory({ id: 'mem_pref', kind: 'preference', text: 'User prefers concise implementation plans.' }),

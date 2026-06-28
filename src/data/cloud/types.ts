@@ -94,6 +94,12 @@ export interface MemoryProfileItem {
   confidence: number;
 }
 
+export interface MemoryProfileChild extends MemoryProfileItem {
+  name: string;
+  relationship: 'daughter' | 'son' | 'child';
+  age?: number;
+}
+
 export interface MemoryProfileView {
   schemaVersion: 1;
   userId: string;
@@ -104,7 +110,7 @@ export interface MemoryProfileView {
       details: Record<string, MemoryProfileItem>;
       family: {
         spouse: MemoryProfileItem[];
-        children: MemoryProfileItem[];
+        children: MemoryProfileChild[];
         pets: Array<{ name: string; species?: string; inspiredBy: string[]; sourceMemoryIds: string[]; confidence: number }>;
       };
       preferences: {
