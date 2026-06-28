@@ -412,9 +412,9 @@ Return strict JSON only.
 
 Extractor model choice:
 
-- Memory operations use server-decided models, not the user's chat selection. Two tiers:
-  - Routine extraction (command + turn lanes) uses `MEMORY_MODEL` (a lighter/faster deployment such as `gpt-5.4-mini`).
-  - Deep operations (the rebuild/import lane, plus heavy merges and conflict resolution) use `MEMORY_DEEP_MODEL` (a stronger deployment such as `gpt-5.4`).
+- Memory operations use server-decided models, not the user's chat selection. The deployment is set by `MEMORY_MODEL` (routine command + turn lanes) and `MEMORY_DEEP_MODEL` (the rebuild/import lane and heavy reconciliation).
+- Both tiers must be a model strong enough to reliably emit the strict extraction JSON (operations plus the optional routed `target`). Mini-tier models are NOT reliable for this structured output, so we run `gpt-5.4` for all memory operations for now; the deep tier exists so a stronger model can be selected for heavy work when needed.
+- Extraction parsing is resilient regardless of model: a malformed optional `target` is dropped (the atomic memory is still stored), fully invalid operations are dropped, and an all-invalid output degrades to `ignore` instead of failing the job. This prevents one bad field from discarding a whole turn.
 - The lane (`command` / `turn` / `rebuild`) determines the tier: `rebuild` jobs get the deep model; all others get the routine model.
 - An admin can override either tier at runtime in Settings > Admin > Memory model (no redeploy). Precedence: admin override -> env default -> (deep falls back to the routine model; routine falls back to the user's chat model).
 - The user still chooses their own chat model for actual conversations; that selection drives generation only, never memory extraction.
