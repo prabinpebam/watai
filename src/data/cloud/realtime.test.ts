@@ -74,4 +74,15 @@ describe('RealtimeClient', () => {
 
     expect(seen).toEqual([{ thread: { id: 't1', title: 'Hello' } }]);
   });
+
+  it('dispatches memory pushes', async () => {
+    const { client, conn } = make({ url: 'https://x/client/?hub=watai', accessToken: 't' });
+    await client.ensure();
+    const seen: unknown[] = [];
+    client.on('memory', (p) => seen.push(p));
+
+    conn.emit('memory', { acceptedCount: 1, threadId: 't1' });
+
+    expect(seen).toEqual([{ acceptedCount: 1, threadId: 't1' }]);
+  });
 });

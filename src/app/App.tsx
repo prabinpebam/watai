@@ -233,6 +233,18 @@ export function App() {
           })
           .catch(() => undefined);
       });
+      const offMemory = realtime.on('memory', (payload) => {
+        const count = (payload as { acceptedCount?: number } | null)?.acceptedCount ?? 1;
+        useUi.getState().pushToast(count > 1 ? `${count} memories updated` : 'Memory updated', 'success', {
+          persistent: true,
+          key: 'memory-updated',
+        });
+      });
+      const previousOff = off;
+      off = () => {
+        previousOff?.();
+        offMemory();
+      };
     })();
     return () => off?.();
   }, []);

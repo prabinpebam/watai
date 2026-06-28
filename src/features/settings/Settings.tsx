@@ -9,7 +9,7 @@ import { ConfirmDialog } from '../../design/overlays';
 import { useUi } from '../../state/store';
 import { useIsExpanded } from '../../lib/hooks';
 import { formatBytes } from '../../lib/format';
-import { repo, cloudApi } from '../../data';
+import { repo, cloudApi, realtime } from '../../data';
 import { kvGet } from '../../data/db';
 import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import { useMe } from '../../auth/access';
@@ -804,11 +804,11 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = async (nextStatus = status) => {
     setLoading(true);
     setError(null);
     try {
-      setItems(await repo.listMemory({ status, limit: 100 }));
+      setItems(await repo.listMemory({ status: nextStatus, limit: 100 }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load memory.');
     } finally {
@@ -819,6 +819,16 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     void load();
   }, [status]);
+
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    void realtime.ensure();
+    off = realtime.on('memory', () => {
+      setStatus('active');
+      void load('active');
+    });
+    return () => off?.();
+  }, []);
 
   const add = async () => {
     const value = text.trim();

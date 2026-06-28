@@ -132,6 +132,9 @@ export function container(): ApiContainer {
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
   const memoryContextService = new MemoryContextService(memoryStore, settingsService);
+  const signalr: SignalRSender | null = process.env.AzureSignalRConnectionString
+    ? new AzureSignalR(process.env.AzureSignalRConnectionString)
+    : null;
   const memoryExtractionService = new MemoryExtractionService({
     memoryStore,
     jobStore: memoryJobStore,
@@ -141,6 +144,7 @@ export function container(): ApiContainer {
     settings: settingsService,
     credentials: credentialService,
     extractor: (creds, input) => extractMemories(creds, input),
+    signalr: signalr ?? undefined,
     clock,
   });
   const messageService = new MessageService(threadStore, messageStore, clock, memoryExtractionService);
@@ -151,9 +155,6 @@ export function container(): ApiContainer {
   const aiProxyService = new AiProxyService(credentialService);
   const skillCatalog = new SkillCatalogService(new CosmosSkillStore(), new SasSkillBlobStore(minter), clock);
   const skillProvisioner = createSkillProvisioner(aoaiFiles);
-  const signalr: SignalRSender | null = process.env.AzureSignalRConnectionString
-    ? new AzureSignalR(process.env.AzureSignalRConnectionString)
-    : null;
 
   cached = {
     verifier: buildVerifier(),

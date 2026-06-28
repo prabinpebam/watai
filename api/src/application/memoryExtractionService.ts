@@ -9,6 +9,7 @@ import type { MemoryJobStore } from '../ports/memoryJobStore';
 import type { MessageRecord, MessageStore } from '../ports/messageStore';
 import type { ThreadRecord, ThreadStore } from '../ports/threadStore';
 import type { ServiceClock } from './threadService';
+import type { SignalRSender } from '../adapters/azure/signalr';
 
 export interface MemoryQueuePort {
   enqueue(job: import('../domain/memoryExtraction').MemoryExtractionJobRecord): Promise<void>;
@@ -40,6 +41,7 @@ export interface MemoryExtractionDeps {
   settings: MemorySettingsReader;
   credentials: MemoryCredentialReader;
   extractor: MemoryExtractorPort;
+  signalr?: SignalRSender;
   clock: ServiceClock;
 }
 
@@ -177,6 +179,17 @@ export class MemoryExtractionService {
       updatedAt: ts,
       completedAt: ts,
     });
+    if (accepted > 0 && this.deps.signalr) {
+      await this.deps.signalr
+        .sendToUser(job.userId, 'memory', {
+          jobId: job.id,
+          threadId: job.threadId,
+          kind: job.kind,
+          acceptedCount: accepted,
+          updatedAt: ts,
+        })
+        .catch(() => undefined);
+    }
   }
 
   private async windowFor(job: import('../domain/memoryExtraction').MemoryExtractionJobRecord): Promise<MessageRecord[]> {

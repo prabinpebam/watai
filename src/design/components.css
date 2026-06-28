@@ -733,6 +733,17 @@
   font-size: var(--text-callout-size);
   animation: slide-up var(--motion-base) var(--ease-standard);
 }
+.toast__dismiss {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--color-bg) 14%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
 
 /* ============================ Onboarding ============================ */
 .onboard {

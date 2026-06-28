@@ -304,6 +304,8 @@ export interface Toast {
   id: Id;
   message: string;
   kind?: 'info' | 'success' | 'error';
+  persistent?: boolean;
+  key?: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

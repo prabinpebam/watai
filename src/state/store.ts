@@ -57,7 +57,7 @@ interface UiState {
   setStream: (s: StreamState) => void;
   setCapability: (c: CapabilityMatrix | null) => void;
   setConnectivity: (c: 'online' | 'offline') => void;
-  pushToast: (message: string, kind?: Toast['kind']) => void;
+  pushToast: (message: string, kind?: Toast['kind'], opts?: { persistent?: boolean; key?: string }) => void;
   dismissToast: (id: string) => void;
   bumpThreads: () => void;
   bumpThread: (threadId: string) => void;
@@ -111,8 +111,13 @@ export const useUi = create<UiState>()(
       setStream: (stream) => set({ stream }),
       setCapability: (capability) => set({ capability }),
       setConnectivity: (connectivity) => set({ connectivity }),
-      pushToast: (message, kind) =>
-        set((s) => ({ toasts: [...s.toasts, { id: newId(), message, kind }] })),
+      pushToast: (message, kind, opts) =>
+        set((s) => ({
+          toasts: [
+            ...(opts?.key ? s.toasts.filter((toast) => toast.key !== opts.key) : s.toasts),
+            { id: newId(), message, kind, persistent: opts?.persistent, key: opts?.key },
+          ],
+        })),
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
       bumpThreads: () => set((s) => ({ threadsVersion: s.threadsVersion + 1 })),
       bumpThread: (threadId) =>

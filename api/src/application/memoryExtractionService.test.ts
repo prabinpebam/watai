@@ -18,8 +18,10 @@ function setup(extractor: MemoryExtractorPort) {
   const clock = { newId: () => `id_${++n}`, now: () => `2026-01-01T00:00:${String(t++).padStart(2, '0')}Z` };
   const settings = { get: async () => ({ ...DEFAULT_SETTINGS, data: { ...DEFAULT_SETTINGS.data, sync: true } }) };
   const credentials = { getDecrypted: async () => ({ baseUrl: 'https://example.com/openai/v1', key: 'k', models: { chat: 'gpt-4.1' } }) };
-  const svc = new MemoryExtractionService({ memoryStore, jobStore, messageStore, threadStore, queue, settings, credentials, extractor, clock });
-  return { svc, memoryStore, jobStore, messageStore, threadStore, enqueued };
+  const sends: Array<{ target: string; payload: unknown }> = [];
+  const signalr = { negotiate: () => ({}) as never, sendToUser: async (_userId: string, target: string, payload: unknown) => void sends.push({ target, payload }) };
+  const svc = new MemoryExtractionService({ memoryStore, jobStore, messageStore, threadStore, queue, settings, credentials, extractor, signalr: signalr as never, clock });
+  return { svc, memoryStore, jobStore, messageStore, threadStore, enqueued, sends };
 }
 
 async function seedThread(ctx: ReturnType<typeof setup>, temporary = false) {
@@ -57,6 +59,7 @@ describe('MemoryExtractionService', () => {
     expect(memories[0]).toMatchObject({ kind: 'preference', text: 'User prefers concise implementation plans.' });
     expect(memories[0].sourceRefs[0]).toMatchObject({ type: 'message', threadId: 't1', messageId: 'u1' });
     expect((await ctx.jobStore.get('userA', first!.id))?.status).toBe('completed');
+    expect(ctx.sends).toEqual([{ target: 'memory', payload: expect.objectContaining({ acceptedCount: 1, threadId: 't1' }) }]);
   });
 
   it('records ignored decisions and rejects one-off/low-confidence output', async () => {
@@ -68,6 +71,7 @@ describe('MemoryExtractionService', () => {
     await ctx.svc.processJob('userA', job!.id);
     expect((await ctx.memoryStore.list('userA', { status: 'active' })).memories).toEqual([]);
     expect((await ctx.jobStore.get('userA', job!.id))?.status).toBe('ignored');
+    expect(ctx.sends).toEqual([]);
   });
 
   it('does not enqueue for temporary threads', async () => {

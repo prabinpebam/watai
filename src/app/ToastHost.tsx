@@ -9,7 +9,7 @@ export function ToastHost() {
 
   useEffect(() => {
     if (toasts.length === 0) return;
-    const timers = toasts.map((t) => setTimeout(() => dismiss(t.id), 3200));
+    const timers = toasts.filter((t) => !t.persistent).map((t) => setTimeout(() => dismiss(t.id), 3200));
     return () => timers.forEach(clearTimeout);
   }, [toasts, dismiss]);
 
@@ -21,6 +21,11 @@ export function ToastHost() {
           {t.kind === 'success' && <Icon name="check" size={16} />}
           {t.kind === 'error' && <Icon name="alert" size={16} />}
           <span>{t.message}</span>
+          {t.persistent && (
+            <button className="toast__dismiss" aria-label="Dismiss" title="Dismiss" onClick={() => dismiss(t.id)}>
+              <Icon name="close" size={14} />
+            </button>
+          )}
         </div>
       ))}
     </div>,
