@@ -317,6 +317,28 @@ a:hover {
 }
 .appbar__spacer {
   flex: 1;
+.appbar-model {
+  flex: none;
+  min-width: 0;
+}
+.appbar-model__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.appbar-model__select {
+  max-width: 180px;
+  height: 36px;
+  padding: 0 var(--space-4) 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-caption-size);
+}
 }
 
 /* ============================ Chat ============================ */

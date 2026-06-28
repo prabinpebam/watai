@@ -38,6 +38,14 @@ describe('parseCredentialsInput', () => {
     expect(out.models.chat).toBe('gpt-5.4');
   });
 
+  it('accepts and dedupes chat model options', () => {
+    const out = parseCredentialsInput({
+      ...ok,
+      models: { chat: 'model-router', chatOptions: ['model-router', 'gpt-5.4', 'gpt-5.4'] },
+    });
+    expect(out.models.chatOptions).toEqual(['model-router', 'gpt-5.4']);
+  });
+
   it('coerces an empty tavilyKey to undefined', () => {
     expect(parseCredentialsInput({ ...ok, tavilyKey: '   ' }).tavilyKey).toBeUndefined();
     expect(parseCredentialsInput({ ...ok, tavilyKey: 'tvly-9' }).tavilyKey).toBe('tvly-9');

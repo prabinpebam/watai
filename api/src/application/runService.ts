@@ -59,6 +59,7 @@ export class RunService {
       status: 'queued',
       instanceId: null,
       tools: parsed.tools ?? [],
+      ...(parsed.model ? { model: parsed.model } : {}),
       allowDestructive: parsed.allowDestructive ?? [],
       prompt: { text: parsed.text, attachments: parsed.attachments },
       error: null,

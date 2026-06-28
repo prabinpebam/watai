@@ -40,6 +40,8 @@ const runInputSchema = z
     attachments: z.array(attachmentSchema).max(20).optional(),
     /** Client-supplied id for the user message (idempotent submit). */
     clientMessageId: z.string().min(1).max(64).optional(),
+    /** Chat deployment override for this run. Omitted uses the saved default chat model. */
+    model: z.string().min(1).max(100).optional(),
     /** Tools enabled for this run (subset of the configured tools). */
     tools: z.array(z.string().min(1).max(40)).max(20).optional(),
     /** Destructive tools explicitly authorized for this run (see 06 §4). */

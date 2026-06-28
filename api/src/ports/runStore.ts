@@ -13,6 +13,8 @@ export interface RunRecord {
   instanceId?: string | null;
   /** Tools enabled for this run. */
   tools: string[];
+  /** Chat deployment override for this run. */
+  model?: string;
   /** Destructive tools explicitly authorized for this run. */
   allowDestructive: string[];
   /** The user prompt that triggered the run (echoed for the worker). */

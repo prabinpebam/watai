@@ -6,6 +6,7 @@ const deployment = z.string().min(1).max(100);
 const modelsSchema = z
   .object({
     chat: deployment,
+    chatOptions: z.array(deployment).max(20).optional(),
     image: deployment.optional(),
     transcribe: deployment.optional(),
     tts: deployment.optional(),
@@ -53,9 +54,11 @@ export function normalizeBaseUrl(input: string): string {
  *  service to encrypt immediately; they are never logged here. */
 export function parseCredentialsInput(input: unknown): CredentialsInput {
   const parsed = parseOrThrow(credentialsInputSchema, input, 'Invalid credentials.');
+  const chatOptions = [...new Set([parsed.models.chat, ...(parsed.models.chatOptions ?? [])].map((m) => m.trim()).filter(Boolean))];
   return {
     ...parsed,
     baseUrl: normalizeBaseUrl(parsed.baseUrl),
+    models: { ...parsed.models, chatOptions },
     key: parsed.key?.trim() || undefined,
     tavilyKey: parsed.tavilyKey?.trim() || undefined,
     knowledgeBaseVectorStoreId: parsed.knowledgeBaseVectorStoreId?.trim() || undefined,

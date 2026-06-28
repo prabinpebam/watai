@@ -15,6 +15,7 @@ import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import { useMe } from '../../auth/access';
 import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo } from '../../data/cloud/types';
 import { normalizeBaseUrl } from '../../data/secureStore';
+import { normalizeChatModelOptions } from '../../lib/modelOptions';
 import { DEFAULT_SETTINGS } from '../../lib/types';
 import type { ImageRef, Settings as SettingsModel, TextScale } from '../../lib/types';
 
@@ -549,8 +550,9 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
   const [loading, setLoading] = useState(true);
   const [baseUrl, setBaseUrl] = useState('');
   const [key, setKey] = useState('');
-  const [models, setModels] = useState<{ chat: string; image?: string; transcribe?: string; tts?: string }>({
-    chat: '',
+  const [models, setModels] = useState<{ chat: string; chatOptions: string[]; image?: string; transcribe?: string; tts?: string }>({
+    chat: 'model-router',
+    chatOptions: normalizeChatModelOptions('model-router'),
   });
   const [tavilyKey, setTavilyKey] = useState('');
   const [kbStore, setKbStore] = useState('');
@@ -563,7 +565,8 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
         setStatus(s);
         setBaseUrl(s.baseUrl ?? '');
         setModels({
-          chat: s.models?.chat ?? '',
+          chat: s.models?.chat ?? 'model-router',
+          chatOptions: normalizeChatModelOptions(s.models?.chat, s.models?.chatOptions),
           image: s.models?.image,
           transcribe: s.models?.transcribe,
           tts: s.models?.tts,
@@ -577,6 +580,11 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
   if (loading) return <p className="muted">Loading…</p>;
 
   const updateModels = (patch: Partial<typeof models>) => setModels((m) => ({ ...m, ...patch }));
+  const updateChatOption = (index: number, value: string) =>
+    setModels((m) => ({ ...m, chatOptions: m.chatOptions.map((option, i) => (i === index ? value : option)) }));
+  const addChatOption = () => setModels((m) => ({ ...m, chatOptions: [...m.chatOptions, ''] }));
+  const removeChatOption = (index: number) =>
+    setModels((m) => ({ ...m, chatOptions: m.chatOptions.filter((_, i) => i !== index) }));
 
   // Everything is stored encrypted in the server vault; the key is write-only (never returned), so
   // leaving it blank on an update keeps the saved key.
@@ -590,6 +598,7 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
         baseUrl: normalizeBaseUrl(baseUrl),
         models: {
           chat: models.chat.trim(),
+          chatOptions: normalizeChatModelOptions(models.chat, models.chatOptions),
           ...(models.image?.trim() ? { image: models.image.trim() } : {}),
           ...(models.transcribe?.trim() ? { transcribe: models.transcribe.trim() } : {}),
           ...(models.tts?.trim() ? { tts: models.tts.trim() } : {}),
@@ -630,7 +639,32 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
             onChange={(e) => setKey(e.target.value)}
             autoComplete="off"
           />
-          <Field label="Chat model" value={models.chat} onChange={(e) => updateModels({ chat: e.target.value })} />
+          <Field
+            label="Default chat model"
+            hint="Used when no per-chat model is selected. Use model-router for Auto."
+            value={models.chat}
+            onChange={(e) => updateModels({ chat: e.target.value })}
+          />
+          <div className="model-options-editor">
+            <div className="field__label">Chat model options</div>
+            <div className="field__hint">These appear in the chat header selector. Auto is model-router.</div>
+            <div className="model-options-editor__list">
+              {models.chatOptions.map((model, index) => (
+                <div key={index} className="model-option-row">
+                  <input
+                    className="input"
+                    value={model}
+                    placeholder={index === 0 ? 'model-router' : 'deployment-name'}
+                    onChange={(e) => updateChatOption(index, e.target.value)}
+                    autoCapitalize="off"
+                    spellCheck={false}
+                  />
+                  <IconButton name="trash" label="Remove model option" onClick={() => removeChatOption(index)} />
+                </div>
+              ))}
+            </div>
+            <Button variant="secondary" onClick={addChatOption}>Add model option</Button>
+          </div>
           <Field
             label="Transcription model"
             value={models.transcribe ?? ''}

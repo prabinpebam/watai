@@ -105,9 +105,11 @@ describe('RunService.submit', () => {
   it('carries the tool + destructive allowlists onto the run', async () => {
     const run = await ctx.svc.submit('userA', 't1', {
       text: 'x',
+      model: 'gpt-5.4',
       tools: ['web_search'],
       allowDestructive: ['delete_thread'],
     });
+    expect(run.model).toBe('gpt-5.4');
     expect(run.tools).toEqual(['web_search']);
     expect(run.allowDestructive).toEqual(['delete_thread']);
   });

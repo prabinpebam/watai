@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChatView } from './ChatView';
 import { ToolsMenu } from './ToolsMenu';
+import { DEFAULT_CHAT_MODEL } from './runStore';
 
 import { IconButton } from '../../design/ui';
 import { useIsExpanded } from '../../lib/hooks';
 import { useUi } from '../../state/store';
-import { repo } from '../../data';
+import { cloudApi, repo } from '../../data';
+import { chatModelLabel, normalizeChatModelOptions } from '../../lib/modelOptions';
 
 export function ChatScreen() {
   const params = useParams();
@@ -17,6 +19,8 @@ export function ChatScreen() {
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const version = useUi((s) => s.threadsVersion);
   const toggleFilesPane = useUi((s) => s.toggleFilesPane);
+  const activeModel = useUi((s) => s.activeModelByThread[params.threadId!]);
+  const setModelForThread = useUi((s) => s.setModelForThread);
 
   // The thread id is always in the URL (a fresh chat redirects /new -> /c/{newId} first), so the
   // thread is only persisted once the first prompt commits it. Until then getThread is null and we
@@ -24,6 +28,7 @@ export function ChatScreen() {
   const threadId = params.threadId!;
   const [title, setTitle] = useState('New chat');
   const [scrolled, setScrolled] = useState(false);
+  const [modelOptions, setModelOptions] = useState<string[]>(() => normalizeChatModelOptions(DEFAULT_CHAT_MODEL));
 
   useEffect(() => {
     let live = true;
@@ -34,6 +39,23 @@ export function ChatScreen() {
       live = false;
     };
   }, [threadId, version]);
+
+  useEffect(() => {
+    let live = true;
+    cloudApi
+      .getCredentialStatus()
+      .then((status) => {
+        if (!live) return;
+        setModelOptions(normalizeChatModelOptions(status.models?.chat, status.models?.chatOptions));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const selectedModel = activeModel ?? DEFAULT_CHAT_MODEL;
+  const options = modelOptions.includes(selectedModel) ? modelOptions : normalizeChatModelOptions(selectedModel, modelOptions);
 
   return (
     <>
@@ -47,6 +69,19 @@ export function ChatScreen() {
         ) : (
           <IconButton name="menu" label="Open menu" onClick={() => toggleDrawer(true)} />
         )}
+        <label className="appbar-model" title="Chat model">
+          <span className="appbar-model__sr">Chat model</span>
+          <select
+            className="appbar-model__select"
+            value={selectedModel}
+            onChange={(e) => setModelForThread(threadId, e.target.value)}
+            aria-label="Chat model"
+          >
+            {options.map((model) => (
+              <option key={model} value={model}>{chatModelLabel(model)}</option>
+            ))}
+          </select>
+        </label>
         <div className="appbar__title">{title}</div>
         <IconButton name="file-text" label="Chat files" onClick={() => toggleFilesPane(threadId)} />
         <ToolsMenu />

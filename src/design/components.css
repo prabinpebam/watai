@@ -160,6 +160,24 @@
   font-size: var(--text-caption-size);
   color: var(--color-text-secondary);
 }
+.model-options-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.model-options-editor__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.model-option-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.model-option-row .input {
+  flex: 1;
+}
 .field__error {
   font-size: var(--text-caption-size);
   color: var(--color-danger);

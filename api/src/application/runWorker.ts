@@ -567,7 +567,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   try {
     const c = await credentials.getDecrypted(run.userId);
     creds = c;
-    model = c.models.chat;
+    model = run.model ?? c.models.chat;
     const settings = deps.settings
       ? await deps.settings.get(run.userId).catch(() => undefined)
       : undefined;

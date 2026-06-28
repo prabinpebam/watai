@@ -149,6 +149,18 @@ describe('processRun', () => {
     expect((await ctx.threadStore.get('userA', 't1'))?.lastMessagePreview).toBe('Hi there');
   });
 
+  it('uses the run model override when one is supplied', async () => {
+    const run = await seed(ctx);
+    await ctx.runStore.put({ ...run, model: 'gpt-5.4' });
+    let seenModel = '';
+    const runAgent: RunAgentFn = (params) => {
+      seenModel = params.model;
+      return script([{ type: 'done' }])({ ...params });
+    };
+    await processRun(ctx.deps(runAgent), 't1', 'r1');
+    expect(seenModel).toBe('gpt-5.4');
+  });
+
   it('captures a code-interpreter artifact onto the message, thread files, and tool call', async () => {
     await seed(ctx);
     const uploaded: Array<{ id: string; mime: string; bytes: number }> = [];

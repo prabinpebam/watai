@@ -10,10 +10,11 @@ import { newId } from '../../lib/ids';
 import { runOnServer } from './serverRun';
 import { useUi } from '../../state/store';
 import { messageFromRecord } from '../../data/cloud/types';
+import { AUTO_CHAT_MODEL } from '../../lib/modelOptions';
 import type { MessageRecord, SubmitRunBody } from '../../data/cloud/types';
 import type { Message } from '../../lib/types';
 
-export const DEFAULT_CHAT_MODEL = 'gpt-5.4';
+export const DEFAULT_CHAT_MODEL = AUTO_CHAT_MODEL;
 
 const kv = idbKvStore();
 const SNAPSHOT_PREFIX = 'run.active.';

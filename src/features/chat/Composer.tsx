@@ -182,7 +182,18 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
     if (!ta) return;
     const next = skillQueryAt(ta.value, ta.selectionStart);
     setSkillQuery(next);
-    setSkillIndex(0);
+    setSkillIndex((index) => {
+      if (!next) return 0;
+      if (!skillQuery || skillQuery.start !== next.start || skillQuery.end !== next.end || skillQuery.query !== next.query) {
+        return 0;
+      }
+      return index;
+    });
+  };
+
+  const onKeyUp = (e: React.KeyboardEvent) => {
+    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) return;
+    updateSkillQuery();
   };
 
   const chooseSkill = (skill: SkillSummary) => {
@@ -369,7 +380,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
             }}
             onClick={updateSkillQuery}
             onKeyDown={onKeyDown}
-            onKeyUp={updateSkillQuery}
+            onKeyUp={onKeyUp}
             onPaste={onPaste}
             onScroll={(e) => {
               if (highlightRef.current) highlightRef.current.scrollTop = e.currentTarget.scrollTop;

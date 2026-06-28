@@ -182,6 +182,7 @@ export interface InviteRecord {
 /** Model deployment names configured server-side (mirrors api credentials schema). */
 export interface ModelDeployments {
   chat: string;
+  chatOptions?: string[];
   image?: string;
   transcribe?: string;
   tts?: string;
@@ -244,6 +245,7 @@ export interface RunRecord {
   status: RunStatus;
   instanceId?: string | null;
   tools: string[];
+  model?: string;
   allowDestructive: string[];
   prompt?: { text?: string; attachments?: AttachmentRecord[] };
   error?: RunError | null;
@@ -260,6 +262,7 @@ export interface SubmitRunBody {
   /** Idempotency key for the user message — pass the locally-created user message id so the
    *  server's copy and the local one converge to a single record when sync pulls it back. */
   clientMessageId?: string;
+  model?: string;
   tools?: string[];
   allowDestructive?: string[];
 }
