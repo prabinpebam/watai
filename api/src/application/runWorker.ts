@@ -18,7 +18,7 @@ import {
 } from '../ai/orchestrator';
 import type { ResponsesCitation, ResponsesTool } from '../ai/responses';
 import { tavilySearch } from '../ai/tavily';
-import { generateImage } from '../ai/image';
+import { editImage, generateImage } from '../ai/image';
 import { listContainerFiles, getContainerFile, mimeForFilename } from '../ai/containerFiles';
 import type { ContainerFile } from '../ai/containerFiles';
 import { selectSkills, codeInterpreterSection, slashSkillTags } from './skillService';
@@ -121,6 +121,41 @@ function shouldExposeArtifact(file: ContainerFile, name: string, kind: ArtifactK
   return DEFAULT_VISIBLE_ARTIFACT_KINDS.has(kind);
 }
 
+interface ImageReference {
+  bytes: Uint8Array;
+  contentType: string;
+}
+
+function shouldUseImageReference(args: Record<string, unknown>): boolean {
+  return args.edit_reference === true;
+}
+
+async function latestUserImageReference(
+  history: MessageRecord[],
+  resolveImageUrl?: (blobPath: string) => Promise<string | null>,
+  fetchImpl?: typeof fetch,
+): Promise<ImageReference | undefined> {
+  if (!resolveImageUrl) return undefined;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const message = history[i];
+    if (message.role !== 'user') continue;
+    const images = (message.attachments ?? []).filter((att) => att.kind === 'image' && att.blobPath).reverse();
+    for (const image of images) {
+      const url = await resolveImageUrl(image.blobPath).catch(() => null);
+      if (!url) continue;
+      try {
+        const res = await (fetchImpl ?? fetch)(url);
+        if (!res.ok) continue;
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        if (bytes.byteLength) return { bytes, contentType: image.mime || res.headers.get('content-type') || 'image/png' };
+      } catch {
+        /* try an earlier image */
+      }
+    }
+  }
+  return undefined;
+}
+
 /** Build the system prompt from the user's personalization (about-you / response-style) plus a
  *  base persona and light tool guidance. */
 function systemPrompt(creds: DecryptedCredentials, settings?: Settings, skillsSection?: string): string {
@@ -130,7 +165,7 @@ function systemPrompt(creds: DecryptedCredentials, settings?: Settings, skillsSe
   if (p?.howRespond?.trim()) lines.push(`How the user wants you to respond:\n${p.howRespond.trim()}`);
   const hints: string[] = [];
   if (creds.tavilyKey) hints.push('use web_search for current or factual web information and cite the sources');
-  if (creds.models.image) hints.push('use generate_image when the user asks for an image, illustration, or diagram');
+  if (creds.models.image) hints.push('use generate_image when the user asks for an image, illustration, or diagram; if the user references an uploaded image, set edit_reference=true');
   if (hints.length) lines.push(`When helpful, ${hints.join('; ')}.`);
   if (skillsSection) lines.push(skillsSection);
   return lines.join('\n\n');
@@ -229,6 +264,7 @@ function assembleTools(
         properties: {
           prompt: { type: 'string', description: 'A detailed description of the image to generate.' },
           size: { type: 'string', description: 'Optional size, e.g. 1024x1024, 1024x1536, or 1536x1024.' },
+          edit_reference: { type: 'boolean', description: 'Set true when the user wants to edit, remix, transform, or use the latest uploaded image as the image-model input/reference.' },
         },
         required: ['prompt'],
         additionalProperties: false,
@@ -239,7 +275,11 @@ function assembleTools(
 }
 
 /** The tool executor: runs function tools server-side and returns output + grounding citations. */
-function makeExecute(creds: DecryptedCredentials, fetchImpl?: typeof fetch): ToolExecute {
+function makeExecute(
+  creds: DecryptedCredentials,
+  fetchImpl?: typeof fetch,
+  getImageReference?: () => Promise<ImageReference | undefined>,
+): ToolExecute {
   return async (name, args) => {
     if (name === 'web_search') {
       if (!creds.tavilyKey) return { output: 'Web search is not configured.' };
@@ -265,14 +305,28 @@ function makeExecute(creds: DecryptedCredentials, fetchImpl?: typeof fetch): Too
       if (!prompt) return { output: 'No image prompt was provided.' };
       const sizeArg = (args as { size?: unknown }).size;
       const size = typeof sizeArg === 'string' && sizeArg ? sizeArg : undefined;
-      const imgs = await generateImage({
-        baseUrl: creds.baseUrl,
-        key: creds.key,
-        model: creds.models.image,
-        prompt,
-        ...(size ? { size } : {}),
-        fetchImpl,
-      });
+      const useReference = shouldUseImageReference(args);
+      const imageReference = useReference ? await getImageReference?.() : undefined;
+      if (useReference && !imageReference) return { output: 'No uploaded image is available to use as a reference.' };
+      const imgs = useReference
+        ? await editImage({
+            baseUrl: creds.baseUrl,
+            key: creds.key,
+            model: creds.models.image,
+            prompt,
+            image: imageReference!.bytes,
+            imageContentType: imageReference!.contentType,
+            ...(size ? { size } : {}),
+            fetchImpl,
+          })
+        : await generateImage({
+            baseUrl: creds.baseUrl,
+            key: creds.key,
+            model: creds.models.image,
+            prompt,
+            ...(size ? { size } : {}),
+            fetchImpl,
+          });
       if (!imgs.length) return { output: 'No image was generated.' };
       return {
         output: 'Generated the requested image.',
@@ -491,6 +545,9 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       ? await deps.settings.get(run.userId).catch(() => undefined)
       : undefined;
     const history = await messageStore.list(threadId);
+    let imageReferencePromise: Promise<ImageReference | undefined> | undefined;
+    const getImageReference = (): Promise<ImageReference | undefined> =>
+      imageReferencePromise ??= latestUserImageReference(history, deps.resolveImageUrl, deps.fetchImpl);
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
     const explicitSkillNames = slashSkillTags(run.prompt?.text ?? firstUser);
     const codeOn = run.tools.includes('code_interpreter');
@@ -528,7 +585,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       deps.resolveImageUrl,
     );
     const tools = assembleTools(c, run, thread, skillFileIds);
-    const execute = makeExecute(c, deps.fetchImpl);
+    const execute = makeExecute(c, deps.fetchImpl, getImageReference);
 
     for await (const ev of runAgent({ baseUrl: c.baseUrl, key: c.key, model, turns, tools, execute })) {
       if (ev.type === 'text') {

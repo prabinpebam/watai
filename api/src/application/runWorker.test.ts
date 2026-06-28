@@ -12,7 +12,7 @@ import { AppError } from '../domain/errors';
 
 type RunAgentFn = NonNullable<RunWorkerDeps['runAgent']>;
 
-function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string }) {
+function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string; image?: boolean }) {
   const runStore = new InMemoryRunStore();
   const messageStore = new InMemoryMessageStore();
   const threadStore = new InMemoryThreadStore();
@@ -27,7 +27,7 @@ function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string 
       return {
         baseUrl: 'https://r.services.ai.azure.com/openai/v1',
         key: 'k',
-        models: { chat: 'gpt-5.4' },
+        models: { chat: 'gpt-5.4', ...(opts?.image ? { image: 'gpt-image-1' } : {}) },
         ...(opts?.tavily ? { tavilyKey: 'tav-key' } : {}),
         ...(opts?.kbStore ? { knowledgeBaseVectorStoreId: opts.kbStore } : {}),
       };
@@ -463,6 +463,143 @@ describe('processRun', () => {
     expect(imageFile?.name).toBe('a cat');
     expect(imageFile?.blobPath).toContain('.png');
     expect(imageFile?.status).toBe('ready');
+  });
+
+  it('passes the latest user image attachment to the image model when edit_reference is requested', async () => {
+    ctx = setup({ image: true });
+    await seed(ctx);
+    await ctx.messageStore.append({
+      id: 'um2',
+      threadId: 't1',
+      userId: 'userA',
+      role: 'user',
+      content: 'Use this image as the reference.',
+      status: 'complete',
+      attachments: [
+        {
+          id: 'att1',
+          kind: 'image',
+          blobPath: 'userA/t1/att1.png',
+          mime: 'image/png',
+          bytes: 4,
+          name: 'reference.png',
+        },
+      ],
+      createdAt: '2026-06-01T00:00:01.500Z',
+      orderAt: '2026-06-01T00:00:01.500Z',
+      deletedAt: null,
+    });
+
+    const referenceBytes = new Uint8Array([1, 2, 3, 4]);
+    let editCalled = false;
+    let generationCalled = false;
+    const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
+      const url = String(input);
+      if (url === 'https://assets.example/reference.png') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'image/png' }),
+          arrayBuffer: async () => referenceBytes.buffer,
+        } as unknown as Response;
+      }
+      if (url.includes('/images/edits')) {
+        editCalled = true;
+        const image = (init?.body as FormData).get('image') as Blob;
+        expect([...new Uint8Array(await image.arrayBuffer())]).toEqual([...referenceBytes]);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ b64_json: Buffer.from('EDITED').toString('base64') }] }),
+          headers: new Headers(),
+        } as unknown as Response;
+      }
+      if (url.includes('/images/generations')) generationCalled = true;
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const runAgent: RunAgentFn = async function* (params) {
+      const result = await params.execute('generate_image', {
+        prompt: 'Turn this into a watercolor portrait.',
+        edit_reference: true,
+      });
+      if (result.image) {
+        yield { type: 'image', b64: result.image.b64, partial: false, prompt: result.image.prompt };
+      }
+      yield { type: 'done' };
+    };
+    const uploadImage = async (): Promise<string> => 'userA/t1/img-ref.png';
+    const resolveImageUrl = async (): Promise<string> => 'https://assets.example/reference.png';
+
+    await processRun({ ...ctx.deps(runAgent), uploadImage, resolveImageUrl, fetchImpl }, 't1', 'r1');
+
+    expect(editCalled).toBe(true);
+    expect(generationCalled).toBe(false);
+    expect((await ctx.messageStore.get('t1', 'am1'))?.images).toHaveLength(1);
+  });
+
+  it('does not pass an attached image to the image model unless edit_reference is requested', async () => {
+    ctx = setup({ image: true });
+    await seed(ctx);
+    await ctx.messageStore.append({
+      id: 'um2',
+      threadId: 't1',
+      userId: 'userA',
+      role: 'user',
+      content: 'Analyze this image, then make a separate simple icon.',
+      status: 'complete',
+      attachments: [
+        {
+          id: 'att1',
+          kind: 'image',
+          blobPath: 'userA/t1/att1.png',
+          mime: 'image/png',
+          bytes: 4,
+          name: 'analysis.png',
+        },
+      ],
+      createdAt: '2026-06-01T00:00:01.500Z',
+      orderAt: '2026-06-01T00:00:01.500Z',
+      deletedAt: null,
+    });
+
+    let referenceFetched = false;
+    let editCalled = false;
+    let generationCalled = false;
+    const fetchImpl = (async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
+      const url = String(input);
+      if (url === 'https://assets.example/reference.png') {
+        referenceFetched = true;
+        throw new Error('reference image should not be fetched');
+      }
+      if (url.includes('/images/edits')) {
+        editCalled = true;
+        throw new Error('image edits should not be called');
+      }
+      if (url.includes('/images/generations')) {
+        generationCalled = true;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ b64_json: Buffer.from('TXT2IMG').toString('base64') }] }),
+          headers: new Headers(),
+        } as unknown as Response;
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const runAgent: RunAgentFn = async function* (params) {
+      const result = await params.execute('generate_image', { prompt: 'Make a simple blue app icon.' });
+      if (result.image) yield { type: 'image', b64: result.image.b64, partial: false, prompt: result.image.prompt };
+      yield { type: 'done' };
+    };
+    const uploadImage = async (): Promise<string> => 'userA/t1/img-generated.png';
+    const resolveImageUrl = async (): Promise<string> => 'https://assets.example/reference.png';
+
+    await processRun({ ...ctx.deps(runAgent), uploadImage, resolveImageUrl, fetchImpl }, 't1', 'r1');
+
+    expect(referenceFetched).toBe(false);
+    expect(editCalled).toBe(false);
+    expect(generationCalled).toBe(true);
+    expect((await ctx.messageStore.get('t1', 'am1'))?.images).toHaveLength(1);
   });
 
   it('streams an aspect-correct image placeholder, then yields it to the real image (no overlap)', async () => {
