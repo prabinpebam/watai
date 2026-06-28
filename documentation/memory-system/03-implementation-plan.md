@@ -2,7 +2,7 @@
 
 This plan maps the memory system spec to Watai's current codebase. It assumes the server-authoritative direction in [../02-architecture.md](../02-architecture.md) and [../06-server-runs-and-migration.md](../06-server-runs-and-migration.md).
 
-The implementation must optimize for four outcomes together: fast hot-path retrieval, high response quality, accurate/current personalization, and enough memory width to cover user preferences, project context, and past work without dumping history into prompts.
+The implementation must optimize for four outcomes together: fast hot-path retrieval, high response quality, accurate/current personalization, and enough memory width to cover user preferences, project context, and past work without dumping history into prompts. UX requirements are specified in [05-memory-ux-spec.md](05-memory-ux-spec.md), exact contracts in [06-api-and-schema-contracts.md](06-api-and-schema-contracts.md), algorithms in [07-retrieval-and-extraction-algorithms.md](07-retrieval-and-extraction-algorithms.md), and PR-sized slices in [08-build-slices-and-acceptance.md](08-build-slices-and-acceptance.md). These are part of the implementation contract, not follow-up polish.
 
 ## 1. Current Code Facts
 
@@ -102,11 +102,15 @@ Product behavior:
 - Summary editor.
 - Pause/reset controls.
 - Import existing local memory into cloud on first enable/sync.
+- Top-of-mind/background priority controls.
+- Memory detail view with category, source, use state, history, and danger zone.
+- Mobile bottom sheets/full-screen editors for memory actions.
 
 Validation:
 
 - Settings UI tests for toggle/list/add/delete flows.
 - A data deletion test proving memory is included in delete-all-data behavior.
+- UX acceptance checks from [05-memory-ux-spec.md](05-memory-ux-spec.md) for empty/loading/error/paused states and mobile controls.
 
 ## 5. Phase 3 — Memory Retrieval In Server Runs
 
@@ -196,12 +200,14 @@ Product behavior:
 - Show a compact "Memory used" affordance when `memoryRefs` are present.
 - Detail view shows used memories and source links.
 - User can correct, suppress, or delete directly from the source detail.
+- User can mark a memory as not relevant without deleting it, for retrieval feedback.
 
 Validation:
 
 - Component tests for disclosure visibility.
 - API tests for correction/suppression from response source actions.
 - Accessibility tests for keyboard/screen reader controls.
+- Mobile bottom-sheet tests for response-level memory sources.
 
 ## 8. Phase 6 — Hybrid Retrieval Upgrade
 

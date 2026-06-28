@@ -80,6 +80,18 @@ Memory **width** comes from these layers together, not from one large vector sto
 
 Each layer has different retention, consent, ranking, and UI controls.
 
+### 4.1 Abstract Memory Is First-Class
+
+Memory is not only for simple facts like names, locations, or resource groups. Watai should remember abstract context when it reliably improves future work:
+
+- **Preferences:** concise plans, visual verification before claims, no automatic Electron launch, preferred deployment workflow.
+- **Styles:** direct engineering prose, low-fluff explanations, design-system strictness, dense operational UI instead of marketing layouts.
+- **Work habits:** commit/push/deploy after validated changes, benchmark architecture before optimizing hot paths, verify with Storybook/Playwright when UI is involved.
+- **Project posture:** Watai is server-authoritative, memory must run server-side, GitHub Pages deploys from `docs/`, Azure Functions runs backend workers.
+- **Avoidances:** do not mention suppressed topics, do not use deleted memories, do not suggest workflows the user has rejected.
+
+The extractor should store abstract memories only when they are durable, source-linked, and useful. It should not infer personality traits, mood, or private attributes from tone.
+
 ## 5. High-Level Architecture
 
 ```mermaid

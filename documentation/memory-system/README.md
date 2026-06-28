@@ -46,6 +46,24 @@ This means the MVP should be intentionally simple but not simplistic: start with
 | [02-watai-memory-spec.md](02-watai-memory-spec.md) | Product, architecture, data model, retrieval, extraction, API, privacy, and UI spec for Watai. |
 | [03-implementation-plan.md](03-implementation-plan.md) | Phased implementation plan mapped to Watai's current frontend/backend files and Azure infrastructure. |
 | [04-evaluation-and-governance.md](04-evaluation-and-governance.md) | Eval fixtures, metrics, regression gates, observability, privacy controls, and operational policy. |
+| [05-memory-ux-spec.md](05-memory-ux-spec.md) | Build-ready Memory UX: settings IA, rows, detail views, response-level Memory Used panel, touch/mobile behavior, and acceptance checklist. |
+| [06-api-and-schema-contracts.md](06-api-and-schema-contracts.md) | Exact wire/domain contracts: schemas, endpoints, store/service interfaces, message refs, settings migration, and API errors. |
+| [07-retrieval-and-extraction-algorithms.md](07-retrieval-and-extraction-algorithms.md) | Deterministic MVP retrieval, scoring, budgeting, extraction, redaction, dedupe, invalidation, summary refresh, and feedback algorithms. |
+| [08-build-slices-and-acceptance.md](08-build-slices-and-acceptance.md) | PR-sized implementation slices with touched files, work items, and acceptance criteria. |
+
+## What "Implementation-Ready" Means Here
+
+Implementation-ready means a developer can build the feature without inventing product behavior, data semantics, or acceptance criteria. For this memory system, the docs must define:
+
+- exact server ownership and run-worker integration points,
+- exact record types, statuses, source refs, and deletion/suppression semantics,
+- exact retrieval budgets, scoring inputs, fallback behavior, and telemetry,
+- exact extraction timing, model-output contract, validation, and rejection rules,
+- exact user-facing screens, copy, states, and controls,
+- exact response-level transparency model for "Memory used",
+- exact tests/evals that decide whether recall, precision, speed, deletion, temporary-chat behavior, and over-insertion are acceptable.
+
+If any implementation choice would affect user trust, response quality, latency, or deletion/privacy behavior, it belongs in these specs before coding.
 
 ## Load-Bearing Requirements
 

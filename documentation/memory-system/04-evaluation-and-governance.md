@@ -4,6 +4,8 @@ Watai's memory system is only useful if it remembers the right things, forgets w
 
 This document defines the eval plan, metrics, observability, and governance rules for Watai memory.
 
+UX transparency requirements are specified in [05-memory-ux-spec.md](05-memory-ux-spec.md). The evaluation plan treats those controls as functional requirements: a memory that cannot be inspected, corrected, suppressed, or deleted from the relevant UX surface is not an acceptable memory.
+
 ## 1. Evaluation Principles
 
 1. Test semantic behavior, not plumbing.
@@ -194,6 +196,7 @@ A change must fail CI or release validation if:
 - A secret-like value is stored as memory.
 - Memory context exceeds budget without an explicit test override.
 - A response records memory refs that the user cannot inspect.
+- A response-level memory source cannot be corrected, suppressed, or deleted from the UI.
 - Server-run prompt assembly uses client-only memory state.
 - Retrieval p95 exceeds the release budget in benchmark mode.
 - Precision falls because the retriever widened memory without a source cap or threshold change approved by evals.
