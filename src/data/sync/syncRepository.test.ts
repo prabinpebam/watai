@@ -20,6 +20,7 @@ import type {
   CredentialsInput,
   ListMemoryQuery,
   ListMemoryResponse,
+  MemoryProfileView,
   MemoryRecord,
   PatchMemoryBody,
   MessageRecord,
@@ -171,6 +172,9 @@ class FakeLocal implements SyncLocalStore {
   async removeMemory(id: Id): Promise<void> {
     const current = this.memories.get(id);
     if (current) this.memories.set(id, { ...current, status: 'deleted', deletedAt: this.now() });
+  }
+  async getMemoryProfile(): Promise<MemoryProfileView> {
+    return emptyMemoryProfile('local');
   }
   async search(): Promise<SearchHit[]> {
     return [];
@@ -388,6 +392,10 @@ class FakeCloud implements CloudApi {
     const current = this.memories.get(id);
     if (current) this.memories.set(id, { ...current, status: 'deleted', deletedAt: this.now() });
   }
+  async getMemoryProfile(): Promise<MemoryProfileView> {
+    this.calls.push('getMemoryProfile');
+    return emptyMemoryProfile('u');
+  }
   async requestSas(body: SasRequestBody): Promise<SasResult> {
     this.calls.push(`requestSas:${body.op}:${body.threadId}:${body.assetId}`);
     return {
@@ -516,6 +524,21 @@ const msg = (over: Partial<Message> & { id: string; threadId: string }): Message
   ...over,
 });
 
+function emptyMemoryProfile(userId: string): MemoryProfileView {
+  return {
+    schemaVersion: 1,
+    userId,
+    updatedAt: '2026-01-01T00:00:00Z',
+    evidenceCount: 0,
+    profile: {
+      user: { details: {}, family: { spouse: [], children: [], pets: [] }, preferences: { communication: [], engineering: [], design: [], tools: [], other: [] }, interests: { media: [], hobbies: [], other: [] } },
+      work: { projects: [], repositories: [], deployments: [], currentFocus: [] },
+      avoidances: [],
+    },
+    temporal: { today: { items: [] }, week: { items: [] }, month: { items: [] } },
+  };
+}
+
 describe('SyncRepository — sync disabled', () => {
   it('is a pure local passthrough that queues nothing', async () => {
     const { repo, cloud, kv } = setup(false);
@@ -547,6 +570,12 @@ describe('SyncRepository — memory', () => {
     await repo.updateMemory(memory.id, { status: 'suppressed' });
     await repo.removeMemory(memory.id);
     expect(cloud.calls).toEqual(['createMemory', 'listMemory', `patchMemory:${memory.id}`, `deleteMemory:${memory.id}`]);
+  });
+
+  it('uses cloud memory profile when sync is enabled', async () => {
+    const { repo, cloud } = setup(true);
+    await expect(repo.getMemoryProfile()).resolves.toMatchObject({ userId: 'u' });
+    expect(cloud.calls).toEqual(['getMemoryProfile']);
   });
 });
 

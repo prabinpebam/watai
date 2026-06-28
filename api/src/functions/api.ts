@@ -138,6 +138,13 @@ app.http('memory-summary', {
   handler: methodDispatch({ GET: (c) => c.memory.getSummary, PUT: (c) => c.memory.putSummary }, invited),
 });
 
+app.http('memory-profile', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'memory/profile',
+  handler: methodDispatch({ GET: (c) => c.memory.profile }, invited),
+});
+
 app.http('memory-export', {
   methods: ['POST'],
   authLevel: 'anonymous',

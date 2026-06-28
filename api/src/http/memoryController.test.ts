@@ -58,4 +58,13 @@ describe('memoryController', () => {
     const next = await ctrl.getSummary({ claims: { sub: 'userA' } });
     expect((next.body as any).summary.text).toBe('Short summary.');
   });
+
+  it('returns a structured profile derived from active memory evidence', async () => {
+    await ctrl.create({ claims: { sub: 'userA' }, body: { text: 'User has a dog named Chopper inspired by One Piece.', kind: 'fact' } });
+
+    const res = await ctrl.profile({ claims: { sub: 'userA' } });
+
+    expect(res.status).toBe(200);
+    expect((res.body as any).profile.user.family.pets[0]).toMatchObject({ name: 'Chopper', species: 'dog' });
+  });
 });

@@ -13,6 +13,7 @@ import {
   type MemorySummaryRecord,
   type PatchMemoryInput,
 } from '../domain/memory';
+import { buildMemoryProfile, type MemoryProfileView } from '../domain/memoryProfile';
 import type { MemoryListPage, MemoryStore } from '../ports/memoryStore';
 import type { ServiceClock } from './threadService';
 
@@ -46,6 +47,17 @@ export class MemoryService {
 
   list(userId: string, query: ListMemoryQuery): Promise<MemoryListPage> {
     return this.store.list(userId, query);
+  }
+
+  async profile(userId: string): Promise<MemoryProfileView> {
+    const memories: MemoryRecord[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.store.list(userId, { status: 'active', limit: 100, cursor });
+      memories.push(...page.memories);
+      cursor = page.cursor;
+    } while (cursor);
+    return buildMemoryProfile(userId, this.clock.now(), memories);
   }
 
   async createManual(userId: string, input: CreateMemoryInput): Promise<MemoryRecord> {

@@ -88,6 +88,53 @@ export interface MemorySummaryRecord {
   version: number;
 }
 
+export interface MemoryProfileItem {
+  text: string;
+  sourceMemoryIds: string[];
+  confidence: number;
+}
+
+export interface MemoryProfileView {
+  schemaVersion: 1;
+  userId: string;
+  updatedAt: string;
+  evidenceCount: number;
+  profile: {
+    user: {
+      details: Record<string, MemoryProfileItem>;
+      family: {
+        spouse: MemoryProfileItem[];
+        children: MemoryProfileItem[];
+        pets: Array<{ name: string; species?: string; inspiredBy: string[]; sourceMemoryIds: string[]; confidence: number }>;
+      };
+      preferences: {
+        communication: MemoryProfileItem[];
+        engineering: MemoryProfileItem[];
+        design: MemoryProfileItem[];
+        tools: MemoryProfileItem[];
+        other: MemoryProfileItem[];
+      };
+      interests: {
+        media: Array<{ name: string; sourceMemoryIds: string[] }>;
+        hobbies: Array<{ name: string; sourceMemoryIds: string[] }>;
+        other: Array<{ name: string; sourceMemoryIds: string[] }>;
+      };
+    };
+    work: {
+      projects: MemoryProfileItem[];
+      repositories: MemoryProfileItem[];
+      deployments: MemoryProfileItem[];
+      currentFocus: MemoryProfileItem[];
+    };
+    avoidances: MemoryProfileItem[];
+  };
+  temporal: {
+    today: { items: Array<{ memoryId: string; text: string; kind: MemoryKind; updatedAt: string }> };
+    week: { items: Array<{ memoryId: string; text: string; kind: MemoryKind; updatedAt: string }> };
+    month: { items: Array<{ memoryId: string; text: string; kind: MemoryKind; updatedAt: string }> };
+  };
+}
+
 export interface MemoryContextBlock {
   summary?: string;
   customInstructions?: {

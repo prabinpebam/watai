@@ -236,6 +236,26 @@ describe('WataiApiClient', () => {
     expect(calls[2].body).toEqual({ status: 'suppressed' });
   });
 
+  it('GETs the structured memory profile', async () => {
+    const profile = {
+      schemaVersion: 1,
+      userId: 'u',
+      updatedAt: '2026-01-01T00:00:00Z',
+      evidenceCount: 1,
+      profile: {
+        user: { details: {}, family: { spouse: [], children: [], pets: [] }, preferences: { communication: [], engineering: [], design: [], tools: [], other: [] }, interests: { media: [], hobbies: [], other: [] } },
+        work: { projects: [], repositories: [], deployments: [], currentFocus: [] },
+        avoidances: [],
+      },
+      temporal: { today: { items: [] }, week: { items: [] }, month: { items: [] } },
+    };
+    const { fetchImpl, calls } = stubFetch([{ status: 200, body: profile }]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    await expect(client.getMemoryProfile()).resolves.toEqual(profile);
+    expect(calls[0].url).toBe('https://api.test/api/memory/profile');
+  });
+
   it('carries the error details (lock holder) on a 409 conflict', async () => {
     const holder = { deviceId: 'd2', deviceLabel: 'Safari on iPhone', acquiredAt: 'a', heartbeatAt: 'b' };
     const { fetchImpl } = stubFetch([

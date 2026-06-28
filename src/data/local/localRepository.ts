@@ -2,7 +2,7 @@ import { db, kvGet, kvSet } from '../db';
 import type { SearchHit, SyncLocalStore } from '../repository';
 import { newId } from '../../lib/ids';
 import { DEFAULT_SETTINGS, type Id, type ImageRef, type Message, type Settings, type Thread, type MemoryKind } from '../../lib/types';
-import type { CreateMemoryBody, ListMemoryQuery, MemoryRecord, PatchMemoryBody } from '../cloud/types';
+import type { CreateMemoryBody, ListMemoryQuery, MemoryProfileView, MemoryRecord, PatchMemoryBody } from '../cloud/types';
 
 const SETTINGS_KEY = 'settings';
 const MEMORY_KEY = 'memory';
@@ -37,6 +37,26 @@ function asMemoryRecord(item: unknown): MemoryRecord | null {
     createdAt: ts,
     updatedAt: ts,
     useCount: 0,
+  };
+}
+
+function emptyProfile(userId = 'local'): MemoryProfileView {
+  return {
+    schemaVersion: 1,
+    userId,
+    updatedAt: nowIso(),
+    evidenceCount: 0,
+    profile: {
+      user: {
+        details: {},
+        family: { spouse: [], children: [], pets: [] },
+        preferences: { communication: [], engineering: [], design: [], tools: [], other: [] },
+        interests: { media: [], hobbies: [], other: [] },
+      },
+      work: { projects: [], repositories: [], deployments: [], currentFocus: [] },
+      avoidances: [],
+    },
+    temporal: { today: { items: [] }, week: { items: [] }, month: { items: [] } },
   };
 }
 
@@ -185,6 +205,23 @@ export class LocalRepository implements SyncLocalStore {
       .filter((m) => !query.kind || m.kind === query.kind)
       .filter((m) => !q || [m.text, m.summary, ...(m.entities ?? []), ...(m.topics ?? [])].filter(Boolean).some((x) => x!.toLowerCase().includes(q)))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async getMemoryProfile(): Promise<MemoryProfileView> {
+    const profile = emptyProfile('local');
+    const memories = await this.listMemory({ status: 'active' });
+    profile.evidenceCount = memories.length;
+    const temporalItems = memories.slice(0, 20).map((memory) => ({ memoryId: memory.id, text: memory.text, kind: memory.kind, updatedAt: memory.updatedAt }));
+    profile.temporal.today.items = temporalItems;
+    profile.temporal.week.items = temporalItems;
+    profile.temporal.month.items = temporalItems;
+    for (const memory of memories) {
+      const item = { text: memory.text, sourceMemoryIds: [memory.id], confidence: memory.confidence };
+      if (memory.kind === 'preference') profile.profile.user.preferences.other.push(item);
+      else if (memory.kind === 'avoidance') profile.profile.avoidances.push(item);
+      else if (memory.kind === 'project_context') profile.profile.work.projects.push(item);
+    }
+    return profile;
   }
 
   async addMemory(input: CreateMemoryBody): Promise<MemoryRecord> {

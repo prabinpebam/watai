@@ -19,6 +19,12 @@ export function createMemoryController(memory: MemoryService) {
         return memory.list(userId, parseMemoryListQuery(req.query ?? {}));
       }),
 
+    profile: (req: ApiRequest): Promise<HttpResult> =>
+      respond(200, async () => {
+        const { userId } = identityFromClaims(req.claims);
+        return memory.profile(userId);
+      }),
+
     create: (req: ApiRequest): Promise<HttpResult> =>
       respond(201, async () => {
         const { userId } = identityFromClaims(req.claims);

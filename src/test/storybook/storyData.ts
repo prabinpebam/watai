@@ -1,7 +1,7 @@
 import { cloudApi, repo, realtime, skillsApi } from '../../data';
 import { clearMe } from '../../auth/access';
 import { DEFAULT_SETTINGS, type Artifact, type Attachment, type ImageRef, type Message, type Settings, type SkillDetail, type SkillSummary, type Thread, type ThreadFile, type ThreadLock } from '../../lib/types';
-import type { AppendMessageBody, CreateImagesBody, CreateMemoryBody, CreateThreadBody, CredentialStatus, ImageRecord, InviteRecord, ListImagesQuery, ListImagesResult, ListMemoryQuery, ListMemoryResponse, MemoryRecord, MessageRecord, PatchMemoryBody, RunRecord, SasRequestBody, SasResult, StudioImage, SubmitRunBody, SubmitRunResult, ThreadRecord, UpdateThreadBody } from '../../data/cloud/types';
+import type { AppendMessageBody, CreateImagesBody, CreateMemoryBody, CreateThreadBody, CredentialStatus, ImageRecord, InviteRecord, ListImagesQuery, ListImagesResult, ListMemoryQuery, ListMemoryResponse, MemoryProfileView, MemoryRecord, MessageRecord, PatchMemoryBody, RunRecord, SasRequestBody, SasResult, StudioImage, SubmitRunBody, SubmitRunResult, ThreadRecord, UpdateThreadBody } from '../../data/cloud/types';
 
 const now = new Date('2026-06-28T08:00:00.000Z').getTime();
 const iso = (offsetMs = 0) => new Date(now + offsetMs).toISOString();
@@ -106,6 +106,26 @@ function assetUrl(asset: { id: string; localBlobKey?: string; blobPath?: string 
   return svgUrl(asset.id, '#34343b');
 }
 
+function storyMemoryProfile(): MemoryProfileView {
+  return {
+    schemaVersion: 1,
+    userId: 'story-user',
+    updatedAt: iso(),
+    evidenceCount: Math.max(1, memory.length),
+    profile: {
+      user: {
+        details: {},
+        family: { spouse: [], children: [], pets: [{ name: 'Chopper', species: 'dog', inspiredBy: ['One Piece'], sourceMemoryIds: ['story-memory-pet'], confidence: 0.9 }] },
+        preferences: { communication: [], engineering: [], design: [], tools: [], other: [] },
+        interests: { media: [{ name: 'One Piece', sourceMemoryIds: ['story-memory-pet'] }], hobbies: [], other: [] },
+      },
+      work: { projects: [], repositories: [], deployments: [], currentFocus: [] },
+      avoidances: [],
+    },
+    temporal: { today: { items: [] }, week: { items: [] }, month: { items: [] } },
+  };
+}
+
 const credentialStatus: CredentialStatus = {
   configured: true,
   baseUrl: 'https://story-resource.openai.azure.com/openai/v1',
@@ -174,6 +194,7 @@ export function installStoryData(): void {
       settings = next;
     },
     listMemory: async (query?: ListMemoryQuery) => memory.filter((item) => (query?.status ? item.status === query.status : item.status === 'active')),
+    getMemoryProfile: async () => storyMemoryProfile(),
     addMemory: async (input: CreateMemoryBody) => {
       const item: MemoryRecord = {
         id: `story-memory-${memory.length + 1}`,
@@ -225,6 +246,7 @@ export function installStoryData(): void {
     getSettings: async () => settings,
     patchSettings: async (patch: Partial<Settings>) => (settings = { ...settings, ...patch }),
     listMemory: async (query?: ListMemoryQuery): Promise<ListMemoryResponse> => ({ memories: await repo.listMemory(query) }),
+    getMemoryProfile: async () => repo.getMemoryProfile(),
     createMemory: async (body: CreateMemoryBody) => repo.addMemory(body),
     patchMemory: async (id: string, body: PatchMemoryBody) => repo.updateMemory(id, body),
     deleteMemory: async (id: string) => repo.removeMemory(id),

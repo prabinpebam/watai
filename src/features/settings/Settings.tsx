@@ -13,7 +13,7 @@ import { repo, cloudApi, realtime } from '../../data';
 import { kvGet } from '../../data/db';
 import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import { useMe } from '../../auth/access';
-import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo, MemoryRecord, MemoryStatus } from '../../data/cloud/types';
+import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo, MemoryProfileItem, MemoryProfileView, MemoryRecord, MemoryStatus } from '../../data/cloud/types';
 import { normalizeBaseUrl } from '../../data/secureStore';
 import { normalizeChatModelOptions } from '../../lib/modelOptions';
 import { DEFAULT_SETTINGS, effectiveMemorySettings } from '../../lib/types';
@@ -797,6 +797,8 @@ function memoryKindLabel(kind: MemoryKind): string {
 export function MemoryManager({ enabled }: { enabled: boolean }) {
   const pushToast = useUi((s) => s.pushToast);
   const [items, setItems] = useState<MemoryRecord[]>([]);
+  const [profile, setProfile] = useState<MemoryProfileView | null>(null);
+  const [view, setView] = useState<'structured' | 'evidence'>('structured');
   const [status, setStatus] = useState<Extract<MemoryStatus, 'active' | 'suppressed' | 'invalidated'>>('active');
   const [text, setText] = useState('');
   const [kind, setKind] = useState<Exclude<MemoryKind, 'thread_summary' | 'entity'>>('fact');
@@ -808,7 +810,12 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
     setLoading(true);
     setError(null);
     try {
-      setItems(await repo.listMemory({ status: nextStatus, limit: 100 }));
+      const [nextItems, nextProfile] = await Promise.all([
+        repo.listMemory({ status: nextStatus, limit: 100 }),
+        repo.getMemoryProfile(),
+      ]);
+      setItems(nextItems);
+      setProfile(nextProfile);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load memory.');
     } finally {
@@ -893,49 +900,143 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
 
       <div style={{ marginTop: 'var(--space-5)' }}>
         <Segmented
-          value={status}
+          value={view}
           options={[
-            { value: 'active', label: 'Active' },
-            { value: 'suppressed', label: 'Hidden' },
-            { value: 'invalidated', label: 'Outdated' },
+            { value: 'structured', label: 'Structured' },
+            { value: 'evidence', label: 'Evidence' },
           ]}
-          onChange={setStatus}
+          onChange={setView}
         />
       </div>
 
-      {loading ? (
-        <div className="setting-row"><Spinner size="sm" /><div className="setting-row__body"><div className="setting-row__sub">Loading memory…</div></div></div>
-      ) : error ? (
-        <InlineAlert tone="danger">{error}</InlineAlert>
-      ) : items.length === 0 ? (
-        <div className="setting-row"><div className="setting-row__body"><div className="setting-row__title">No {status === 'active' ? 'active' : status} memories</div><div className="setting-row__sub">Items you add here appear in this list.</div></div></div>
+      {view === 'structured' ? (
+        loading ? (
+          <div className="setting-row"><Spinner size="sm" /><div className="setting-row__body"><div className="setting-row__sub">Loading memory…</div></div></div>
+        ) : error ? (
+          <InlineAlert tone="danger">{error}</InlineAlert>
+        ) : (
+          <StructuredMemoryView profile={profile} />
+        )
       ) : (
-        <div className="col" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
-          {items.map((item) => (
-            <div key={item.id} className="setting-row" style={{ alignItems: 'flex-start' }}>
-              <Avatar size="md" variant={item.visibility === 'top_of_mind' ? 'assistant' : undefined}>
-                <Icon name={item.pinned || item.visibility === 'top_of_mind' ? 'pin' : 'sparkle'} size={16} />
-              </Avatar>
-              <div className="setting-row__body">
-                <div className="setting-row__title">{item.text}</div>
-                <div className="setting-row__sub">{memoryKindLabel(item.kind)} · {item.visibility.replace(/_/g, ' ')}</div>
-                <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
-                  {item.status !== 'active' ? (
-                    <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'active' }, 'Memory restored')}>Restore</Button>
-                  ) : (
-                    <>
-                      <Button size="sm" variant="outline" onClick={() => patch(item.id, { visibility: item.visibility === 'top_of_mind' ? 'normal' : 'top_of_mind', pinned: item.visibility !== 'top_of_mind' }, item.visibility === 'top_of_mind' ? 'Memory unpinned' : 'Memory pinned')}>{item.visibility === 'top_of_mind' ? 'Unpin' : 'Pin'}</Button>
-                      <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'suppressed' }, 'Memory hidden')}>Hide</Button>
-                      <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'invalidated' }, 'Memory marked outdated')}>Outdated</Button>
-                    </>
-                  )}
-                  <Button size="sm" variant="danger" onClick={() => remove(item.id)}>Delete</Button>
+        <>
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <Segmented
+              value={status}
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'suppressed', label: 'Hidden' },
+                { value: 'invalidated', label: 'Outdated' },
+              ]}
+              onChange={setStatus}
+            />
+          </div>
+
+          {loading ? (
+            <div className="setting-row"><Spinner size="sm" /><div className="setting-row__body"><div className="setting-row__sub">Loading memory…</div></div></div>
+          ) : error ? (
+            <InlineAlert tone="danger">{error}</InlineAlert>
+          ) : items.length === 0 ? (
+            <div className="setting-row"><div className="setting-row__body"><div className="setting-row__title">No {status === 'active' ? 'active' : status} memories</div><div className="setting-row__sub">Items you add here appear in this list.</div></div></div>
+          ) : (
+            <div className="col" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
+              {items.map((item) => (
+                <div key={item.id} className="setting-row" style={{ alignItems: 'flex-start' }}>
+                  <Avatar size="md" variant={item.visibility === 'top_of_mind' ? 'assistant' : undefined}>
+                    <Icon name={item.pinned || item.visibility === 'top_of_mind' ? 'pin' : 'sparkle'} size={16} />
+                  </Avatar>
+                  <div className="setting-row__body">
+                    <div className="setting-row__title">{item.text}</div>
+                    <div className="setting-row__sub">{memoryKindLabel(item.kind)} · {item.visibility.replace(/_/g, ' ')}</div>
+                    <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
+                      {item.status !== 'active' ? (
+                        <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'active' }, 'Memory restored')}>Restore</Button>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => patch(item.id, { visibility: item.visibility === 'top_of_mind' ? 'normal' : 'top_of_mind', pinned: item.visibility !== 'top_of_mind' }, item.visibility === 'top_of_mind' ? 'Memory unpinned' : 'Memory pinned')}>{item.visibility === 'top_of_mind' ? 'Unpin' : 'Pin'}</Button>
+                          <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'suppressed' }, 'Memory hidden')}>Hide</Button>
+                          <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'invalidated' }, 'Memory marked outdated')}>Outdated</Button>
+                        </>
+                      )}
+                      <Button size="sm" variant="danger" onClick={() => remove(item.id)}>Delete</Button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+function StructuredMemoryView({ profile }: { profile: MemoryProfileView | null }) {
+  if (!profile || profile.evidenceCount === 0) {
+    return <div className="setting-row"><div className="setting-row__body"><div className="setting-row__title">No structured memory yet</div><div className="setting-row__sub">As Watai learns, memories will appear as a profile tree.</div></div></div>;
+  }
+  const user = profile.profile.user;
+  const work = profile.profile.work;
+  return (
+    <div className="col" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
+      <TreeSection title="User" icon="user">
+        <TreeSection title="Family" compact>
+          <TreeList title="Pets" items={user.family.pets.map((pet) => ({ text: `${pet.name}${pet.species ? ` · ${pet.species}` : ''}${pet.inspiredBy.length ? ` · inspired by ${pet.inspiredBy.join(', ')}` : ''}`, confidence: pet.confidence, sourceMemoryIds: pet.sourceMemoryIds }))} />
+          <TreeList title="Spouse" items={user.family.spouse} />
+          <TreeList title="Children" items={user.family.children} />
+        </TreeSection>
+        <TreeSection title="Preferences" compact>
+          <TreeList title="Communication" items={user.preferences.communication} />
+          <TreeList title="Engineering" items={user.preferences.engineering} />
+          <TreeList title="Design" items={user.preferences.design} />
+          <TreeList title="Tools" items={user.preferences.tools} />
+          <TreeList title="Other" items={user.preferences.other} />
+        </TreeSection>
+        <TreeSection title="Interests" compact>
+          <TreeList title="Media" items={user.interests.media.map((interest) => ({ text: interest.name, confidence: 1, sourceMemoryIds: interest.sourceMemoryIds }))} />
+        </TreeSection>
+      </TreeSection>
+
+      <TreeSection title="Work" icon="code">
+        <TreeList title="Projects" items={work.projects} />
+        <TreeList title="Repositories" items={work.repositories} />
+        <TreeList title="Deployments" items={work.deployments} />
+        <TreeList title="Current focus" items={work.currentFocus} />
+      </TreeSection>
+
+      <TreeSection title="Recent" icon="history">
+        <TreeList title="Today" items={profile.temporal.today.items.map((item) => ({ text: item.text, confidence: 1, sourceMemoryIds: [item.memoryId] }))} />
+        <TreeList title="This week" items={profile.temporal.week.items.map((item) => ({ text: item.text, confidence: 1, sourceMemoryIds: [item.memoryId] }))} />
+      </TreeSection>
+
+      <TreeSection title="Avoidances" icon="alert">
+        <TreeList title="Do not use" items={profile.profile.avoidances} />
+      </TreeSection>
+    </div>
+  );
+}
+
+function TreeSection({ title, icon, compact, children }: { title: string; icon?: string; compact?: boolean; children: React.ReactNode }) {
+  return (
+    <div className={`memory-tree ${compact ? 'memory-tree--compact' : ''}`}>
+      <div className="memory-tree__head">
+        {icon && <Icon name={icon} size={16} />}
+        <span>{title}</span>
+      </div>
+      <div className="memory-tree__body">{children}</div>
+    </div>
+  );
+}
+
+function TreeList({ title, items }: { title: string; items: MemoryProfileItem[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="memory-tree__group">
+      <div className="memory-tree__label">{title}</div>
+      {items.map((item, index) => (
+        <div key={`${title}-${index}-${item.sourceMemoryIds.join('-')}`} className="memory-tree__item">
+          {item.text}
+        </div>
+      ))}
     </div>
   );
 }

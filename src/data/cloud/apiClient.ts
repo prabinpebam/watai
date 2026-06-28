@@ -15,6 +15,7 @@ import type {
   ListImagesResult,
   ListMemoryQuery,
   ListMemoryResponse,
+  MemoryProfileView,
   MemoryRecord,
   MeInfo,
   MessageRecord,
@@ -229,6 +230,10 @@ export class WataiApiClient implements CloudApi {
     return this.request('GET', `/memory${suffix ? `?${suffix}` : ''}`);
   }
 
+  getMemoryProfile(): Promise<MemoryProfileView> {
+    return this.request('GET', '/memory/profile');
+  }
+
   createMemory(body: CreateMemoryBody): Promise<MemoryRecord> {
     return this.request('POST', '/memory', body);
   }
@@ -426,6 +431,7 @@ export interface CloudApi {
   getSettings(): Promise<Settings>;
   patchSettings(patch: Partial<Settings>): Promise<Settings>;
   listMemory(query?: ListMemoryQuery): Promise<ListMemoryResponse>;
+  getMemoryProfile(): Promise<MemoryProfileView>;
   createMemory(body: CreateMemoryBody): Promise<MemoryRecord>;
   patchMemory(id: string, body: PatchMemoryBody): Promise<MemoryRecord>;
   deleteMemory(id: string): Promise<void>;

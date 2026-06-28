@@ -17,6 +17,7 @@ import {
   type CreateMemoryBody,
   type CreateThreadBody,
   type ListMemoryQuery,
+  type MemoryProfileView,
   type MemoryRecord,
   type PatchMemoryBody,
   type MessageRecord,
@@ -129,6 +130,16 @@ export class SyncRepository implements Repository {
       }
     }
     return this.local.listMemory(query);
+  }
+  async getMemoryProfile(): Promise<MemoryProfileView> {
+    if (await this.syncEnabled()) {
+      try {
+        return await this.cloud.getMemoryProfile();
+      } catch {
+        return this.local.getMemoryProfile();
+      }
+    }
+    return this.local.getMemoryProfile();
   }
   search(query: string): Promise<SearchHit[]> {
     return this.local.search(query);
