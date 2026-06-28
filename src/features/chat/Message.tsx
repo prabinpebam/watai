@@ -6,7 +6,7 @@ import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
 import { cloudApi } from '../../data';
 import { base64ToBlob } from '../../lib/files';
-import type { Citation, Message, PendingImage, ToolCall } from '../../lib/types';
+import type { Citation, ImageRef, Message, PendingImage, ToolCall } from '../../lib/types';
 
 function domainOf(url: string): string {
   try {
@@ -287,9 +287,23 @@ interface AssistantProps {
   message: Message;
   streaming: boolean;
   onRegenerate: () => void;
+  threadImages?: ImageRef[];
+  viewerImageId?: string | null;
+  onOpenImage?: (image: ImageRef) => void;
+  onSelectImage?: (image: ImageRef) => void;
+  onCloseImage?: () => void;
 }
 
-export function AssistantMessage({ message, streaming, onRegenerate }: AssistantProps) {
+export function AssistantMessage({
+  message,
+  streaming,
+  onRegenerate,
+  threadImages,
+  viewerImageId,
+  onOpenImage,
+  onSelectImage,
+  onCloseImage,
+}: AssistantProps) {
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -373,7 +387,15 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
           </div>
         )}
 
-        <GeneratedImages images={message.images} pending={pendingImages} />
+        <GeneratedImages
+          images={message.images}
+          pending={pendingImages}
+          threadImages={threadImages}
+          viewerImageId={viewerImageId}
+          onOpenImage={onOpenImage}
+          onSelectImage={onSelectImage}
+          onCloseImage={onCloseImage}
+        />
 
         {message.content ? (
           <div className={isStreamingThis ? 'typing-caret' : ''}>

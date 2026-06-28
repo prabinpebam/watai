@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { repo } from '../../data';
 import { Icon } from '../../design/icons';
 import { IconButton } from '../../design/ui';
-import { Lightbox } from './Lightbox';
+import { ImagePrompt, Lightbox, type GalleryImage } from './Lightbox';
 import { formatBytes } from '../../lib/format';
 import type { Artifact, Attachment, ImageRef, PendingImage } from '../../lib/types';
 
@@ -254,37 +254,131 @@ function useResolvedImage(image: ImageRef): string | null {
   return url;
 }
 
-function GeneratedImage({ image }: { image: ImageRef }) {
+function GeneratedImage({
+  image,
+  threadImages,
+  viewerImageId,
+  onOpenImage,
+  onSelectImage,
+  onCloseImage,
+}: {
+  image: ImageRef;
+  threadImages?: ImageRef[];
+  viewerImageId?: string | null;
+  onOpenImage?: (image: ImageRef) => void;
+  onSelectImage?: (image: ImageRef) => void;
+  onCloseImage?: () => void;
+}) {
   const url = useResolvedImage(image);
-  const [open, setOpen] = useState(false);
+  const open = viewerImageId === image.id;
   if (!url) return <ImageLoading size={image.size} />;
   return (
-    <div className="image-card">
-      <button className="image-card__hit" onClick={() => setOpen(true)} aria-label="Expand image">
+    <div className="image-card" data-image-id={image.id}>
+      <button className="image-card__hit" onClick={() => onOpenImage?.(image)} aria-label="Expand image">
         <img src={url} alt={image.prompt} loading="lazy" />
       </button>
       <div className="image-card__bar">
-        <span className="image-card__prompt" title={image.prompt}>
-          {image.prompt}
-        </span>
+        <ImagePrompt text={image.prompt} compact />
         <IconButton name="download" label="Download" size={16} onClick={() => download(url, `${image.id}.${image.outputFormat}`)} />
-        <IconButton name="expand" label="Expand" size={16} onClick={() => setOpen(true)} />
+        <IconButton name="expand" label="Expand" size={16} onClick={() => onOpenImage?.(image)} />
       </div>
       {open && (
-        <Lightbox src={url} alt={image.prompt} onClose={() => setOpen(false)} onDownload={() => download(url, `${image.id}.${image.outputFormat}`)} />
+        <GeneratedImageLightbox
+          image={image}
+          url={url}
+          threadImages={threadImages ?? [image]}
+          onSelectImage={onSelectImage ?? onOpenImage ?? (() => {})}
+          onClose={onCloseImage ?? (() => {})}
+        />
       )}
     </div>
   );
 }
 
-export function GeneratedImages({ images, pending }: { images?: ImageRef[]; pending?: PendingImage[] }) {
+function GeneratedImageLightbox({
+  image,
+  url,
+  threadImages,
+  onSelectImage,
+  onClose,
+}: {
+  image: ImageRef;
+  url: string;
+  threadImages: ImageRef[];
+  onSelectImage: (image: ImageRef) => void;
+  onClose: () => void;
+}) {
+  const gallery = useResolvedGallery(threadImages);
+  const items = gallery.length ? gallery : [{ image, url }];
+  const currentIndex = Math.max(0, items.findIndex((item) => item.image.id === image.id));
+  return (
+    <Lightbox
+      src={url}
+      alt={image.prompt}
+      prompt={image.prompt}
+      onClose={onClose}
+      onDownload={() => download(url, `${image.id}.${image.outputFormat}`)}
+      images={items}
+      currentIndex={currentIndex === -1 ? 0 : currentIndex}
+      onSelect={(item) => onSelectImage(item.image)}
+    />
+  );
+}
+
+function useResolvedGallery(images: ImageRef[]): GalleryImage[] {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const imageKey = images.map((image) => `${image.id}:${image.blobPath ?? image.localBlobKey ?? ''}`).join('|');
+  useEffect(() => {
+    let live = true;
+    void Promise.all(
+      images.map(async (image) => [image.id, await repo.resolveImageUrl(image).catch(() => '')] as const),
+    ).then((pairs) => {
+      if (!live) return;
+      setUrls(Object.fromEntries(pairs.filter(([, value]) => value)));
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageKey]);
+  return useMemo(
+    () => images.flatMap((image) => (urls[image.id] ? [{ image, url: urls[image.id] }] : [])),
+    [images, urls],
+  );
+}
+
+export function GeneratedImages({
+  images,
+  pending,
+  threadImages,
+  viewerImageId,
+  onOpenImage,
+  onSelectImage,
+  onCloseImage,
+}: {
+  images?: ImageRef[];
+  pending?: PendingImage[];
+  threadImages?: ImageRef[];
+  viewerImageId?: string | null;
+  onOpenImage?: (image: ImageRef) => void;
+  onSelectImage?: (image: ImageRef) => void;
+  onCloseImage?: () => void;
+}) {
   const imageCount = images?.length ?? 0;
   const pendingCount = pending?.length ?? 0;
   if (imageCount + pendingCount === 0) return null;
   return (
     <div className={`gen-images ${imageCount + pendingCount > 1 ? 'gen-images--grid' : ''}`}>
       {images?.map((img) => (
-        <GeneratedImage key={img.id} image={img} />
+        <GeneratedImage
+          key={img.id}
+          image={img}
+          threadImages={threadImages}
+          viewerImageId={viewerImageId}
+          onOpenImage={onOpenImage}
+          onSelectImage={onSelectImage}
+          onCloseImage={onCloseImage}
+        />
       ))}
       {pending?.map((p) => (
         <ImagePlaceholder key={p.id} size={p.size} />

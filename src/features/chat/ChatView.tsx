@@ -8,6 +8,7 @@ import { Icon } from '../../design/icons';
 import { Avatar, Spinner } from '../../design/ui';
 import { useUi } from '../../state/store';
 import { greeting } from '../../lib/format';
+import type { ImageRef } from '../../lib/types';
 
 const SUGGESTIONS = [
   { title: 'Explain a concept', sub: 'Break down quantum entanglement simply', prompt: 'Explain quantum entanglement in simple terms.' },
@@ -27,6 +28,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   const lastTopRef = useRef(0); // previous scrollTop, to detect user-driven upward scrolls
   const roRef = useRef<ResizeObserver | null>(null);
   const [showJump, setShowJump] = useState(false);
+  const [viewerImageId, setViewerImageId] = useState<string | null>(null);
 
   // Close any open source pane when this thread view unmounts (e.g. switching threads).
   useEffect(() => () => closeSourcePane(), [closeSourcePane]);
@@ -34,6 +36,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   useEffect(() => () => closeFilesPane(), [closeFilesPane]);
 
   const isEmpty = !loading && messages.length === 0;
+  const threadImages = messages.flatMap((message) => message.images ?? []);
 
   const STICK_THRESHOLD = 80; // px from the bottom that still counts as "at the bottom"
 
@@ -82,6 +85,32 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
     onScrolledChange?.(top > 4);
   };
 
+  const focusImageInThread = useCallback((image: ImageRef) => {
+    const el = scrollRef.current;
+    const target = document.querySelector<HTMLElement>(`[data-image-id="${CSS.escape(image.id)}"]`);
+    if (!el || !target) return;
+    const elRect = el.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const top = targetRect.top - elRect.top + el.scrollTop - Math.max(24, (el.clientHeight - targetRect.height) / 2);
+    el.scrollTo({ top, behavior: 'smooth' });
+  }, []);
+
+  const openImageViewer = useCallback((image: ImageRef) => {
+    setViewerImageId(image.id);
+    focusImageInThread(image);
+  }, [focusImageInThread]);
+
+  const setViewerImage = useCallback((image: ImageRef) => {
+    setViewerImageId(image.id);
+    focusImageInThread(image);
+  }, [focusImageInThread]);
+
+  useEffect(() => {
+    if (viewerImageId && !threadImages.some((image) => image.id === viewerImageId)) {
+      setViewerImageId(null);
+    }
+  }, [threadImages, viewerImageId]);
+
   return (
     <div className="chat-area">
       <div className="chat">
@@ -114,7 +143,17 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
               m.role === 'user' ? (
                 <UserMessage key={m.id} message={m} />
               ) : (
-                <AssistantMessage key={m.id} message={m} streaming={streaming} onRegenerate={regenerate} />
+                <AssistantMessage
+                  key={m.id}
+                  message={m}
+                  streaming={streaming}
+                  onRegenerate={regenerate}
+                  threadImages={threadImages}
+                  viewerImageId={viewerImageId}
+                  onOpenImage={openImageViewer}
+                  onSelectImage={setViewerImage}
+                  onCloseImage={() => setViewerImageId(null)}
+                />
               ),
             )}
             <div style={{ height: 'var(--space-4)' }} />

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { AttachmentList } from './Attachments';
 import { AssistantMessage, UserMessage } from './Message';
@@ -9,7 +10,7 @@ import { ThreadFilesPane } from './ThreadFilesPane';
 import { ToolsMenu } from './ToolsMenu';
 import { cloudApi, repo } from '../../data';
 import { useUi } from '../../state/store';
-import type { Artifact, Attachment, Citation, Message, Thread, ThreadFile } from '../../lib/types';
+import type { Artifact, Attachment, Citation, ImageRef, Message, Thread, ThreadFile } from '../../lib/types';
 
 const meta = {
   title: 'Features/Chat',
@@ -59,6 +60,25 @@ const pdfArtifact: Artifact = {
   blobPath: 'data:application/pdf;base64,JVBERi0xLjQKJQ==',
   createdAt: new Date().toISOString(),
 };
+
+const storyImages: ImageRef[] = [
+  {
+    id: 'img-a',
+    blobPath: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220"><rect width="320" height="220" fill="black"/><text x="160" y="118" text-anchor="middle" font-size="26" fill="white">A</text></svg>',
+    prompt: 'A compact storybook preview with a carefully bounded prompt that can expand when the user wants to inspect the full generation request.',
+    size: '1024x1024',
+    outputFormat: 'png',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'img-b',
+    blobPath: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220"><rect width="320" height="220" fill="%232f6feb"/><text x="160" y="118" text-anchor="middle" font-size="26" fill="white">B</text></svg>',
+    prompt: 'Second generated image in the thread.',
+    size: '1024x1024',
+    outputFormat: 'png',
+    createdAt: new Date().toISOString(),
+  },
+];
 
 const citations: Citation[] = [
   {
@@ -187,12 +207,21 @@ export const MarkdownContent: Story = {
 };
 
 export const ImageLightbox: Story = {
-  render: () => (
-    <Lightbox
-      src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 220'><rect width='320' height='220' fill='black'/><text x='160' y='120' text-anchor='middle' font-size='32' fill='white'>Preview</text></svg>"
-      alt="Generated preview"
-      onClose={() => {}}
-      onDownload={() => {}}
-    />
-  ),
+  render: function ImageLightboxStory() {
+    const [index, setIndex] = useState(0);
+    const images = storyImages.map((image) => ({ image, url: image.blobPath! }));
+    const current = images[index];
+    return (
+      <Lightbox
+        src={current.url}
+        alt={current.image.prompt}
+        prompt={current.image.prompt}
+        onClose={() => {}}
+        onDownload={() => {}}
+        images={images}
+        currentIndex={index}
+        onSelect={(item) => setIndex(Math.max(0, images.findIndex((candidate) => candidate.image.id === item.image.id)))}
+      />
+    );
+  },
 };
