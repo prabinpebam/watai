@@ -808,7 +808,7 @@ a:hover {
 .prompt-minimap {
   position: absolute;
   top: var(--space-5);
-  right: var(--space-2);
+  right: 10px;
   bottom: calc(var(--size-composer-min) + var(--space-10));
   width: 48px;
   z-index: calc(var(--z-jump-pill) - 1);
@@ -897,7 +897,7 @@ a:hover {
 @media (pointer: coarse) {
   .prompt-minimap {
     width: 56px;
-    right: var(--space-1);
+    right: 10px;
   }
   .prompt-minimap__mark {
     width: 56px;
