@@ -31,7 +31,7 @@ exhaustive, buildable plan.
 | [04-data-model.md](04-data-model.md) | Entities, Cosmos DB schema, Blob layout, local cache, sync strategy, data lifecycle. |
 | [05-execution-plan.md](05-execution-plan.md) | Phased roadmap, milestones, testing strategy, CI/CD, risks, decisions log, DoD. |
 | [06-server-runs-and-migration.md](06-server-runs-and-migration.md) | **Server runs & credentials** spec + the phased migration plan (the 2026 pivot). |
-| [long-term-memory/](long-term-memory/README.md) | **Long-term memory research and implementation spec**: industry patterns, benchmarks, Watai architecture, rollout plan, and eval/governance gates. |
+| [memory-system/](memory-system/README.md) | **Memory system research and implementation spec**: industry patterns, benchmarks, Watai architecture, rollout plan, retrieval/extraction design, and eval/governance gates. |
 | [archive/](archive/README.md) | Superseded v1 (BYO-key, client-side) architecture + API specs. |
 | [ui-design/](ui-design/README.md) | **Implementation-ready UI design spec** (frontend-first): tokens, components, every screen/state, interaction/motion/a11y, copy/assets, and frontend architecture. |
 | [azure-api-detail/azure-api-detail.md](azure-api-detail/azure-api-detail.md) | Source-of-truth Azure `/openai/v1` request examples the API spec is aligned to. |

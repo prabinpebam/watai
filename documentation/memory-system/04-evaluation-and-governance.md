@@ -1,6 +1,6 @@
 # 04 — Evaluation And Governance
 
-Long-term memory is only useful if it remembers the right things, forgets what the user deleted, and avoids inventing personalized context. CRUD tests are necessary but not sufficient.
+Watai's memory system is only useful if it remembers the right things, forgets what the user deleted, stays fast, and avoids inventing personalized context. CRUD tests are necessary but not sufficient.
 
 This document defines the eval plan, metrics, observability, and governance rules for Watai memory.
 
@@ -144,7 +144,9 @@ Expected:
 | Metric | Target For MVP | Notes |
 | --- | ---: | --- |
 | Retrieval p95 latency | <= 250 ms | Server-side memory context build, excluding model generation. |
+| Retrieval p99 latency | <= 500 ms | Slow memory must degrade to empty context rather than block generation. |
 | Memory context token budget | <= 1,200 tokens default | Configurable; eval should fail if exceeded without explicit override. |
+| Memory context hard max | <= 2,000 tokens | Requires explicit test/runtime override to exceed. |
 | Relevant recall@8 | >= 0.80 on local fixtures | At least one needed memory in top 8. |
 | Irrelevant precision@8 | >= 0.70 on local fixtures | Avoid prompt clutter. |
 | Deleted memory leakage | 0 | Hard gate. |
@@ -152,6 +154,8 @@ Expected:
 | Secret leakage | 0 | Hard gate. |
 | Source coverage | >= 0.95 | Used memories should have displayable source refs unless manually added. |
 | Extraction hot-path latency | 0 ms | Automatic extraction must not block response streaming. |
+| Over-insertion rate | <= 0.10 on local fixtures | One-off details should not become durable memory. |
+| Abstention accuracy | >= 0.90 | Do not invent memory when no support exists. |
 
 ## 4. Benchmark Strategy
 
@@ -166,6 +170,9 @@ Minimum fixtures:
 - 10 temporary-chat exclusion cases.
 - 10 deletion/suppression cases.
 - 10 no-memory abstention cases.
+- 10 over-insertion rejection cases.
+- 10 project-context recall cases.
+- 10 source-ref correction cases.
 
 ### 4.2 Public Benchmarks Later
 
@@ -188,6 +195,8 @@ A change must fail CI or release validation if:
 - Memory context exceeds budget without an explicit test override.
 - A response records memory refs that the user cannot inspect.
 - Server-run prompt assembly uses client-only memory state.
+- Retrieval p95 exceeds the release budget in benchmark mode.
+- Precision falls because the retriever widened memory without a source cap or threshold change approved by evals.
 
 ## 6. Observability
 

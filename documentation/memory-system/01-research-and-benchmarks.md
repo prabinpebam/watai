@@ -1,8 +1,8 @@
 # 01 — Research And Benchmarks
 
-This document summarizes how leading AI assistant products and memory frameworks handle long-term memory, then extracts the design principles Watai should adopt.
+This document summarizes how leading AI assistant products and memory frameworks handle memory systems, then extracts the design principles Watai should adopt.
 
-Research date: 2026-06-27.
+Research date: 2026-06-27. Spot-checked and updated: 2026-06-28.
 
 Primary sources consulted:
 
@@ -33,6 +33,8 @@ The best current systems converge on these patterns:
 | Use **bounded retrieval** on the hot path. | Retrieval must be fast and token-efficient; dumping all past chats does not scale and hurts model focus. |
 | Preserve **source links** and show memory usage in responses. | Trust depends on users seeing why personalization happened and how to correct it. |
 | Treat memory changes as **time-aware**, not blind overwrites. | Real user facts change. The system should understand current vs old facts, not lose history. |
+| Distinguish **top-of-mind** memory from background memory. | The assistant needs a way to prioritize highly useful memories without deleting lower-priority ones. |
+| Do not search every source on every request. | The memory system should decide when personalization is likely useful, otherwise latency and prompt noise grow. |
 | Test with **semantic memory evals**, not only CRUD tests. | Memory can pass API tests while recalling the wrong thing, using deleted data, or ignoring new corrections. |
 
 ## 2. Product Benchmarks
@@ -45,6 +47,7 @@ Observed pattern:
 - Users can enable/disable memory from Settings > Personalization > Memory.
 - ChatGPT has a memory summary that updates over time and can be reviewed/edited.
 - Sources can show whether custom instructions, past chats, files, or saved memories influenced a response.
+- Newer memory UI distinguishes memory summary, top-of-mind memories, background memories, and source panels.
 - Temporary Chats do not use existing memories or create new ones.
 - Saved memories and chat history are controlled separately in the legacy/current transition model.
 - Memory can be used for search query rewriting when personal details improve search relevance.
@@ -57,6 +60,7 @@ Watai takeaways:
 - Add Temporary Chat exclusion as a hard rule.
 - Persist response-level memory sources so users can inspect and correct what was used.
 - Avoid claiming the memory summary is the complete database; describe it as a reviewable synthesis.
+- Add `visibility` or equivalent priority state so Watai can keep less-important memories in the background without deleting them.
 
 ### 2.2 Claude
 
@@ -114,7 +118,7 @@ LangGraph also identifies the key write-path tradeoff:
 
 Watai takeaways:
 
-- Watai should use short-term message history and long-term memory as separate inputs to prompt assembly.
+- Watai should use short-term message history and server-owned memory context as separate inputs to prompt assembly.
 - Use background extraction for automatic memory writes.
 - Keep explicit user commands such as "remember this" as hot-path/manual writes because the user expects immediacy.
 
@@ -193,7 +197,7 @@ For Watai, BEAM is directionally important because it reflects what happens when
 
 ## 5. What Not To Copy
 
-- Do not use raw whole-chat stuffing as the primary long-term memory strategy.
+- Do not use raw whole-chat stuffing as the primary memory strategy.
 - Do not store a single editable memory summary as the only source of truth; summaries lose source traceability and make deletion/correction ambiguous.
 - Do not ask the assistant to decide memory writes while also producing every normal response unless the user explicitly says "remember this".
 - Do not use embeddings alone. Benchmarks and production systems increasingly combine semantic, keyword, entity, recency, and salience signals.

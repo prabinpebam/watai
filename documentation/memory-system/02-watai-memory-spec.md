@@ -1,6 +1,6 @@
 # 02 — Watai Memory Spec
 
-This document specifies the product behavior, architecture, data model, retrieval path, extraction path, API surface, UI, and privacy rules for Watai long-term memory.
+This document specifies the product behavior, architecture, data model, retrieval path, extraction path, API surface, UI, and privacy rules for the Watai memory system.
 
 Cross-references: [../02-architecture.md](../02-architecture.md), [../04-data-model.md](../04-data-model.md), [../06-server-runs-and-migration.md](../06-server-runs-and-migration.md), [01-research-and-benchmarks.md](01-research-and-benchmarks.md).
 
@@ -8,7 +8,14 @@ Cross-references: [../02-architecture.md](../02-architecture.md), [../04-data-mo
 
 Watai currently has a memory toggle and local `MemoryItem` storage, but the server-run architecture means the browser is no longer the agent. If generation runs on the server, memory retrieval and memory writing must be server-owned too.
 
-The goal is to let Watai build useful continuity across conversations without making every new response read the user's entire chat history.
+The goal is to let Watai build useful continuity across conversations without making every new response read the user's entire chat history. The memory system must balance four forces:
+
+- **Speed:** keep retrieval p95 low enough that send-to-first-token still feels immediate.
+- **Quality:** improve answers when memory is relevant, while avoiding constant over-personalization.
+- **Accuracy:** use source-linked, time-aware memories; handle corrections and deletions as hard constraints.
+- **Width:** cover user preferences, work style, durable facts, project context, and past work without storing secrets or one-off noise.
+
+Therefore memory is a bounded serving layer, not an ever-growing prompt prefix.
 
 ## 2. Product Goals
 
@@ -21,6 +28,9 @@ A user should be able to:
 5. Correct, suppress, delete, import, export, pause, reset, and rebuild memory.
 6. Use Temporary Chat without reading existing memory or writing new memory.
 7. Sign in on another device and get the same memory-backed behavior.
+8. Keep response speed predictable even as memory grows.
+9. Separate explicit saved memories from chat-history-derived recall.
+10. Understand why a memory was used and mark it as wrong, irrelevant, or no longer useful.
 
 ## 3. Non-Goals For The First Implementation
 
@@ -30,6 +40,21 @@ A user should be able to:
 - Fine-tuning or model-weight personalization.
 - Storing raw full chat history as memory records. Messages already exist as messages.
 - Autonomous modification of destructive settings without user intent.
+- Unbounded vector search over all user data on every run.
+- Memory writes that block normal response streaming.
+- Treating the memory summary as the only source of truth.
+
+## 3.1 Design Critique Of The Naive Approach
+
+The tempting implementation is: store chat summaries, embed them, retrieve top K, and prepend them to every prompt. Watai should not do that. It fails in five ways:
+
+1. **Latency drift:** the hot path gets slower as history grows.
+2. **Prompt pollution:** irrelevant memories distract the model and reduce answer quality.
+3. **Deletion ambiguity:** summaries obscure which source created which personalized fact.
+4. **Contradiction blindness:** embeddings do not understand that newer facts invalidate older ones.
+5. **User trust gap:** users cannot inspect or correct why a response was personalized.
+
+The right approach is a memory system with typed records, source refs, validity intervals, retrieval budgets, and response-level transparency.
 
 ## 4. Memory Types
 
@@ -42,6 +67,18 @@ Watai should treat memory as a layered system:
 | Atomic memories | User | Until invalidated/deleted | Manual commands or extraction jobs | Precise facts/preferences with source links. |
 | Thread summaries | Thread | Until thread deletion/retention expiry | Background summarization | Episodic recall for past work. |
 | Session working memory | Run/thread | Run or task lifetime | Tool outputs/intermediate state | Not long-term; do not store as user memory. |
+| Retrieval cache | User/thread | Minutes | Memory context service | Speed up repeated adjacent turns without changing source of truth. |
+
+Memory **width** comes from these layers together, not from one large vector store. The system should be able to retrieve across:
+
+- explicit user instructions,
+- durable preferences and facts,
+- current project/product context,
+- past completed tasks,
+- relevant thread summaries,
+- temporary working context from the current thread.
+
+Each layer has different retention, consent, ranking, and UI controls.
 
 ## 5. High-Level Architecture
 
@@ -79,6 +116,14 @@ flowchart TD
 5. Prompt assembly injects the memory context block before the latest conversation messages.
 6. The assistant response stores `memoryRefs` so the UI can show sources.
 
+Read-path service-level objective for MVP:
+
+- p95 memory context build <= 250 ms.
+- p99 memory context build <= 500 ms.
+- default context block <= 1,200 tokens.
+- hard max context block <= 2,000 tokens unless a test/runtime override explicitly opts in.
+- retrieval must return an empty block on error rather than fail the whole run, but must emit non-content telemetry.
+
 ### 5.2 Write Path
 
 1. Assistant message reaches a terminal state: `complete`, `interrupted`, or `error`.
@@ -89,6 +134,17 @@ flowchart TD
 6. Summary refresh runs when enough memory changed or when the user requests refresh.
 
 Manual commands such as "remember that..." and "forget that..." should take effect immediately through the memory service, but still avoid blocking normal answer generation more than necessary.
+
+### 5.3 Serving Contract
+
+The run worker consumes one object: `MemoryContextBlock`. It should not know how memories are stored, embedded, summarized, or deduplicated. That keeps the hot path testable and gives the memory system freedom to improve retrieval without changing prompt assembly.
+
+Memory context construction has four stages:
+
+1. **Eligibility:** memory enabled, non-temporary thread, user not paused, source data allowed.
+2. **Candidate generation:** summary, pinned memories, lexical/entity candidates, thread summaries, optional vector candidates.
+3. **Ranking and trimming:** score, diversify by kind/source, enforce budgets and hard exclusions.
+4. **Audit artifact:** return selected source refs and telemetry fields for UI and observability.
 
 ## 6. Data Model
 
@@ -111,7 +167,9 @@ type MemoryKind =
   | 'work_style'
   | 'project_context'
   | 'thread_summary'
-  | 'avoidance';
+  | 'avoidance'
+  | 'entity'
+  | 'procedure';
 
 type MemoryStatus = 'active' | 'suppressed' | 'invalidated' | 'deleted';
 
@@ -130,6 +188,8 @@ interface MemoryRecord {
   salience: number;
   pinned: boolean;
   sensitive: boolean;
+  sourceHash?: string;
+  visibility: 'normal' | 'top_of_mind' | 'background';
   validAt?: string;
   invalidAt?: string;
   createdAt: string;
@@ -143,6 +203,13 @@ interface MemoryRecord {
   deletedAt?: string;
 }
 ```
+
+Field notes:
+
+- `visibility` supports a review UI similar to "top of mind" vs background memories.
+- `sourceHash` helps deduplicate imported/local memories without storing extra source content.
+- `procedure` is for user-approved durable behavior rules. It is not model self-modification.
+- `entity` is optional for the first release but keeps the schema compatible with graph-like retrieval later.
 
 ### 6.3 `MemorySourceRef`
 
@@ -185,6 +252,10 @@ The memory summary is reviewable and editable, but it is not the only source of 
 ```ts
 interface MemoryContextBlock {
   summary?: string;
+  customInstructions?: {
+    aboutYou?: string;
+    howRespond?: string;
+  };
   instructions: string[];
   memories: Array<{
     id: string;
@@ -206,13 +277,15 @@ interface MemoryContextBlock {
     messageId?: string;
   }>;
   tokenEstimate: number;
+  latencyBudgetMs: number;
+  retrievalMode: 'lexical' | 'hybrid' | 'cached' | 'empty';
 }
 ```
 
 Prompt format:
 
 ```text
-Relevant long-term memory. Use this only when it helps answer the user. Do not mention it unless relevant.
+Relevant memory context. Use this only when it helps answer the user. Do not mention it unless relevant.
 
 User summary:
 ...
@@ -232,12 +305,34 @@ Relevant prior work:
 For initial Watai scale, the simplest reliable path is:
 
 1. Query active, non-sensitive, non-suppressed user memories from Cosmos with caps.
-2. Score with lexical match, entity overlap, recency, salience, and explicit pinned status.
-3. Include the memory summary by default when memory is enabled.
-4. Include up to 8 atomic memories and up to 3 thread summaries.
-5. Keep the memory context block under a configurable token budget, default 1,200 tokens.
+2. Always consider pinned/top-of-mind memories, but still trim if they are unrelated and the user did not ask for personalization.
+3. Score with lexical match, entity overlap, recency, salience, validity, and explicit pinned status.
+4. Include the memory summary only when it is relevant or when the query is broad enough that profile context helps.
+5. Include up to 8 atomic memories and up to 3 thread summaries.
+6. Keep the memory context block under a configurable token budget, default 1,200 tokens.
+7. Cache candidate IDs for short adjacent-turn windows, but re-check status/deletion before serving.
 
 This avoids adding Azure AI Search before the product behavior is validated.
+
+### 7.1.1 MVP Scoring
+
+MVP scoring should be deterministic and testable:
+
+```text
+score = lexical * 0.30
+  + entity * 0.25
+  + salience * 0.20
+  + recency * 0.10
+  + validity * 0.10
+  + pinned * 0.05
+```
+
+Rules:
+
+- `validity = 0` for invalidated, suppressed, deleted, expired, or temporary-chat-derived records.
+- `pinned` can lift a candidate but cannot override deletion/suppression.
+- diversify final selection so one noisy topic cannot consume the entire block.
+- if the top score is below threshold, return no atomic memories and only custom instructions if enabled.
 
 ### 7.2 Hybrid Retrieval Upgrade
 
@@ -256,10 +351,25 @@ score = semantic * 0.35
       + entity * 0.20
       + salience * 0.15
       + recency * 0.05
-      + pinned * 0.05
+      + validity * 0.03
+      + pinned * 0.02
 ```
 
 Weights are defaults, not doctrine. Evals decide.
+
+### 7.3 Memory Width Controls
+
+Memory width is controlled through source budgets, not a single global `topK`:
+
+| Source | Default cap | Purpose |
+| --- | ---: | --- |
+| Custom instructions | 2 fields | Stable user-authored behavior. |
+| Summary | 1 compact block | Broad user/project profile when relevant. |
+| Atomic memories | 8 records | Precise facts/preferences. |
+| Thread summaries | 3 records | Past work recall. |
+| Current thread recency | existing run history budget | Immediate conversation continuity. |
+
+The memory context service should report which cap trimmed candidates. If evals show poor recall, widen the right source rather than increasing all caps.
 
 ## 8. Extraction Strategy
 
@@ -308,6 +418,19 @@ The extractor must output strict JSON:
 ```
 
 The service, not the model, owns final validation and storage.
+
+### 8.4 Extraction Quality Gates
+
+The extractor must reject or downgrade candidates when:
+
+- confidence < 0.65 for automatic memories,
+- source refs are missing,
+- text is not durable beyond the current task,
+- the candidate duplicates an active memory without adding new validity or source information,
+- the candidate contains secret-like values,
+- the candidate is about a third party and not clearly project context.
+
+Manual "remember this" writes can bypass the confidence threshold but not secret/safety validation.
 
 ### 8.3 Additive Memory
 

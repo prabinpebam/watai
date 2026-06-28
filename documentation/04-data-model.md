@@ -109,10 +109,11 @@ erDiagram
   retained audio; the bytes live in Blob, the row holds metadata + path.
 - **ImageAsset** — a generated image with its prompt and parameters (provenance for the
   viewer/gallery, product spec §5.8).
-- **Memory** — optional long-term personalization facts, summaries, and source-linked
-  recall records (if memory is enabled); user-viewable and erasable. The expanded
-  research, architecture, implementation, and eval plan lives in
-  [long-term-memory/](long-term-memory/README.md).
+- **Memory** — optional server-owned memory-system records: explicit instructions,
+  summary, atomic facts/preferences, thread summaries, source refs, and suppression
+  state (if memory is enabled); user-viewable and erasable. The expanded research,
+  architecture, implementation, and eval plan lives in
+  [memory-system/](memory-system/README.md).
 - **UsageEvent** — optional, privacy-preserving local/usage accounting; no content.
 
 ### 1.2 Critical privacy boundary
@@ -151,7 +152,7 @@ own container to keep thread documents small and lists fast.
 
 The `memory` row above is intentionally high-level. The implementation-ready schema,
 retrieval strategy, user controls, and eval gates are specified in
-[long-term-memory/02-watai-memory-spec.md](long-term-memory/02-watai-memory-spec.md).
+[memory-system/02-watai-memory-spec.md](memory-system/02-watai-memory-spec.md).
 
 > Partitioning `messages` by `threadId` keeps a conversation's reads/writes in one
 > logical partition (efficient append + scroll). A single, pathologically huge thread is

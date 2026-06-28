@@ -1,6 +1,8 @@
 # 03 — Implementation Plan
 
-This plan maps the memory spec to Watai's current codebase. It assumes the server-authoritative direction in [../02-architecture.md](../02-architecture.md) and [../06-server-runs-and-migration.md](../06-server-runs-and-migration.md).
+This plan maps the memory system spec to Watai's current codebase. It assumes the server-authoritative direction in [../02-architecture.md](../02-architecture.md) and [../06-server-runs-and-migration.md](../06-server-runs-and-migration.md).
+
+The implementation must optimize for four outcomes together: fast hot-path retrieval, high response quality, accurate/current personalization, and enough memory width to cover user preferences, project context, and past work without dumping history into prompts.
 
 ## 1. Current Code Facts
 
@@ -25,6 +27,8 @@ Deliverables:
 - Add shared frontend wire types in `src/data/cloud/types.ts`.
 - Add prompt assembly contract for `MemoryContextBlock` in the server-run worker docs/tests.
 - Add eval fixtures from [04-evaluation-and-governance.md](04-evaluation-and-governance.md).
+- Add the initial scorer contract and source caps to tests before implementing retrieval.
+- Add telemetry event names and non-content fields to the API contract.
 
 Validation:
 
@@ -126,6 +130,8 @@ Implementation:
 6. Inject block into server-run prompt.
 7. Persist memory refs used on the assistant message.
 8. Exclude suppressed/deleted/invalidated records.
+9. Emit `memory_context_built` or `memory_context_skipped` telemetry with candidate count, selected count, token estimate, latency, and retrieval mode.
+10. If retrieval fails, continue the run with an empty memory block and log non-content telemetry.
 
 Validation:
 
@@ -133,6 +139,8 @@ Validation:
 - Run worker tests proving memory context is included only when eligible.
 - Tests for temporary chat exclusion.
 - Tests proving deleted/suppressed memories are not referenced.
+- Latency tests or synthetic benchmarks for p95 under the MVP budget.
+- Tests proving low-score candidates produce an empty memory block rather than irrelevant prompt context.
 
 ## 6. Phase 4 — Background Extraction
 
@@ -169,6 +177,8 @@ Validation:
 - Sensitive/secret rejection tests.
 - Contradiction tests: new memory invalidates old one, old one no longer retrieves as current.
 - Queue decode/retry tests following the existing run queue pattern.
+- Over-insertion tests: one-off requests should not become memory.
+- Assistant-fact tests: useful completed work can become episodic memory with assistant-message source refs.
 
 ## 7. Phase 5 — Memory Sources In Chat UI
 
@@ -216,6 +226,7 @@ Validation:
 - Recall@K and answer-correctness deltas on the memory eval suite.
 - p95 retrieval latency budget.
 - Token budget regression check.
+- Precision regression check: hybrid retrieval cannot improve recall by flooding prompt context with irrelevant memories.
 
 ## 9. Phase 7 — Import, Export, Rebuild, Retention
 
@@ -303,3 +314,4 @@ Memory is implementation-complete when:
 - Users can pause/reset/export/import memory.
 - Delete-all-data cascades through memory.
 - The memory eval suite passes all required gates in [04-evaluation-and-governance.md](04-evaluation-and-governance.md).
+- Retrieval p95, token budget, recall, precision, and leakage metrics are observable and stay within release thresholds.
