@@ -4,7 +4,7 @@ import { ChatView } from './ChatView';
 import { ToolsMenu } from './ToolsMenu';
 import { DEFAULT_CHAT_MODEL } from './runStore';
 
-import { IconButton } from '../../design/ui';
+import { IconButton, SelectMenu } from '../../design/ui';
 import { useIsExpanded } from '../../lib/hooks';
 import { useUi } from '../../state/store';
 import { cloudApi, repo } from '../../data';
@@ -55,7 +55,8 @@ export function ChatScreen() {
   }, []);
 
   const selectedModel = activeModel ?? DEFAULT_CHAT_MODEL;
-  const options = modelOptions.includes(selectedModel) ? modelOptions : normalizeChatModelOptions(selectedModel, modelOptions);
+  const options = (modelOptions.includes(selectedModel) ? modelOptions : normalizeChatModelOptions(selectedModel, modelOptions))
+    .map((model) => ({ value: model, label: chatModelLabel(model), description: model === DEFAULT_CHAT_MODEL ? 'Routes automatically' : model }));
 
   return (
     <>
@@ -69,19 +70,13 @@ export function ChatScreen() {
         ) : (
           <IconButton name="menu" label="Open menu" onClick={() => toggleDrawer(true)} />
         )}
-        <label className="appbar-model" title="Chat model">
-          <span className="appbar-model__sr">Chat model</span>
-          <select
-            className="appbar-model__select"
-            value={selectedModel}
-            onChange={(e) => setModelForThread(threadId, e.target.value)}
-            aria-label="Chat model"
-          >
-            {options.map((model) => (
-              <option key={model} value={model}>{chatModelLabel(model)}</option>
-            ))}
-          </select>
-        </label>
+        <SelectMenu
+          className="appbar-model"
+          label="Chat model"
+          value={selectedModel}
+          options={options}
+          onChange={(model) => setModelForThread(threadId, model)}
+        />
         <div className="appbar__title">{title}</div>
         <IconButton name="file-text" label="Chat files" onClick={() => toggleFilesPane(threadId)} />
         <ToolsMenu />

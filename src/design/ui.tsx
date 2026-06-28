@@ -1,5 +1,7 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'react';
+import { useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './icons';
+import { useDismiss } from '../lib/hooks';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'outline' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
@@ -133,6 +135,69 @@ export function Segmented<T extends string>({ value, options, onChange }: Segmen
         </button>
       ))}
     </div>
+  );
+}
+
+interface SelectMenuProps<T extends string> {
+  value: T;
+  options: { value: T; label: string; description?: string }[];
+  onChange: (v: T) => void;
+  label: string;
+  className?: string;
+}
+
+export function SelectMenu<T extends string>({ value, options, onChange, label, className = '' }: SelectMenuProps<T>) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useDismiss(open, () => setOpen(false), [buttonRef, menuRef]);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+  const rect = buttonRef.current?.getBoundingClientRect();
+  const left = rect ? Math.min(rect.left, window.innerWidth - 260) : 0;
+  const top = rect ? rect.bottom + 6 : 0;
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`select-menu ${open ? 'select-menu--open' : ''} ${className}`}
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="select-menu__label">{selected?.label ?? value}</span>
+        <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} className="select-menu__chevron" />
+      </button>
+      {open && rect && createPortal(
+        <div ref={menuRef} className="select-menu-pop" style={{ left, top }} role="listbox" aria-label={label}>
+          {options.map((option) => {
+            const active = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={active}
+                className={`select-menu-pop__item ${active ? 'is-active' : ''}`}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                <span className="select-menu-pop__text">
+                  <span className="select-menu-pop__label">{option.label}</span>
+                  {option.description && <span className="select-menu-pop__desc">{option.description}</span>}
+                </span>
+                {active && <Icon name="check" size={16} className="select-menu-pop__check" />}
+              </button>
+            );
+          })}
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
