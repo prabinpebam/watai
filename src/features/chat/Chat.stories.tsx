@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { AttachmentList } from './Attachments';
 import { AssistantMessage, UserMessage } from './Message';
+import { ChatView } from './ChatView';
 import { Composer } from './Composer';
 import { Lightbox } from './Lightbox';
 import { Markdown } from './Markdown';
@@ -225,4 +226,19 @@ export const ImageLightbox: Story = {
     );
   },
   parameters: { frame: 'none' },
+};
+
+export const PromptMinimapThread: Story = {
+  render: () => <ChatView threadId="story-thread" />,
+  parameters: { frame: 'app', route: '/c/story-thread' },
+};
+
+export const PromptMinimapWithFilesPane: Story = {
+  render: function PromptMinimapWithFilesPaneStory() {
+    useEffect(() => {
+      useUi.setState({ filesPane: 'story-thread', sourcePane: null });
+    }, []);
+    return <ChatView threadId="story-thread" />;
+  },
+  parameters: { frame: 'app', route: '/c/story-thread' },
 };

@@ -269,7 +269,7 @@ export function UserMessage({ message }: { message: Message }) {
     });
   };
   return (
-    <div className="msg-group msg-group--user">
+    <div className="msg-group msg-group--user" data-prompt-id={message.id}>
       {message.attachments && message.attachments.length > 0 && (
         <div className="msg-group__attachments">
           <AttachmentList attachments={message.attachments} />

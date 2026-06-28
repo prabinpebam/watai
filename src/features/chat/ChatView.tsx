@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from './useChat';
 import { Composer } from './Composer';
 import { AssistantMessage, UserMessage } from './Message';
+import { PromptMinimap } from './PromptMinimap';
 import { SourcePane } from './SourcePane';
 import { ThreadFilesPane } from './ThreadFilesPane';
 import { Icon } from '../../design/icons';
@@ -190,6 +191,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
         locked={!!lockedBy && !streaming}
         autoFocus={isEmpty}
       />
+      {!loading && !isEmpty && <PromptMinimap messages={messages} scrollRef={scrollRef} />}
       </div>
       <SourcePane />
       <ThreadFilesPane />

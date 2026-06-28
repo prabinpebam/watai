@@ -48,14 +48,21 @@ let blobs = new Map<string, Blob>();
 
 function resetState(): void {
   threads = [
-    { id: 'story-thread', title: 'PDF worksheet draft', pinned: true, archived: false, temporary: false, createdAt: iso(-7200000), updatedAt: iso(-60000), messageCount: 3, lastMessagePreview: 'The final worksheet PDF is attached.', files: threadFiles },
+    { id: 'story-thread', title: 'PDF worksheet draft', pinned: true, archived: false, temporary: false, createdAt: iso(-7200000), updatedAt: iso(-60000), messageCount: 10, lastMessagePreview: 'The final worksheet PDF is attached.', files: threadFiles },
     { id: 'story-research', title: 'Research sources for lesson plan', pinned: false, archived: false, temporary: false, createdAt: iso(-172800000), updatedAt: iso(-3600000), messageCount: 8, lastMessagePreview: 'Finding high-quality references.' },
     { id: 'story-images', title: 'Image prompts for story cards', pinned: false, archived: false, temporary: false, createdAt: iso(-604800000), updatedAt: iso(-86400000), messageCount: 5, lastMessagePreview: 'Use a bright editorial style.' },
   ];
   messages = [
-    { id: 'u1', threadId: 'story-thread', role: 'user', content: '/pdf Create a worksheet from this file', status: 'complete', attachments: [pdfAttachment], createdAt: iso(-180000) },
-    { id: 'a1', threadId: 'story-thread', role: 'assistant', content: 'Done — the PDF is ready as an attachment below.', status: 'complete', artifacts: [pdfArtifact], toolCalls: [{ id: 'w1', kind: 'web_search', name: 'web_search', status: 'done', summary: 'Search sources' }, { id: 'c1', kind: 'code_interpreter', name: 'code_interpreter', status: 'done', summary: 'Create PDF', resultPreview: 'wrote /mnt/data/worksheet.pdf', artifactIds: ['art1'] }], createdAt: iso(-120000) },
-    { id: 'a2', threadId: 'story-thread', role: 'assistant', content: '', status: 'complete', images: generatedImages, createdAt: iso(-90000) },
+    { id: 'u1', threadId: 'story-thread', role: 'user', content: '/pdf Create a worksheet from this file', status: 'complete', attachments: [pdfAttachment], createdAt: iso(-600000) },
+    { id: 'a1', threadId: 'story-thread', role: 'assistant', content: 'Done — the PDF is ready as an attachment below.\n\n'.repeat(8), status: 'complete', artifacts: [pdfArtifact], toolCalls: [{ id: 'w1', kind: 'web_search', name: 'web_search', status: 'done', summary: 'Search sources' }, { id: 'c1', kind: 'code_interpreter', name: 'code_interpreter', status: 'done', summary: 'Create PDF', resultPreview: 'wrote /mnt/data/worksheet.pdf', artifactIds: ['art1'] }], createdAt: iso(-540000) },
+    { id: 'u2', threadId: 'story-thread', role: 'user', content: 'Now create two image concepts for the worksheet cover with a friendly classroom style.', status: 'complete', createdAt: iso(-480000) },
+    { id: 'a2', threadId: 'story-thread', role: 'assistant', content: '', status: 'complete', images: generatedImages, createdAt: iso(-420000) },
+    { id: 'u3', threadId: 'story-thread', role: 'user', content: 'Revise the design direction so the images feel less busy and more suitable for printing.', status: 'complete', createdAt: iso(-360000) },
+    { id: 'a3', threadId: 'story-thread', role: 'assistant', content: 'I would simplify the background, keep the type large, and reserve color for headings and icon accents.\n\n'.repeat(10), status: 'complete', createdAt: iso(-300000) },
+    { id: 'u4', threadId: 'story-thread', role: 'user', content: 'Make a short checklist of what still needs review before I send this to parents.', status: 'complete', createdAt: iso(-240000) },
+    { id: 'a4', threadId: 'story-thread', role: 'assistant', content: 'Review print margins, reading level, answer key alignment, and whether every image has enough contrast.\n\n'.repeat(9), status: 'complete', createdAt: iso(-180000) },
+    { id: 'u5', threadId: 'story-thread', role: 'user', content: 'Summarize the final plan in one paragraph and mention the files attached in this chat.', status: 'complete', createdAt: iso(-120000) },
+    { id: 'a5', threadId: 'story-thread', role: 'assistant', content: 'The final plan is to ship a print-ready worksheet with a calm cover, clear activities, and the generated PDF attached in this chat.', status: 'complete', createdAt: iso(-60000) },
   ];
   settings = { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, theme: 'dark' } };
   memory = [];
