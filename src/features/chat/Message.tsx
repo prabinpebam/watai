@@ -307,10 +307,12 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
   }));
   const pendingImages = message.images?.length ? undefined : derivedPending.length ? derivedPending : message.pendingImages;
   // Image tool calls are conveyed by the placeholder / final image, so keep them out of the card
-  // strip — except a failure, which the user should see.
-  const toolCards = (message.toolCalls ?? []).filter(
-    (tc) => tc.kind !== 'image' || tc.status === 'error',
-  );
+  // strip. A failed image call is only useful if no later image succeeded.
+  const hasGeneratedImages = (message.images?.length ?? 0) > 0;
+  const toolCards = (message.toolCalls ?? []).filter((tc) => {
+    if (tc.kind !== 'image') return true;
+    return tc.status === 'error' && !hasGeneratedImages;
+  });
   const toolEntries = groupedToolCards(toolCards);
 
   const copy = () => {
