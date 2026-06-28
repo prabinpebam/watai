@@ -70,7 +70,12 @@ function HighlightedValue({ value, skills }: { value: string; skills: SkillSumma
   return (
     <>
       {parts.map((part, index) =>
-        part.skill ? <span key={index} className="composer-skill-token">{part.text}</span> : <span key={index}>{part.text}</span>,
+        part.skill ? (
+          <span key={index} className="composer-skill-token">
+            <span className="composer-skill-token__prefix">/</span>
+            {part.text.slice(1)}
+          </span>
+        ) : <span key={index}>{part.text}</span>,
       )}
     </>
   );

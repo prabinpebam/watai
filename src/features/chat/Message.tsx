@@ -79,25 +79,11 @@ function ToolCardView({ tc }: { tc: ToolCall }) {
 
 type ToolCardEntry =
   | { type: 'tool'; tc: ToolCall }
-  | { type: 'code-group'; id: string; calls: ToolCall[] };
+  | { type: 'tool-group'; id: string; calls: ToolCall[] };
 
 function groupedToolCards(cards: ToolCall[]): ToolCardEntry[] {
-  const grouped: ToolCardEntry[] = [];
-  for (let index = 0; index < cards.length; index++) {
-    const current = cards[index];
-    if (current.kind !== 'code_interpreter') {
-      grouped.push({ type: 'tool', tc: current });
-      continue;
-    }
-    const calls = [current];
-    while (cards[index + 1]?.kind === 'code_interpreter') {
-      calls.push(cards[index + 1]);
-      index++;
-    }
-    if (calls.length === 1) grouped.push({ type: 'tool', tc: current });
-    else grouped.push({ type: 'code-group', id: `${calls[0].id}-${calls[calls.length - 1].id}`, calls });
-  }
-  return grouped;
+  if (cards.length <= 1) return cards.map((tc) => ({ type: 'tool', tc }));
+  return [{ type: 'tool-group', id: `${cards[0].id}-${cards[cards.length - 1].id}`, calls: cards }];
 }
 
 function aggregateStatus(calls: ToolCall[]): ToolCall['status'] {
@@ -143,9 +129,29 @@ function ToolStepView({ tc, index }: { tc: ToolCall; index: number }) {
   );
 }
 
-function CodeInterpreterGroup({ calls }: { calls: ToolCall[] }) {
+function groupLabel(calls: ToolCall[]): string {
+  const first = calls[0]?.kind;
+  if (first && calls.every((tc) => tc.kind === first)) {
+    switch (first) {
+      case 'web_search':
+        return 'Web search';
+      case 'code_interpreter':
+        return 'Code interpreter';
+      case 'file_search':
+        return 'File search';
+      case 'image':
+        return 'Image generation';
+      default:
+        return 'Tools';
+    }
+  }
+  return 'Tools';
+}
+
+function ToolGroup({ calls }: { calls: ToolCall[] }) {
   const [open, setOpen] = useState(false);
   const status = aggregateStatus(calls);
+  const icon = calls.every((tc) => tc.kind === calls[0].kind) ? kindIcon(calls[0].kind) : 'sparkle';
   return (
     <div className={`tool-group tool-group--${status}`}>
       <button
@@ -155,9 +161,9 @@ function CodeInterpreterGroup({ calls }: { calls: ToolCall[] }) {
         onClick={() => setOpen((value) => !value)}
       >
         <span className="tool-card__kind" aria-hidden>
-          <Icon name="code" size={15} />
+          <Icon name={icon} size={15} />
         </span>
-        <span className="tool-card__label">Code interpreter</span>
+        <span className="tool-card__label">{groupLabel(calls)}</span>
         <span className="tool-group__meta">
           {calls.length} call{calls.length === 1 ? '' : 's'}
         </span>
@@ -176,6 +182,28 @@ function CodeInterpreterGroup({ calls }: { calls: ToolCall[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+function SkillTaggedText({ text }: { text: string }) {
+  const parts: Array<string | { skill: string }> = [];
+  let cursor = 0;
+  for (const match of text.matchAll(/(?:^|\s)\/([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi)) {
+    const full = match[0];
+    const index = match.index ?? 0;
+    const prefixLength = full.startsWith('/') ? 0 : 1;
+    const tokenStart = index + prefixLength;
+    if (tokenStart > cursor) parts.push(text.slice(cursor, tokenStart));
+    parts.push({ skill: match[1] });
+    cursor = index + full.length;
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return (
+    <>
+      {parts.map((part, index) =>
+        typeof part === 'string' ? part : <span key={index} className="bubble-skill-token">{part.skill}</span>,
+      )}
+    </>
   );
 }
 
@@ -247,7 +275,7 @@ export function UserMessage({ message }: { message: Message }) {
           <AttachmentList attachments={message.attachments} />
         </div>
       )}
-      {message.content && <div className="bubble-user">{message.content}</div>}
+      {message.content && <div className="bubble-user"><SkillTaggedText text={message.content} /></div>}
       <div className="user__actions">
         <IconButton name={copied ? 'check' : 'copy'} label="Copy" size={16} onClick={copy} />
       </div>
@@ -334,8 +362,8 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
         {toolEntries.length > 0 && (
           <div className="tool-cards" aria-live="polite">
             {toolEntries.map((entry) => (
-              entry.type === 'code-group' ? (
-                <CodeInterpreterGroup key={entry.id} calls={entry.calls} />
+              entry.type === 'tool-group' ? (
+                <ToolGroup key={entry.id} calls={entry.calls} />
               ) : (
                 <ToolCardView key={entry.tc.id} tc={entry.tc} />
               )

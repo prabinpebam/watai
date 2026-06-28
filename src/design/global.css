@@ -809,6 +809,13 @@ a:hover {
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
+.composer-skill-token__prefix {
+  visibility: hidden;
+}
+.bubble-skill-token {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
 .composer__textarea {
   position: relative;
   z-index: 1;
