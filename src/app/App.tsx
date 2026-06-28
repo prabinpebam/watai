@@ -234,10 +234,12 @@ export function App() {
           .catch(() => undefined);
       });
       const offMemory = realtime.on('memory', (payload) => {
-        const count = (payload as { acceptedCount?: number } | null)?.acceptedCount ?? 1;
-        useUi.getState().pushToast(count > 1 ? `${count} memories updated` : 'Memory updated', 'success', {
-          persistent: true,
-          key: 'memory-updated',
+        const event = payload as { acceptedCount?: number; threadId?: string; updatedAt?: string } | null;
+        if (!event?.threadId) return;
+        useUi.getState().setMemoryNotice({
+          threadId: event.threadId,
+          acceptedCount: Math.max(1, event.acceptedCount ?? 1),
+          updatedAt: event.updatedAt ?? new Date().toISOString(),
         });
       });
       const previousOff = off;

@@ -981,6 +981,10 @@ button.tool-card__head:hover {
 .tool-card--error .tool-card__status {
   color: var(--color-danger);
 }
+.memory-update-card {
+  min-width: 0;
+  background: var(--color-surface-2);
+}
 .tool-group {
   display: flex;
   flex-direction: column;

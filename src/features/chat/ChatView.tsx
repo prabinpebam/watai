@@ -21,6 +21,7 @@ const SUGGESTIONS = [
 export function ChatView({ threadId, onScrolledChange }: { threadId: string; onScrolledChange?: (v: boolean) => void }) {
   const { messages, loading, send, regenerate, stop, streaming, indexing, lockedBy } = useChat(threadId);
   const draft = useUi((s) => s.composerDrafts[threadId] ?? '');
+  const memoryNotice = useUi((s) => s.memoryNotices[threadId]);
   const setDraft = useUi((s) => s.setDraft);
   const closeSourcePane = useUi((s) => s.closeSourcePane);
   const closeFilesPane = useUi((s) => s.closeFilesPane);
@@ -112,6 +113,12 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
     }
   }, [threadImages, viewerImageId]);
 
+  const memoryNoticeLabel = memoryNotice
+    ? memoryNotice.acceptedCount > 1
+      ? `${memoryNotice.acceptedCount} memories updated`
+      : 'Memory updated'
+    : '';
+
   return (
     <div className="chat-area">
       <div className="chat">
@@ -156,6 +163,24 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
                   onCloseImage={() => setViewerImageId(null)}
                 />
               ),
+            )}
+            {memoryNotice && (
+              <div className="msg-group msg-group--assistant" aria-live="polite">
+                <div className="assistant">
+                  <div className="tool-card tool-card--done memory-update-card">
+                    <div className="tool-card__head">
+                      <span className="tool-card__kind" aria-hidden>
+                        <Icon name="database" size={15} />
+                      </span>
+                      <span className="tool-card__label">{memoryNoticeLabel}</span>
+                      <span className="tool-card__status" aria-hidden>
+                        <Icon name="check" size={14} />
+                      </span>
+                    </div>
+                    <div className="tool-card__message">Saved from this conversation. You can review it in Memory settings.</div>
+                  </div>
+                </div>
+              </div>
             )}
             <div style={{ height: 'var(--space-4)' }} />
           </div>

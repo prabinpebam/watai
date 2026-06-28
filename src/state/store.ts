@@ -9,6 +9,13 @@ interface StreamState {
   messageId?: string;
 }
 
+export interface MemoryNotice {
+  id: string;
+  threadId: string;
+  acceptedCount: number;
+  updatedAt: string;
+}
+
 /** A pending confirmation surfaced as a design-system dialog (no native window.confirm). */
 export interface ConfirmRequest {
   title: string;
@@ -39,6 +46,8 @@ interface UiState {
   threadRev: Record<string, number>;
   /** Per-thread run lock (another device is generating). Transient; never persisted/synced. */
   threadLocks: Record<string, ThreadLock | null>;
+  /** Last accepted memory update per thread, shown inline in the chat. */
+  memoryNotices: Record<string, MemoryNotice>;
   confirmRequest: ConfirmRequest | null;
   /** Open source-detail pane (web search results) — transient, never persisted. */
   sourcePane: { citations: Citation[]; index: number } | null;
@@ -62,6 +71,7 @@ interface UiState {
   bumpThreads: () => void;
   bumpThread: (threadId: string) => void;
   setThreadLock: (threadId: string, lock: ThreadLock | null) => void;
+  setMemoryNotice: (notice: Omit<MemoryNotice, 'id'> & { id?: string }) => void;
   requestConfirm: (opts: Omit<ConfirmRequest, 'resolve'>) => Promise<boolean>;
   resolveConfirm: (ok: boolean) => void;
   openSourcePane: (citations: Citation[], index: number) => void;
@@ -93,6 +103,7 @@ export const useUi = create<UiState>()(
       threadsVersion: 0,
       threadRev: {},
       threadLocks: {},
+      memoryNotices: {},
       confirmRequest: null,
       sourcePane: null,
       filesPane: null,
@@ -124,6 +135,13 @@ export const useUi = create<UiState>()(
         set((s) => ({ threadRev: { ...s.threadRev, [threadId]: (s.threadRev[threadId] ?? 0) + 1 } })),
       setThreadLock: (threadId, lock) =>
         set((s) => ({ threadLocks: { ...s.threadLocks, [threadId]: lock } })),
+      setMemoryNotice: (notice) =>
+        set((s) => ({
+          memoryNotices: {
+            ...s.memoryNotices,
+            [notice.threadId]: { id: notice.id ?? newId(), ...notice },
+          },
+        })),
       requestConfirm: (opts) =>
         new Promise<boolean>((resolve) => set({ confirmRequest: { ...opts, resolve } })),
       resolveConfirm: (ok) => {
@@ -150,6 +168,7 @@ export const useUi = create<UiState>()(
         sidebarCollapsed: s.sidebarCollapsed,
         composerDrafts: s.composerDrafts,
         activeModelByThread: s.activeModelByThread,
+        memoryNotices: s.memoryNotices,
       }),
     },
   ),

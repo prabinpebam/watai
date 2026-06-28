@@ -206,6 +206,23 @@ export const MemoryUsed: Story = {
   ),
 };
 
+export const MemoryUpdatedInline: Story = {
+  render: function MemoryUpdatedInlineStory() {
+    useUi.setState({
+      memoryNotices: {
+        'story-thread': {
+          id: 'story-memory-notice',
+          threadId: 'story-thread',
+          acceptedCount: 1,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    return <ChatView threadId="story-thread" />;
+  },
+  parameters: { frame: 'app', route: '/c/story-thread' },
+};
+
   export const ImageGenerationFailures: Story = {
     render: () => (
       <div className="chat__column" style={{ maxWidth: 720 }}>
