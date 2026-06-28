@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MEMORY_KINDS, containsSecretLikeValue } from './memory';
+import { memoryRouteTargetSchema } from './memoryRouting';
 import { parseOrThrow } from './validate';
 
 export const MEMORY_JOB_KINDS = ['command', 'turn', 'rebuild'] as const;
@@ -26,6 +27,7 @@ const addOperationSchema = z
     text,
     entities: z.array(z.string().trim().min(1).max(80)).max(32).optional(),
     topics: z.array(z.string().trim().min(1).max(80)).max(32).optional(),
+    target: memoryRouteTargetSchema.optional(),
     confidence: score,
     salience: score,
     validAt: z.string().trim().min(1).max(40).optional(),
@@ -42,6 +44,7 @@ const mergeOperationSchema = z
     text: text.optional(),
     entities: z.array(z.string().trim().min(1).max(80)).max(32).optional(),
     topics: z.array(z.string().trim().min(1).max(80)).max(32).optional(),
+    target: memoryRouteTargetSchema.optional(),
     confidence: score.optional(),
     salience: score.optional(),
     sourceMessageIds: z.array(id).min(1).max(12),

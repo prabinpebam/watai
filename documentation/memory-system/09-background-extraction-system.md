@@ -356,6 +356,7 @@ export interface MemoryExtractionOutput {
         text: string;
         entities?: string[];
         topics?: string[];
+        target?: MemoryRouteTarget;
         confidence: number;
         salience: number;
         validAt?: string;
@@ -369,6 +370,7 @@ export interface MemoryExtractionOutput {
         text?: string;
         entities?: string[];
         topics?: string[];
+        target?: MemoryRouteTarget;
         confidence?: number;
         salience?: number;
         sourceMessageIds: string[];
@@ -394,6 +396,8 @@ export interface MemoryExtractionOutput {
   >;
 }
 ```
+
+`target` is optional for backward compatibility, but new extractor prompts should include it when confident. The service validates target shape deterministically and can still store atomic evidence when target is absent.
 
 System prompt requirements:
 

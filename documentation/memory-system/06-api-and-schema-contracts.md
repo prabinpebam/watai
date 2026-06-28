@@ -190,6 +190,125 @@ export interface MemoryContextBlock {
 }
 ```
 
+### 4.5 `MemoryRouteTarget`
+
+Automatic extraction may include a structured route target. This is the bridge between the LLM's judgment and deterministic storage. The LLM proposes the route; the service validates it against this schema before writing anything.
+
+```ts
+export type MemoryRouteLayer =
+  | 'working'
+  | 'today'
+  | 'week'
+  | 'month'
+  | 'long_term_profile'
+  | 'project'
+  | 'evidence_archive';
+
+export type MemoryProfilePath =
+  | 'user.details.name'
+  | 'user.details.location'
+  | 'user.family.spouse'
+  | 'user.family.children'
+  | 'user.family.pets'
+  | 'user.preferences.communication'
+  | 'user.preferences.engineering'
+  | 'user.preferences.design'
+  | 'user.preferences.tools'
+  | 'user.preferences.other'
+  | 'user.interests.media'
+  | 'user.interests.hobbies'
+  | 'user.interests.other'
+  | 'work.projects'
+  | 'work.repositories'
+  | 'work.deployments'
+  | 'work.currentFocus'
+  | 'avoidances'
+  | 'custom';
+
+export interface MemoryEntityRef {
+  id?: string;
+  type: 'user' | 'person' | 'family_member' | 'pet' | 'project' | 'repo' | 'tool' | 'organization' | 'location' | 'interest' | 'concept' | 'custom';
+  name: string;
+  aliases?: string[];
+}
+
+export interface MemoryRelationshipTarget {
+  predicate:
+    | 'HAS_FAMILY_MEMBER'
+    | 'HAS_PET'
+    | 'HAS_ATTRIBUTE'
+    | 'PREFERS'
+    | 'AVOIDS'
+    | 'WORKS_ON'
+    | 'USES_TOOL'
+    | 'DEPLOYS_TO'
+    | 'INTERESTED_IN'
+    | 'INSPIRED_BY'
+    | 'CUSTOM';
+  subject?: MemoryEntityRef; // omitted means the user entity
+  object?: MemoryEntityRef;
+  objectValue?: string;
+  attributes?: Record<string, string | number | boolean | null>;
+  customPredicate?: string;
+}
+
+export interface MemoryRouteTarget {
+  layer: MemoryRouteLayer;
+  profilePath?: MemoryProfilePath;
+  customPath?: string;
+  entity?: MemoryEntityRef;
+  relationship?: MemoryRelationshipTarget;
+  temporal?: {
+    bucket: 'today' | 'week' | 'month' | 'long_term';
+    validAt?: string;
+    invalidAt?: string;
+    expiresAt?: string;
+  };
+  evidenceStrategy?: 'append' | 'merge' | 'invalidate_then_add';
+}
+```
+
+Validation rules:
+
+- `long_term_profile` targets require `profilePath`.
+- `profilePath: 'custom'` requires `customPath`.
+- Non-archive targets require at least one of `profilePath`, `entity`, or `relationship`.
+- `CUSTOM` relationships require `customPredicate`.
+- Relationships require an `object`, `objectValue`, or `attributes` payload.
+- Target fields are routing metadata, not a replacement for source-linked atomic evidence.
+
+### 4.6 `MemoryWritePlan`
+
+The scalable async write path should normalize model output into a write plan before persistence:
+
+```ts
+export type MemoryWritePlan =
+  | { op: 'ignore'; reason: string }
+  | {
+      op: 'store';
+      canonicalText: string;
+      target: MemoryRouteTarget;
+      confidence: number;
+      salience: number;
+      sourceMessageIds: string[];
+      reason: string;
+    }
+  | {
+      op: 'merge';
+      memoryId: string;
+      canonicalText?: string;
+      target?: MemoryRouteTarget;
+      confidence?: number;
+      salience?: number;
+      sourceMessageIds: string[];
+      reason: string;
+    }
+  | { op: 'invalidate'; memoryId: string; sourceMessageIds: string[]; reason: string }
+  | { op: 'suppress'; memoryId: string; sourceMessageIds: string[]; reason: string };
+```
+
+The deterministic service decides how to apply the plan: append evidence, merge matching entity facts, invalidate outdated facts, update temporal buckets, and refresh the derived profile. The LLM never writes directly.
+
 ## 5. Message Integration
 
 Assistant messages need source refs for transparent response-level UI.

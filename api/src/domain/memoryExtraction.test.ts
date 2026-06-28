@@ -32,6 +32,30 @@ describe('memory extraction domain', () => {
     expect(code(() => parseMemoryExtractionOutput({ operations: [{ op: 'ignore', reason: 'x', extra: true }] }))).toBe('validation');
   });
 
+  it('accepts routed add operations', () => {
+    const out = parseMemoryExtractionOutput({
+      operations: [{
+        op: 'add',
+        kind: 'fact',
+        text: 'User has a daughter named Laija who is 9 years old.',
+        target: {
+          layer: 'long_term_profile',
+          profilePath: 'user.family.children',
+          entity: { type: 'family_member', name: 'Laija' },
+          relationship: { predicate: 'HAS_FAMILY_MEMBER', object: { type: 'family_member', name: 'Laija' }, attributes: { relationship: 'daughter', age: 9 } },
+          temporal: { bucket: 'long_term' },
+          evidenceStrategy: 'merge',
+        },
+        confidence: 0.94,
+        salience: 0.88,
+        sourceMessageIds: ['m1'],
+        reason: 'Stable family profile fact.',
+      }],
+    });
+
+    expect(out.operations[0]).toMatchObject({ op: 'add', target: { profilePath: 'user.family.children' } });
+  });
+
   it('rejects unsafe or unsupported extraction output', () => {
     expect(
       code(() =>

@@ -96,6 +96,55 @@ The profile tree is a derived view over evidence and graph records. It is not a 
 
 Serving rule: the profile tree and graph are not dumped into every prompt. They are queried only after an intent/relevance gate passes, and the prompt receives a small context block rather than the whole tree.
 
+## 3.1 Async Write-Routing Algorithm
+
+The write path should follow the loop below. It runs asynchronously after the response path and may use a strong LLM model, but persistence is deterministic.
+
+```text
+Prompt/turn saved
+  -> cheap opportunity gate
+  -> LLM memory planner
+       - should this be stored?
+       - what canonical text preserves the fact without losing detail?
+       - what layer and schema path should own it?
+       - what entities and relationships does it imply?
+       - is it an append, merge, invalidate-then-add, suppress, or ignore?
+  -> strict schema validation
+  -> deterministic apply
+       - always preserve source-linked atomic evidence
+       - upsert/merge entity nodes
+       - upsert/merge or invalidate relationship facts
+       - update profile projection and temporal buckets
+       - never delete old evidence just because a newer fact exists
+```
+
+Example routed plan:
+
+```jsonc
+{
+  "op": "store",
+  "canonicalText": "User has a daughter named Laija who is 9 years old.",
+  "target": {
+    "layer": "long_term_profile",
+    "profilePath": "user.family.children",
+    "entity": { "type": "family_member", "name": "Laija" },
+    "relationship": {
+      "predicate": "HAS_FAMILY_MEMBER",
+      "object": { "type": "family_member", "name": "Laija" },
+      "attributes": { "relationship": "daughter", "age": 9 }
+    },
+    "temporal": { "bucket": "long_term" },
+    "evidenceStrategy": "merge"
+  },
+  "confidence": 0.94,
+  "salience": 0.88,
+  "sourceMessageIds": ["msg_..."],
+  "reason": "Stable family profile fact."
+}
+```
+
+This design lets the schema grow: common product paths stay first-class, while `custom` paths and `CUSTOM` relationships preserve new concepts without forcing an immediate migration. Later migrations can promote repeated custom paths into first-class schema paths.
+
 ## 4. Memory Tiers
 
 | Tier | Scope | Lifetime | Purpose |

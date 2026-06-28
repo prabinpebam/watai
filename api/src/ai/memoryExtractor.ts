@@ -94,6 +94,7 @@ export async function extractMemories(
     'Be selective. Most single-turn requests, casual comments, examples, jokes, temporary formatting requests, and transient task details should return ignore.',
     'Only add memory when the detail is likely to improve future conversations, is explicitly requested, is repeated/confirmed, or is a high-salience stable profile/work fact.',
     'Named family relationships and directly stated ages are high-salience profile facts; combine them into one concise memory when possible, for example "User has a daughter named Laija who is 9 years old."',
+    'When confident, include target for add/merge: layer, profilePath, entity, relationship, temporal, and evidenceStrategy. Example profilePath values include user.family.children, user.family.pets, user.preferences.communication, work.projects, work.deployments, and avoidances.',
     'Stable personal facts such as pet names can be memory-worthy, but only assign high salience when the fact is clearly durable and likely useful later.',
     'Example high-salience memory: if the user says "Remember that my dog is called Chopper", add a fact memory. Example lower-salience or ignore: a casual one-off example unless future usefulness is clear.',
     'Do not store secrets, credentials, one-off requests, private third-party details, hidden reasoning, or guesses about emotions.',
