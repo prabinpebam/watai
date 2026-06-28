@@ -581,6 +581,80 @@ describe('processRun', () => {
     expect(imageFile?.status).toBe('ready');
   });
 
+  it('shows a clear content-policy message when image generation is moderated', async () => {
+    ctx = setup({ image: true });
+    await seed(ctx);
+    const fetchImpl = (async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
+      const url = String(input);
+      if (url.includes('/images/generations')) {
+        return new Response(
+          JSON.stringify({ error: { message: 'Request rejected by the safety system due to content policy.' } }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const runAgent: RunAgentFn = async function* (params) {
+      yield { type: 'tool', name: 'generate_image', status: 'running', callId: 'g1' };
+      try {
+        await params.execute('generate_image', { prompt: 'blocked prompt' });
+      } catch (e) {
+        yield {
+          type: 'tool',
+          name: 'generate_image',
+          status: 'error',
+          callId: 'g1',
+          detail: e instanceof Error ? e.message : 'Tool failed.',
+        };
+      }
+      yield { type: 'done' };
+    };
+
+    await processRun({ ...ctx.deps(runAgent), fetchImpl }, 't1', 'r1');
+
+    const tool = (await ctx.messageStore.get('t1', 'am1'))?.toolCalls?.find((t) => t.id === 'g1');
+    expect(tool).toMatchObject({ kind: 'image', status: 'error' });
+    expect(tool?.summary).toBe(
+      'Image generation was blocked by the content policy. Try changing the prompt to avoid sensitive, explicit, or restricted content.',
+    );
+  });
+
+  it('shows a clear image-generation failure when the image service fails for another reason', async () => {
+    ctx = setup({ image: true });
+    await seed(ctx);
+    const fetchImpl = (async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
+      const url = String(input);
+      if (url.includes('/images/generations')) {
+        return new Response(JSON.stringify({ error: { message: 'Image backend unavailable.' } }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const runAgent: RunAgentFn = async function* (params) {
+      yield { type: 'tool', name: 'generate_image', status: 'running', callId: 'g1' };
+      try {
+        await params.execute('generate_image', { prompt: 'normal prompt' });
+      } catch (e) {
+        yield {
+          type: 'tool',
+          name: 'generate_image',
+          status: 'error',
+          callId: 'g1',
+          detail: e instanceof Error ? e.message : 'Tool failed.',
+        };
+      }
+      yield { type: 'done' };
+    };
+
+    await processRun({ ...ctx.deps(runAgent), fetchImpl }, 't1', 'r1');
+
+    const tool = (await ctx.messageStore.get('t1', 'am1'))?.toolCalls?.find((t) => t.id === 'g1');
+    expect(tool).toMatchObject({ kind: 'image', status: 'error' });
+    expect(tool?.summary).toBe('Image generation failed: The service is temporarily unavailable.');
+  });
+
   it('passes the latest user image attachment to the image model when edit_reference is requested', async () => {
     ctx = setup({ image: true });
     await seed(ctx);

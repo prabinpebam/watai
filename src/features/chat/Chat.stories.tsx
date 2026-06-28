@@ -43,6 +43,38 @@ const assistantMessage: Message = {
   ],
 };
 
+  const imageModerationMessage: Message = {
+    id: 'img-mod-error',
+    threadId: 't1',
+    role: 'assistant',
+    content: '',
+    status: 'complete',
+    createdAt: new Date().toISOString(),
+    toolCalls: [
+      {
+        id: 'g1',
+        kind: 'image',
+        name: 'generate_image',
+        status: 'error',
+        summary: 'Image generation was blocked by the content policy. Try changing the prompt to avoid sensitive, explicit, or restricted content.',
+      },
+    ],
+  };
+
+  const imageServiceFailureMessage: Message = {
+    ...imageModerationMessage,
+    id: 'img-service-error',
+    toolCalls: [
+      {
+        id: 'g2',
+        kind: 'image',
+        name: 'generate_image',
+        status: 'error',
+        summary: 'Image generation failed: The service is temporarily unavailable.',
+      },
+    ],
+  };
+
 const pdfAttachment: Attachment = {
   id: 'p1',
   kind: 'file',
@@ -150,6 +182,15 @@ export const Messages: Story = {
     </div>
   ),
 };
+
+  export const ImageGenerationFailures: Story = {
+    render: () => (
+      <div className="chat__column" style={{ maxWidth: 720 }}>
+        <AssistantMessage message={imageModerationMessage} streaming={false} onRegenerate={() => {}} />
+        <AssistantMessage message={imageServiceFailureMessage} streaming={false} onRegenerate={() => {}} />
+      </div>
+    ),
+  };
 
 export const ComposerSurface: Story = {
   render: () => (

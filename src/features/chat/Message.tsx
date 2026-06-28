@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import { AttachmentList, ArtifactList, GeneratedImages } from './Attachments';
 import { Avatar, IconButton, InlineAlert, Spinner } from '../../design/ui';
@@ -38,16 +38,36 @@ function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
   return <Icon name="check" size={14} />;
 }
 
+function isContentPolicyImageError(text = ''): boolean {
+  return /content policy|content.?filter|moderation|safety system|policy violation/i.test(text);
+}
+
+function toolLabel(tc: ToolCall): string | undefined {
+  if (tc.kind === 'image' && tc.status === 'error') {
+    return isContentPolicyImageError(tc.summary) ? 'Image blocked by content policy' : 'Image generation failed';
+  }
+  return tc.summary ?? tc.name;
+}
+
+function toolErrorMessage(tc: ToolCall): string | null {
+  if (tc.status !== 'error') return null;
+  if (tc.kind === 'image') {
+    return tc.summary ?? 'Image generation failed. Try again or change the prompt.';
+  }
+  return tc.summary ?? tc.resultPreview ?? null;
+}
+
 /** One tool-activity card. Expands to reveal the detail (e.g. code + output) when present. */
 function ToolCardView({ tc }: { tc: ToolCall }) {
   const [open, setOpen] = useState(false);
   const hasDetail = !!tc.resultPreview;
+  const errorMessage = toolErrorMessage(tc);
   const header = (
     <>
       <span className="tool-card__kind" aria-hidden>
         <Icon name={kindIcon(tc.kind)} size={15} />
       </span>
-      <span className="tool-card__label">{tc.summary ?? tc.name}</span>
+      <span className="tool-card__label">{toolLabel(tc)}</span>
       {hasDetail && (
         <span className="tool-card__chevron" aria-hidden>
           <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />
@@ -73,6 +93,7 @@ function ToolCardView({ tc }: { tc: ToolCall }) {
         <div className="tool-card__head">{header}</div>
       )}
       {hasDetail && open && <pre className="tool-card__detail">{tc.resultPreview}</pre>}
+      {errorMessage && <div className="tool-card__message">{errorMessage}</div>}
     </div>
   );
 }
@@ -96,10 +117,11 @@ function aggregateStatus(calls: ToolCall[]): ToolCall['status'] {
 function ToolStepView({ tc, index }: { tc: ToolCall; index: number }) {
   const [open, setOpen] = useState(false);
   const hasDetail = !!tc.resultPreview;
+  const errorMessage = toolErrorMessage(tc);
   const body = (
     <>
       <span className="tool-step__index">{index + 1}</span>
-      <span className="tool-step__label">{tc.summary ?? tc.name}</span>
+      <span className="tool-step__label">{toolLabel(tc)}</span>
       {hasDetail && (
         <span className="tool-step__chevron" aria-hidden>
           <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />
@@ -125,6 +147,7 @@ function ToolStepView({ tc, index }: { tc: ToolCall; index: number }) {
         <div className="tool-step__head">{body}</div>
       )}
       {hasDetail && open && <pre className="tool-step__detail">{tc.resultPreview}</pre>}
+      {errorMessage && <div className="tool-step__message">{errorMessage}</div>}
     </div>
   );
 }
@@ -149,8 +172,11 @@ function groupLabel(calls: ToolCall[]): string {
 }
 
 function ToolGroup({ calls }: { calls: ToolCall[] }) {
-  const [open, setOpen] = useState(false);
   const status = aggregateStatus(calls);
+  const [open, setOpen] = useState(status === 'error');
+  useEffect(() => {
+    if (status === 'error') setOpen(true);
+  }, [status]);
   const icon = calls.every((tc) => tc.kind === calls[0].kind) ? kindIcon(calls[0].kind) : 'sparkle';
   return (
     <div className={`tool-group tool-group--${status}`}>

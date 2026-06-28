@@ -89,7 +89,7 @@ export async function normalizeHttpError(res: Response, capability?: AiCapabilit
     case 400:
       code = 'bad_request';
       message = 'The request was invalid.';
-      if (detail && /content.?filter/i.test(detail)) {
+      if (detail && /content.?filter|content.?policy|moderation|safety system|policy violation/i.test(detail)) {
         code = 'content_filtered';
         message = 'The response was filtered by the content policy.';
       }

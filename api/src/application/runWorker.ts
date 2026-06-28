@@ -19,6 +19,7 @@ import {
 import type { ResponsesCitation, ResponsesTool } from '../ai/responses';
 import { tavilySearch } from '../ai/tavily';
 import { editImage, generateImage } from '../ai/image';
+import { isAiError } from '../ai/errors';
 import { listContainerFiles, getContainerFile, mimeForFilename } from '../ai/containerFiles';
 import type { ContainerFile } from '../ai/containerFiles';
 import { selectSkills, codeInterpreterSection, slashSkillTags } from './skillService';
@@ -305,7 +306,8 @@ function makeExecute(
       return { output, citations };
     }
     if (name === 'generate_image') {
-      if (!creds.models.image) return { output: 'Image generation is not configured.' };
+      const imageModel = creds.models.image;
+      if (!imageModel) return { output: 'Image generation is not configured.' };
       const prompt = String((args as { prompt?: unknown }).prompt ?? '').trim();
       if (!prompt) return { output: 'No image prompt was provided.' };
       const sizeArg = (args as { size?: unknown }).size;
@@ -313,25 +315,27 @@ function makeExecute(
       const useReference = shouldUseImageReference(args);
       const imageReference = useReference ? await getImageReference?.() : undefined;
       if (useReference && !imageReference) return { output: 'No uploaded image is available to use as a reference.' };
-      const imgs = useReference
-        ? await editImage({
-            baseUrl: creds.baseUrl,
-            key: creds.key,
-            model: creds.models.image,
-            prompt,
-            image: imageReference!.bytes,
-            imageContentType: imageReference!.contentType,
-            ...(size ? { size } : {}),
-            fetchImpl,
-          })
-        : await generateImage({
-            baseUrl: creds.baseUrl,
-            key: creds.key,
-            model: creds.models.image,
-            prompt,
-            ...(size ? { size } : {}),
-            fetchImpl,
-          });
+      const imgs = await withImageToolErrorMessage(async () =>
+        useReference
+          ? editImage({
+              baseUrl: creds.baseUrl,
+              key: creds.key,
+              model: imageModel,
+              prompt,
+              image: imageReference!.bytes,
+              imageContentType: imageReference!.contentType,
+              ...(size ? { size } : {}),
+              fetchImpl,
+            })
+          : generateImage({
+              baseUrl: creds.baseUrl,
+              key: creds.key,
+              model: imageModel,
+              prompt,
+              ...(size ? { size } : {}),
+              fetchImpl,
+            }),
+      );
       if (!imgs.length) return { output: 'No image was generated.' };
       return {
         output: 'Generated the requested image.',
@@ -340,6 +344,22 @@ function makeExecute(
     }
     return { output: `Unknown tool: ${name}` };
   };
+}
+
+async function withImageToolErrorMessage<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (e) {
+    if (isAiError(e) && e.code === 'content_filtered') {
+      throw new Error(
+        'Image generation was blocked by the content policy. Try changing the prompt to avoid sensitive, explicit, or restricted content.',
+      );
+    }
+    if (isAiError(e)) {
+      throw new Error(`Image generation failed: ${e.message}`);
+    }
+    throw new Error(e instanceof Error ? `Image generation failed: ${e.message}` : 'Image generation failed.');
+  }
 }
 
 function toolKind(name: string): MessageToolCall['kind'] {

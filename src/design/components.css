@@ -940,6 +940,13 @@ button.tool-card__head:hover {
   word-break: break-word;
   color: var(--color-text-secondary);
 }
+.tool-card__message,
+.tool-step__message {
+  padding: 0 var(--space-3) var(--space-3) calc(24px + var(--space-6));
+  color: var(--color-danger);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-lh);
+}
 .tool-card__status {
   display: inline-flex;
   align-items: center;
