@@ -1,0 +1,41 @@
+.storybook-shell {
+  min-width: 0;
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+}
+
+.storybook-shell--app {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.storybook-shell--surface {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-8);
+  overflow: auto;
+}
+
+.storybook-shell--none {
+  width: 100%;
+  min-height: 100vh;
+  overflow: auto;
+}
+
+.storybook-surface {
+  width: min(100%, 960px);
+}
+
+.storybook-panel {
+  width: min(100%, 960px);
+  min-height: 720px;
+  padding: var(--space-6);
+}
+
+.storybook-row-frame {
+  width: min(100%, 720px);
+}

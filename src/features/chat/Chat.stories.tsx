@@ -14,7 +14,7 @@ import type { Artifact, Attachment, Citation, ImageRef, Message, Thread, ThreadF
 
 const meta = {
   title: 'Features/Chat',
-  parameters: { layout: 'padded' },
+  parameters: { layout: 'fullscreen', frame: 'surface', route: '/c/story-thread' },
 } satisfies Meta;
 
 export default meta;
@@ -152,7 +152,7 @@ export const Messages: Story = {
 
 export const ComposerSurface: Story = {
   render: () => (
-    <div style={{ width: 'min(720px, 100%)' }}>
+    <div className="storybook-row-frame">
       <Composer value="/pdf Make this into a polished PDF" onChange={() => {}} onSend={() => {}} streaming={false} onStop={() => {}} />
     </div>
   ),
@@ -160,7 +160,7 @@ export const ComposerSurface: Story = {
 
 export const AttachmentsAndTools: Story = {
   render: () => (
-    <div className="col" style={{ gap: 'var(--space-5)', width: 'min(520px, 100%)' }}>
+    <div className="col storybook-row-frame" style={{ gap: 'var(--space-5)' }}>
       <ToolsMenu />
       <AttachmentList attachments={[pdfAttachment]} />
     </div>
@@ -185,7 +185,7 @@ export const SourcesPanel: Story = {
 
 export const MarkdownContent: Story = {
   render: () => (
-    <div className="msg msg--assistant" style={{ width: 'min(720px, 100%)' }}>
+    <div className="msg msg--assistant storybook-row-frame">
       <div className="msg__bubble">
         <Markdown
           content={[
@@ -224,4 +224,5 @@ export const ImageLightbox: Story = {
       />
     );
   },
+  parameters: { frame: 'none' },
 };

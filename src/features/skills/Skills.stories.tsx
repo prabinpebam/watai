@@ -1,16 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { MemoryRouter } from 'react-router-dom';
 import type { Meta, StoryObj } from '@storybook/react';
 import { SkillsBody } from './SkillsBody';
 import { SkillDetailDialog } from './SkillDetailDialog';
 import { SkillErrorsDialog } from './SkillErrorsDialog';
-import { useSkills } from './useSkills';
-import { skillsApi } from '../../data';
 import type { SkillDetail, SkillSummary, SkillValidationError } from '../../lib/types';
 
 const meta = {
   title: 'Features/Skills',
-  parameters: { layout: 'fullscreen' },
+  parameters: { layout: 'fullscreen', frame: 'surface', route: '/settings/skills' },
 } satisfies Meta;
 
 export default meta;
@@ -76,68 +72,32 @@ const validationErrors: SkillValidationError[] = [
   { rule: 'path', message: 'Remove absolute paths before uploading the package.' },
 ];
 
-function installSkillFixtures() {
-  Object.assign(skillsApi, {
-    list: async () => skillRows,
-    get: async (id: string) => ({ ...skillDetail, ...(skillRows.find((s) => s.id === id) ?? {}) }),
-    setEnabled: async (id: string, enabled: boolean) => ({
-      ...(skillRows.find((s) => s.id === id) ?? skillRows[0]),
-      enabled,
-    }),
-    upload: async () => skillRows[1],
-    replace: async (id: string) => skillRows.find((s) => s.id === id) ?? skillRows[1],
-    remove: async () => undefined,
-    download: async () => ({ url: 'data:application/zip;base64,UEs=' }),
-  });
-  useSkills.setState({ skills: [], loading: true, loadError: false, busy: {}, uploading: false });
-}
-
-function SkillsHarness({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    installSkillFixtures();
-    setReady(true);
-  }, []);
-
-  return (
-    <MemoryRouter initialEntries={['/settings/skills']}>
-      <div className="page" style={{ minHeight: 720, padding: 'var(--space-6)' }}>
-        <div className="settings-panel" style={{ maxWidth: 880 }}>
-          {ready ? children : null}
-        </div>
-      </div>
-    </MemoryRouter>
-  );
-}
-
 export const Catalog: Story = {
   render: () => (
-    <SkillsHarness>
+    <div className="settings-panel storybook-surface">
       <SkillsBody />
-    </SkillsHarness>
+    </div>
   ),
 };
 
 export const CodeInterpreterGate: Story = {
   render: () => (
-    <SkillsHarness>
+    <div className="settings-panel storybook-surface">
       <SkillsBody codeInterpreterOff />
-    </SkillsHarness>
+    </div>
   ),
 };
 
 export const DetailDialog: Story = {
   render: () => (
-    <SkillsHarness>
-      <SkillDetailDialog
-        skill={skillRows[0]}
-        onClose={() => {}}
-        onToggle={() => {}}
-        onReplace={() => {}}
-        onDownload={() => {}}
-        onDelete={() => {}}
-      />
-    </SkillsHarness>
+    <SkillDetailDialog
+      skill={skillRows[0]}
+      onClose={() => {}}
+      onToggle={() => {}}
+      onReplace={() => {}}
+      onDownload={() => {}}
+      onDelete={() => {}}
+    />
   ),
 };
 

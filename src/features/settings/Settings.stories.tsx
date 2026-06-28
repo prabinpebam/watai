@@ -4,7 +4,7 @@ import { Settings } from './Settings';
 const meta = {
   title: 'Features/Settings',
   component: Settings,
-  parameters: { layout: 'fullscreen' },
+  parameters: { layout: 'fullscreen', frame: 'app', route: '/settings/models' },
 } satisfies Meta<typeof Settings>;
 
 export default meta;

@@ -9,7 +9,7 @@ import './studio.css';
 
 const meta = {
   title: 'Features/Image Studio',
-  parameters: { layout: 'fullscreen' },
+  parameters: { layout: 'fullscreen', frame: 'app' },
 } satisfies Meta;
 
 export default meta;
@@ -42,7 +42,7 @@ export const Workspace: Story = {
   render: function WorkspaceStory() {
     seedStudio();
     return (
-      <div className="studio" style={{ height: 720 }}>
+      <div className="studio" style={{ height: '100vh' }}>
         <div className="studio__top"><Composer /><Toolbar /></div>
         <div className="studio__gallery"><Gallery /></div>
       </div>
@@ -52,10 +52,11 @@ export const Workspace: Story = {
 
 export const Cards: Story = {
   render: () => (
-    <div className="studio-grid" style={{ width: 520 }}>
+    <div className="studio-grid storybook-row-frame">
       <ImageCard img={readyImage} />
       <ImageCard img={{ ...readyImage, id: 'err', status: 'error', error: { code: 'content_filtered', message: 'Blocked' }, url: undefined }} />
       <ImageCard img={{ ...readyImage, id: 'pending', status: 'queued', url: undefined }} />
     </div>
   ),
+  parameters: { frame: 'surface' },
 };
