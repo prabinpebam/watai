@@ -79,6 +79,7 @@ export function useChat(threadId: string, temporary = false) {
   const [loading, setLoading] = useState(true);
   const [indexing, setIndexing] = useState(false);
   const busyRef = useRef(false);
+  const loadedThreadRef = useRef<string | null>(null);
   const run = useRuns((s) => s.runs[threadId]);
   const threadRev = useUi((s) => s.threadRev[threadId] ?? 0);
   const setThreadLock = useUi((s) => s.setThreadLock);
@@ -86,13 +87,20 @@ export function useChat(threadId: string, temporary = false) {
   const [lockTick, setLockTick] = useState(0);
 
   // Reload persisted messages on thread change and whenever this thread's revision bumps
-  // (a run completed, regenerate trimmed history, etc.).
+  // (a run completed, regenerate trimmed history, etc.). Same-thread refreshes must keep the
+  // message column mounted; otherwise routine background updates replace the chat with the global
+  // spinner, which looks like a full UI refresh and drops scroll anchoring.
   useEffect(() => {
     let live = true;
-    setLoading(true);
+    const switchingThreads = loadedThreadRef.current !== threadId;
+    if (switchingThreads) {
+      setPersisted([]);
+      setLoading(true);
+    }
     repo.listMessages(threadId).then((m) => {
       if (live) {
         setPersisted(m);
+        loadedThreadRef.current = threadId;
         setLoading(false);
       }
     });
