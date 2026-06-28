@@ -48,6 +48,8 @@ export interface RunWorkerDeps {
   settings?: SettingsReader;
   /** Builds bounded, server-owned memory context for this run. Optional until memory is enabled. */
   memoryContext?: MemoryContextService;
+  /** Max time to wait for memory context on the generation hot path. Slow memory degrades to empty. */
+  memoryContextBudgetMs?: number;
   /** Schedules post-response memory extraction. Best-effort and never awaited by callers. */
   memoryExtraction?: MemoryExtractionService;
   /** The agentic loop (Responses API). Injectable for tests. */
@@ -99,6 +101,7 @@ const MAX_ARTIFACTS = 16;
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 const ARTIFACT_CAPTURE_ATTEMPTS = 4;
 const ARTIFACT_CAPTURE_RETRY_MS = 500;
+const DEFAULT_MEMORY_CONTEXT_BUDGET_MS = 250;
 
 const DEFAULT_VISIBLE_ARTIFACT_KINDS = new Set<ArtifactKind>(['pdf', 'document', 'spreadsheet', 'presentation']);
 
@@ -430,6 +433,32 @@ function mapCitation(c: ResponsesCitation): MessageCitation {
   };
 }
 
+async function withTimeout<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), Math.max(0, ms));
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function emptyMemoryBlock(): MemoryContextBlock {
+  return {
+    instructions: [],
+    memories: [],
+    threadSummaries: [],
+    sourceRefs: [],
+    tokenEstimate: 0,
+    latencyBudgetMs: DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
+    retrievalMode: 'empty',
+  };
+}
+
 /**
  * Process one run end-to-end on the server, independently of any client: load the user's decrypted
  * credentials, assemble the history, run the agentic loop (Responses API — text + web search + any
@@ -623,9 +652,11 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
     const latestUserText = run.prompt?.text ?? [...history].reverse().find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
     memoryBlock = deps.memoryContext
-      ? await deps.memoryContext
-          .buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now() })
-          .catch(() => undefined)
+      ? await withTimeout(
+          deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now() }),
+          deps.memoryContextBudgetMs ?? DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
+          emptyMemoryBlock(),
+        ).catch(() => emptyMemoryBlock())
       : undefined;
     if (memoryBlock?.memories.length) {
       memoryRefs = memoryBlock.memories.map((memory) => {

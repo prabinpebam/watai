@@ -513,6 +513,26 @@ describe('processRun', () => {
     ]);
   });
 
+  it('does not block generation when memory context lookup is slow', async () => {
+    await seed(ctx);
+    const seen: RunAgentParams[] = [];
+    const runAgent: RunAgentFn = (p) => {
+      seen.push(p);
+      return script([{ type: 'text', delta: 'ok' }, { type: 'done' }])(p);
+    };
+    await processRun(
+      {
+        ...ctx.deps(runAgent),
+        memoryContextBudgetMs: 1,
+        memoryContext: { buildForRun: async () => new Promise<never>(() => {}) } as any,
+      },
+      't1',
+      'r1',
+    );
+    expect((await ctx.messageStore.get('t1', 'am1'))?.content).toBe('ok');
+    expect(seen[0].turns[0].text).not.toContain('Relevant saved memory');
+  });
+
   it('schedules turn-lane memory extraction after a complete assistant response', async () => {
     await seed(ctx);
     const scheduled: string[] = [];
