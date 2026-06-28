@@ -451,6 +451,39 @@ describe('cloud mappers', () => {
     expect(messageFromRecord(rec).createdAt).toBe('2026-01-01T00:00:00Z');
   });
 
+  it('messageFromRecord surfaces memoryRefs used by the assistant response', () => {
+    const rec: MessageRecord = {
+      id: 'm1',
+      threadId: 't1',
+      userId: 'u',
+      role: 'assistant',
+      content: 'Use rg-watai-dev.',
+      status: 'complete',
+      createdAt: '2026-01-01T00:00:30Z',
+      deletedAt: null,
+      memoryRefs: [
+        {
+          memoryId: 'mem_1',
+          kind: 'project_context',
+          text: 'User deploys Watai to rg-watai-dev.',
+          sourceThreadId: 'thr_1',
+          sourceMessageId: 'msg_1',
+          score: 0.91,
+        },
+      ],
+    };
+    expect(messageFromRecord(rec).memoryRefs).toEqual([
+      {
+        memoryId: 'mem_1',
+        kind: 'project_context',
+        text: 'User deploys Watai to rg-watai-dev.',
+        sourceThreadId: 'thr_1',
+        sourceMessageId: 'msg_1',
+        score: 0.91,
+      },
+    ]);
+  });
+
   it('appendBodyFromMessage syncs full citations and tool result previews', () => {
     const m: Message = {
       id: 'm1',

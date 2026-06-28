@@ -1,0 +1,66 @@
+{
+  "id": "contradiction-update",
+  "description": "Current server-authoritative architecture should supersede older client-side generation memory.",
+  "now": "2026-06-28T00:00:00.000Z",
+  "memories": [
+    {
+      "id": "mem_arch_client_old",
+      "userId": "user_fixture",
+      "kind": "project_context",
+      "status": "invalidated",
+      "text": "Watai generation runs client-side in the browser.",
+      "sourceRefs": [
+        {
+          "type": "message",
+          "threadId": "thr_arch_old",
+          "messageId": "msg_arch_old_1",
+          "quote": "Generation is still client-side in the browser.",
+          "createdAt": "2026-04-01T09:00:00.000Z"
+        }
+      ],
+      "confidence": 0.85,
+      "salience": 0.2,
+      "pinned": false,
+      "sensitive": false,
+      "visibility": "background",
+      "validAt": "2026-04-01T09:00:00.000Z",
+      "invalidAt": "2026-06-01T09:00:00.000Z",
+      "createdAt": "2026-04-01T09:00:00.000Z",
+      "updatedAt": "2026-06-01T09:00:00.000Z",
+      "useCount": 0,
+      "supersededBy": "mem_arch_server_current"
+    },
+    {
+      "id": "mem_arch_server_current",
+      "userId": "user_fixture",
+      "kind": "project_context",
+      "status": "active",
+      "text": "Watai generation is server-authoritative and runs through the Azure Functions run worker.",
+      "sourceRefs": [
+        {
+          "type": "message",
+          "threadId": "thr_arch_new",
+          "messageId": "msg_arch_new_1",
+          "quote": "Watai pivoted to server-authoritative generation through the run worker.",
+          "createdAt": "2026-06-01T09:00:00.000Z"
+        }
+      ],
+      "confidence": 0.96,
+      "salience": 0.85,
+      "pinned": false,
+      "sensitive": false,
+      "visibility": "normal",
+      "validAt": "2026-06-01T09:00:00.000Z",
+      "createdAt": "2026-06-01T09:00:00.000Z",
+      "updatedAt": "2026-06-01T09:00:00.000Z",
+      "useCount": 0,
+      "supersedes": ["mem_arch_client_old"]
+    }
+  ],
+  "prompt": "Where does Watai generation run now?",
+  "expected": {
+    "selectedMemoryIds": ["mem_arch_server_current"],
+    "excludedMemoryIds": ["mem_arch_client_old"],
+    "answerShouldMention": ["server-authoritative", "Azure Functions"]
+  }
+}

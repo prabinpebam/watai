@@ -2,6 +2,7 @@ import type {
   MessageArtifact,
   MessageAttachment,
   MessageCitation,
+  MessageMemoryRef,
   MessageImage,
   MessageStatus,
   MessageToolCall,
@@ -21,6 +22,7 @@ export interface MessageRecord {
   attachments?: MessageAttachment[];
   toolCalls?: MessageToolCall[];
   citations?: MessageCitation[];
+  memoryRefs?: MessageMemoryRef[];
   /** Files the agent generated this message (code interpreter outputs). */
   artifacts?: MessageArtifact[];
   status: MessageStatus;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MEMORY_KINDS } from './memory';
 import { parseOrThrow } from './validate';
 
 export type Role = 'user' | 'assistant' | 'system';
@@ -106,6 +107,20 @@ const citationSchema = z
 
 export type MessageCitation = z.infer<typeof citationSchema>;
 
+/** Memories selected into an assistant response context, stored for transparent UI. */
+const memoryRefSchema = z
+  .object({
+    memoryId: z.string().min(1).max(64),
+    kind: z.enum(MEMORY_KINDS),
+    text: z.string().min(1).max(2000),
+    sourceThreadId: z.string().min(1).max(64).optional(),
+    sourceMessageId: z.string().min(1).max(64).optional(),
+    score: z.number().min(0).max(1),
+  })
+  .strict();
+
+export type MessageMemoryRef = z.infer<typeof memoryRefSchema>;
+
 /** A user-uploaded attachment synced with a message (bytes live in Blob Storage at `blobPath`). */
 export const attachmentSchema = z
   .object({
@@ -136,6 +151,7 @@ const appendSchema = z
     attachments: z.array(attachmentSchema).max(16).optional(),
     toolCalls: z.array(toolCallSchema).max(32).optional(),
     citations: z.array(citationSchema).max(64).optional(),
+    memoryRefs: z.array(memoryRefSchema).max(16).optional(),
     artifacts: z.array(artifactSchema).max(16).optional(),
   })
   .strict()

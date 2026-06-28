@@ -2,7 +2,7 @@
 // plus boundary mappers that translate to/from the frontend domain types. The server
 // owns `userId`/`deletedAt` and never sees UI-ephemeral fields (attachments, images,
 // usage, error, or the sending/streaming statuses), so those are stripped/defaulted here.
-import type { Message, Role, Thread, ThreadLock } from '../../lib/types';
+import type { MemoryKind, Message, Role, Thread, ThreadLock } from '../../lib/types';
 
 export interface ThreadRecord {
   id: string;
@@ -35,6 +35,176 @@ export interface ThreadFileRecord {
 }
 
 export type ServerMessageStatus = 'streaming' | 'complete' | 'interrupted' | 'error';
+export type MemoryStatus = 'active' | 'suppressed' | 'invalidated' | 'deleted';
+export type MemoryVisibility = 'normal' | 'top_of_mind' | 'background';
+export type MemorySourceType = 'message' | 'thread' | 'manual' | 'import' | 'settings' | 'system';
+
+export interface MemorySourceRefRecord {
+  type: MemorySourceType;
+  threadId?: string;
+  messageId?: string;
+  runId?: string;
+  quote?: string;
+  createdAt: string;
+}
+
+export interface MemoryRecord {
+  id: string;
+  userId: string;
+  kind: MemoryKind;
+  status: MemoryStatus;
+  text: string;
+  normalizedText?: string;
+  summary?: string;
+  entities?: string[];
+  topics?: string[];
+  sourceRefs: MemorySourceRefRecord[];
+  confidence: number;
+  salience: number;
+  pinned: boolean;
+  sensitive: boolean;
+  sourceHash?: string;
+  visibility: MemoryVisibility;
+  validAt?: string;
+  invalidAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastUsedAt?: string;
+  useCount: number;
+  supersedes?: string[];
+  supersededBy?: string;
+  embedding?: number[];
+  embeddingModel?: string;
+  deletedAt?: string;
+}
+
+export interface MemorySummaryRecord {
+  id: 'memory-summary';
+  userId: string;
+  kind: 'summary';
+  text: string;
+  sourceMemoryIds: string[];
+  updatedAt: string;
+  version: number;
+}
+
+export interface MemoryContextBlock {
+  summary?: string;
+  customInstructions?: {
+    aboutYou?: string;
+    howRespond?: string;
+  };
+  instructions: string[];
+  memories: Array<{
+    id: string;
+    kind: MemoryKind;
+    text: string;
+    validAt?: string;
+    invalidAt?: string;
+    score: number;
+  }>;
+  threadSummaries: Array<{
+    threadId: string;
+    title?: string;
+    summary: string;
+    score: number;
+  }>;
+  sourceRefs: Array<{
+    memoryId: string;
+    threadId?: string;
+    messageId?: string;
+  }>;
+  tokenEstimate: number;
+  latencyBudgetMs: number;
+  retrievalMode: 'lexical' | 'hybrid' | 'cached' | 'empty';
+}
+
+export interface ListMemoryQuery {
+  status?: MemoryStatus;
+  kind?: MemoryKind;
+  q?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface ListMemoryResponse {
+  memories: MemoryRecord[];
+  cursor?: string;
+}
+
+export interface CreateMemoryBody {
+  text: string;
+  kind?: Exclude<MemoryKind, 'thread_summary' | 'entity'>;
+  visibility?: MemoryVisibility;
+  pinned?: boolean;
+  sourceRef?: MemorySourceRefRecord;
+}
+
+export interface PatchMemoryBody {
+  text?: string;
+  kind?: MemoryKind;
+  status?: Extract<MemoryStatus, 'active' | 'suppressed' | 'invalidated'>;
+  visibility?: MemoryVisibility;
+  pinned?: boolean;
+  salience?: number;
+}
+
+export interface MemorySummaryResponse {
+  summary: MemorySummaryRecord | null;
+}
+
+export interface PutMemorySummaryBody {
+  text: string;
+}
+
+export interface MemoryQueryPreviewBody {
+  threadId?: string;
+  text: string;
+  includeSuppressed?: boolean;
+  limit?: number;
+}
+
+export interface MemoryQueryPreviewResponse {
+  context: MemoryContextBlock;
+  candidates: Array<{
+    memory: MemoryRecord;
+    score: number;
+    reason: string[];
+    selected: boolean;
+  }>;
+}
+
+export interface MemoryExportResponse {
+  exportedAt: string;
+  version: 1;
+  memories: MemoryRecord[];
+  summary: MemorySummaryRecord | null;
+}
+
+export interface MemoryImportBody {
+  version: 1;
+  memories: Array<Pick<MemoryRecord, 'text' | 'kind' | 'sourceRefs' | 'visibility' | 'pinned'>>;
+  mode: 'preview' | 'commit';
+}
+
+export interface MemoryImportResponse {
+  added: number;
+  skipped: number;
+  rejected: Array<{ text: string; reason: string }>;
+  preview?: MemoryRecord[];
+}
+
+export interface MemoryRebuildBody {
+  mode: 'preview' | 'commit';
+  includeArchived?: boolean;
+  since?: string;
+}
+
+export interface MemoryRebuildResponse {
+  jobId?: string;
+  status: 'queued' | 'preview_ready';
+  previewCount?: number;
+}
 
 /** Cloud image metadata (bytes live in Blob Storage at `blobPath`). */
 export interface ImageRecord {
@@ -82,6 +252,7 @@ export interface MessageRecord {
   attachments?: AttachmentRecord[];
   toolCalls?: ToolCallRecord[];
   citations?: CitationRecord[];
+  memoryRefs?: MessageMemoryRefRecord[];
   artifacts?: ArtifactRecord[];
   status: ServerMessageStatus;
   createdAt: string;
@@ -119,6 +290,16 @@ export interface CitationRecord {
   endIndex?: number;
 }
 
+/** Memories selected into an assistant response context. */
+export interface MessageMemoryRefRecord {
+  memoryId: string;
+  kind: MemoryKind;
+  text: string;
+  sourceThreadId?: string;
+  sourceMessageId?: string;
+  score: number;
+}
+
 export interface CreateThreadBody {
   /** Client-supplied id so local and cloud stay consistent (server create is idempotent on it). */
   id?: string;
@@ -147,6 +328,7 @@ export interface AppendMessageBody {
   attachments?: AttachmentRecord[];
   toolCalls?: ToolCallRecord[];
   citations?: CitationRecord[];
+  memoryRefs?: MessageMemoryRefRecord[];
 }
 
 /** Request a scoped, short-lived SAS URL for an asset blob. */
@@ -392,6 +574,7 @@ export function messageFromRecord(r: MessageRecord): Message {
       : {}),
     ...(r.toolCalls?.length ? { toolCalls: r.toolCalls.map((t) => ({ ...t })) } : {}),
     ...(r.citations?.length ? { citations: r.citations.map((c) => ({ ...c })) } : {}),
+    ...(r.memoryRefs?.length ? { memoryRefs: r.memoryRefs.map((m) => ({ ...m })) } : {}),
     ...(r.artifacts?.length
       ? {
           artifacts: r.artifacts.map((a) => ({
@@ -474,5 +657,6 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
           })),
         }
       : {}),
+    ...(m.memoryRefs?.length ? { memoryRefs: m.memoryRefs.map((memoryRef) => ({ ...memoryRef })) } : {}),
   };
 }

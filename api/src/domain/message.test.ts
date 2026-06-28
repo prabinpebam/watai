@@ -270,6 +270,47 @@ describe('parseAppendMessage', () => {
     });
   });
 
+  it('accepts assistant memoryRefs for response-level memory sources', () => {
+    const input = {
+      role: 'assistant',
+      content: 'Use rg-watai-dev for deployment.',
+      memoryRefs: [
+        {
+          memoryId: 'mem_1',
+          kind: 'project_context',
+          text: 'User deploys Watai to rg-watai-dev.',
+          sourceThreadId: 'thr_1',
+          sourceMessageId: 'msg_1',
+          score: 0.91,
+        },
+      ],
+    };
+    expect(parseAppendMessage(input)).toMatchObject({
+      memoryRefs: [{ memoryId: 'mem_1', kind: 'project_context', score: 0.91 }],
+    });
+  });
+
+  it('rejects invalid memoryRefs', () => {
+    expect(
+      code(() =>
+        parseAppendMessage({
+          role: 'assistant',
+          content: 'x',
+          memoryRefs: [{ memoryId: 'mem_1', kind: 'project_context', text: 'x', score: 1.5 }],
+        }),
+      ),
+    ).toBe('validation');
+    expect(
+      code(() =>
+        parseAppendMessage({
+          role: 'assistant',
+          content: 'x',
+          memoryRefs: [{ memoryId: 'mem_1', kind: 'unknown', text: 'x', score: 0.5 }],
+        }),
+      ),
+    ).toBe('validation');
+  });
+
   it('rejects an artifact with an unknown kind or missing blobPath (strict)', () => {
     expect(
       code(() =>

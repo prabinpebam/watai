@@ -1,0 +1,41 @@
+{
+  "id": "preference-recall",
+  "description": "User preference should be recalled in a later planning request.",
+  "now": "2026-06-28T00:00:00.000Z",
+  "memories": [
+    {
+      "id": "mem_pref_short_plans",
+      "userId": "user_fixture",
+      "kind": "preference",
+      "status": "active",
+      "text": "User prefers short implementation plans.",
+      "normalizedText": "user prefers short implementation plans",
+      "summary": "Prefers short plans.",
+      "entities": ["user"],
+      "topics": ["planning", "style"],
+      "sourceRefs": [
+        {
+          "type": "message",
+          "threadId": "thr_pref",
+          "messageId": "msg_pref_1",
+          "quote": "I prefer short implementation plans.",
+          "createdAt": "2026-06-01T10:00:00.000Z"
+        }
+      ],
+      "confidence": 0.95,
+      "salience": 0.8,
+      "pinned": false,
+      "sensitive": false,
+      "visibility": "normal",
+      "createdAt": "2026-06-01T10:00:00.000Z",
+      "updatedAt": "2026-06-01T10:00:00.000Z",
+      "useCount": 0
+    }
+  ],
+  "prompt": "Can you give me an implementation plan for memory retrieval?",
+  "expected": {
+    "selectedMemoryIds": ["mem_pref_short_plans"],
+    "excludedMemoryIds": [],
+    "answerShouldReflect": ["short", "implementation plan"]
+  }
+}

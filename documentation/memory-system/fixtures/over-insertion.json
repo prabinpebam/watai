@@ -1,0 +1,32 @@
+{
+  "id": "over-insertion",
+  "description": "One-off details should remain rejected candidates rather than durable memories.",
+  "now": "2026-06-28T00:00:00.000Z",
+  "memories": [],
+  "conversation": [
+    {
+      "id": "msg_oneoff_1",
+      "role": "user",
+      "content": "For this one reply, use a pirate voice and mention the color teal."
+    },
+    {
+      "id": "msg_oneoff_2",
+      "role": "assistant",
+      "content": "Understood for this reply."
+    }
+  ],
+  "rejectedCandidates": [
+    {
+      "text": "User wants replies in a pirate voice.",
+      "reason": "one_off_request"
+    },
+    {
+      "text": "User wants teal mentioned.",
+      "reason": "one_off_request"
+    }
+  ],
+  "expected": {
+    "selectedMemoryIds": [],
+    "overInsertionAllowed": false
+  }
+}

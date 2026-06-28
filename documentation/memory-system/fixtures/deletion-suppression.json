@@ -1,0 +1,83 @@
+{
+  "id": "deletion-suppression",
+  "description": "Deleted and suppressed memories must not be retrieved for later answers.",
+  "now": "2026-06-28T00:00:00.000Z",
+  "memories": [
+    {
+      "id": "mem_active_deploy_group",
+      "userId": "user_fixture",
+      "kind": "project_context",
+      "status": "active",
+      "text": "Watai deploy target resource group is rg-watai-dev.",
+      "sourceRefs": [
+        {
+          "type": "manual",
+          "quote": "Remember that my Watai deploy target is rg-watai-dev.",
+          "createdAt": "2026-06-05T09:00:00.000Z"
+        }
+      ],
+      "confidence": 1,
+      "salience": 0.9,
+      "pinned": true,
+      "sensitive": false,
+      "visibility": "top_of_mind",
+      "createdAt": "2026-06-05T09:00:00.000Z",
+      "updatedAt": "2026-06-05T09:00:00.000Z",
+      "useCount": 1
+    },
+    {
+      "id": "mem_deleted_old_group",
+      "userId": "user_fixture",
+      "kind": "project_context",
+      "status": "deleted",
+      "text": "Watai deploy target resource group is rg-old-demo.",
+      "sourceRefs": [
+        {
+          "type": "message",
+          "threadId": "thr_old_deploy",
+          "messageId": "msg_old_deploy_1",
+          "quote": "The deploy target was rg-old-demo.",
+          "createdAt": "2026-05-01T09:00:00.000Z"
+        }
+      ],
+      "confidence": 0.8,
+      "salience": 0.4,
+      "pinned": false,
+      "sensitive": false,
+      "visibility": "background",
+      "createdAt": "2026-05-01T09:00:00.000Z",
+      "updatedAt": "2026-06-10T09:00:00.000Z",
+      "deletedAt": "2026-06-10T09:00:00.000Z",
+      "useCount": 0
+    },
+    {
+      "id": "mem_suppressed_editor",
+      "userId": "user_fixture",
+      "kind": "preference",
+      "status": "suppressed",
+      "text": "User prefers screenshots in every UI answer.",
+      "sourceRefs": [
+        {
+          "type": "message",
+          "threadId": "thr_ui",
+          "messageId": "msg_ui_1",
+          "quote": "Always include screenshots in UI answers.",
+          "createdAt": "2026-05-10T09:00:00.000Z"
+        }
+      ],
+      "confidence": 0.7,
+      "salience": 0.2,
+      "pinned": false,
+      "sensitive": false,
+      "visibility": "background",
+      "createdAt": "2026-05-10T09:00:00.000Z",
+      "updatedAt": "2026-06-12T09:00:00.000Z",
+      "useCount": 0
+    }
+  ],
+  "prompt": "What resource group should I deploy Watai to?",
+  "expected": {
+    "selectedMemoryIds": ["mem_active_deploy_group"],
+    "excludedMemoryIds": ["mem_deleted_old_group", "mem_suppressed_editor"]
+  }
+}

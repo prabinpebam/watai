@@ -1,0 +1,47 @@
+{
+  "id": "temporary-chat-exclusion",
+  "description": "Temporary-thread details are not extracted and normal threads cannot use them later.",
+  "now": "2026-06-28T00:00:00.000Z",
+  "temporaryThread": {
+    "threadId": "thr_temp",
+    "messages": [
+      {
+        "id": "msg_temp_1",
+        "role": "user",
+        "content": "In this temporary chat only, assume my demo database is named wtai-temp-demo."
+      }
+    ]
+  },
+  "memories": [
+    {
+      "id": "mem_normal_backend",
+      "userId": "user_fixture",
+      "kind": "project_context",
+      "status": "active",
+      "text": "Watai uses Azure Functions for server-authoritative runs.",
+      "sourceRefs": [
+        {
+          "type": "message",
+          "threadId": "thr_backend",
+          "messageId": "msg_backend_1",
+          "quote": "Watai uses Azure Functions for server-authoritative runs.",
+          "createdAt": "2026-06-14T09:00:00.000Z"
+        }
+      ],
+      "confidence": 0.92,
+      "salience": 0.75,
+      "pinned": false,
+      "sensitive": false,
+      "visibility": "normal",
+      "createdAt": "2026-06-14T09:00:00.000Z",
+      "updatedAt": "2026-06-14T09:00:00.000Z",
+      "useCount": 0
+    }
+  ],
+  "prompt": "What demo database did I mention?",
+  "expected": {
+    "selectedMemoryIds": [],
+    "excludedTemporaryFacts": ["wtai-temp-demo"],
+    "answerShouldAbstain": true
+  }
+}

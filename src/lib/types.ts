@@ -54,6 +54,16 @@ export interface ThreadLock {
 
 export type Role = 'user' | 'assistant' | 'system';
 export type MessageStatus = 'sending' | 'complete' | 'streaming' | 'interrupted' | 'error';
+export type MemoryKind =
+  | 'fact'
+  | 'preference'
+  | 'instruction'
+  | 'work_style'
+  | 'project_context'
+  | 'thread_summary'
+  | 'avoidance'
+  | 'entity'
+  | 'procedure';
 
 export interface Attachment {
   id: Id;
@@ -149,6 +159,16 @@ export interface Citation {
   content?: string;
 }
 
+/** Memories selected into an assistant response context, shown in the Memory Used panel. */
+export interface MessageMemoryRef {
+  memoryId: Id;
+  kind: MemoryKind;
+  text: string;
+  sourceThreadId?: Id;
+  sourceMessageId?: Id;
+  score: number;
+}
+
 export interface Message {
   id: Id;
   threadId: Id;
@@ -166,6 +186,7 @@ export interface Message {
   /** Agentic activity (additive/optional). */
   toolCalls?: ToolCall[];
   citations?: Citation[];
+  memoryRefs?: MessageMemoryRef[];
   /** Files the agent generated this message (code interpreter outputs). */
   artifacts?: Artifact[];
 }
