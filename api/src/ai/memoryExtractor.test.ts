@@ -46,4 +46,23 @@ describe('normalizeMemoryExtractionJson', () => {
       sourceMessageIds: ['u1'],
     });
   });
+
+  it('normalizes common operation and kind aliases from top-level arrays', () => {
+    const normalized = normalizeMemoryExtractionJson([
+      {
+        operation: 'update',
+        memory_id: 'mem_1',
+        kind: 'personal fact',
+        text: 'User has a dog named Chopper inspired by One Piece.',
+        source_message_ids: ['u1'],
+        reason: 'Useful user profile fact.',
+      },
+    ]);
+
+    expect(parseMemoryExtractionOutput(normalized).operations[0]).toMatchObject({
+      op: 'merge',
+      memoryId: 'mem_1',
+      sourceMessageIds: ['u1'],
+    });
+  });
 });

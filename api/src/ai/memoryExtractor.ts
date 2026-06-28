@@ -26,6 +26,7 @@ function normalizeOperation(raw: unknown, fallbackSourceMessageIds: string[] = [
   const sourceMessageIds =
     input.sourceMessageIds ?? input.source_message_ids ?? input.sourceIds ?? input.source_ids ?? input.sourceMessageId;
   const normalizedOp = typeof op === 'string' ? op.toLowerCase() : undefined;
+  const normalizedKind = typeof input.kind === 'string' ? normalizeKind(input.kind) : undefined;
   const {
     operation: _operation,
     action: _action,
@@ -36,11 +37,12 @@ function normalizeOperation(raw: unknown, fallbackSourceMessageIds: string[] = [
     memory_id: _memoryId,
     replacement_text: _replacementText,
     valid_at: _validAt,
+    kind: _kind,
     ...rest
   } = input;
   return {
     ...rest,
-    ...(normalizedOp ? { op: normalizedOp } : {}),
+    ...(normalizedOp ? { op: normalizeOp(normalizedOp) } : {}),
     ...(input.memoryId === undefined && input.memory_id !== undefined ? { memoryId: input.memory_id } : {}),
     ...(input.replacementText === undefined && input.replacement_text !== undefined ? { replacementText: input.replacement_text } : {}),
     ...(input.validAt === undefined && input.valid_at !== undefined ? { validAt: input.valid_at } : {}),
@@ -49,17 +51,33 @@ function normalizeOperation(raw: unknown, fallbackSourceMessageIds: string[] = [
       : normalizedOp && normalizedOp !== 'ignore' && fallbackSourceMessageIds.length
         ? { sourceMessageIds: fallbackSourceMessageIds }
       : {}),
-    ...(typeof input.kind === 'string' ? { kind: input.kind.toLowerCase().replace(/[\s-]+/g, '_') } : {}),
+    ...(normalizeOp(normalizedOp ?? '') === 'add' && normalizedKind ? { kind: normalizedKind } : {}),
     ...(normalizedOp === 'add' && input.confidence === undefined ? { confidence: 0.75 } : {}),
     ...(normalizedOp === 'add' && input.salience === undefined ? { salience: 0.6 } : {}),
     ...(input.reason === undefined ? { reason: 'Extractor proposed this operation.' } : {}),
   };
 }
 
+function normalizeOp(op: string): string {
+  const value = op.toLowerCase().replace(/[\s-]+/g, '_');
+  if (value === 'update') return 'merge';
+  if (value === 'delete' || value === 'forget' || value === 'hide') return 'suppress';
+  return value;
+}
+
+function normalizeKind(kind: string): string {
+  const value = kind.toLowerCase().replace(/[\s-]+/g, '_');
+  if (['personal_fact', 'user_fact', 'profile', 'profile_fact'].includes(value)) return 'fact';
+  if (['communication_style', 'response_style', 'style'].includes(value)) return 'work_style';
+  if (['project', 'project_fact', 'workspace_context'].includes(value)) return 'project_context';
+  if (['dont', 'do_not', 'negative_preference'].includes(value)) return 'avoidance';
+  return value;
+}
+
 export function normalizeMemoryExtractionJson(raw: unknown, fallbackSourceMessageIds: string[] = []): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const input = raw as Record<string, unknown>;
-  const operations = input.operations ?? input.memories ?? input.memory_updates ?? input.memoryUpdates;
+  const operations = Array.isArray(raw) ? raw : input.operations ?? input.memories ?? input.memory_updates ?? input.memoryUpdates;
   return {
     operations: Array.isArray(operations) ? operations.map((op) => normalizeOperation(op, fallbackSourceMessageIds)) : operations,
   };
