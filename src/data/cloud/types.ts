@@ -34,7 +34,7 @@ export interface ThreadFileRecord {
   mime?: string;
 }
 
-export type ServerMessageStatus = 'complete' | 'interrupted' | 'error';
+export type ServerMessageStatus = 'streaming' | 'complete' | 'interrupted' | 'error';
 
 /** Cloud image metadata (bytes live in Blob Storage at `blobPath`). */
 export interface ImageRecord {

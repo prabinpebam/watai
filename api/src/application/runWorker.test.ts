@@ -143,6 +143,7 @@ describe('processRun', () => {
     expect(msg?.status).toBe('complete');
     expect(msg?.model).toBe('gpt-5.4');
     expect(msg?.orderAt).toBe('2026-06-01T00:00:02Z'); // sorts after the user message
+    expect(Date.parse(msg?.createdAt ?? '')).toBeGreaterThan(Date.parse(msg?.orderAt ?? '')); // delta-sync cursor advances
 
     const run = await ctx.runStore.get('t1', 'r1');
     expect(run?.status).toBe('complete');
@@ -760,6 +761,8 @@ describe('processRun', () => {
     const msg = await ctx.messageStore.get('t1', 'am1');
     expect(msg?.images?.length).toBe(1);
     expect(msg?.toolCalls?.find((t) => t.id === 'g1')?.status).toBe('done');
+    expect(msg?.orderAt).toBe('2026-06-01T00:00:02Z');
+    expect(Date.parse(msg?.createdAt ?? '')).toBeGreaterThan(Date.parse(generating?.createdAt ?? ''));
   });
 
   it('accumulates tool cards and citations onto the message', async () => {

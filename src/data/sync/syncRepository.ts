@@ -41,6 +41,14 @@ function flagsPatch(t: Thread): UpdateThreadBody {
   };
 }
 
+function isStreamingAssistant(message: Message): boolean {
+  return message.role === 'assistant' && message.status === 'streaming';
+}
+
+function shouldReplaceKnownMessage(existing: Message, incoming: MessageRecord): boolean {
+  return isStreamingAssistant(existing) && existing.role === incoming.role;
+}
+
 export class SyncRepository implements Repository {
   constructor(
     private readonly local: SyncLocalStore,
@@ -56,8 +64,13 @@ export class SyncRepository implements Repository {
   getThread(id: Id): Promise<Thread | null> {
     return this.local.getThread(id);
   }
-  listMessages(threadId: Id): Promise<Message[]> {
-    return this.local.listMessages(threadId);
+  async listMessages(threadId: Id): Promise<Message[]> {
+    const messages = await this.local.listMessages(threadId);
+    if (messages.some(isStreamingAssistant) && (await this.syncEnabled())) {
+      await this.pullMessages(threadId, { forceFull: true }).catch(() => false);
+      return this.local.listMessages(threadId);
+    }
+    return messages;
   }
   getBlobUrl(key: string): Promise<string> {
     return this.local.getBlobUrl(key);
@@ -163,8 +176,8 @@ export class SyncRepository implements Repository {
   }
 
   /** Merge a server-authored message into the local store verbatim (no re-queue). Used by the
-   *  server-run streaming finalizer: the bulk pull cursor skips the streaming message (its
-   *  orderAt never advances), so the finished reply is written here directly instead. */
+   *  server-run streaming finalizer so the same device lands the terminal assistant snapshot
+   *  immediately; cross-device sync also reconciles later server snapshots by cursor. */
   async mergeServerMessage(m: Message): Promise<void> {
     await this.local.putMessageRaw(m);
   }
@@ -362,23 +375,26 @@ export class SyncRepository implements Repository {
     return false;
   }
 
-  private async pullMessages(threadId: Id): Promise<boolean> {
+  private async pullMessages(threadId: Id, opts?: { forceFull?: boolean }): Promise<boolean> {
     const key = MSG_CURSOR_PREFIX + threadId;
     const cursor = await this.kv.get<string>(key);
-    const records = await this.cloud.listMessages(threadId, { since: cursor });
+    const localMessages = await this.local.listMessages(threadId);
+    const forceFull = opts?.forceFull || localMessages.some(isStreamingAssistant);
+    const records = await this.cloud.listMessages(threadId, forceFull ? undefined : { since: cursor });
     if (records.length === 0) return false;
-    const known = new Set((await this.local.listMessages(threadId)).map((m) => m.id));
+    const known = new Map(localMessages.map((m) => [m.id, m]));
     let maxCreated = cursor ?? '';
-    let added = false;
+    let changed = false;
     for (const rec of records) {
-      if (!known.has(rec.id)) {
+      const existing = known.get(rec.id);
+      if (!existing || shouldReplaceKnownMessage(existing, rec as MessageRecord)) {
         await this.local.putMessageRaw(messageFromRecord(rec as MessageRecord));
-        added = true;
+        changed = true;
       }
       if (rec.createdAt > maxCreated) maxCreated = rec.createdAt;
     }
     if (maxCreated && maxCreated !== cursor) await this.kv.set(key, maxCreated);
-    return added;
+    return changed;
   }
 
   /** On push, upload any local-only images of this message to Blob Storage (write SAS),

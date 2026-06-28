@@ -617,6 +617,49 @@ describe('SyncRepository — pull', () => {
     const again = await repo.pull();
     expect(again.size).toBe(0);
   });
+
+  it('repairs a known streaming assistant message by fetching the full thread window', async () => {
+    const { repo, local, cloud, kv } = setup(true);
+    await kv.set('sync.cursor.messages.t1', '2026-02-01T00:00:09Z');
+    await local.putMessageRaw(
+      msg({
+        id: 'am1',
+        threadId: 't1',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        createdAt: '2026-02-01T00:00:01Z',
+        toolCalls: [{ id: 'g1', kind: 'image', name: 'generate_image', status: 'running', imageSize: '1024x1024' }],
+      }),
+    );
+    cloud.seedMessage({
+      id: 'am1',
+      threadId: 't1',
+      role: 'assistant',
+      content: 'Done.',
+      status: 'complete',
+      createdAt: '2026-02-01T00:00:01Z',
+      orderAt: '2026-02-01T00:00:01Z',
+      images: [
+        {
+          id: 'img1',
+          blobPath: 'u/t1/img1.png',
+          prompt: 'a cat',
+          size: '1024x1024',
+          outputFormat: 'png',
+          createdAt: '2026-02-01T00:00:02Z',
+        },
+      ],
+      toolCalls: [{ id: 'g1', kind: 'image', name: 'generate_image', status: 'done' }],
+    });
+
+    const messages = await repo.listMessages('t1');
+
+    expect(messages[0]).toMatchObject({ content: 'Done.', status: 'complete' });
+    expect(messages[0].images?.[0].blobPath).toBe('u/t1/img1.png');
+    expect(messages[0].toolCalls?.[0].status).toBe('done');
+    expect(await kv.get('sync.cursor.messages.t1')).toBe('2026-02-01T00:00:09Z');
+  });
 });
 
 describe('SyncRepository — run lock', () => {

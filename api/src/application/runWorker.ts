@@ -440,6 +440,20 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   let model: string | undefined;
   let creds: DecryptedCredentials | undefined;
   let firstUser = '';
+  let lastAssistantCreatedAt = '';
+
+  const nextAssistantCreatedAt = (): string => {
+    const now = clock.now();
+    if (!lastAssistantCreatedAt || now > lastAssistantCreatedAt) {
+      lastAssistantCreatedAt = now;
+      return now;
+    }
+    const parsed = Date.parse(lastAssistantCreatedAt);
+    lastAssistantCreatedAt = Number.isFinite(parsed)
+      ? new Date(parsed + 1).toISOString()
+      : `${lastAssistantCreatedAt}.1`;
+    return lastAssistantCreatedAt;
+  };
 
   const buildAssistant = (status: MessageRecord['status']): MessageRecord => ({
     id: run.assistantMessageId,
@@ -448,7 +462,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     role: 'assistant',
     content: acc,
     status,
-    createdAt: orderAt,
+    createdAt: nextAssistantCreatedAt(),
     orderAt,
     deletedAt: null,
     ...(model ? { model } : {}),
@@ -689,8 +703,18 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
             if (tc) toolCalls.set(ev.callId, { ...tc, status: 'done' });
           }
           await flush(true);
-        } catch {
-          /* image upload failed -> the text answer still completes without it */
+        } catch (e) {
+          if (ev.callId) {
+            const tc = toolCalls.get(ev.callId);
+            if (tc) {
+              toolCalls.set(ev.callId, {
+                ...tc,
+                status: 'error',
+                summary: e instanceof Error ? e.message.slice(0, 400) : 'Image upload failed.',
+              });
+            }
+          }
+          await flush(true);
         }
       } else if (ev.type === 'error') {
         err = { code: 'internal', message: ev.message };

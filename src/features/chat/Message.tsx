@@ -305,7 +305,7 @@ export function AssistantMessage({ message, streaming, onRegenerate }: Assistant
     id: tc.id,
     size: tc.imageSize || '1024x1024',
   }));
-  const pendingImages = derivedPending.length ? derivedPending : message.pendingImages;
+  const pendingImages = message.images?.length ? undefined : derivedPending.length ? derivedPending : message.pendingImages;
   // Image tool calls are conveyed by the placeholder / final image, so keep them out of the card
   // strip — except a failure, which the user should see.
   const toolCards = (message.toolCalls ?? []).filter(
