@@ -47,11 +47,11 @@ app.http('thread-item', {
 });
 
 app.http('thread-lock', {
-  methods: ['POST', 'DELETE'],
+  methods: ['GET', 'POST', 'DELETE'],
   authLevel: 'anonymous',
   route: 'threads/{id}/lock',
   handler: methodDispatch(
-    { POST: (c) => c.threadLock.acquire, DELETE: (c) => c.threadLock.release },
+    { GET: (c) => c.threadLock.get, POST: (c) => c.threadLock.acquire, DELETE: (c) => c.threadLock.release },
     invited,
   ),
 });

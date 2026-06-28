@@ -20,6 +20,14 @@ export class ThreadLockService {
     private readonly clock: ServiceClock,
   ) {}
 
+  /** Read the current lock for proactive UI state. Missing/deleted threads report no lock instead
+   *  of throwing, so local-only stale threads don't create noisy 404s while the client polls. */
+  async get(userId: string, threadId: string): Promise<{ lock: ThreadLock | null }> {
+    const thread = await this.store.get(userId, threadId);
+    if (!thread || thread.deletedAt) return { lock: null };
+    return { lock: thread.lock ?? null };
+  }
+
   /** Take or renew the lock. Throws `conflict` (with the current holder in `details.lock`) when
    *  another, still-live device holds it. */
   async acquire(

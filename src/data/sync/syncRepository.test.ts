@@ -188,6 +188,11 @@ class FakeCloud implements CloudApi {
     });
   }
 
+  async getThreadLock(id: string): Promise<ThreadLock | null> {
+    this.calls.push(`getLock:${id}`);
+    return this.threads.get(id)?.lock ?? null;
+  }
+
   async listThreads(opts?: {
     includeArchived?: boolean;
     includeDeleted?: boolean;

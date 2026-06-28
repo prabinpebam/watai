@@ -98,6 +98,7 @@ describe('ThreadLockService.acquire', () => {
     await seedThread(store);
     let failuresLeft = 2;
     const racy: ThreadLockStore = {
+      get: (u, id) => store.get(u, id),
       getForUpdate: (u, id) => store.getForUpdate(u, id),
       putIfMatch: (rec, etag) => (failuresLeft-- > 0 ? Promise.resolve(null) : store.putIfMatch(rec, etag)),
     };
@@ -110,6 +111,7 @@ describe('ThreadLockService.acquire', () => {
   it('gives up with conflict after exhausting retries', async () => {
     await seedThread(store);
     const alwaysRacy: ThreadLockStore = {
+      get: (u, id) => store.get(u, id),
       getForUpdate: (u, id) => store.getForUpdate(u, id),
       putIfMatch: () => Promise.resolve(null),
     };
@@ -117,6 +119,27 @@ describe('ThreadLockService.acquire', () => {
     expect(await code(() => racySvc.acquire('userA', 't1', { deviceId: 'd', deviceLabel: 'x' }))).toBe(
       'conflict',
     );
+  });
+});
+
+describe('ThreadLockService.get', () => {
+  let store: InMemoryThreadStore;
+  let svc: ThreadLockService;
+  beforeEach(() => {
+    store = new InMemoryThreadStore();
+    svc = new ThreadLockService(store, clock);
+  });
+
+  it('returns null instead of throwing for missing or deleted threads', async () => {
+    expect(await svc.get('userA', 'missing')).toEqual({ lock: null });
+    await seedThread(store, { deletedAt: new Date().toISOString() });
+    expect(await svc.get('userA', 't1')).toEqual({ lock: null });
+  });
+
+  it('returns the current lock for an existing thread', async () => {
+    await seedThread(store);
+    const { lock } = await svc.acquire('userA', 't1', { deviceId: 'devA', deviceLabel: 'Chrome' });
+    expect(await svc.get('userA', 't1')).toEqual({ lock });
   });
 });
 

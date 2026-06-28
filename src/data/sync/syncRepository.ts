@@ -211,8 +211,7 @@ export class SyncRepository implements Repository {
     const thread = await this.local.getThread(threadId);
     if (!thread || thread.temporary) return null;
     try {
-      const rec = await this.cloud.getThread(threadId);
-      return rec.lock ?? null;
+      return await this.cloud.getThreadLock(threadId);
     } catch {
       return null;
     }

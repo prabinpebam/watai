@@ -191,6 +191,11 @@ export class WataiApiClient implements CloudApi {
     return this.request('POST', `/threads/${encodeURIComponent(threadId)}/lock`, body);
   }
 
+  async getThreadLock(threadId: string): Promise<ThreadLock | null> {
+    const out = await this.request<{ lock?: ThreadLock | null }>('GET', `/threads/${encodeURIComponent(threadId)}/lock`);
+    return out.lock ?? null;
+  }
+
   releaseThreadLock(threadId: string, deviceId: string): Promise<void> {
     return this.request(
       'DELETE',
@@ -387,6 +392,7 @@ export interface CloudApi {
     threadId: string,
     body: { deviceId: string; deviceLabel: string },
   ): Promise<{ thread: ThreadRecord; lock: ThreadLock }>;
+  getThreadLock(threadId: string): Promise<ThreadLock | null>;
   releaseThreadLock(threadId: string, deviceId: string): Promise<void>;
   getSettings(): Promise<Settings>;
   patchSettings(patch: Partial<Settings>): Promise<Settings>;

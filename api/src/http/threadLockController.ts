@@ -13,6 +13,12 @@ import type { ApiRequest, HttpResult } from './types';
  */
 export function createThreadLockController(locks: ThreadLockService) {
   return {
+    get: (req: ApiRequest): Promise<HttpResult> =>
+      respond(200, async () => {
+        const { userId } = identityFromClaims(req.claims);
+        return locks.get(userId, req.params!.id);
+      }),
+
     acquire: (req: ApiRequest): Promise<HttpResult> =>
       respond(200, async () => {
         const { userId } = identityFromClaims(req.claims);

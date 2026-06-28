@@ -174,6 +174,18 @@ describe('WataiApiClient', () => {
     expect(out.lock.deviceLabel).toBe('Chrome on Windows');
   });
 
+  it('reads the run lock via GET', async () => {
+    const lock = { deviceId: 'd1', deviceLabel: 'Chrome on Windows', acquiredAt: 'a', heartbeatAt: 'b' };
+    const { fetchImpl, calls } = stubFetch([{ status: 200, body: { lock } }]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    const out = await client.getThreadLock('t1');
+
+    expect(calls[0].method).toBe('GET');
+    expect(calls[0].url).toBe('https://api.test/api/threads/t1/lock');
+    expect(out).toEqual(lock);
+  });
+
   it('releases the run lock via DELETE with the deviceId in the query', async () => {
     const { fetchImpl, calls } = stubFetch([{ status: 200, body: { thread: { id: 't1' } } }]);
     const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });

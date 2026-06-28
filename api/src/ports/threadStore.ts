@@ -64,6 +64,7 @@ export interface ThreadStore {
  * then take it" a single atomic step, so two devices can never both acquire the same thread.
  */
 export interface ThreadLockStore {
+  get(userId: string, id: string): Promise<ThreadRecord | null>;
   getForUpdate(userId: string, id: string): Promise<{ record: ThreadRecord; etag: string } | null>;
   putIfMatch(record: ThreadRecord, etag: string): Promise<ThreadRecord | null>;
 }
