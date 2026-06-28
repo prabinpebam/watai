@@ -80,7 +80,21 @@ Memory **width** comes from these layers together, not from one large vector sto
 
 Each layer has different retention, consent, ranking, and UI controls.
 
-### 4.1 Abstract Memory Is First-Class
+### 4.2 Structured Memory Direction
+
+Atomic memories are evidence units, not the final user-facing model. Watai should evolve toward the structured architecture in [10-structured-hierarchical-memory.md](10-structured-hierarchical-memory.md): a profile tree for human review, temporal day/week/month buckets for short-term continuity, and typed entity/relationship records for relational facts.
+
+Example: "User has a dog called Chopper inspired by One Piece" should not remain only a flat fact. It should also project into:
+
+- `User > Family > Pets > Chopper`
+- entity: `Chopper` of type `pet`
+- entity: `One Piece` of type `interest`
+- relationship: `User HAS_PET Chopper`
+- relationship: `Chopper INSPIRED_BY One Piece`
+
+Flat atomic records remain necessary for source refs, confidence, deletion, and audit. The profile tree and graph are derived views over that evidence.
+
+### 4.3 Abstract Memory Is First-Class
 
 Memory is not only for simple facts like names, locations, or resource groups. Watai should remember abstract context when it reliably improves future work:
 

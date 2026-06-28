@@ -253,6 +253,39 @@ Acceptance:
 - Token budget remains within budget.
 - Vector/hybrid path is feature-flagged.
 
+## Slice 9 — Structured Profile And Temporal Memory
+
+Goal: evolve from flat atomic memory records to the structured profile tree, typed relationship graph, and temporal buckets specified in [10-structured-hierarchical-memory.md](10-structured-hierarchical-memory.md).
+
+Files:
+
+- `api/src/domain/memoryGraph.ts`
+- `api/src/domain/memoryProfile.ts`
+- `api/src/ports/memoryGraphStore.ts`
+- `api/src/ports/memoryProfileStore.ts`
+- `api/src/application/memoryProfileService.ts`
+- `api/src/application/memoryExtractionService.ts`
+- `api/src/application/memoryContextService.ts`
+- `src/features/settings` memory UI components
+
+Work:
+
+- Add entity and relationship records.
+- Add structured profile document and day/week/month temporal bucket records.
+- Extend extractor output to propose entities, relationships, and profile patches.
+- Write atomic evidence first, then graph/profile projections.
+- Add profile rebuild from atomic evidence.
+- Update retrieval to consult profile/graph before atomic fallback.
+- Update Settings memory UI to show Structured and Evidence views.
+
+Acceptance:
+
+- Chopper-style prompt appears under `User > Family > Pets` and as graph relationships.
+- Profile tree is incomplete-safe and source-linked.
+- Deleting/suppressing a profile item suppresses retrieval through the underlying evidence.
+- Today/week/month buckets can update without promoting one-off details to long-term.
+- Hot-path retrieval remains bounded and degrades to empty context if profile/graph lookup is slow.
+
 ## Release Readiness Checklist
 
 Before enabling memory for users:

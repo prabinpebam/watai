@@ -51,6 +51,7 @@ This means the MVP should be intentionally simple but not simplistic: start with
 | [07-retrieval-and-extraction-algorithms.md](07-retrieval-and-extraction-algorithms.md) | Deterministic MVP retrieval, scoring, budgeting, extraction, redaction, dedupe, invalidation, summary refresh, and feedback algorithms. |
 | [08-build-slices-and-acceptance.md](08-build-slices-and-acceptance.md) | PR-sized implementation slices with touched files, work items, and acceptance criteria. |
 | [09-background-extraction-system.md](09-background-extraction-system.md) | Implementation-ready design for the active asynchronous memory learner: triggers, queue jobs, LLM extraction contract, validation gates, apply semantics, and tests. |
+| [10-structured-hierarchical-memory.md](10-structured-hierarchical-memory.md) | Directional architecture for profile-tree memory, typed temporal graph records, day/week/month buckets, structured retrieval, and migration from flat atomic evidence. |
 
 ## What "Implementation-Ready" Means Here
 
