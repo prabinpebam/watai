@@ -2,7 +2,8 @@
   "name": "Watai",
   "short_name": "Watai",
   "description": "Chat and talk with AI using your own Azure OpenAI endpoint.",
-  "start_url": "./",
+  "id": "./",
+  "start_url": "./#/new",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0e0e10",
@@ -13,13 +14,13 @@
       "src": "./icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "./icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "./icon-maskable-512.png",
