@@ -44,11 +44,11 @@ export class CosmosMemoryStore implements MemoryStore {
     }
     const cursor = decodeCursor(opts?.cursor);
     if (cursor) {
-      conditions.push('(c.updatedAt < @cursorUpdatedAt OR (c.updatedAt = @cursorUpdatedAt AND c.id < @cursorId))');
-      parameters.push({ name: '@cursorUpdatedAt', value: cursor.updatedAt }, { name: '@cursorId', value: cursor.id });
+      conditions.push('c.updatedAt < @cursorUpdatedAt');
+      parameters.push({ name: '@cursorUpdatedAt', value: cursor.updatedAt });
     }
     const limit = opts?.limit ?? 50;
-    const query = `SELECT * FROM c WHERE ${conditions.join(' AND ')} ORDER BY c.updatedAt DESC, c.id DESC OFFSET 0 LIMIT ${limit + 1}`;
+    const query = `SELECT * FROM c WHERE ${conditions.join(' AND ')} ORDER BY c.updatedAt DESC OFFSET 0 LIMIT ${limit + 1}`;
     const { resources } = await this.container.items
       .query<MemoryRecord>({ query, parameters }, { partitionKey: userId })
       .fetchAll();
