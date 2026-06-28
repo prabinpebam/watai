@@ -57,7 +57,7 @@ Watai must run an active, asynchronous memory learner for every eligible user pr
 
 Requirements:
 
-- Every non-temporary synced user turn is considered for memory extraction.
+- Every non-temporary synced user turn receives at least one LLM extraction decision when automatic extraction is enabled, either in the command lane, the turn lane, or both.
 - Extraction must never delay send-to-first-token or response completion.
 - LLM judgment is required for automatic memory creation/update/suppression/invalidation.
 - The service, not the LLM, owns storage decisions after strict validation.
@@ -74,6 +74,13 @@ Non-goals for the first automatic extraction release:
 - Perfect long-range summarization.
 - Client-side extraction.
 - Showing every rejected candidate in the UI.
+
+Critical review constraints:
+
+- Do not rely on regex-only "remember" detection. Regex may choose which lane is urgent, but an LLM must make the durable update/no-update decision for eligible turns.
+- Do not make extraction dependent on the frontend being open. The worker must run from server-side message/run persistence.
+- Do not enqueue content-bearing queue messages. Queue payloads carry ids only; the worker rehydrates content from stores.
+- Do not let the learner write faster than users can govern it. Every stored memory remains visible, suppressible, and deletable.
 
 ## 3. Architecture
 
@@ -121,6 +128,7 @@ Triggered shortly after the user message is saved, without waiting for the assis
 Purpose:
 
 - Explicit commands such as "remember that...", "forget that...", "never mention...", "don't use that again", or "correction: ..." should take effect quickly.
+- User prompts that look like direct memory-control instructions still go through LLM extraction; deterministic pattern matching may prioritize the lane but must not be the final decision-maker.
 - The assistant response still does not wait for this lane.
 
 Input window:
@@ -137,7 +145,7 @@ Allowed operations:
 - `invalidate` for explicit corrections.
 - `ignore` for no durable command.
 
-This lane should be fast and conservative. If it is unsure, it returns `ignore` and the turn lane can decide later.
+This lane should be fast and conservative. If it is unsure, it returns `ignore` and the turn lane can decide later. The command lane is allowed to be selectively enqueued by a cheap prefilter only when the turn lane will still run after completion. If there may be no terminal assistant response, such as explicit remember/forget in a sync-only append path, enqueue command lane unconditionally for that user message.
 
 ### 4.2 Turn Reflection Lane
 
@@ -169,6 +177,12 @@ Allowed operations:
 
 This lane is the default active learner for normal usage.
 
+Coverage rule:
+
+- A completed eligible user/assistant turn must have exactly one turn-lane LLM decision unless a job with the same assistant-message dedupe key already completed or was ignored.
+- A user message with explicit memory-control language must have a command-lane LLM decision even if the assistant response later fails.
+- If both lanes run, command-lane writes are visible to the turn lane as existing candidates so the turn lane can merge or ignore rather than duplicate.
+
 ## 5. Queue And Job Model
 
 Queue name: `memory-jobs` unless overridden by `MEMORY_QUEUE`.
@@ -198,6 +212,15 @@ export interface MemoryExtractionJobRecord {
   runId?: string;
   dedupeKey: string;
   attempts: number;
+  operationCounts?: {
+    add: number;
+    merge: number;
+    invalidate: number;
+    suppress: number;
+    ignore: number;
+  };
+  acceptedCount?: number;
+  rejectedCount?: number;
   lastErrorCode?: string;
   lastErrorMessage?: string;
   createdAt: string;
@@ -205,6 +228,13 @@ export interface MemoryExtractionJobRecord {
   completedAt?: string;
 }
 ```
+
+Storage:
+
+- Use a dedicated Cosmos container `memoryJobs` with partition key `/userId` for job records.
+- Add the container to Bicep and create it surgically in the deployed dev resource group before code that writes jobs is deployed.
+- The queue remains Azure Storage Queue `memory-jobs`; Storage Queue invisibility/retry is the execution mechanism, Cosmos job records are the idempotency/audit mechanism.
+- Do not store job records in the `memory` container unless `MemoryStore` first gains explicit `docType = 'memory'` filtering for all list/get paths.
 
 Dedupe keys:
 
@@ -216,8 +246,21 @@ Rules:
 
 - Enqueue is best-effort and must not throw out of run/message completion.
 - If a job with the same dedupe key exists in `queued`, `running`, `completed`, or `ignored`, do not create another.
+- If a job with the same dedupe key is `failed`, enqueue may reuse the same job id and increment attempts, or create a replacement with `replacesJobId`; either path must remain idempotent.
 - Failed jobs may retry through Storage Queue retry policy, but the service must remain idempotent.
 - Poison messages are observable and can be replayed by job id.
+- Worker must load the job record by `jobId` and verify `userId`, `threadId`, and referenced message ownership before reading content.
+
+Job state transitions:
+
+```text
+queued -> running -> completed
+queued -> running -> ignored
+queued -> running -> failed
+failed -> queued (manual replay or retry policy)
+```
+
+`ignored` means the worker successfully made a decision and chose no memory writes. `failed` means extraction infrastructure failed before a valid decision was applied.
 
 ## 6. Trigger Points
 
@@ -231,6 +274,8 @@ When `RunService.submit()` stores the user message and creates the run, it shoul
 - no job exists for that user message.
 
 This catches explicit remember/forget/correction prompts while the assistant response is generated.
+
+If a cheap prefilter is used, it may only decide whether the command lane is urgent. It must not prevent the turn lane from later considering the completed turn.
 
 ### 6.2 Server Run Worker Completion
 
@@ -246,7 +291,14 @@ Do not enqueue for `error` or `interrupted` unless a future workflow has a durab
 
 ### 6.3 Message Append Endpoint
 
-Some clients may still sync complete assistant messages through `POST /threads/{threadId}/messages`. `MessageService.append()` should enqueue a turn-lane job for a newly appended complete assistant message using the same dedupe rule.
+Some clients may still sync messages through `POST /threads/{threadId}/messages`.
+
+Rules:
+
+- For a newly appended complete assistant message, enqueue a turn-lane job using the same assistant-message dedupe rule.
+- For a newly appended user message, enqueue a command-lane job when the message contains explicit memory-control language or when the append path cannot guarantee a later server-run completion job.
+- Never enqueue from messages belonging to temporary threads.
+- Never enqueue when the append is an idempotent retry of an existing message.
 
 ### 6.4 Rebuild
 
@@ -353,6 +405,12 @@ Extractor model choice:
 - If credentials are unavailable, mark job `failed` with `lastErrorCode = 'credentials_missing'`; do not fall back to a hidden platform key.
 - Later, support `MEMORY_EXTRACTOR_MODEL` when the user's endpoint has multiple model deployments.
 
+Model data-boundary disclosure:
+
+- Extraction sends the bounded turn window to the user's configured model endpoint, just like server-run generation.
+- The UI must make clear that automatic learning uses the configured AI endpoint to decide what to remember.
+- If the user disables server-side credentials or sync, automatic extraction is unavailable; manual local memory can still exist.
+
 ## 8. Service Validation Gates
 
 The application service must reject or ignore model proposals that fail any gate.
@@ -376,6 +434,12 @@ Soft downgrade gates:
 - Ambiguous correction: mark old memory `background` or keep both only if invalidation is not justified.
 
 The service may return `ignored` with structured reasons. Ignored candidates are not shown in normal UI but can be counted in telemetry/evals.
+
+Deterministic prevalidation before the LLM:
+
+- Skip LLM extraction for empty/whitespace messages, temporary threads, disabled/paused memory, or missing credentials.
+- Reject or redact obvious secret-like source content before constructing the extractor prompt when possible.
+- Do not skip ordinary eligible prompts simply because they lack memory keywords; the turn-lane LLM is responsible for returning `ignore`.
 
 ## 9. Apply Semantics
 
@@ -464,6 +528,12 @@ Default window:
 - memory source refs by id only,
 - thread title and timestamps.
 
+Ordering:
+
+- Preserve original message chronology by `orderAt ?? createdAt`.
+- Include role labels and timestamps in the extractor input so the model can distinguish old facts from newer corrections.
+- Never include hidden chain-of-thought, tool raw arguments, credentials, or full code-interpreter outputs. Summaries/tool result previews may be included only when needed to understand completed work.
+
 Existing memory candidates are selected by:
 
 - memories used in the just-completed response,
@@ -499,6 +569,18 @@ Required UX states:
 - Memory paused: retrieval may continue only if `referenceSaved` is true, but extraction stops.
 - Auto learning off: manual memory still works, automatic extraction stops.
 - Temporary chat: show memory unavailable for this chat.
+
+Settings migration:
+
+- If `personalization.memory` is absent, derive `enabled` and `referenceSaved` from `memoryEnabled`; derive `paused = false`.
+- Existing users default `referenceHistory = false` and `autoExtract = false` until the upgraded Memory settings copy has been shown or product explicitly decides the old toggle covered automatic learning.
+- Turning `memoryEnabled` off must set `memory.enabled = false` for new settings writes.
+- Existing users should not silently start automatic extraction until the app has displayed the upgraded Memory settings copy at least once, unless product explicitly decides that the existing Memory toggle covered automatic learning.
+
+Recommended default for first rollout:
+
+- Existing `memoryEnabled = true` users: `enabled = true`, `referenceSaved = true`, `referenceHistory = false`, `autoExtract = false` until the user sees the upgraded setting.
+- New users: `enabled = true`, `referenceSaved = true`, `referenceHistory = true`, `autoExtract = true` if onboarding explains memory.
 
 ## 13. Observability
 
@@ -537,6 +619,14 @@ Do not log:
 - Store conflicts rerun dedupe/apply once, then retry through queue if still conflicting.
 - Poison messages are safe to replay because apply is idempotent by dedupe key and source hash.
 
+Backpressure and cost controls:
+
+- Per user, process at most one memory job concurrently.
+- Coalesce queued turn jobs for the same thread when a newer assistant message supersedes an older unprocessed turn, unless the older turn contains explicit memory-control language.
+- Cap extractor calls per user per day; over-cap jobs become `ignored` with `lastErrorCode = 'quota_exceeded'` and can be replayed manually.
+- Rebuild jobs must be batch-limited and lower priority than live command/turn jobs.
+- Extraction completion SLO for live jobs: p50 <= 30 seconds, p95 <= 3 minutes after assistant completion under normal queue health.
+
 ## 15. Implementation Files
 
 Backend domain:
@@ -557,6 +647,12 @@ Backend adapters:
 - `api/src/adapters/cosmos/memoryJobStore.ts`
 - `api/src/adapters/azure/queueMemoryStarter.ts`
 
+Infrastructure:
+
+- `infra/main.bicep` adds `memoryJobs` Cosmos container and any optional `MEMORY_QUEUE` app setting.
+- Because Function App app settings are full replacement in Bicep, reconcile existing live settings before any full deployment.
+- For dev, create `memoryJobs` surgically before deploying code that writes job records.
+
 AI adapter:
 
 - `api/src/ai/memoryExtractor.ts`
@@ -575,7 +671,7 @@ Integration points:
 
 - `RunService.submit()` enqueues command-lane jobs.
 - `processRun()` enqueues turn-lane jobs after final complete assistant message.
-- `MessageService.append()` enqueues turn-lane jobs for synced complete assistant messages.
+- `MessageService.append()` enqueues command-lane jobs for eligible user messages and turn-lane jobs for synced complete assistant messages.
 - `MemoryService.delete()` and thread deletion paths must be respected by retrieval and extraction candidate loading.
 
 ## 16. Test Plan
@@ -594,10 +690,12 @@ Queue tests:
 - invalid queue payload fails safely,
 - duplicate dedupe key does not enqueue twice,
 - queue starter creates queue if needed.
+- worker loads job record by id and rejects mismatched user/thread/message ownership.
 
 Service tests:
 
 - explicit remember command creates memory without blocking run,
+- every eligible completed turn reaches an LLM extraction decision,
 - normal durable preference creates memory after assistant complete,
 - one-off prompt is ignored,
 - secret prompt is rejected,
@@ -611,6 +709,7 @@ Run-worker tests:
 
 - response completes even when enqueue fails,
 - complete assistant response enqueues turn job,
+- user message persistence enqueues or schedules command-lane decision for explicit memory-control language,
 - error/interrupted response does not enqueue,
 - memory extraction is not awaited before final response.
 
@@ -628,6 +727,7 @@ End-to-end evals:
 ## 17. Acceptance Criteria
 
 - Every eligible completed server-run turn creates or dedupes a memory extraction job.
+- Every eligible completed server-run turn has an LLM extraction decision recorded as `completed` or `ignored` unless extraction infrastructure failed.
 - Explicit remember/forget/correction prompts create command-lane jobs immediately after user message persistence.
 - Extraction never runs on the generation hot path and never blocks first token or final message persistence.
 - Worker uses an LLM extractor with strict JSON output.
@@ -638,4 +738,5 @@ End-to-end evals:
 - Corrections invalidate outdated active memories.
 - Response-level `memoryRefs` continue to show only memories actually used for the response, not newly extracted memories from after the response.
 - Newly extracted memories are available to future runs after the worker completes.
+- Live extraction p95 completion is <= 3 minutes under normal queue health.
 - Manual test can prove: say a preference in one normal chat, wait for extraction completion, ask in another chat, and see the preference used with Memory Used disclosure.

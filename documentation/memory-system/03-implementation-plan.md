@@ -165,10 +165,12 @@ Backend files likely added/touched:
 - `api/src/application/runService.ts`
 - `api/src/application/runWorker.ts`
 - `api/src/application/messageService.ts`
+- `infra/main.bicep`
 
 Infrastructure:
 
 - Storage Queue `memory-jobs`.
+- Cosmos container `memoryJobs` with partition key `/userId` for job records.
 - Optional app setting `MEMORY_QUEUE`.
 - Optional app setting for memory extraction model/deployment if not derived from user credentials.
 
@@ -184,6 +186,7 @@ Implementation:
 8. Dedupes, merges, suppresses, invalidates, and stores additive records.
 9. Refreshes memory summary when changed memory count or age threshold is reached.
 10. Emits content-free telemetry for enqueue/completion/rejection/failure.
+11. Enforce per-user concurrency, daily extractor-call caps, and rebuild lower priority so background learning cannot starve normal runs.
 
 Validation:
 
@@ -195,6 +198,7 @@ Validation:
 - Idempotent replay tests by job dedupe key and source hash.
 - Over-insertion tests: one-off requests should not become memory.
 - Assistant-fact tests: useful completed work can become episodic memory with assistant-message source refs.
+- Backpressure tests: per-user concurrency and quota exhaustion produce safe `ignored`/retry states.
 
 ## 7. Phase 5 — Memory Sources In Chat UI
 

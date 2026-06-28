@@ -171,6 +171,7 @@ Files:
 - `api/src/adapters/azure/queueMemoryStarter.ts`
 - `api/src/functions/memoryWorker.ts`
 - `api/src/index.ts`
+- `infra/main.bicep`
 - `api/src/application/runService.ts`
 - `api/src/application/runWorker.ts`
 - `api/src/application/messageService.ts`
@@ -180,6 +181,7 @@ Work:
 - Add command-lane extraction jobs after eligible user messages for explicit remember/forget/correction commands.
 - Add turn-lane extraction jobs after terminal complete assistant messages.
 - Store idempotent job records with dedupe keys.
+- Add dedicated `memoryJobs` Cosmos container `/userId`; create it surgically in dev before deploy.
 - Queue identifiers only; worker loads message content from stores.
 - Implement strict LLM JSON extractor contract.
 - Validate/redact/dedupe/merge/invalidate/suppress in `MemoryExtractionService`.
@@ -190,6 +192,7 @@ Work:
 Acceptance:
 
 - Every eligible completed server-run turn creates or dedupes a memory extraction job.
+- Every eligible completed server-run turn records an LLM extraction decision as `completed` or `ignored` unless extraction infrastructure failed.
 - Explicit remember/forget/correction prompts create command-lane jobs immediately after user message persistence.
 - Extraction is never on send-to-first-token path.
 - Response completion does not wait for extraction.
@@ -199,6 +202,7 @@ Acceptance:
 - Corrections invalidate older memories.
 - Assistant-confirmed durable work can become episodic memory.
 - Job replay is idempotent.
+- Live extraction p95 completion <= 3 minutes under normal queue health.
 - Queue retry/decode tests follow existing run worker pattern.
 
 ## Slice 7 — Import, Export, Rebuild, Retention

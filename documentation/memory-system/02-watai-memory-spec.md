@@ -165,9 +165,9 @@ Memory context construction has four stages:
 | Container | Partition key | Purpose |
 | --- | --- | --- |
 | `memory` | `/userId` | Atomic memories, summaries, source refs, suppression records. |
-| `memoryJobs` | `/userId` | Optional durable queue/job records if Storage Queue visibility alone is insufficient. |
+| `memoryJobs` | `/userId` | Durable extraction job records for idempotency, audit, replay, backpressure, and queue-worker status. |
 
-For the first build, `memory` can hold multiple document kinds. If query volume grows, split summaries and usage logs later.
+For the first build, `memory` can hold multiple memory document kinds. Extraction jobs belong in `memoryJobs`, not `memory`, so memory list/query paths never have to filter job records out of normal retrieval.
 
 ### 6.2 `MemoryRecord`
 

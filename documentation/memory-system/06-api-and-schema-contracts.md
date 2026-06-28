@@ -240,9 +240,12 @@ export interface Settings {
 }
 ```
 
-Migration rule:
+Migration rules:
 
-- If `memory` is absent, derive `enabled = memoryEnabled`, `referenceSaved = memoryEnabled`, `referenceHistory = memoryEnabled`, `autoExtract = memoryEnabled`, `paused = false`.
+- If `memory` is absent, derive `enabled = memoryEnabled`, `referenceSaved = memoryEnabled`, and `paused = false`.
+- For existing users, default `referenceHistory = false` and `autoExtract = false` until the upgraded Memory settings copy has been shown or product explicitly decides the old toggle covered automatic learning.
+- For new users who see onboarding/settings copy that explains automatic learning, default `referenceHistory = memoryEnabled` and `autoExtract = memoryEnabled`.
+- Turning the compatibility `memoryEnabled` switch off must also set `memory.enabled = false` on new writes.
 
 ## 7. HTTP Endpoints
 
@@ -531,6 +534,15 @@ export interface MemoryExtractionJobRecord {
   runId?: string;
   dedupeKey: string;
   attempts: number;
+  operationCounts?: {
+    add: number;
+    merge: number;
+    invalidate: number;
+    suppress: number;
+    ignore: number;
+  };
+  acceptedCount?: number;
+  rejectedCount?: number;
   lastErrorCode?: string;
   lastErrorMessage?: string;
   createdAt: string;
@@ -538,5 +550,7 @@ export interface MemoryExtractionJobRecord {
   completedAt?: string;
 }
 ```
+
+Job records live in a dedicated Cosmos `memoryJobs` container partitioned by `/userId`. Queue payloads carry ids only; workers load the job record and then rehydrate message content from stores after verifying ownership.
 
 Extractor output is strict JSON with operations `add`, `merge`, `invalidate`, `suppress`, and `ignore`. Model output is never stored directly; `MemoryExtractionService` validates source ownership, temporary-thread eligibility, confidence, safety, dedupe, and contradiction rules before writing `MemoryRecord` changes.
