@@ -392,11 +392,11 @@ export class WataiApiClient implements CloudApi {
 
   // --- admin: server-decided memory model ---
   getMemoryModelConfig(): Promise<MemoryModelConfig> {
-    return this.request('GET', '/admin/memory-model');
+    return this.request('GET', '/config/memory-model');
   }
 
   setMemoryModel(memoryModel: string): Promise<MemoryModelConfig> {
-    return this.request('PUT', '/admin/memory-model', { memoryModel });
+    return this.request('PUT', '/config/memory-model', { memoryModel });
   }
 }
 

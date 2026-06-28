@@ -274,9 +274,11 @@ app.http('invite-item', {
 });
 
 // Admin-only server config: the model used for background memory extraction.
-app.http('admin-memory-model', {
+// Note: the route avoids the `/admin` segment, which the Functions host reserves for
+// its own management endpoints; `/api/admin/*` is not reliably routable to a function.
+app.http('config-memory-model', {
   methods: ['GET', 'PUT'],
   authLevel: 'anonymous',
-  route: 'admin/memory-model',
+  route: 'config/memory-model',
   handler: methodDispatch({ GET: (c) => c.adminConfig.getMemoryModel, PUT: (c) => c.adminConfig.setMemoryModel }, admin),
 });
