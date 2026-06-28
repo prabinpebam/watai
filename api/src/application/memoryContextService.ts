@@ -1,5 +1,5 @@
 import type { MemoryContextBlock, MemoryRecord } from '../domain/memory';
-import type { Settings } from '../domain/settings';
+import { effectiveMemorySettings, type Settings } from '../domain/settings';
 import type { MemoryStore } from '../ports/memoryStore';
 
 export interface MemoryContextInput {
@@ -70,7 +70,10 @@ export class MemoryContextService {
 
   async buildForRun(input: MemoryContextInput): Promise<MemoryContextBlock> {
     const settings = await this.settings.get(input.userId).catch(() => undefined);
-    if (settings?.personalization.memoryEnabled === false) return { ...EMPTY, latencyBudgetMs: 250 };
+    if (settings) {
+      const memory = effectiveMemorySettings(settings);
+      if (!memory.enabled || memory.paused || !memory.referenceSaved) return { ...EMPTY, latencyBudgetMs: 250 };
+    }
 
     const query = tokens(input.latestUserText);
     if (!query.size) return { ...EMPTY, latencyBudgetMs: 250 };

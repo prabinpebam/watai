@@ -29,6 +29,7 @@ import type { MountedSkill, SkillPackage } from '../domain/skill';
 import { DEFAULT_SKILLS } from '../skills';
 import { completeChat } from '../ai/chat';
 import { renderMemoryContext, type MemoryContextService } from './memoryContextService';
+import type { MemoryExtractionService } from './memoryExtractionService';
 
 export interface CredentialReader {
   getDecrypted(userId: string): Promise<DecryptedCredentials>;
@@ -47,6 +48,8 @@ export interface RunWorkerDeps {
   settings?: SettingsReader;
   /** Builds bounded, server-owned memory context for this run. Optional until memory is enabled. */
   memoryContext?: MemoryContextService;
+  /** Schedules post-response memory extraction. Best-effort and never awaited by callers. */
+  memoryExtraction?: MemoryExtractionService;
   /** The agentic loop (Responses API). Injectable for tests. */
   runAgent?: (p: RunAgentParams) => AsyncGenerator<AgentEvent>;
   clock: ServiceClock;
@@ -792,6 +795,9 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   const finalStatus: MessageRecord['status'] = canceled ? 'interrupted' : err ? 'error' : 'complete';
   const finalMessage = buildAssistant(finalStatus);
   await messageStore.append(finalMessage);
+  if (finalStatus === 'complete' && deps.memoryExtraction) {
+    void deps.memoryExtraction.enqueueTurn(run.userId, threadId, run.assistantMessageId, run.id).catch(() => {});
+  }
   if (deps.signalr) await deps.signalr.sendToUser(run.userId, 'message', { threadId, message: finalMessage });
 
   // Bump the thread so the assistant message syncs and the thread surfaces as recently active.

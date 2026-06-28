@@ -4,6 +4,10 @@ import type { MessageListOptions, MessageRecord, MessageStore } from '../ports/m
 import type { ThreadRecord, ThreadStore } from '../ports/threadStore';
 import type { ServiceClock } from './threadService';
 
+export interface MemoryExtractionScheduler {
+  enqueueAfterMessage(record: MessageRecord, thread: ThreadRecord): Promise<void>;
+}
+
 /**
  * Application service for messages. Ownership is enforced via the parent thread
  * (a message is reachable only if the caller owns its thread), so cross-user reads
@@ -14,6 +18,7 @@ export class MessageService {
     private readonly threadStore: ThreadStore,
     private readonly messageStore: MessageStore,
     private readonly clock: ServiceClock,
+    private readonly memoryExtraction?: MemoryExtractionScheduler,
   ) {}
 
   private async requireOwnThread(userId: string, threadId: string): Promise<ThreadRecord> {
@@ -54,6 +59,7 @@ export class MessageService {
       deletedAt: null,
     };
     await this.messageStore.append(record);
+    if (this.memoryExtraction) void this.memoryExtraction.enqueueAfterMessage(record, thread).catch(() => {});
     await this.threadStore.put({
       ...thread,
       messageCount: thread.messageCount + 1,

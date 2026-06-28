@@ -8,10 +8,19 @@ const reduceMotion = z.union([z.boolean(), z.literal('system')]);
 const retention = z.enum(['forever', '30d', '90d']);
 const engine = z.enum(['tts', 'realtime']);
 
+const memorySettingsSchema = z.object({
+  enabled: z.boolean(),
+  paused: z.boolean(),
+  referenceSaved: z.boolean(),
+  referenceHistory: z.boolean(),
+  autoExtract: z.boolean(),
+});
+
 const personalizationBase = z.object({
   aboutYou: z.string().max(2000).optional(),
   howRespond: z.string().max(2000).optional(),
   memoryEnabled: z.boolean(),
+  memory: memorySettingsSchema.strict().optional(),
 });
 const appearanceBase = z.object({
   theme: themeEnum,
@@ -54,9 +63,18 @@ const patchSchema = z
 
 export type Settings = z.infer<typeof settingsSchema>;
 export type SettingsPatch = z.infer<typeof patchSchema>;
+export type MemorySettings = z.infer<typeof memorySettingsSchema>;
+
+export const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
+  enabled: true,
+  paused: false,
+  referenceSaved: true,
+  referenceHistory: true,
+  autoExtract: true,
+};
 
 export const DEFAULT_SETTINGS: Settings = {
-  personalization: { memoryEnabled: true },
+  personalization: { memoryEnabled: true, memory: DEFAULT_MEMORY_SETTINGS },
   appearance: { theme: 'system', textScale: 1.0, density: 'comfortable', reduceMotion: 'system', language: 'en' },
   voice: { engine: 'tts', rate: 1, vad: 0.5, autoSend: true, captions: true },
   data: { sync: false, temporaryDefault: false, retention: 'forever' },
@@ -73,5 +91,15 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
     appearance: { ...current.appearance, ...patch.appearance },
     voice: { ...current.voice, ...patch.voice },
     data: { ...current.data, ...patch.data },
+  };
+}
+
+export function effectiveMemorySettings(settings: Settings): MemorySettings {
+  return settings.personalization.memory ?? {
+    enabled: settings.personalization.memoryEnabled,
+    paused: false,
+    referenceSaved: settings.personalization.memoryEnabled,
+    referenceHistory: settings.personalization.memoryEnabled,
+    autoExtract: settings.personalization.memoryEnabled,
   };
 }

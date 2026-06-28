@@ -8,12 +8,14 @@ import { CosmosRunStore } from './adapters/cosmos/runStore';
 import { CosmosImageStore } from './adapters/cosmos/imageStore';
 import { CosmosSkillStore } from './adapters/cosmos/skillStore';
 import { CosmosMemoryStore } from './adapters/cosmos/memoryStore';
+import { CosmosMemoryJobStore } from './adapters/cosmos/memoryJobStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
 import { SasSkillBlobStore } from './adapters/azure/sasSkillBlobStore';
 import { KeyVaultWrapper } from './adapters/azure/keyVaultWrapper';
 import { LocalKeyWrapper } from './adapters/local/keyWrapper';
 import { QueueRunStarter } from './adapters/azure/queueRunStarter';
 import { QueueImageStarter } from './adapters/azure/queueImageStarter';
+import { QueueMemoryStarter } from './adapters/azure/queueMemoryStarter';
 import { AzureSignalR, type SignalRSender } from './adapters/azure/signalr';
 import { entraVerifierFromEnv } from './adapters/auth/entraTokenVerifier';
 import { ThreadService } from './application/threadService';
@@ -32,6 +34,8 @@ import type { RunWorkerDeps } from './application/runWorker';
 import { ImageService } from './application/imageService';
 import { MemoryService } from './application/memoryService';
 import { MemoryContextService } from './application/memoryContextService';
+import { MemoryExtractionService } from './application/memoryExtractionService';
+import { extractMemories } from './ai/memoryExtractor';
 import type { ImageWorkerDeps } from './application/imageWorker';
 import { SkillCatalogService } from './application/skillCatalogService';
 import { createSkillProvisioner } from './application/skillProvisioner';
@@ -76,6 +80,8 @@ export interface ApiContainer {
   runWorker: RunWorkerDeps;
   /** Dependencies the queue-triggered image worker needs to process a job. */
   imageWorker: ImageWorkerDeps;
+  /** Background memory extraction worker service. */
+  memoryWorker: MemoryExtractionService;
 }
 
 /** Production uses an Azure Key Vault RSA key as the KEK; local dev falls back to an
@@ -114,19 +120,31 @@ export function container(): ApiContainer {
   const runStore = new CosmosRunStore();
   const imageStore = new CosmosImageStore();
   const memoryStore = new CosmosMemoryStore();
+  const memoryJobStore = new CosmosMemoryJobStore();
   const minter = new AzureSasMinter();  const access = new AccessService(
     inviteStore,
     process.env.ADMIN_EMAIL ?? '',
     (process.env.ADMIN_OID ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   );
-  const messageService = new MessageService(threadStore, messageStore, clock);
   const credentialService = new CredentialService(credentialStore, buildKeyWrapper(), clock);
-  const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
   const imageService = new ImageService(imageStore, credentialService, new QueueImageStarter(), minter, clock);
   const memoryService = new MemoryService(memoryStore, clock);
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
   const memoryContextService = new MemoryContextService(memoryStore, settingsService);
+  const memoryExtractionService = new MemoryExtractionService({
+    memoryStore,
+    jobStore: memoryJobStore,
+    messageStore,
+    threadStore,
+    queue: new QueueMemoryStarter(),
+    settings: settingsService,
+    credentials: credentialService,
+    extractor: (creds, input) => extractMemories(creds, input),
+    clock,
+  });
+  const messageService = new MessageService(threadStore, messageStore, clock, memoryExtractionService);
+  const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
   const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock, {
     uploadOriginal: makeUploadImage(assetService),
   });
@@ -165,6 +183,7 @@ export function container(): ApiContainer {
       credentials: credentialService,
       settings: settingsService,
       memoryContext: memoryContextService,
+      memoryExtraction: memoryExtractionService,
       uploadImage: makeUploadImage(assetService),
       uploadArtifact: makeUploadImage(assetService),
       resolveImageUrl: makeResolveImageUrl(minter),
@@ -180,6 +199,7 @@ export function container(): ApiContainer {
       signalr: signalr ?? undefined,
       clock,
     },
+    memoryWorker: memoryExtractionService,
   };
   return cached;
 }

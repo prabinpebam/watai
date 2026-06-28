@@ -513,6 +513,25 @@ describe('processRun', () => {
     ]);
   });
 
+  it('schedules turn-lane memory extraction after a complete assistant response', async () => {
+    await seed(ctx);
+    const scheduled: string[] = [];
+    await processRun(
+      {
+        ...ctx.deps(script([{ type: 'text', delta: 'ok' }, { type: 'done' }])),
+        memoryExtraction: {
+          enqueueTurn: async (_userId: string, threadId: string, assistantMessageId: string, runId?: string) => {
+            scheduled.push(`${threadId}:${assistantMessageId}:${runId}`);
+            return null;
+          },
+        } as any,
+      },
+      't1',
+      'r1',
+    );
+    expect(scheduled).toEqual(['t1:am1:r1']);
+  });
+
   it('auto-names an untitled thread from the first exchange', async () => {
     await seed(ctx);
     const t = await ctx.threadStore.get('userA', 't1');

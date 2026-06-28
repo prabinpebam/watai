@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSettingsPatch, DEFAULT_SETTINGS } from './settings';
+import { parseSettingsPatch, DEFAULT_SETTINGS, effectiveMemorySettings } from './settings';
 import { AppError } from './errors';
 
 function code(fn: () => unknown): string | undefined {
@@ -15,6 +15,12 @@ describe('parseSettingsPatch', () => {
   it('accepts a partial patch', () => {
     expect(parseSettingsPatch({ appearance: { theme: 'dark' } })).toEqual({
       appearance: { theme: 'dark' },
+    });
+  });
+
+  it('accepts memory settings patch', () => {
+    expect(parseSettingsPatch({ personalization: { memory: { enabled: true, paused: false, referenceSaved: true, referenceHistory: true, autoExtract: true } } })).toEqual({
+      personalization: { memory: { enabled: true, paused: false, referenceSaved: true, referenceHistory: true, autoExtract: true } },
     });
   });
 
@@ -34,7 +40,16 @@ describe('DEFAULT_SETTINGS', () => {
   it('is a complete, valid settings object', () => {
     expect(DEFAULT_SETTINGS.appearance.theme).toBe('system');
     expect(DEFAULT_SETTINGS.personalization.memoryEnabled).toBe(true);
+    expect(DEFAULT_SETTINGS.personalization.memory?.autoExtract).toBe(true);
     expect(DEFAULT_SETTINGS.voice.engine).toBe('tts');
     expect(DEFAULT_SETTINGS.data.retention).toBe('forever');
+  });
+
+  it('derives effective memory settings from the compatibility toggle', () => {
+    expect(effectiveMemorySettings({ ...DEFAULT_SETTINGS, personalization: { memoryEnabled: false } })).toMatchObject({
+      enabled: false,
+      autoExtract: false,
+      referenceHistory: false,
+    });
   });
 });

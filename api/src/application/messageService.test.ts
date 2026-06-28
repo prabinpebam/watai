@@ -19,6 +19,23 @@ function makeCtx() {
   return { threadStore, messageStore, threads, messages };
 }
 
+function makeCtxWithScheduler() {
+  const threadStore = new InMemoryThreadStore();
+  const messageStore = new InMemoryMessageStore();
+  let n = 0;
+  let t = 0;
+  const clock = {
+    newId: () => `id_${++n}`,
+    now: () => `2026-01-01T00:00:${String(t++).padStart(2, '0')}Z`,
+  };
+  const scheduled: string[] = [];
+  const threads = new ThreadService(threadStore, clock);
+  const messages = new MessageService(threadStore, messageStore, clock, {
+    enqueueAfterMessage: async (record) => void scheduled.push(`${record.role}:${record.id}`),
+  });
+  return { threadStore, messageStore, threads, messages, scheduled };
+}
+
 async function code(fn: () => Promise<unknown>): Promise<string | undefined> {
   try {
     await fn();
@@ -114,6 +131,15 @@ describe('MessageService.append', () => {
     expect(msg.memoryRefs).toEqual([
       { memoryId: 'mem_1', kind: 'project_context', text: 'Watai deploy target is rg-watai-dev.', score: 0.91 },
     ]);
+  });
+
+  it('schedules memory extraction after newly appended messages', async () => {
+    const local = makeCtxWithScheduler();
+    const thread = await local.threads.create('userA', { title: 'A', temporary: false });
+    await local.messages.append('userA', thread.id, { id: 'u1', role: 'user', content: 'Remember that I prefer concise plans.' });
+    await local.messages.append('userA', thread.id, { id: 'a1', role: 'assistant', content: 'Saved.' });
+    await Promise.resolve();
+    expect(local.scheduled).toEqual(['user:u1', 'assistant:a1']);
   });
 });
 

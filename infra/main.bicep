@@ -50,6 +50,7 @@ var cosmosContainers = [
   { name: 'messages', pk: '/threadId' }
   { name: 'assets', pk: '/userId' }
   { name: 'memory', pk: '/userId' }
+  { name: 'memoryJobs', pk: '/userId' }
   { name: 'usage', pk: '/userId' }
   { name: 'invites', pk: '/pk' }
   { name: 'credentials', pk: '/userId' }

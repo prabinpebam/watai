@@ -41,7 +41,12 @@ describe('MemoryContextService', () => {
   });
 
   it('returns an empty context when memory is disabled or query has no support', async () => {
-    const off = makeServices({ personalization: { memoryEnabled: false } });
+    const off = makeServices({
+      personalization: {
+        memoryEnabled: false,
+        memory: { enabled: false, paused: false, referenceSaved: false, referenceHistory: false, autoExtract: false },
+      },
+    });
     await off.memory.createManual('userA', { text: 'Watai deploy target is rg-watai-dev.', kind: 'project_context' });
     expect((await off.ctx.buildForRun({ userId: 'userA', threadId: 'thr_1', latestUserText: 'deploy?', now: '2026-01-01T00:01:00Z' })).memories).toEqual([]);
 

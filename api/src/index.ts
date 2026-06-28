@@ -4,3 +4,4 @@ import './functions/health';
 import './functions/api';
 import './functions/runWorker';
 import './functions/imageWorker';
+import './functions/memoryWorker';

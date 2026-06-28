@@ -16,8 +16,8 @@ import { useMe } from '../../auth/access';
 import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo, MemoryRecord, MemoryStatus } from '../../data/cloud/types';
 import { normalizeBaseUrl } from '../../data/secureStore';
 import { normalizeChatModelOptions } from '../../lib/modelOptions';
-import { DEFAULT_SETTINGS } from '../../lib/types';
-import type { ImageRef, MemoryKind, Settings as SettingsModel, TextScale } from '../../lib/types';
+import { DEFAULT_SETTINGS, effectiveMemorySettings } from '../../lib/types';
+import type { ImageRef, MemoryKind, MemorySettings, Settings as SettingsModel, TextScale } from '../../lib/types';
 
 const APP_VERSION = '0.1.0';
 
@@ -91,7 +91,7 @@ function summaryFor(id: string, ctx: SettingsCtx): string {
     case 'models':
       return ctx.chatModel || SECTIONS.models.sub;
     case 'personalization':
-      return s.personalization.memoryEnabled ? 'Memory on' : 'Memory off';
+      return effectiveMemorySettings(s).enabled ? 'Memory on' : 'Memory off';
     case 'voice':
       return `${s.voice.autoSend ? 'Auto-send on' : 'Auto-send off'} · ${s.voice.rate.toFixed(1)}×`;
     case 'tools': {
@@ -715,6 +715,11 @@ function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
   const { settings, setSettings } = ctx;
   const pushToast = useUi((s) => s.pushToast);
   const p = settings.personalization;
+  const memory = effectiveMemorySettings(settings);
+  const setMemory = (patch: Partial<MemorySettings>) => {
+    const nextMemory = { ...memory, ...patch };
+    setSettings({ ...settings, personalization: { ...p, memoryEnabled: nextMemory.enabled, memory: nextMemory } });
+  };
   return (
     <>
       <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
@@ -740,16 +745,37 @@ function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
             <div className="setting-row__sub">Let Watai remember useful details across chats.</div>
           </div>
           <Switch
-            checked={p.memoryEnabled}
+            checked={memory.enabled}
             onChange={(v) => {
-              setSettings({ ...settings, personalization: { ...p, memoryEnabled: v } });
+              setMemory({ enabled: v, referenceSaved: v ? memory.referenceSaved : false, autoExtract: v ? memory.autoExtract : false, referenceHistory: v ? memory.referenceHistory : false });
               pushToast(v ? 'Memory enabled' : 'Memory disabled');
             }}
             label="Memory"
           />
         </div>
+        <div className="setting-row">
+          <div className="setting-row__body">
+            <div className="setting-row__title">Use saved memories</div>
+            <div className="setting-row__sub">Include relevant saved memories in future server-generated replies.</div>
+          </div>
+          <Switch checked={memory.enabled && memory.referenceSaved} disabled={!memory.enabled} onChange={(v) => setMemory({ referenceSaved: v })} label="Use saved memories" />
+        </div>
+        <div className="setting-row">
+          <div className="setting-row__body">
+            <div className="setting-row__title">Learn from chats</div>
+            <div className="setting-row__sub">After each completed reply, Watai asks your configured model what should become durable memory.</div>
+          </div>
+          <Switch checked={memory.enabled && memory.autoExtract && memory.referenceHistory} disabled={!memory.enabled} onChange={(v) => setMemory({ autoExtract: v, referenceHistory: v })} label="Learn from chats" />
+        </div>
+        <div className="setting-row">
+          <div className="setting-row__body">
+            <div className="setting-row__title">Pause learning</div>
+            <div className="setting-row__sub">Keep existing memory available, but stop creating automatic memories.</div>
+          </div>
+          <Switch checked={memory.enabled && memory.paused} disabled={!memory.enabled} onChange={(v) => setMemory({ paused: v })} label="Pause learning" />
+        </div>
       </div>
-      <MemoryManager enabled={p.memoryEnabled} />
+      <MemoryManager enabled={memory.enabled} />
     </>
   );
 }

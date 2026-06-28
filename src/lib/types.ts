@@ -216,8 +216,16 @@ export interface ApiConfig {
   keyEncrypted: boolean;
 }
 
+export interface MemorySettings {
+  enabled: boolean;
+  paused: boolean;
+  referenceSaved: boolean;
+  referenceHistory: boolean;
+  autoExtract: boolean;
+}
+
 export interface Settings {
-  personalization: { aboutYou?: string; howRespond?: string; memoryEnabled: boolean };
+  personalization: { aboutYou?: string; howRespond?: string; memoryEnabled: boolean; memory?: MemorySettings };
   appearance: {
     theme: Theme;
     textScale: TextScale;
@@ -299,7 +307,10 @@ export interface Toast {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  personalization: { memoryEnabled: true },
+  personalization: {
+    memoryEnabled: true,
+    memory: { enabled: true, paused: false, referenceSaved: true, referenceHistory: true, autoExtract: true },
+  },
   appearance: {
     theme: 'system',
     textScale: 1.0,
@@ -317,6 +328,16 @@ export const DEFAULT_SETTINGS: Settings = {
     imageAgent: true,
   },
 };
+
+export function effectiveMemorySettings(settings: Settings): MemorySettings {
+  return settings.personalization.memory ?? {
+    enabled: settings.personalization.memoryEnabled,
+    paused: false,
+    referenceSaved: settings.personalization.memoryEnabled,
+    referenceHistory: settings.personalization.memoryEnabled,
+    autoExtract: settings.personalization.memoryEnabled,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Agent Skills (canonical SKILL.md folders the assistant loads on demand).
