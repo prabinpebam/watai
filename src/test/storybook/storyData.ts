@@ -64,7 +64,7 @@ function resetState(): void {
     { id: 'u5', threadId: 'story-thread', role: 'user', content: 'Summarize the final plan in one paragraph and mention the files attached in this chat.', status: 'complete', createdAt: iso(-120000) },
     { id: 'a5', threadId: 'story-thread', role: 'assistant', content: 'The final plan is to ship a print-ready worksheet with a calm cover, clear activities, and the generated PDF attached in this chat.', status: 'complete', createdAt: iso(-60000) },
   ];
-  for (let i = 6; i <= 34; i++) {
+  for (let i = 6; i <= 54; i++) {
     messages.push(
       {
         id: `u${i}`,

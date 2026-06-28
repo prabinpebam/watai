@@ -7,7 +7,7 @@ interface PromptMinimapProps {
   scrollRef: RefObject<HTMLDivElement | null>;
 }
 
-const ROW_HEIGHT = 30;
+const ROW_HEIGHT = 16;
 const EDGE_SCROLL_ZONE = 56;
 
 function promptLabel(message: Message): string {
