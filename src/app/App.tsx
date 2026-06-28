@@ -234,9 +234,10 @@ export function App() {
           .catch(() => undefined);
       });
       const offMemory = realtime.on('memory', (payload) => {
-        const event = payload as { acceptedCount?: number; threadId?: string; updatedAt?: string } | null;
+        const event = payload as { jobId?: string; acceptedCount?: number; threadId?: string; updatedAt?: string } | null;
         if (!event?.threadId) return;
         useUi.getState().setMemoryNotice({
+          ...(event.jobId ? { id: event.jobId } : {}),
           threadId: event.threadId,
           acceptedCount: Math.max(1, event.acceptedCount ?? 1),
           updatedAt: event.updatedAt ?? new Date().toISOString(),

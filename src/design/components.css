@@ -1020,9 +1020,17 @@ button.tool-card__head:hover {
 .tool-card--error .tool-card__status {
   color: var(--color-danger);
 }
-.memory-update-card {
-  min-width: 0;
-  background: var(--color-surface-2);
+.memory-log {
+  align-self: center;
+  max-width: 100%;
+  margin: var(--space-1) 0;
+  padding: 2px var(--space-2);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-lh);
+  white-space: nowrap;
+  opacity: 0.6;
+  user-select: none;
 }
 .tool-group {
   display: flex;

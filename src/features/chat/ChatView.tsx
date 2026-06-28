@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from './useChat';
 import { Composer } from './Composer';
 import { AssistantMessage, UserMessage } from './Message';
@@ -7,9 +7,13 @@ import { SourcePane } from './SourcePane';
 import { ThreadFilesPane } from './ThreadFilesPane';
 import { Icon } from '../../design/icons';
 import { Avatar, Spinner } from '../../design/ui';
-import { useUi } from '../../state/store';
+import { useUi, type MemoryNotice } from '../../state/store';
 import { greeting } from '../../lib/format';
 import type { ImageRef } from '../../lib/types';
+
+function memoryLogLabel(count: number): string {
+  return count > 1 ? `${count} memories updated` : 'Memory updated';
+}
 
 const SUGGESTIONS = [
   { title: 'Explain a concept', sub: 'Break down quantum entanglement simply', prompt: 'Explain quantum entanglement in simple terms.' },
@@ -21,7 +25,7 @@ const SUGGESTIONS = [
 export function ChatView({ threadId, onScrolledChange }: { threadId: string; onScrolledChange?: (v: boolean) => void }) {
   const { messages, loading, send, regenerate, stop, streaming, indexing, lockedBy } = useChat(threadId);
   const draft = useUi((s) => s.composerDrafts[threadId] ?? '');
-  const memoryNotice = useUi((s) => s.memoryNotices[threadId]);
+  const memoryNotices = useUi((s) => s.memoryNotices[threadId]);
   const setDraft = useUi((s) => s.setDraft);
   const closeSourcePane = useUi((s) => s.closeSourcePane);
   const closeFilesPane = useUi((s) => s.closeFilesPane);
@@ -113,11 +117,18 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
     }
   }, [threadImages, viewerImageId]);
 
-  const memoryNoticeLabel = memoryNotice
-    ? memoryNotice.acceptedCount > 1
-      ? `${memoryNotice.acceptedCount} memories updated`
-      : 'Memory updated'
-    : '';
+  // Interleave assistant/user messages with memory-update logs in chronological order, so a
+  // memory update appears as a quiet system-log line at the point in time it actually happened.
+  const timeline = useMemo(() => {
+    const items: Array<
+      | { kind: 'message'; key: string; ts: string; message: (typeof messages)[number] }
+      | { kind: 'memory'; key: string; ts: string; notice: MemoryNotice }
+    > = [];
+    for (const message of messages) items.push({ kind: 'message', key: message.id, ts: message.createdAt, message });
+    for (const notice of Array.isArray(memoryNotices) ? memoryNotices : []) items.push({ kind: 'memory', key: `mem:${notice.id}`, ts: notice.updatedAt, notice });
+    items.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+    return items;
+  }, [messages, memoryNotices]);
 
   return (
     <div className="chat-area">
@@ -147,13 +158,17 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
           </div>
         ) : (
           <div className="chat__column" ref={setColumnRef}>
-            {messages.map((m) =>
-              m.role === 'user' ? (
-                <UserMessage key={m.id} message={m} />
+            {timeline.map((item) =>
+              item.kind === 'memory' ? (
+                <div key={item.key} className="memory-log" role="note">
+                  {memoryLogLabel(item.notice.acceptedCount)}
+                </div>
+              ) : item.message.role === 'user' ? (
+                <UserMessage key={item.key} message={item.message} />
               ) : (
                 <AssistantMessage
-                  key={m.id}
-                  message={m}
+                  key={item.key}
+                  message={item.message}
                   streaming={streaming}
                   onRegenerate={regenerate}
                   threadImages={threadImages}
@@ -163,24 +178,6 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
                   onCloseImage={() => setViewerImageId(null)}
                 />
               ),
-            )}
-            {memoryNotice && (
-              <div className="msg-group msg-group--assistant" aria-live="polite">
-                <div className="assistant">
-                  <div className="tool-card tool-card--done memory-update-card">
-                    <div className="tool-card__head">
-                      <span className="tool-card__kind" aria-hidden>
-                        <Icon name="database" size={15} />
-                      </span>
-                      <span className="tool-card__label">{memoryNoticeLabel}</span>
-                      <span className="tool-card__status" aria-hidden>
-                        <Icon name="check" size={14} />
-                      </span>
-                    </div>
-                    <div className="tool-card__message">Saved from this conversation. You can review it in Memory settings.</div>
-                  </div>
-                </div>
-              </div>
             )}
             <div style={{ height: 'var(--space-4)' }} />
           </div>

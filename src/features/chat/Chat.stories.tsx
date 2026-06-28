@@ -210,12 +210,12 @@ export const MemoryUpdatedInline: Story = {
   render: function MemoryUpdatedInlineStory() {
     useUi.setState({
       memoryNotices: {
-        'story-thread': {
-          id: 'story-memory-notice',
-          threadId: 'story-thread',
-          acceptedCount: 1,
-          updatedAt: new Date().toISOString(),
-        },
+        'story-thread': [
+          // Mid-conversation update: interleaves between messages by timestamp.
+          { id: 'story-memory-1', threadId: 'story-thread', acceptedCount: 1, updatedAt: '2026-06-28T08:20:00.000Z' },
+          // A later update with multiple accepted memories, shown again in place.
+          { id: 'story-memory-2', threadId: 'story-thread', acceptedCount: 2, updatedAt: new Date().toISOString() },
+        ],
       },
     });
     return <ChatView threadId="story-thread" />;

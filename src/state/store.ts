@@ -46,8 +46,8 @@ interface UiState {
   threadRev: Record<string, number>;
   /** Per-thread run lock (another device is generating). Transient; never persisted/synced. */
   threadLocks: Record<string, ThreadLock | null>;
-  /** Last accepted memory update per thread, shown inline in the chat. */
-  memoryNotices: Record<string, MemoryNotice>;
+  /** Accepted memory updates per thread, shown inline in the chat timeline in chronological order. */
+  memoryNotices: Record<string, MemoryNotice[]>;
   confirmRequest: ConfirmRequest | null;
   /** Open source-detail pane (web search results) — transient, never persisted. */
   sourcePane: { citations: Citation[]; index: number } | null;
@@ -136,12 +136,17 @@ export const useUi = create<UiState>()(
       setThreadLock: (threadId, lock) =>
         set((s) => ({ threadLocks: { ...s.threadLocks, [threadId]: lock } })),
       setMemoryNotice: (notice) =>
-        set((s) => ({
-          memoryNotices: {
-            ...s.memoryNotices,
-            [notice.threadId]: { id: notice.id ?? newId(), ...notice },
-          },
-        })),
+        set((s) => {
+          const existing = s.memoryNotices[notice.threadId];
+          const list = Array.isArray(existing) ? existing : [];
+          const id = notice.id ?? newId();
+          if (list.some((n) => n.id === id)) return {};
+          const next = [
+            ...list,
+            { id, threadId: notice.threadId, acceptedCount: notice.acceptedCount, updatedAt: notice.updatedAt },
+          ].slice(-50);
+          return { memoryNotices: { ...s.memoryNotices, [notice.threadId]: next } };
+        }),
       requestConfirm: (opts) =>
         new Promise<boolean>((resolve) => set({ confirmRequest: { ...opts, resolve } })),
       resolveConfirm: (ok) => {
@@ -160,6 +165,21 @@ export const useUi = create<UiState>()(
     }),
     {
       name: 'watai.ui',
+      version: 1,
+      // v0 stored one MemoryNotice per thread; v1 stores an array per thread. Coerce any
+      // legacy single-object value into an array so the chat timeline never iterates a non-array.
+      migrate: (persisted: unknown, _version: number) => {
+        const state = (persisted ?? {}) as Record<string, unknown>;
+        const raw = state.memoryNotices;
+        const coerced: Record<string, MemoryNotice[]> = {};
+        if (raw && typeof raw === 'object') {
+          for (const [threadId, value] of Object.entries(raw as Record<string, unknown>)) {
+            if (Array.isArray(value)) coerced[threadId] = value as MemoryNotice[];
+            else if (value && typeof value === 'object') coerced[threadId] = [value as MemoryNotice];
+          }
+        }
+        return { ...state, memoryNotices: coerced } as UiState;
+      },
       partialize: (s) => ({
         theme: s.theme,
         textScale: s.textScale,
