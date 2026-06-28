@@ -1,6 +1,54 @@
 import { describe, expect, it } from 'vitest';
 import { parseMemoryExtractionOutput } from '../domain/memoryExtraction';
-import { extractMemories, normalizeMemoryExtractionJson } from './memoryExtractor';
+import { extractMemories, normalizeMemoryExtractionJson, resilientParseExtraction } from './memoryExtractor';
+
+describe('resilientParseExtraction', () => {
+  it('keeps an add operation even when its routed target is malformed', () => {
+    const out = resilientParseExtraction({
+      operations: [
+        {
+          op: 'add',
+          kind: 'fact',
+          text: 'User has a daughter named Laija who is 9 years old.',
+          confidence: 0.94,
+          salience: 0.86,
+          sourceMessageIds: ['u1'],
+          reason: 'Stable family fact.',
+          // Invalid: profilePath is not in the enum and relationship lacks an object/value.
+          target: { layer: 'long_term_profile', profilePath: 'family.children', relationship: { predicate: 'HAS_FAMILY_MEMBER' } },
+        },
+      ],
+    });
+
+    expect(out.operations).toHaveLength(1);
+    expect(out.operations[0]).toMatchObject({ op: 'add', text: 'User has a daughter named Laija who is 9 years old.' });
+    expect((out.operations[0] as { target?: unknown }).target).toBeUndefined();
+  });
+
+  it('keeps a valid routed target intact', () => {
+    const out = resilientParseExtraction({
+      operations: [
+        {
+          op: 'add',
+          kind: 'fact',
+          text: 'User has a daughter named Laija who is 9 years old.',
+          confidence: 0.94,
+          salience: 0.86,
+          sourceMessageIds: ['u1'],
+          reason: 'Stable family fact.',
+          target: { layer: 'long_term_profile', profilePath: 'user.family.children', entity: { type: 'family_member', name: 'Laija' } },
+        },
+      ],
+    });
+
+    expect(out.operations[0]).toMatchObject({ target: { profilePath: 'user.family.children' } });
+  });
+
+  it('drops fully invalid operations and falls back to ignore', () => {
+    const out = resilientParseExtraction({ operations: [{ op: 'add', kind: 'fact' }, { nonsense: true }] });
+    expect(out.operations).toEqual([{ op: 'ignore', reason: 'No valid memory operations were produced.' }]);
+  });
+});
 
 describe('extractMemories model selection', () => {
   it('uses the server-decided memory model instead of the user chat model', async () => {

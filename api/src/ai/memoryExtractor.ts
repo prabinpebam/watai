@@ -1,6 +1,6 @@
 import { completeChat } from './chat';
 import type { DecryptedCredentials } from '../application/credentialService';
-import { parseMemoryExtractionOutput, type MemoryExtractionOutput } from '../domain/memoryExtraction';
+import { memoryExtractionOperationSchema, type MemoryExtractionOperation, type MemoryExtractionOutput } from '../domain/memoryExtraction';
 
 export interface MemoryExtractionInput {
   mode: 'command' | 'turn' | 'rebuild';
@@ -83,6 +83,32 @@ export function normalizeMemoryExtractionJson(raw: unknown, fallbackSourceMessag
   };
 }
 
+/**
+ * Parse the normalized extractor output resiliently. A single malformed operation must never
+ * discard the entire turn (small models frequently emit a slightly-off optional `target`).
+ * For each operation: try strict parse; if it fails and the op carries a `target`, retry without
+ * the target (keeping the atomic memory); drop only operations that are still invalid. If nothing
+ * survives, return an `ignore` so the job completes cleanly instead of failing/poisoning.
+ */
+export function resilientParseExtraction(normalized: unknown): MemoryExtractionOutput {
+  const list =
+    normalized && typeof normalized === 'object' && Array.isArray((normalized as { operations?: unknown }).operations)
+      ? ((normalized as { operations: unknown[] }).operations)
+      : [];
+  const operations: MemoryExtractionOperation[] = [];
+  for (const op of list) {
+    if (operations.length >= 16) break;
+    let parsed = memoryExtractionOperationSchema.safeParse(op);
+    if (!parsed.success && op && typeof op === 'object' && 'target' in (op as Record<string, unknown>)) {
+      const { target: _droppedTarget, ...withoutTarget } = op as Record<string, unknown>;
+      parsed = memoryExtractionOperationSchema.safeParse(withoutTarget);
+    }
+    if (parsed.success) operations.push(parsed.data);
+  }
+  if (!operations.length) return { operations: [{ op: 'ignore', reason: 'No valid memory operations were produced.' }] };
+  return { operations };
+}
+
 export async function extractMemories(
   creds: DecryptedCredentials,
   input: MemoryExtractionInput,
@@ -94,7 +120,7 @@ export async function extractMemories(
     'Be selective. Most single-turn requests, casual comments, examples, jokes, temporary formatting requests, and transient task details should return ignore.',
     'Only add memory when the detail is likely to improve future conversations, is explicitly requested, is repeated/confirmed, or is a high-salience stable profile/work fact.',
     'Named family relationships and directly stated ages are high-salience profile facts; combine them into one concise memory when possible, for example "User has a daughter named Laija who is 9 years old."',
-    'When confident, include target for add/merge: layer, profilePath, entity, relationship, temporal, and evidenceStrategy. Example profilePath values include user.family.children, user.family.pets, user.preferences.communication, work.projects, work.deployments, and avoidances.',
+    'Optionally include target for add/merge only when you are fully certain it matches the schema (layer, profilePath, entity, relationship, temporal, evidenceStrategy). If unsure, omit target entirely and never invent profilePath values; a missing target is fine.',
     'Stable personal facts such as pet names can be memory-worthy, but only assign high salience when the fact is clearly durable and likely useful later.',
     'Example high-salience memory: if the user says "Remember that my dog is called Chopper", add a fact memory. Example lower-salience or ignore: a casual one-off example unless future usefulness is clear.',
     'Do not store secrets, credentials, one-off requests, private third-party details, hidden reasoning, or guesses about emotions.',
@@ -116,5 +142,5 @@ export async function extractMemories(
   });
   if (!raw) throw new Error('Memory extractor returned an empty response.');
   const fallbackSourceMessageIds = [...input.messages].reverse().filter((message) => message.role === 'user').slice(0, 1).map((message) => message.id);
-  return parseMemoryExtractionOutput(normalizeMemoryExtractionJson(extractJson(raw), fallbackSourceMessageIds));
+  return resilientParseExtraction(normalizeMemoryExtractionJson(extractJson(raw), fallbackSourceMessageIds));
 }
