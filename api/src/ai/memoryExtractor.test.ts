@@ -1,6 +1,46 @@
 import { describe, expect, it } from 'vitest';
 import { parseMemoryExtractionOutput } from '../domain/memoryExtraction';
-import { normalizeMemoryExtractionJson } from './memoryExtractor';
+import { extractMemories, normalizeMemoryExtractionJson } from './memoryExtractor';
+
+describe('extractMemories model selection', () => {
+  it('uses the server-decided memory model instead of the user chat model', async () => {
+    let sentBody: { model?: string } = {};
+    const fetchImpl = (async (_url: string, init: { body: string }) => {
+      sentBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '{"operations":[{"op":"ignore","reason":"x"}]}' } }] }),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    await extractMemories(
+      { baseUrl: 'https://r.services.ai.azure.com/openai/v1', key: 'k', models: { chat: 'gpt-5.4' } },
+      { mode: 'turn', now: '2026-01-01T00:00:00Z', threadId: 't1', messages: [{ id: 'u1', role: 'user', content: 'hi', createdAt: '2026-01-01T00:00:00Z' }], existingMemories: [] },
+      { model: 'gpt-5.4-mini', fetchImpl },
+    );
+
+    expect(sentBody.model).toBe('gpt-5.4-mini');
+  });
+
+  it('falls back to the user chat model when no server memory model is set', async () => {
+    let sentBody: { model?: string } = {};
+    const fetchImpl = (async (_url: string, init: { body: string }) => {
+      sentBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '{"operations":[{"op":"ignore","reason":"x"}]}' } }] }),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    await extractMemories(
+      { baseUrl: 'https://r.services.ai.azure.com/openai/v1', key: 'k', models: { chat: 'gpt-5.4' } },
+      { mode: 'turn', now: '2026-01-01T00:00:00Z', threadId: 't1', messages: [{ id: 'u1', role: 'user', content: 'hi', createdAt: '2026-01-01T00:00:00Z' }], existingMemories: [] },
+      { fetchImpl },
+    );
+
+    expect(sentBody.model).toBe('gpt-5.4');
+  });
+});
 
 describe('normalizeMemoryExtractionJson', () => {
   it('normalizes common LLM output variants into strict extraction operations', () => {

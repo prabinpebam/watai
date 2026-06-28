@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { containsSecretLikeValue } from './memory';
+import { containsSecretLikeValue } from './secrets';
 import { parseOrThrow } from './validate';
 
 export const MEMORY_ROUTE_LAYERS = [

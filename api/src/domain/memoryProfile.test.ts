@@ -103,4 +103,38 @@ describe('buildMemoryProfile', () => {
     expect(profile.profile.work.deployments.map((item) => item.text)).toContain('Watai deploy target is rg-watai-dev.');
     expect(profile.profile.avoidances.map((item) => item.text)).toContain('Do not launch Electron automatically.');
   });
+
+  it('honors an explicit child route from the planner, including structured age', () => {
+    const profile = buildMemoryProfile('userA', '2026-06-28T12:00:00.000Z', [
+      memory({
+        id: 'mem_routed_child',
+        kind: 'fact',
+        text: 'Daughter Laija.',
+        route: {
+          layer: 'long_term_profile',
+          profilePath: 'user.family.children',
+          entity: { type: 'family_member', name: 'Laija' },
+          relationship: { predicate: 'HAS_FAMILY_MEMBER', object: { type: 'family_member', name: 'Laija' }, attributes: { relationship: 'daughter', age: 9 } },
+        },
+      }),
+    ]);
+
+    expect(profile.profile.user.family.children).toEqual([
+      expect.objectContaining({ name: 'Laija', relationship: 'daughter', age: 9, text: 'Laija · daughter · age 9', sourceMemoryIds: ['mem_routed_child'] }),
+    ]);
+  });
+
+  it('routes a preference into the planner-specified branch even when text would classify elsewhere', () => {
+    const profile = buildMemoryProfile('userA', '2026-06-28T12:00:00.000Z', [
+      memory({
+        id: 'mem_routed_pref',
+        kind: 'preference',
+        text: 'Keep things tidy.',
+        route: { layer: 'long_term_profile', profilePath: 'user.preferences.engineering' },
+      }),
+    ]);
+
+    expect(profile.profile.user.preferences.engineering.map((item) => item.text)).toContain('Keep things tidy.');
+    expect(profile.profile.user.preferences.other).toEqual([]);
+  });
 });

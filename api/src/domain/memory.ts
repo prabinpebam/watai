@@ -1,5 +1,9 @@
 import { z } from 'zod';
+import { containsSecretLikeValue } from './secrets';
+import { memoryRouteTargetSchema } from './memoryRouting';
 import { parseOrThrow } from './validate';
+
+export { containsSecretLikeValue } from './secrets';
 
 export const MEMORY_KINDS = [
   'fact',
@@ -25,19 +29,6 @@ export type MemorySourceType = (typeof MEMORY_SOURCE_TYPES)[number];
 
 const id = z.string().trim().min(1).max(64);
 const iso = z.string().trim().min(1).max(40);
-const secretLikePatterns = [
-  /sk-[A-Za-z0-9_-]{8,}/i,
-  /eyJ[A-Za-z0-9_-]{10,}/,
-  /Bearer\s+[A-Za-z0-9._~+/=-]{8,}/i,
-  /DefaultEndpointsProtocol=/i,
-  /AccountKey=/i,
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
-  /\b(password|passphrase|secret|token)\s*(is|=|:)\s*\S+/i,
-];
-
-export function containsSecretLikeValue(value: string): boolean {
-  return secretLikePatterns.some((pattern) => pattern.test(value));
-}
 
 const secretSafe = (schema: z.ZodString) =>
   schema.refine((value) => !containsSecretLikeValue(value), { message: 'Memory text cannot contain secret-like values.' });
@@ -104,6 +95,7 @@ const memoryRecordSchema = z
     pinned: z.boolean(),
     sensitive: z.boolean(),
     sourceHash: z.string().trim().min(1).max(128).optional(),
+    route: memoryRouteTargetSchema.optional(),
     visibility: z.enum(MEMORY_VISIBILITY),
     validAt: iso.optional(),
     invalidAt: iso.optional(),

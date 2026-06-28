@@ -412,9 +412,12 @@ Return strict JSON only.
 
 Extractor model choice:
 
-- Use the user's saved chat model and credentials for MVP, because the app already has user-owned AI billing and deployment configuration.
+- Memory operations use a server-decided model, not the user's chat selection. The server sets `MEMORY_MODEL` (a lighter/faster deployment such as `gpt-5.4-mini`) and the extractor uses it for all background memory work.
+- The user still chooses their own chat model for actual conversations; that selection drives generation only, never memory extraction.
+- The memory model runs against the user's saved endpoint and credentials (same Foundry resource), so no hidden platform key is introduced.
+- When `MEMORY_MODEL` is unset, the extractor falls back to the user's chat model so memory still works.
 - If credentials are unavailable, mark job `failed` with `lastErrorCode = 'credentials_missing'`; do not fall back to a hidden platform key.
-- Later, support `MEMORY_EXTRACTOR_MODEL` when the user's endpoint has multiple model deployments.
+- Because extraction is async and never on the response hot path, a smaller model is preferred for cost and latency; deterministic schema validation guards quality.
 
 Model data-boundary disclosure:
 

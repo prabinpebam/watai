@@ -247,7 +247,7 @@ export class MemoryExtractionService {
           const hash = sourceHash(op.text, op.kind, op.entities);
           const duplicate = candidates.find((m) => m.sourceHash === hash && m.status === 'active');
           if (duplicate) {
-            await this.mergeMemory(duplicate, refs, op.confidence, op.salience);
+            await this.mergeMemory(duplicate, refs, op.confidence, op.salience, undefined, undefined, undefined, op.target);
           } else {
             const id = this.deps.clock.newId();
             for (const oldId of op.supersedes ?? []) await this.invalidateMemory(userId, oldId, id);
@@ -266,6 +266,7 @@ export class MemoryExtractionService {
               pinned: false,
               sensitive: false,
               sourceHash: hash,
+              ...(op.target ? { route: op.target } : {}),
               visibility: op.salience >= 0.85 ? 'top_of_mind' : op.salience <= 0.35 ? 'background' : 'normal',
               validAt: op.validAt,
               createdAt: this.deps.clock.now(),
@@ -278,7 +279,7 @@ export class MemoryExtractionService {
         } else if (op.op === 'merge') {
           const current = await this.deps.memoryStore.get(userId, op.memoryId);
           if (!current || current.status === 'deleted') { rejected++; continue; }
-          await this.mergeMemory(current, refs, op.confidence, op.salience, op.text, op.entities, op.topics);
+          await this.mergeMemory(current, refs, op.confidence, op.salience, op.text, op.entities, op.topics, op.target);
           accepted++;
         } else if (op.op === 'invalidate') {
           await this.invalidateMemory(userId, op.memoryId);
@@ -296,7 +297,7 @@ export class MemoryExtractionService {
     return { counts, accepted, rejected };
   }
 
-  private async mergeMemory(memory: MemoryRecord, refs: MemorySourceRef[], confidence?: number, salience?: number, text?: string, entities?: string[], topics?: string[]): Promise<void> {
+  private async mergeMemory(memory: MemoryRecord, refs: MemorySourceRef[], confidence?: number, salience?: number, text?: string, entities?: string[], topics?: string[], route?: MemoryRecord['route']): Promise<void> {
     const seen = new Set(memory.sourceRefs.map((r) => `${r.type}:${r.threadId}:${r.messageId}:${r.createdAt}`));
     const sourceRefs = [...memory.sourceRefs];
     for (const ref of refs) {
@@ -311,6 +312,7 @@ export class MemoryExtractionService {
       entities: entities ?? memory.entities,
       topics: topics ?? memory.topics,
       sourceRefs,
+      ...(route ? { route } : {}),
       confidence: Math.max(memory.confidence, confidence ?? memory.confidence),
       salience: Math.max(memory.salience, salience ?? memory.salience),
       updatedAt: this.deps.clock.now(),

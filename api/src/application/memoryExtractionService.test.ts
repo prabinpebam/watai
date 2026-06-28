@@ -108,4 +108,34 @@ describe('MemoryExtractionService', () => {
     await expect(ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1')).resolves.toBeNull();
     expect(ctx.enqueued).toEqual([]);
   });
+
+  it('persists the routed target proposed by the planner', async () => {
+    const ctx = setup(async () => ({
+      operations: [{
+        op: 'add',
+        kind: 'fact',
+        text: 'User has a daughter named Laija who is 9 years old.',
+        target: {
+          layer: 'long_term_profile',
+          profilePath: 'user.family.children',
+          entity: { type: 'family_member', name: 'Laija' },
+          relationship: { predicate: 'HAS_FAMILY_MEMBER', object: { type: 'family_member', name: 'Laija' }, attributes: { relationship: 'daughter', age: 9 } },
+          temporal: { bucket: 'long_term' },
+          evidenceStrategy: 'merge',
+        },
+        confidence: 0.94,
+        salience: 0.88,
+        sourceMessageIds: ['u1'],
+        reason: 'Stable family profile fact.',
+      }],
+    }));
+    await seedThread(ctx, false, 'My daughter is named Laija and she is 9.');
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    await ctx.svc.processJob('userA', job!.id);
+
+    const memories = (await ctx.memoryStore.list('userA', { status: 'active' })).memories;
+    expect(memories).toHaveLength(1);
+    expect(memories[0].route).toMatchObject({ layer: 'long_term_profile', profilePath: 'user.family.children' });
+    expect(memories[0].route?.relationship?.attributes).toMatchObject({ relationship: 'daughter', age: 9 });
+  });
 });

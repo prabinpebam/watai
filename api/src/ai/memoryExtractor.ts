@@ -86,7 +86,7 @@ export function normalizeMemoryExtractionJson(raw: unknown, fallbackSourceMessag
 export async function extractMemories(
   creds: DecryptedCredentials,
   input: MemoryExtractionInput,
-  fetchImpl?: typeof fetch,
+  opts?: { model?: string; fetchImpl?: typeof fetch },
 ): Promise<MemoryExtractionOutput> {
   const system = [
     'You extract durable memories for Watai.',
@@ -104,11 +104,11 @@ export async function extractMemories(
   const raw = await completeChat({
     baseUrl: creds.baseUrl,
     key: creds.key,
-    model: creds.models.chat,
+    model: opts?.model?.trim() || creds.models.chat,
     reasoningEffort: 'minimal',
     maxCompletionTokens: 1200,
     timeoutMs: 45_000,
-    fetchImpl,
+    fetchImpl: opts?.fetchImpl,
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: JSON.stringify(input) },

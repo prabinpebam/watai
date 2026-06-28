@@ -143,7 +143,7 @@ export function container(): ApiContainer {
     queue: new QueueMemoryStarter(),
     settings: settingsService,
     credentials: credentialService,
-    extractor: (creds, input) => extractMemories(creds, input),
+    extractor: (creds, input) => extractMemories(creds, input, { model: process.env.MEMORY_MODEL }),
     signalr: signalr ?? undefined,
     clock,
   });

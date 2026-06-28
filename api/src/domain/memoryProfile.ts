@@ -191,6 +191,59 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function asLabel(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function asAttributeAge(value: unknown): number | undefined {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(n) && n >= 0 && n <= 120 ? n : undefined;
+}
+
+/** Structured child derived from an explicit memory route, when the planner provided one. */
+function routedChild(memory: MemoryRecord): ProfileChild | null {
+  const route = memory.route;
+  if (!route || route.profilePath !== 'user.family.children') return null;
+  const name = asLabel(route.entity?.name) ?? asLabel(route.relationship?.object?.name);
+  if (!name) return null;
+  const attrs = route.relationship?.attributes ?? {};
+  const rel = asLabel(attrs.relationship)?.toLowerCase();
+  const relationship: ProfileChild['relationship'] = rel === 'daughter' || rel === 'son' ? rel : 'child';
+  const age = asAttributeAge(attrs.age);
+  return { name, relationship, ...(age !== undefined ? { age } : {}), text: childText({ name, relationship, age }), sourceMemoryIds: [memory.id], confidence: memory.confidence };
+}
+
+const PROFILE_ITEM_BRANCHES: Record<string, (profile: MemoryProfileView) => ProfileItem[]> = {
+  'user.preferences.communication': (p) => p.profile.user.preferences.communication,
+  'user.preferences.engineering': (p) => p.profile.user.preferences.engineering,
+  'user.preferences.design': (p) => p.profile.user.preferences.design,
+  'user.preferences.tools': (p) => p.profile.user.preferences.tools,
+  'user.preferences.other': (p) => p.profile.user.preferences.other,
+  'work.projects': (p) => p.profile.work.projects,
+  'work.repositories': (p) => p.profile.work.repositories,
+  'work.deployments': (p) => p.profile.work.deployments,
+  'work.currentFocus': (p) => p.profile.work.currentFocus,
+  avoidances: (p) => p.profile.avoidances,
+};
+
+/** Place a memory using its explicit route. Returns true when the route owned placement. */
+function placeRoutedItem(profile: MemoryProfileView, memory: MemoryRecord): boolean {
+  const path = memory.route?.profilePath;
+  if (!path) return false;
+  const branch = PROFILE_ITEM_BRANCHES[path];
+  if (branch) {
+    addUnique(branch(profile), item(memory));
+    return true;
+  }
+  if (path === 'user.interests.media' || path === 'user.interests.hobbies' || path === 'user.interests.other') {
+    const name = asLabel(memory.route?.entity?.name) ?? memory.text;
+    const bucket = path === 'user.interests.hobbies' ? profile.profile.user.interests.hobbies : path === 'user.interests.other' ? profile.profile.user.interests.other : profile.profile.user.interests.media;
+    addUnique(bucket, { name, sourceMemoryIds: [memory.id] });
+    return true;
+  }
+  return false;
+}
+
 function bucketFor(memory: MemoryRecord): Array<'today' | 'week' | 'month'> {
   const ageMs = Date.now() - Date.parse(memory.updatedAt || memory.createdAt);
   const day = 24 * 60 * 60 * 1000;
@@ -233,7 +286,7 @@ export function buildMemoryProfile(userId: string, now: string, memories: Memory
 
   for (const memory of activeMemories) {
     for (const bucket of bucketFor(memory)) profile.temporal[bucket].items.push({ memoryId: memory.id, text: memory.text, kind: memory.kind, updatedAt: memory.updatedAt });
-    const child = extractChild(memory);
+    const child = routedChild(memory) ?? extractChild(memory);
     if (child) mergeChild(profile.profile.user.family.children, child);
     const pet = extractPet(memory);
     if (pet) {
@@ -242,6 +295,8 @@ export function buildMemoryProfile(userId: string, now: string, memories: Memory
       continue;
     }
     if (/\bOne Piece\b/i.test(memory.text)) addInterest(profile, 'One Piece', memory);
+
+    if (placeRoutedItem(profile, memory)) continue;
 
     if (memory.kind === 'preference' || memory.kind === 'work_style' || memory.kind === 'procedure') {
       addUnique(profile.profile.user.preferences[classifyPreference(memory)], item(memory));
