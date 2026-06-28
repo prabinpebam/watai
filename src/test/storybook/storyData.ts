@@ -282,6 +282,13 @@ export function installStoryData(): void {
     deleteInvite: async (email: string) => {
       invites = invites.filter((invite) => invite.email !== email);
     },
+    getMemoryModelConfig: async () => ({ memoryModel: 'gpt-5.4-mini', source: 'env' as const, envDefault: 'gpt-5.4-mini', override: null }),
+    setMemoryModel: async (memoryModel: string) => ({
+      memoryModel: memoryModel || 'gpt-5.4-mini',
+      source: (memoryModel ? 'override' : 'env') as 'override' | 'env',
+      envDefault: 'gpt-5.4-mini',
+      override: memoryModel || null,
+    }),
   });
 
   Object.assign(skillsApi, {

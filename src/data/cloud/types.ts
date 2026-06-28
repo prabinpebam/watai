@@ -412,6 +412,18 @@ export interface InviteRecord {
   createdAt: string;
 }
 
+/** Admin view of the server-decided model used for background memory extraction.
+ *  `source` explains where the effective value comes from; `memoryModel === null`
+ *  means it falls back to each user's own chat model. */
+export interface MemoryModelConfig {
+  memoryModel: string | null;
+  source: 'override' | 'env' | 'chat';
+  envDefault: string | null;
+  override: string | null;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
 // --- credential vault (server-side AI keys) ---
 
 /** Model deployment names configured server-side (mirrors api credentials schema). */

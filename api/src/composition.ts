@@ -9,6 +9,7 @@ import { CosmosImageStore } from './adapters/cosmos/imageStore';
 import { CosmosSkillStore } from './adapters/cosmos/skillStore';
 import { CosmosMemoryStore } from './adapters/cosmos/memoryStore';
 import { CosmosMemoryJobStore } from './adapters/cosmos/memoryJobStore';
+import { CosmosAppConfigStore } from './adapters/cosmos/appConfigStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
 import { SasSkillBlobStore } from './adapters/azure/sasSkillBlobStore';
 import { KeyVaultWrapper } from './adapters/azure/keyVaultWrapper';
@@ -35,6 +36,7 @@ import { ImageService } from './application/imageService';
 import { MemoryService } from './application/memoryService';
 import { MemoryContextService } from './application/memoryContextService';
 import { MemoryExtractionService } from './application/memoryExtractionService';
+import { MemoryModelService } from './application/memoryModelService';
 import { extractMemories } from './ai/memoryExtractor';
 import type { ImageWorkerDeps } from './application/imageWorker';
 import { SkillCatalogService } from './application/skillCatalogService';
@@ -47,6 +49,7 @@ import { createThreadFilesController } from './http/threadFilesController';
 import { createAssetsController } from './http/assetsController';
 import { createMeController } from './http/meController';
 import { createInvitesController } from './http/invitesController';
+import { createAdminConfigController } from './http/adminConfigController';
 import { createCredentialsController } from './http/credentialsController';
 import { createRunsController } from './http/runsController';
 import { createImagesController } from './http/imagesController';
@@ -69,6 +72,7 @@ export interface ApiContainer {
   assets: ReturnType<typeof createAssetsController>;
   me: ReturnType<typeof createMeController>;
   invites: ReturnType<typeof createInvitesController>;
+  adminConfig: ReturnType<typeof createAdminConfigController>;
   credentials: ReturnType<typeof createCredentialsController>;
   runs: ReturnType<typeof createRunsController>;
   images: ReturnType<typeof createImagesController>;
@@ -121,6 +125,7 @@ export function container(): ApiContainer {
   const imageStore = new CosmosImageStore();
   const memoryStore = new CosmosMemoryStore();
   const memoryJobStore = new CosmosMemoryJobStore();
+  const appConfigStore = new CosmosAppConfigStore();
   const minter = new AzureSasMinter();  const access = new AccessService(
     inviteStore,
     process.env.ADMIN_EMAIL ?? '',
@@ -129,6 +134,7 @@ export function container(): ApiContainer {
   const credentialService = new CredentialService(credentialStore, buildKeyWrapper(), clock);
   const imageService = new ImageService(imageStore, credentialService, new QueueImageStarter(), minter, clock);
   const memoryService = new MemoryService(memoryStore, clock);
+  const memoryModelService = new MemoryModelService(appConfigStore, () => process.env.MEMORY_MODEL, clock);
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
   const memoryContextService = new MemoryContextService(memoryStore, settingsService);
@@ -143,7 +149,7 @@ export function container(): ApiContainer {
     queue: new QueueMemoryStarter(),
     settings: settingsService,
     credentials: credentialService,
-    extractor: (creds, input) => extractMemories(creds, input, { model: process.env.MEMORY_MODEL }),
+    extractor: async (creds, input) => extractMemories(creds, input, { model: await memoryModelService.effectiveModel() }),
     signalr: signalr ?? undefined,
     clock,
   });
@@ -170,6 +176,7 @@ export function container(): ApiContainer {
     assets: createAssetsController(assetService),
     me: createMeController(access),
     invites: createInvitesController(inviteStore, clock),
+    adminConfig: createAdminConfigController(memoryModelService),
     credentials: createCredentialsController(credentialService),
     runs: createRunsController(runService),
     images: createImagesController(imageService),

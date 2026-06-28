@@ -13,7 +13,7 @@ import { repo, cloudApi, realtime } from '../../data';
 import { kvGet } from '../../data/db';
 import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import { useMe } from '../../auth/access';
-import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo, MemoryProfileItem, MemoryProfileView, MemoryRecord, MemoryStatus } from '../../data/cloud/types';
+import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo, MemoryModelConfig, MemoryProfileItem, MemoryProfileView, MemoryRecord, MemoryStatus } from '../../data/cloud/types';
 import { normalizeBaseUrl } from '../../data/secureStore';
 import { normalizeChatModelOptions } from '../../lib/modelOptions';
 import { DEFAULT_SETTINGS, effectiveMemorySettings } from '../../lib/types';
@@ -53,13 +53,14 @@ const SECTIONS: Record<string, SectionMeta> = {
   appearance: { id: 'appearance', label: 'Appearance', icon: 'palette', sub: 'Theme, text size, and density' },
   data: { id: 'data', label: 'Data controls', icon: 'database', sub: 'Sync, export, retention, and deletion' },
   invites: { id: 'invites', label: 'Invites', icon: 'user-add', sub: 'Manage who can sign in', adminOnly: true },
+  memoryModels: { id: 'memoryModels', label: 'Memory model', icon: 'tune', sub: 'Server model that learns memories', adminOnly: true },
   about: { id: 'about', label: 'About', icon: 'info', sub: 'Version and links' },
 };
 
 const GROUPS: { label: string; ids: string[] }[] = [
   { label: 'Assistant', ids: ['models', 'tools', 'skills', 'personalization', 'voice'] },
   { label: 'App', ids: ['appearance', 'data', 'about'] },
-  { label: 'Admin', ids: ['invites'] },
+  { label: 'Admin', ids: ['invites', 'memoryModels'] },
 ];
 
 /** Shared, single-source state handed to every section so the rail summaries
@@ -356,6 +357,8 @@ function SectionBody({ id, ctx }: { id: string; ctx: SettingsCtx }) {
       return <DataBody ctx={ctx} />;
     case 'invites':
       return <InvitesBody />;
+    case 'memoryModels':
+      return <MemoryModelsBody />;
     case 'about':
       return <AboutBody />;
     default:
@@ -1486,6 +1489,118 @@ function InvitesBody() {
           ))
         )}
       </div>
+    </>
+  );
+}
+
+function MemoryModelsBody() {
+  const pushToast = useUi((s) => s.pushToast);
+  const [config, setConfig] = useState<MemoryModelConfig | null>(null);
+  const [model, setModel] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const apply = (next: MemoryModelConfig) => {
+    setConfig(next);
+    setModel(next.override ?? '');
+  };
+
+  const refresh = () => {
+    cloudApi
+      .getMemoryModelConfig()
+      .then(apply)
+      .catch(() => setConfig(null));
+  };
+  useEffect(refresh, []);
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      apply(await cloudApi.setMemoryModel(model.trim()));
+      pushToast('Memory model updated', 'success');
+    } catch {
+      setError('Could not update the memory model. Check the deployment name and try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reset = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      apply(await cloudApi.setMemoryModel(''));
+      pushToast('Reverted to the server default');
+    } catch {
+      pushToast('Could not reset the memory model', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sourceLabel =
+    config?.source === 'override' ? 'Custom override' : config?.source === 'env' ? 'Server default' : 'Each user’s chat model';
+  const effective = config ? (config.memoryModel ?? 'Each user’s own chat model') : '…';
+  const dirty = (model.trim() || null) !== (config?.override ?? null);
+  const hint = config?.envDefault
+    ? `Leave blank to use the server default (${config.envDefault}).`
+    : 'Leave blank to fall back to each user’s own chat model.';
+
+  return (
+    <>
+      <p className="muted" style={{ marginBottom: 'var(--space-5)' }}>
+        Memories are learned in the background by a separate, server-decided model so the experience
+        stays fast and economical. Members never choose this — it does not change the model they pick
+        for chat. Update it here as better or cheaper models become available.
+      </p>
+
+      <div className="settings-card" style={{ padding: 'var(--space-5)' }}>
+        <div className="setting-row" style={{ paddingTop: 0 }}>
+          <div className="setting-row__body">
+            <div className="setting-row__title">Currently learning with</div>
+            <div className="setting-row__sub">{effective}</div>
+          </div>
+          <span className={`badge ${config?.source === 'override' ? 'badge--accent' : ''}`}>{sourceLabel}</span>
+        </div>
+
+        <div className="col" style={{ gap: 'var(--space-4)', marginTop: 'var(--space-4)' }}>
+          <Field
+            label="Memory model deployment"
+            placeholder={config?.envDefault ?? 'e.g. gpt-5.4-mini'}
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (dirty) void save();
+              }
+            }}
+            autoCapitalize="off"
+            autoComplete="off"
+            spellCheck={false}
+            error={error ?? undefined}
+            hint={hint}
+          />
+          <div className="row" style={{ gap: 'var(--space-3)' }}>
+            <Button icon="check" loading={busy} disabled={!dirty} onClick={() => void save()}>
+              Save model
+            </Button>
+            {config?.override ? (
+              <Button icon="refresh" variant="outline" loading={busy} onClick={() => void reset()}>
+                Reset to default
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {config?.updatedBy ? (
+        <p className="muted" style={{ marginTop: 'var(--space-4)' }}>
+          Last changed by {config.updatedBy}
+          {config.updatedAt ? ` on ${new Date(config.updatedAt).toLocaleString()}` : ''}.
+        </p>
+      ) : null}
     </>
   );
 }

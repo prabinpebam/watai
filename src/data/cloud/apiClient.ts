@@ -15,6 +15,7 @@ import type {
   ListImagesResult,
   ListMemoryQuery,
   ListMemoryResponse,
+  MemoryModelConfig,
   MemoryProfileView,
   MemoryRecord,
   MeInfo,
@@ -388,6 +389,15 @@ export class WataiApiClient implements CloudApi {
   deleteInvite(email: string): Promise<void> {
     return this.request('DELETE', `/invites/${encodeURIComponent(email)}`);
   }
+
+  // --- admin: server-decided memory model ---
+  getMemoryModelConfig(): Promise<MemoryModelConfig> {
+    return this.request('GET', '/admin/memory-model');
+  }
+
+  setMemoryModel(memoryModel: string): Promise<MemoryModelConfig> {
+    return this.request('PUT', '/admin/memory-model', { memoryModel });
+  }
 }
 
 function statusToCode(status: number): CloudErrorCode {
@@ -467,4 +477,6 @@ export interface CloudApi {
   listInvites(): Promise<InviteRecord[]>;
   createInvite(email: string): Promise<InviteRecord>;
   deleteInvite(email: string): Promise<void>;
+  getMemoryModelConfig(): Promise<MemoryModelConfig>;
+  setMemoryModel(memoryModel: string): Promise<MemoryModelConfig>;
 }

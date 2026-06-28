@@ -466,6 +466,12 @@ class FakeCloud implements CloudApi {
     return { email, invitedBy: 'admin@example.com', createdAt: this.now() };
   }
   async deleteInvite() {}
+  async getMemoryModelConfig() {
+    return { memoryModel: 'gpt-5.4-mini', source: 'env' as const, envDefault: 'gpt-5.4-mini', override: null };
+  }
+  async setMemoryModel(memoryModel: string) {
+    return { memoryModel: memoryModel || 'gpt-5.4-mini', source: (memoryModel ? 'override' : 'env') as 'override' | 'env', envDefault: 'gpt-5.4-mini', override: memoryModel || null };
+  }
   async negotiate() {
     return { url: '', accessToken: '' };
   }

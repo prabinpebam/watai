@@ -272,3 +272,11 @@ app.http('invite-item', {
   route: 'invites/{email}',
   handler: methodDispatch({ DELETE: (c) => c.invites.remove }, admin),
 });
+
+// Admin-only server config: the model used for background memory extraction.
+app.http('admin-memory-model', {
+  methods: ['GET', 'PUT'],
+  authLevel: 'anonymous',
+  route: 'admin/memory-model',
+  handler: methodDispatch({ GET: (c) => c.adminConfig.getMemoryModel, PUT: (c) => c.adminConfig.setMemoryModel }, admin),
+});
