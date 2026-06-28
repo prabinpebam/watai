@@ -2,15 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { formatTime, relativeDay } from '../../lib/format';
 import type { Message } from '../../lib/types';
 
-interface PromptMark {
-  message: Message;
-  top: number;
-}
-
 interface PromptMinimapProps {
   messages: Message[];
   scrollRef: RefObject<HTMLDivElement | null>;
 }
+
+const ROW_HEIGHT = 30;
+const EDGE_SCROLL_ZONE = 56;
 
 function promptLabel(message: Message): string {
   return message.content.trim().replace(/\s+/g, ' ') || 'Untitled prompt';
@@ -26,54 +24,102 @@ function touchLike(pointerType?: string): boolean {
 
 export function PromptMinimap({ messages, scrollRef }: PromptMinimapProps) {
   const prompts = useMemo(() => messages.filter((message) => message.role === 'user'), [messages]);
-  const [marks, setMarks] = useState<PromptMark[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const [tipTop, setTipTop] = useState<number | null>(null);
+  const rootRef = useRef<HTMLElement | null>(null);
+  const railRef = useRef<HTMLDivElement | null>(null);
   const clearTimer = useRef<number | null>(null);
   const skipClickRef = useRef(false);
+  const scrollVelocity = useRef(0);
+  const scrollFrame = useRef<number | null>(null);
 
-  const measure = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el || prompts.length === 0) {
-      setMarks([]);
+  const updateTipPosition = useCallback((id = activeId ?? pinnedId) => {
+    const root = rootRef.current;
+    const rail = railRef.current;
+    if (!root || !rail || !id) {
+      setTipTop(null);
       return;
     }
-    const scrollerRect = el.getBoundingClientRect();
-    const next = prompts.map((message) => {
-      const node = el.querySelector<HTMLElement>(`[data-prompt-id="${CSS.escape(message.id)}"]`);
-      if (!node) return { message, top: 0 };
-      const rect = node.getBoundingClientRect();
-      const y = rect.top - scrollerRect.top + el.scrollTop;
-      const max = Math.max(1, el.scrollHeight - rect.height);
-      return { message, top: Math.min(96, Math.max(4, (y / max) * 100)) };
-    });
-    setMarks(next);
-  }, [prompts, scrollRef]);
+    const mark = rail.querySelector<HTMLElement>(`[data-minimap-id="${CSS.escape(id)}"]`);
+    if (!mark) {
+      setTipTop(null);
+      return;
+    }
+    const rootRect = root.getBoundingClientRect();
+    const markRect = mark.getBoundingClientRect();
+    setTipTop(markRect.top - rootRect.top + markRect.height / 2);
+  }, [activeId, pinnedId]);
+
+  const stopAutoScroll = useCallback(() => {
+    scrollVelocity.current = 0;
+    if (scrollFrame.current !== null) {
+      window.cancelAnimationFrame(scrollFrame.current);
+      scrollFrame.current = null;
+    }
+  }, []);
+
+  const runAutoScroll = useCallback(() => {
+    const rail = railRef.current;
+    if (!rail || scrollVelocity.current === 0) {
+      scrollFrame.current = null;
+      return;
+    }
+    const before = rail.scrollTop;
+    rail.scrollTop += scrollVelocity.current;
+    if (rail.scrollTop === before && (rail.scrollTop === 0 || rail.scrollTop + rail.clientHeight >= rail.scrollHeight - 1)) {
+      stopAutoScroll();
+      return;
+    }
+    updateTipPosition();
+    scrollFrame.current = window.requestAnimationFrame(runAutoScroll);
+  }, [stopAutoScroll, updateTipPosition]);
+
+  const updateAutoScroll = useCallback((clientY: number) => {
+    const rail = railRef.current;
+    if (!rail || rail.scrollHeight <= rail.clientHeight) {
+      stopAutoScroll();
+      return;
+    }
+    const rect = rail.getBoundingClientRect();
+    const topPressure = Math.max(0, EDGE_SCROLL_ZONE - (clientY - rect.top));
+    const bottomPressure = Math.max(0, EDGE_SCROLL_ZONE - (rect.bottom - clientY));
+    const nextVelocity = topPressure > 0
+      ? -Math.min(16, 2 + topPressure / 3)
+      : bottomPressure > 0
+        ? Math.min(16, 2 + bottomPressure / 3)
+        : 0;
+    scrollVelocity.current = nextVelocity;
+    if (nextVelocity === 0) {
+      stopAutoScroll();
+      return;
+    }
+    if (scrollFrame.current === null) {
+      scrollFrame.current = window.requestAnimationFrame(runAutoScroll);
+    }
+  }, [runAutoScroll, stopAutoScroll]);
 
   useEffect(() => {
-    measure();
-    const el = scrollRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    const column = el.querySelector('.chat__column');
-    if (column) ro.observe(column);
-    window.addEventListener('resize', measure);
-    el.addEventListener('scroll', measure, { passive: true });
+    const rail = railRef.current;
+    if (!rail) return;
+    const onScroll = () => updateTipPosition();
+    rail.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    updateTipPosition();
     return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-      el.removeEventListener('scroll', measure);
+      rail.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
     };
-  }, [measure, scrollRef]);
+  }, [prompts, updateTipPosition]);
 
   useEffect(() => {
     return () => {
       if (clearTimer.current) window.clearTimeout(clearTimer.current);
+      stopAutoScroll();
     };
-  }, []);
+  }, [stopAutoScroll]);
 
-  const activeMark = marks.find((mark) => mark.message.id === activeId || mark.message.id === pinnedId);
+  const activePrompt = prompts.find((message) => message.id === activeId || message.id === pinnedId);
 
   const scrollToPrompt = useCallback((message: Message) => {
     const el = scrollRef.current;
@@ -88,6 +134,7 @@ export function PromptMinimap({ messages, scrollRef }: PromptMinimapProps) {
   const selectPrompt = (message: Message, pointerType?: string) => {
     setActiveId(message.id);
     setPinnedId(touchLike(pointerType) ? message.id : null);
+    updateTipPosition(message.id);
     scrollToPrompt(message);
     if (clearTimer.current) window.clearTimeout(clearTimer.current);
     if (touchLike(pointerType)) {
@@ -98,36 +145,51 @@ export function PromptMinimap({ messages, scrollRef }: PromptMinimapProps) {
     }
   };
 
-  if (marks.length === 0) return null;
+  if (prompts.length < 2) return null;
 
-  const activeIndex = marks.findIndex((mark) => mark.message.id === (activeId ?? pinnedId));
+  const activeIndex = prompts.findIndex((message) => message.id === (activeId ?? pinnedId));
 
   return (
-    <nav className="prompt-minimap" aria-label="User prompts in this chat">
-      <div className="prompt-minimap__rail">
-        {marks.map((mark, index) => {
+    <nav className="prompt-minimap" aria-label="User prompts in this chat" ref={rootRef}>
+      <div
+        className="prompt-minimap__rail"
+        ref={railRef}
+        onPointerMove={(event) => {
+          if (!touchLike(event.pointerType)) updateAutoScroll(event.clientY);
+        }}
+        onPointerLeave={(event) => {
+          stopAutoScroll();
+          if (!touchLike(event.pointerType)) setActiveId(null);
+        }}
+      >
+        <div className="prompt-minimap__track" style={{ ['--prompt-row-height' as string]: `${ROW_HEIGHT}px` }}>
+        {prompts.map((message, index) => {
           const distance = activeIndex === -1 ? 99 : Math.abs(activeIndex - index);
           const wave = distance === 0 ? 1 : distance === 1 ? 0.62 : distance === 2 ? 0.34 : distance === 3 ? 0.16 : 0;
-          const active = mark.message.id === activeId || mark.message.id === pinnedId;
+          const active = message.id === activeId || message.id === pinnedId;
           return (
             <button
-              key={mark.message.id}
+              key={message.id}
               type="button"
               className={`prompt-minimap__mark ${active ? 'prompt-minimap__mark--active' : ''}`}
-              style={{ top: `${mark.top}%`, ['--wave' as string]: wave }}
-              aria-label={`Jump to prompt: ${promptLabel(mark.message)}`}
+              data-minimap-id={message.id}
+              style={{ ['--wave' as string]: wave }}
+              aria-label={`Jump to prompt: ${promptLabel(message)}`}
               onPointerEnter={(event) => {
-                if (!touchLike(event.pointerType)) setActiveId(mark.message.id);
+                if (!touchLike(event.pointerType)) {
+                  setActiveId(message.id);
+                  updateTipPosition(message.id);
+                }
               }}
-              onPointerLeave={(event) => {
-                if (!touchLike(event.pointerType)) setActiveId(null);
+              onFocus={() => {
+                setActiveId(message.id);
+                updateTipPosition(message.id);
               }}
-              onFocus={() => setActiveId(mark.message.id)}
               onBlur={() => setActiveId(null)}
               onPointerDown={(event) => {
                 if (touchLike(event.pointerType)) {
                   skipClickRef.current = true;
-                  selectPrompt(mark.message, event.pointerType);
+                  selectPrompt(message, event.pointerType);
                 }
               }}
               onClick={() => {
@@ -135,18 +197,19 @@ export function PromptMinimap({ messages, scrollRef }: PromptMinimapProps) {
                   skipClickRef.current = false;
                   return;
                 }
-                selectPrompt(mark.message);
+                selectPrompt(message);
               }}
             >
               <span />
             </button>
           );
         })}
+        </div>
       </div>
-      {activeMark && (
-        <div className="prompt-minimap__tip" style={{ top: `${activeMark.top}%` }} role="status">
-          <div className="prompt-minimap__tip-text">{promptLabel(activeMark.message)}</div>
-          <div className="prompt-minimap__tip-time">{promptTime(activeMark.message.createdAt)}</div>
+      {activePrompt && tipTop !== null && (
+        <div className="prompt-minimap__tip" style={{ top: `${tipTop}px` }} role="status">
+          <div className="prompt-minimap__tip-text">{promptLabel(activePrompt)}</div>
+          <div className="prompt-minimap__tip-time">{promptTime(activePrompt.createdAt)}</div>
         </div>
       )}
     </nav>

@@ -64,6 +64,27 @@ function resetState(): void {
     { id: 'u5', threadId: 'story-thread', role: 'user', content: 'Summarize the final plan in one paragraph and mention the files attached in this chat.', status: 'complete', createdAt: iso(-120000) },
     { id: 'a5', threadId: 'story-thread', role: 'assistant', content: 'The final plan is to ship a print-ready worksheet with a calm cover, clear activities, and the generated PDF attached in this chat.', status: 'complete', createdAt: iso(-60000) },
   ];
+  for (let i = 6; i <= 34; i++) {
+    messages.push(
+      {
+        id: `u${i}`,
+        threadId: 'story-thread',
+        role: 'user',
+        content: `Follow-up prompt ${i}: refine one small part of the worksheet plan and keep the explanation concise.`,
+        status: 'complete',
+        createdAt: iso(i * 60000),
+      },
+      {
+        id: `a${i}`,
+        threadId: 'story-thread',
+        role: 'assistant',
+        content: `Refinement ${i}: keep the layout calm, scannable, and print friendly.\n\n`,
+        status: 'complete',
+        createdAt: iso(i * 60000 + 30000),
+      },
+    );
+  }
+  threads[0] = { ...threads[0], messageCount: messages.filter((message) => message.threadId === 'story-thread').length };
   settings = { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, theme: 'dark' } };
   memory = [];
   invites = [{ email: 'friend@example.com', invitedBy: 'admin@example.com', createdAt: iso(-3600000) }];
