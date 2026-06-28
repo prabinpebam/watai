@@ -183,6 +183,29 @@ export const Messages: Story = {
   ),
 };
 
+export const MemoryUsed: Story = {
+  render: () => (
+    <div className="chat__column" style={{ maxWidth: 720 }}>
+      <AssistantMessage
+        message={{
+          ...assistantMessage,
+          content: 'Deploy Watai to rg-watai-dev.',
+          memoryRefs: [
+            {
+              memoryId: 'mem_deploy',
+              kind: 'project_context',
+              text: 'Watai deploy target is rg-watai-dev.',
+              score: 0.91,
+            },
+          ],
+        }}
+        streaming={false}
+        onRegenerate={() => {}}
+      />
+    </div>
+  ),
+};
+
   export const ImageGenerationFailures: Story = {
     render: () => (
       <div className="chat__column" style={{ maxWidth: 720 }}>

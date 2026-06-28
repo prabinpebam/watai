@@ -1,7 +1,7 @@
 import { cloudApi, repo, realtime, skillsApi } from '../../data';
 import { clearMe } from '../../auth/access';
-import { DEFAULT_SETTINGS, type Artifact, type Attachment, type ImageRef, type MemoryItem, type Message, type Settings, type SkillDetail, type SkillSummary, type Thread, type ThreadFile, type ThreadLock } from '../../lib/types';
-import type { AppendMessageBody, CreateImagesBody, CreateThreadBody, CredentialStatus, ImageRecord, InviteRecord, ListImagesQuery, ListImagesResult, MessageRecord, RunRecord, SasRequestBody, SasResult, StudioImage, SubmitRunBody, SubmitRunResult, ThreadRecord, UpdateThreadBody } from '../../data/cloud/types';
+import { DEFAULT_SETTINGS, type Artifact, type Attachment, type ImageRef, type Message, type Settings, type SkillDetail, type SkillSummary, type Thread, type ThreadFile, type ThreadLock } from '../../lib/types';
+import type { AppendMessageBody, CreateImagesBody, CreateMemoryBody, CreateThreadBody, CredentialStatus, ImageRecord, InviteRecord, ListImagesQuery, ListImagesResult, ListMemoryQuery, ListMemoryResponse, MemoryRecord, MessageRecord, PatchMemoryBody, RunRecord, SasRequestBody, SasResult, StudioImage, SubmitRunBody, SubmitRunResult, ThreadRecord, UpdateThreadBody } from '../../data/cloud/types';
 
 const now = new Date('2026-06-28T08:00:00.000Z').getTime();
 const iso = (offsetMs = 0) => new Date(now + offsetMs).toISOString();
@@ -41,7 +41,7 @@ const pdfArtifact: Artifact = {
 let threads: Thread[] = [];
 let messages: Message[] = [];
 let settings: Settings = DEFAULT_SETTINGS;
-let memory: MemoryItem[] = [];
+let memory: MemoryRecord[] = [];
 let invites: InviteRecord[] = [];
 let studioImages: StudioImage[] = [];
 let blobs = new Map<string, Blob>();
@@ -97,7 +97,7 @@ function threadRecord(thread: Thread): ThreadRecord {
 }
 
 function messageRecord(message: Message): MessageRecord {
-  return { id: message.id, threadId: message.threadId, userId: 'story-user', role: message.role, content: message.content, status: message.status === 'sending' ? 'complete' : message.status, createdAt: message.createdAt, orderAt: message.createdAt, deletedAt: null, ...(message.images ? { images: message.images.map((image): ImageRecord => ({ id: image.id, blobPath: image.blobPath ?? image.localBlobKey ?? '', prompt: image.prompt, size: image.size, outputFormat: image.outputFormat, createdAt: image.createdAt })) } : {}), ...(message.attachments ? { attachments: message.attachments.filter((attachment) => attachment.blobPath).map((attachment) => ({ id: attachment.id, kind: attachment.kind, blobPath: attachment.blobPath!, mime: attachment.mime, bytes: attachment.bytes, ...(attachment.name ? { name: attachment.name } : {}) })) } : {}), ...(message.toolCalls ? { toolCalls: message.toolCalls.map((toolCall) => ({ ...toolCall, status: toolCall.status === 'awaiting-confirm' ? 'running' : toolCall.status })) } : {}), ...(message.citations ? { citations: message.citations.map((citation) => ({ ...citation })) } : {}) };
+  return { id: message.id, threadId: message.threadId, userId: 'story-user', role: message.role, content: message.content, status: message.status === 'sending' ? 'complete' : message.status, createdAt: message.createdAt, orderAt: message.createdAt, deletedAt: null, ...(message.images ? { images: message.images.map((image): ImageRecord => ({ id: image.id, blobPath: image.blobPath ?? image.localBlobKey ?? '', prompt: image.prompt, size: image.size, outputFormat: image.outputFormat, createdAt: image.createdAt })) } : {}), ...(message.attachments ? { attachments: message.attachments.filter((attachment) => attachment.blobPath).map((attachment) => ({ id: attachment.id, kind: attachment.kind, blobPath: attachment.blobPath!, mime: attachment.mime, bytes: attachment.bytes, ...(attachment.name ? { name: attachment.name } : {}) })) } : {}), ...(message.toolCalls ? { toolCalls: message.toolCalls.map((toolCall) => ({ ...toolCall, status: toolCall.status === 'awaiting-confirm' ? 'running' : toolCall.status })) } : {}), ...(message.citations ? { citations: message.citations.map((citation) => ({ ...citation })) } : {}), ...(message.memoryRefs ? { memoryRefs: message.memoryRefs.map((memoryRef) => ({ ...memoryRef })) } : {}) };
 }
 
 function assetUrl(asset: { id: string; localBlobKey?: string; blobPath?: string }): string {
@@ -173,12 +173,35 @@ export function installStoryData(): void {
     saveSettings: async (next: Settings) => {
       settings = next;
     },
-    listMemory: async () => memory,
-    addMemory: async (item: MemoryItem) => {
+    listMemory: async (query?: ListMemoryQuery) => memory.filter((item) => (query?.status ? item.status === query.status : item.status === 'active')),
+    addMemory: async (input: CreateMemoryBody) => {
+      const item: MemoryRecord = {
+        id: `story-memory-${memory.length + 1}`,
+        userId: 'story-user',
+        kind: input.kind ?? 'fact',
+        status: 'active',
+        text: input.text,
+        sourceRefs: [input.sourceRef ?? { type: 'manual', createdAt: iso() }],
+        confidence: 1,
+        salience: 0.7,
+        pinned: input.pinned ?? false,
+        sensitive: false,
+        visibility: input.visibility ?? 'normal',
+        createdAt: iso(),
+        updatedAt: iso(),
+        useCount: 0,
+      };
       memory = [item, ...memory];
+      return item;
+    },
+    updateMemory: async (id: string, patch: PatchMemoryBody) => {
+      const current = memory.find((item) => item.id === id) ?? memory[0];
+      const next = { ...current, ...patch, updatedAt: iso() } as MemoryRecord;
+      memory = memory.map((item) => (item.id === id ? next : item));
+      return next;
     },
     removeMemory: async (id: string) => {
-      memory = memory.filter((item) => item.id !== id);
+      memory = memory.map((item) => (item.id === id ? { ...item, status: 'deleted', deletedAt: iso(), updatedAt: iso() } : item));
     },
     search: async (query: string) => (query.trim() ? messages.slice(0, 2).map((message) => ({ thread: threads.find((thread) => thread.id === message.threadId) ?? threads[0], messageId: message.id, snippet: message.content || 'Generated image result.' })) : []),
     exportAll: async () => new Blob([JSON.stringify({ threads, messages, settings }, null, 2)], { type: 'application/json' }),
@@ -201,6 +224,10 @@ export function installStoryData(): void {
     releaseThreadLock: async () => undefined,
     getSettings: async () => settings,
     patchSettings: async (patch: Partial<Settings>) => (settings = { ...settings, ...patch }),
+    listMemory: async (query?: ListMemoryQuery): Promise<ListMemoryResponse> => ({ memories: await repo.listMemory(query) }),
+    createMemory: async (body: CreateMemoryBody) => repo.addMemory(body),
+    patchMemory: async (id: string, body: PatchMemoryBody) => repo.updateMemory(id, body),
+    deleteMemory: async (id: string) => repo.removeMemory(id),
     requestSas: async (body: SasRequestBody): Promise<SasResult> => ({ blobPath: `story/${body.assetId}`, url: assetUrl({ id: body.assetId }), expiresAt: iso(3600000) }),
     getCredentialStatus: async () => credentialStatus,
     putCredentials: async () => credentialStatus,

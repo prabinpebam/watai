@@ -7,6 +7,7 @@ import { CosmosCredentialStore } from './adapters/cosmos/credentialStore';
 import { CosmosRunStore } from './adapters/cosmos/runStore';
 import { CosmosImageStore } from './adapters/cosmos/imageStore';
 import { CosmosSkillStore } from './adapters/cosmos/skillStore';
+import { CosmosMemoryStore } from './adapters/cosmos/memoryStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
 import { SasSkillBlobStore } from './adapters/azure/sasSkillBlobStore';
 import { KeyVaultWrapper } from './adapters/azure/keyVaultWrapper';
@@ -29,6 +30,8 @@ import { CredentialService } from './application/credentialService';
 import { RunService } from './application/runService';
 import type { RunWorkerDeps } from './application/runWorker';
 import { ImageService } from './application/imageService';
+import { MemoryService } from './application/memoryService';
+import { MemoryContextService } from './application/memoryContextService';
 import type { ImageWorkerDeps } from './application/imageWorker';
 import { SkillCatalogService } from './application/skillCatalogService';
 import { createSkillProvisioner } from './application/skillProvisioner';
@@ -43,6 +46,7 @@ import { createInvitesController } from './http/invitesController';
 import { createCredentialsController } from './http/credentialsController';
 import { createRunsController } from './http/runsController';
 import { createImagesController } from './http/imagesController';
+import { createMemoryController } from './http/memoryController';
 import { createSkillsController } from './http/skillsController';
 import { createNegotiateController } from './http/negotiateController';
 import { createAiProxyController } from './http/aiProxyController';
@@ -64,6 +68,7 @@ export interface ApiContainer {
   credentials: ReturnType<typeof createCredentialsController>;
   runs: ReturnType<typeof createRunsController>;
   images: ReturnType<typeof createImagesController>;
+  memory: ReturnType<typeof createMemoryController>;
   skills: ReturnType<typeof createSkillsController>;
   negotiate: ReturnType<typeof createNegotiateController>;
   aiProxy: ReturnType<typeof createAiProxyController>;
@@ -108,6 +113,7 @@ export function container(): ApiContainer {
   const credentialStore = new CosmosCredentialStore();
   const runStore = new CosmosRunStore();
   const imageStore = new CosmosImageStore();
+  const memoryStore = new CosmosMemoryStore();
   const minter = new AzureSasMinter();  const access = new AccessService(
     inviteStore,
     process.env.ADMIN_EMAIL ?? '',
@@ -117,8 +123,10 @@ export function container(): ApiContainer {
   const credentialService = new CredentialService(credentialStore, buildKeyWrapper(), clock);
   const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
   const imageService = new ImageService(imageStore, credentialService, new QueueImageStarter(), minter, clock);
+  const memoryService = new MemoryService(memoryStore, clock);
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
+  const memoryContextService = new MemoryContextService(memoryStore, settingsService);
   const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock, {
     uploadOriginal: makeUploadImage(assetService),
   });
@@ -146,6 +154,7 @@ export function container(): ApiContainer {
     credentials: createCredentialsController(credentialService),
     runs: createRunsController(runService),
     images: createImagesController(imageService),
+    memory: createMemoryController(memoryService),
     skills: createSkillsController(skillCatalog),
     negotiate: createNegotiateController(signalr),
     aiProxy: createAiProxyController(aiProxyService),
@@ -155,6 +164,7 @@ export function container(): ApiContainer {
       threadStore,
       credentials: credentialService,
       settings: settingsService,
+      memoryContext: memoryContextService,
       uploadImage: makeUploadImage(assetService),
       uploadArtifact: makeUploadImage(assetService),
       resolveImageUrl: makeResolveImageUrl(minter),

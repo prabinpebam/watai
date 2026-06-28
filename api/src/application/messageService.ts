@@ -44,6 +44,7 @@ export class MessageService {
       ...(input.attachments && input.attachments.length ? { attachments: input.attachments } : {}),
       ...(input.toolCalls && input.toolCalls.length ? { toolCalls: input.toolCalls } : {}),
       ...(input.citations && input.citations.length ? { citations: input.citations } : {}),
+      ...(input.memoryRefs && input.memoryRefs.length ? { memoryRefs: input.memoryRefs } : {}),
       status: 'complete',
       // `createdAt` is the server append time (delta-sync cursor). `orderAt` is the device's
       // logical creation time (chronology), preserved as-sent so late-finalized assistant

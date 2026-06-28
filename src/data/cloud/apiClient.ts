@@ -10,10 +10,15 @@ import type {
   CredentialStatus,
   CredentialsInput,
   InviteRecord,
+  CreateMemoryBody,
   ListImagesQuery,
   ListImagesResult,
+  ListMemoryQuery,
+  ListMemoryResponse,
+  MemoryRecord,
   MeInfo,
   MessageRecord,
+  PatchMemoryBody,
   RunRecord,
   SasRequestBody,
   SasResult,
@@ -212,6 +217,30 @@ export class WataiApiClient implements CloudApi {
     return this.request('PATCH', '/settings', patch);
   }
 
+  // --- memory ---
+  listMemory(query: ListMemoryQuery = {}): Promise<ListMemoryResponse> {
+    const qs = new URLSearchParams();
+    if (query.status) qs.set('status', query.status);
+    if (query.kind) qs.set('kind', query.kind);
+    if (query.q) qs.set('q', query.q);
+    if (query.cursor) qs.set('cursor', query.cursor);
+    if (query.limit) qs.set('limit', String(query.limit));
+    const suffix = qs.toString();
+    return this.request('GET', `/memory${suffix ? `?${suffix}` : ''}`);
+  }
+
+  createMemory(body: CreateMemoryBody): Promise<MemoryRecord> {
+    return this.request('POST', '/memory', body);
+  }
+
+  patchMemory(id: string, body: PatchMemoryBody): Promise<MemoryRecord> {
+    return this.request('PATCH', `/memory/${encodeURIComponent(id)}`, body);
+  }
+
+  deleteMemory(id: string): Promise<void> {
+    return this.request('DELETE', `/memory/${encodeURIComponent(id)}`);
+  }
+
   // --- assets ---
   requestSas(body: SasRequestBody): Promise<SasResult> {
     return this.request('POST', '/assets/sas', body);
@@ -396,6 +425,10 @@ export interface CloudApi {
   releaseThreadLock(threadId: string, deviceId: string): Promise<void>;
   getSettings(): Promise<Settings>;
   patchSettings(patch: Partial<Settings>): Promise<Settings>;
+  listMemory(query?: ListMemoryQuery): Promise<ListMemoryResponse>;
+  createMemory(body: CreateMemoryBody): Promise<MemoryRecord>;
+  patchMemory(id: string, body: PatchMemoryBody): Promise<MemoryRecord>;
+  deleteMemory(id: string): Promise<void>;
   requestSas(body: SasRequestBody): Promise<SasResult>;
   getCredentialStatus(): Promise<CredentialStatus>;
   putCredentials(body: CredentialsInput): Promise<CredentialStatus>;

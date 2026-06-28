@@ -96,6 +96,25 @@ describe('MessageService.append', () => {
     expect(stored?.images).toEqual([img]);
     expect((await ctx.threads.get('userA', thread.id)).lastMessagePreview).toBe('Image');
   });
+
+  it('persists memoryRefs for assistant messages', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const msg = await ctx.messages.append('userA', thread.id, {
+      role: 'assistant',
+      content: 'Deploy to rg-watai-dev.',
+      memoryRefs: [
+        {
+          memoryId: 'mem_1',
+          kind: 'project_context',
+          text: 'Watai deploy target is rg-watai-dev.',
+          score: 0.91,
+        },
+      ],
+    });
+    expect(msg.memoryRefs).toEqual([
+      { memoryId: 'mem_1', kind: 'project_context', text: 'Watai deploy target is rg-watai-dev.', score: 0.91 },
+    ]);
+  });
 });
 
 describe('MessageService.list', () => {

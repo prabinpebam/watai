@@ -3,10 +3,11 @@ import type { ServiceClock } from './threadService';
 import type { DecryptedCredentials } from './credentialService';
 import type { RunStore } from '../ports/runStore';
 import type { MessageRecord, MessageStore } from '../ports/messageStore';
-import type { ArtifactKind, MessageToolCall, MessageCitation, MessageImage, MessageArtifact } from '../domain/message';
+import type { ArtifactKind, MessageToolCall, MessageCitation, MessageImage, MessageArtifact, MessageMemoryRef } from '../domain/message';
 import { artifactKindForMime } from '../domain/message';
 import { ALLOWED_CONTENT_TYPES } from '../domain/asset';
 import type { Settings } from '../domain/settings';
+import type { MemoryContextBlock } from '../domain/memory';
 import type { ThreadStore, ThreadFileMeta } from '../ports/threadStore';
 import type { SignalRSender } from '../adapters/azure/signalr';
 import {
@@ -27,6 +28,7 @@ import type { SkillProvisioner } from './skillProvisioner';
 import type { MountedSkill, SkillPackage } from '../domain/skill';
 import { DEFAULT_SKILLS } from '../skills';
 import { completeChat } from '../ai/chat';
+import { renderMemoryContext, type MemoryContextService } from './memoryContextService';
 
 export interface CredentialReader {
   getDecrypted(userId: string): Promise<DecryptedCredentials>;
@@ -43,6 +45,8 @@ export interface RunWorkerDeps {
   credentials: CredentialReader;
   /** Per-user settings (personalization) for the system prompt. Optional. */
   settings?: SettingsReader;
+  /** Builds bounded, server-owned memory context for this run. Optional until memory is enabled. */
+  memoryContext?: MemoryContextService;
   /** The agentic loop (Responses API). Injectable for tests. */
   runAgent?: (p: RunAgentParams) => AsyncGenerator<AgentEvent>;
   clock: ServiceClock;
@@ -164,7 +168,7 @@ async function latestUserImageReference(
 
 /** Build the system prompt from the user's personalization (about-you / response-style) plus a
  *  base persona and light tool guidance. */
-function systemPrompt(creds: DecryptedCredentials, settings?: Settings, skillsSection?: string): string {
+function systemPrompt(creds: DecryptedCredentials, settings?: Settings, skillsSection?: string, memorySection?: string): string {
   const lines = ['You are Watai, a helpful AI assistant. Be accurate and concise.'];
   const p = settings?.personalization;
   if (p?.aboutYou?.trim()) lines.push(`About the user:\n${p.aboutYou.trim()}`);
@@ -173,6 +177,7 @@ function systemPrompt(creds: DecryptedCredentials, settings?: Settings, skillsSe
   if (creds.tavilyKey) hints.push('use web_search for current or factual web information and cite the sources');
   if (creds.models.image) hints.push('use generate_image when the user asks for an image, illustration, or diagram; if the user references an uploaded image, set edit_reference=true');
   if (hints.length) lines.push(`When helpful, ${hints.join('; ')}.`);
+  if (memorySection) lines.push(memorySection);
   if (skillsSection) lines.push(skillsSection);
   return lines.join('\n\n');
 }
@@ -453,6 +458,8 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   const ciContainers = new Map<string, string>();
   /** Artifacts generated this run (images + code-interpreter files) for the thread file list. */
   const generatedFiles: ThreadFileMeta[] = [];
+  let memoryBlock: MemoryContextBlock | undefined;
+  let memoryRefs: MessageMemoryRef[] = [];
   let acc = '';
   let lastFlush = 0;
   let flushed = false;
@@ -488,6 +495,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     ...(model ? { model } : {}),
     ...(toolCalls.size ? { toolCalls: [...toolCalls.values()] } : {}),
     ...(citations.length ? { citations } : {}),
+    ...(memoryRefs.length ? { memoryRefs } : {}),
     ...(images.length ? { images } : {}),
     ...(artifacts.length ? { artifacts } : {}),
   });
@@ -610,6 +618,25 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     const getImageReference = (): Promise<ImageReference | undefined> =>
       imageReferencePromise ??= latestUserImageReference(history, deps.resolveImageUrl, deps.fetchImpl);
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
+    const latestUserText = run.prompt?.text ?? [...history].reverse().find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
+    memoryBlock = deps.memoryContext
+      ? await deps.memoryContext
+          .buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now() })
+          .catch(() => undefined)
+      : undefined;
+    if (memoryBlock?.memories.length) {
+      memoryRefs = memoryBlock.memories.map((memory) => {
+        const source = memoryBlock!.sourceRefs.find((ref) => ref.memoryId === memory.id);
+        return {
+          memoryId: memory.id,
+          kind: memory.kind,
+          text: memory.text,
+          ...(source?.threadId ? { sourceThreadId: source.threadId } : {}),
+          ...(source?.messageId ? { sourceMessageId: source.messageId } : {}),
+          score: memory.score,
+        };
+      });
+    }
     const explicitSkillNames = slashSkillTags(run.prompt?.text ?? firstUser);
     const codeOn = run.tools.includes('code_interpreter');
 
@@ -640,7 +667,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       ? codeInterpreterSection(selectSkills(run.prompt?.text ?? firstUser), skillMounts, explicitSkillNames)
       : '';
     const turns = await buildTurns(
-      systemPrompt(c, settings, ciSection),
+      systemPrompt(c, settings, ciSection, memoryBlock ? renderMemoryContext(memoryBlock) : ''),
       history,
       run.assistantMessageId,
       deps.resolveImageUrl,

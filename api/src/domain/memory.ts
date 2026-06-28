@@ -81,7 +81,7 @@ const listMemoryQuerySchema = z
     kind: z.enum(MEMORY_KINDS).optional(),
     q: z.string().trim().min(1).max(200).optional(),
     cursor: z.string().trim().min(1).max(512).optional(),
-    limit: z.coerce.number().int().min(1).max(100).default(50),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
   })
   .strict();
 

@@ -7,7 +7,6 @@ import {
   DEFAULT_SETTINGS,
   type Id,
   type ImageRef,
-  type MemoryItem,
   type Message,
   type Settings,
   type Thread,
@@ -15,9 +14,14 @@ import {
 } from '../../lib/types';
 import type {
   AppendMessageBody,
+  CreateMemoryBody,
   CreateThreadBody,
   CredentialStatus,
   CredentialsInput,
+  ListMemoryQuery,
+  ListMemoryResponse,
+  MemoryRecord,
+  PatchMemoryBody,
   MessageRecord,
   RunRecord,
   SasRequestBody,
@@ -32,6 +36,7 @@ import type {
 class FakeLocal implements SyncLocalStore {
   threads = new Map<Id, Thread>();
   messages = new Map<Id, Message>();
+  memories = new Map<Id, MemoryRecord>();
   blobs = new Map<string, Blob>();
   settings: Settings;
   private clock = 0;
@@ -133,11 +138,40 @@ class FakeLocal implements SyncLocalStore {
     if (asset.blobPath && /^(data:|blob:|https?:)/.test(asset.blobPath)) return asset.blobPath;
     return '';
   }
-  async listMemory(): Promise<MemoryItem[]> {
-    return [];
+  async listMemory(query: ListMemoryQuery = {}): Promise<MemoryRecord[]> {
+    return [...this.memories.values()].filter((m) => (query.status ? m.status === query.status : m.status === 'active'));
   }
-  async addMemory(): Promise<void> {}
-  async removeMemory(): Promise<void> {}
+  async addMemory(input: CreateMemoryBody): Promise<MemoryRecord> {
+    const ts = this.now();
+    const rec: MemoryRecord = {
+      id: `mem_${this.clock}`,
+      userId: 'local',
+      kind: input.kind ?? 'fact',
+      status: 'active',
+      text: input.text,
+      sourceRefs: [input.sourceRef ?? { type: 'manual', createdAt: ts }],
+      confidence: 1,
+      salience: 0.7,
+      pinned: input.pinned ?? false,
+      sensitive: false,
+      visibility: input.visibility ?? 'normal',
+      createdAt: ts,
+      updatedAt: ts,
+      useCount: 0,
+    };
+    this.memories.set(rec.id, rec);
+    return rec;
+  }
+  async updateMemory(id: Id, patch: PatchMemoryBody): Promise<MemoryRecord> {
+    const current = this.memories.get(id)!;
+    const next = { ...current, ...patch, updatedAt: this.now() } as MemoryRecord;
+    this.memories.set(id, next);
+    return next;
+  }
+  async removeMemory(id: Id): Promise<void> {
+    const current = this.memories.get(id);
+    if (current) this.memories.set(id, { ...current, status: 'deleted', deletedAt: this.now() });
+  }
   async search(): Promise<SearchHit[]> {
     return [];
   }
@@ -154,6 +188,7 @@ class FakeLocal implements SyncLocalStore {
 class FakeCloud implements CloudApi {
   threads = new Map<string, ThreadRecord>();
   messages = new Map<string, MessageRecord>();
+  memories = new Map<string, MemoryRecord>();
   serverSettings: Settings | null = null;
   calls: string[] = [];
   private clock = 0;
@@ -268,6 +303,7 @@ class FakeCloud implements CloudApi {
       ...(body.attachments?.length ? { attachments: body.attachments } : {}),
       ...(body.toolCalls?.length ? { toolCalls: body.toolCalls } : {}),
       ...(body.citations?.length ? { citations: body.citations } : {}),
+      ...(body.memoryRefs?.length ? { memoryRefs: body.memoryRefs } : {}),
     };
     this.messages.set(id, rec);
     return rec;
@@ -311,6 +347,46 @@ class FakeCloud implements CloudApi {
     this.calls.push('patchSettings');
     this.serverSettings = patch as Settings;
     return this.serverSettings;
+  }
+  async listMemory(query: ListMemoryQuery = {}): Promise<ListMemoryResponse> {
+    this.calls.push('listMemory');
+    return {
+      memories: [...this.memories.values()].filter((m) => (query.status ? m.status === query.status : m.status === 'active')),
+    };
+  }
+  async createMemory(body: CreateMemoryBody): Promise<MemoryRecord> {
+    this.calls.push('createMemory');
+    const ts = this.now();
+    const rec: MemoryRecord = {
+      id: `cloud_mem_${this.clock}`,
+      userId: 'u',
+      kind: body.kind ?? 'fact',
+      status: 'active',
+      text: body.text,
+      sourceRefs: [body.sourceRef ?? { type: 'manual', createdAt: ts }],
+      confidence: 1,
+      salience: 0.7,
+      pinned: body.pinned ?? false,
+      sensitive: false,
+      visibility: body.visibility ?? 'normal',
+      createdAt: ts,
+      updatedAt: ts,
+      useCount: 0,
+    };
+    this.memories.set(rec.id, rec);
+    return rec;
+  }
+  async patchMemory(id: string, patch: PatchMemoryBody): Promise<MemoryRecord> {
+    this.calls.push(`patchMemory:${id}`);
+    const current = this.memories.get(id)!;
+    const next = { ...current, ...patch, updatedAt: this.now() } as MemoryRecord;
+    this.memories.set(id, next);
+    return next;
+  }
+  async deleteMemory(id: string): Promise<void> {
+    this.calls.push(`deleteMemory:${id}`);
+    const current = this.memories.get(id);
+    if (current) this.memories.set(id, { ...current, status: 'deleted', deletedAt: this.now() });
   }
   async requestSas(body: SasRequestBody): Promise<SasResult> {
     this.calls.push(`requestSas:${body.op}:${body.threadId}:${body.assetId}`);
@@ -450,6 +526,27 @@ describe('SyncRepository — sync disabled', () => {
     expect(await kv.get('sync.queue')).toBeUndefined();
     expect(cloud.calls).toEqual([]);
     expect((await repo.listThreads()).map((x) => x.id)).toEqual([t.id]);
+  });
+
+  it('keeps memory local when sync is disabled', async () => {
+    const { repo, cloud } = setup(false);
+    const memory = await repo.addMemory({ text: 'Local memory only.', kind: 'preference' });
+    expect((await repo.listMemory()).map((m) => m.id)).toEqual([memory.id]);
+    await repo.updateMemory(memory.id, { status: 'suppressed' });
+    expect(await repo.listMemory()).toEqual([]);
+    await repo.removeMemory(memory.id);
+    expect(cloud.calls).toEqual([]);
+  });
+});
+
+describe('SyncRepository — memory', () => {
+  it('uses cloud memory CRUD when sync is enabled', async () => {
+    const { repo, cloud } = setup(true);
+    const memory = await repo.addMemory({ text: 'Cloud memory.', kind: 'preference' });
+    await expect(repo.listMemory()).resolves.toHaveLength(1);
+    await repo.updateMemory(memory.id, { status: 'suppressed' });
+    await repo.removeMemory(memory.id);
+    expect(cloud.calls).toEqual(['createMemory', 'listMemory', `patchMemory:${memory.id}`, `deleteMemory:${memory.id}`]);
   });
 });
 

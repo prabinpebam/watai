@@ -4,9 +4,9 @@ import { AttachmentList, ArtifactList, GeneratedImages } from './Attachments';
 import { Avatar, IconButton, InlineAlert, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
-import { cloudApi } from '../../data';
+import { cloudApi, repo } from '../../data';
 import { base64ToBlob } from '../../lib/files';
-import type { Citation, ImageRef, Message, PendingImage, ToolCall } from '../../lib/types';
+import type { Citation, ImageRef, Message, MessageMemoryRef, PendingImage, ToolCall } from '../../lib/types';
 
 function domainOf(url: string): string {
   try {
@@ -286,6 +286,58 @@ function SourcesStrip({ citations }: { citations: Citation[] }) {
   );
 }
 
+function MemoryUsedStrip({ memories }: { memories: MessageMemoryRef[] }) {
+  const [open, setOpen] = useState(false);
+  const pushToast = useUi((s) => s.pushToast);
+  if (!memories.length) return null;
+
+  const hide = async (memoryId: string) => {
+    try {
+      await repo.updateMemory(memoryId, { status: 'suppressed' });
+      pushToast('Memory hidden', 'success');
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Could not hide memory.', 'error');
+    }
+  };
+
+  const remove = async (memoryId: string) => {
+    try {
+      await repo.removeMemory(memoryId);
+      pushToast('Memory deleted', 'success');
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Could not delete memory.', 'error');
+    }
+  };
+
+  return (
+    <div className={`sources ${open ? 'sources--open' : ''}`}>
+      <button type="button" className="sources__toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        <Icon name="database" size={14} />
+        <span className="sources__toggle-label">
+          {memories.length} memory used{memories.length === 1 ? '' : 's'}
+        </span>
+        <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} className="sources__caret" />
+      </button>
+      {open && (
+        <div className="sources__list">
+          {memories.map((memory, index) => (
+            <div key={memory.memoryId} className="source-chip" style={{ alignItems: 'flex-start' }}>
+              <span className="source-chip__num">{index + 1}</span>
+              <span className="source-chip__text" style={{ whiteSpace: 'normal' }}>
+                <strong>{memory.kind.replace(/_/g, ' ')}</strong>: {memory.text}
+              </span>
+              <span className="row" style={{ gap: 4, marginLeft: 'auto' }}>
+                <button type="button" className="source-chip source-chip--bing" onClick={() => hide(memory.memoryId)}>Hide</button>
+                <button type="button" className="source-chip source-chip--bing" onClick={() => remove(memory.memoryId)}>Delete</button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function UserMessage({ message }: { message: Message }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
@@ -436,6 +488,8 @@ export function AssistantMessage({
         ) : null}
 
         {!isStreamingThis && message.citations && <SourcesStrip citations={message.citations} />}
+
+        {!isStreamingThis && message.memoryRefs?.length ? <MemoryUsedStrip memories={message.memoryRefs} /> : null}
 
         <ArtifactList artifacts={message.artifacts} />
 

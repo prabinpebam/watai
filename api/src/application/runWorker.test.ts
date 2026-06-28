@@ -3,6 +3,9 @@ import { processRun, type RunWorkerDeps } from './runWorker';
 import { InMemoryRunStore } from '../adapters/memory/runStore';
 import { InMemoryMessageStore } from '../adapters/memory/messageStore';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
+import { InMemoryMemoryStore } from '../adapters/memory/memoryStore';
+import { MemoryService } from './memoryService';
+import { MemoryContextService } from './memoryContextService';
 import type { RunRecord } from '../ports/runStore';
 import type { MessageRecord } from '../ports/messageStore';
 import type { RunStatus } from '../domain/run';
@@ -474,6 +477,40 @@ describe('processRun', () => {
     const sys = seen[0].turns[0].text;
     expect(sys).toContain('I am a chef.');
     expect(sys).toContain('Be terse.');
+  });
+
+  it('injects selected memory into the prompt and persists response memoryRefs', async () => {
+    await seed(ctx);
+    const memoryStore = new InMemoryMemoryStore();
+    const memory = new MemoryService(memoryStore, ctx.clock);
+    const saved = await memory.createManual('userA', {
+      text: 'Watai deploy target is rg-watai-dev.',
+      kind: 'project_context',
+    });
+    const memoryContext = new MemoryContextService(memoryStore, {
+      get: async () => DEFAULT_SETTINGS,
+    });
+    const run = await ctx.runStore.get('t1', 'r1');
+    await ctx.runStore.put({ ...run!, prompt: { text: 'What resource group should I deploy Watai to?' } });
+
+    const seen: RunAgentParams[] = [];
+    const runAgent: RunAgentFn = (p) => {
+      seen.push(p);
+      return script([{ type: 'text', delta: 'Deploy to rg-watai-dev.' }, { type: 'done' }])(p);
+    };
+    await processRun({ ...ctx.deps(runAgent), memoryContext }, 't1', 'r1');
+
+    expect(seen[0].turns[0].text).toContain('Relevant saved memory');
+    expect(seen[0].turns[0].text).toContain('Watai deploy target is rg-watai-dev.');
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.memoryRefs).toEqual([
+      {
+        memoryId: saved.id,
+        kind: 'project_context',
+        text: 'Watai deploy target is rg-watai-dev.',
+        score: expect.any(Number),
+      },
+    ]);
   });
 
   it('auto-names an untitled thread from the first exchange', async () => {

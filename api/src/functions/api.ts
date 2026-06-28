@@ -117,6 +117,48 @@ app.http('images', {
   handler: methodDispatch({ GET: (c) => c.images.list, POST: (c) => c.images.create }, invited),
 });
 
+app.http('memory', {
+  methods: ['GET', 'POST'],
+  authLevel: 'anonymous',
+  route: 'memory',
+  handler: methodDispatch({ GET: (c) => c.memory.list, POST: (c) => c.memory.create }, invited),
+});
+
+app.http('memory-item', {
+  methods: ['PATCH', 'DELETE'],
+  authLevel: 'anonymous',
+  route: 'memory/{memoryId}',
+  handler: methodDispatch({ PATCH: (c) => c.memory.patch, DELETE: (c) => c.memory.remove }, invited),
+});
+
+app.http('memory-summary', {
+  methods: ['GET', 'PUT'],
+  authLevel: 'anonymous',
+  route: 'memory/summary',
+  handler: methodDispatch({ GET: (c) => c.memory.getSummary, PUT: (c) => c.memory.putSummary }, invited),
+});
+
+app.http('memory-export', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'memory/export',
+  handler: methodDispatch({ POST: (c) => c.memory.export }, invited),
+});
+
+app.http('memory-import', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'memory/import',
+  handler: methodDispatch({ POST: (c) => c.memory.import }, invited),
+});
+
+app.http('memory-rebuild', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'memory/rebuild',
+  handler: methodDispatch({ POST: (c) => c.memory.rebuild }, invited),
+});
+
 app.http('image-item', {
   methods: ['GET', 'DELETE'],
   authLevel: 'anonymous',

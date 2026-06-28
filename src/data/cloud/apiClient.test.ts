@@ -196,6 +196,46 @@ describe('WataiApiClient', () => {
     expect(calls[0].url).toBe('https://api.test/api/threads/t1/lock?deviceId=d1');
   });
 
+  it('lists, creates, patches, and deletes memories', async () => {
+    const memory = {
+      id: 'mem_1',
+      userId: 'u',
+      kind: 'preference',
+      status: 'active',
+      text: 'User prefers short plans.',
+      sourceRefs: [{ type: 'manual', createdAt: '2026-01-01T00:00:00Z' }],
+      confidence: 1,
+      salience: 0.7,
+      pinned: false,
+      sensitive: false,
+      visibility: 'normal',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      useCount: 0,
+    };
+    const { fetchImpl, calls } = stubFetch([
+      { status: 200, body: { memories: [memory], cursor: 'next' } },
+      { status: 201, body: memory },
+      { status: 200, body: { ...memory, status: 'suppressed' } },
+      { status: 204 },
+    ]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    await expect(client.listMemory({ q: 'short plans', limit: 10 })).resolves.toEqual({ memories: [memory], cursor: 'next' });
+    await client.createMemory({ text: 'User prefers short plans.', kind: 'preference' });
+    await client.patchMemory('mem_1', { status: 'suppressed' });
+    await client.deleteMemory('mem_1');
+
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+      'GET https://api.test/api/memory?q=short+plans&limit=10',
+      'POST https://api.test/api/memory',
+      'PATCH https://api.test/api/memory/mem_1',
+      'DELETE https://api.test/api/memory/mem_1',
+    ]);
+    expect(calls[1].body).toEqual({ text: 'User prefers short plans.', kind: 'preference' });
+    expect(calls[2].body).toEqual({ status: 'suppressed' });
+  });
+
   it('carries the error details (lock holder) on a 409 conflict', async () => {
     const holder = { deviceId: 'd2', deviceLabel: 'Safari on iPhone', acquiredAt: 'a', heartbeatAt: 'b' };
     const { fetchImpl } = stubFetch([

@@ -1,7 +1,8 @@
 import { db, kvGet, kvSet } from '../db';
 import type { SearchHit, SyncLocalStore } from '../repository';
 import { newId } from '../../lib/ids';
-import { DEFAULT_SETTINGS, type Id, type ImageRef, type Message, type Settings, type Thread, type MemoryItem } from '../../lib/types';
+import { DEFAULT_SETTINGS, type Id, type ImageRef, type Message, type Settings, type Thread, type MemoryKind } from '../../lib/types';
+import type { CreateMemoryBody, ListMemoryQuery, MemoryRecord, PatchMemoryBody } from '../cloud/types';
 
 const SETTINGS_KEY = 'settings';
 const MEMORY_KEY = 'memory';
@@ -9,6 +10,34 @@ const blobUrlCache = new Map<string, string>();
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function normalizeMemoryText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ');
+}
+
+function asMemoryRecord(item: unknown): MemoryRecord | null {
+  const raw = item as Partial<MemoryRecord> & { source?: string };
+  if (!raw || typeof raw !== 'object' || !raw.id || !raw.text) return null;
+  if (raw.status && raw.kind && raw.sourceRefs) return raw as MemoryRecord;
+  const ts = raw.createdAt ?? nowIso();
+  return {
+    id: raw.id,
+    userId: 'local',
+    kind: 'fact',
+    status: 'active',
+    text: raw.text,
+    normalizedText: normalizeMemoryText(raw.text).toLowerCase(),
+    sourceRefs: [{ type: 'manual', quote: raw.source, createdAt: ts }],
+    confidence: 1,
+    salience: 0.7,
+    pinned: false,
+    sensitive: false,
+    visibility: 'normal',
+    createdAt: ts,
+    updatedAt: ts,
+    useCount: 0,
+  };
 }
 
 export class LocalRepository implements SyncLocalStore {
@@ -148,18 +177,62 @@ export class LocalRepository implements SyncLocalStore {
     await kvSet(SETTINGS_KEY, s);
   }
 
-  async listMemory(): Promise<MemoryItem[]> {
-    return (await kvGet<MemoryItem[]>(MEMORY_KEY)) ?? [];
+  async listMemory(query: ListMemoryQuery = {}): Promise<MemoryRecord[]> {
+    const list = ((await kvGet<unknown[]>(MEMORY_KEY)) ?? []).map(asMemoryRecord).filter((m): m is MemoryRecord => !!m);
+    const q = query.q?.trim().toLowerCase();
+    return list
+      .filter((m) => (query.status ? m.status === query.status : m.status === 'active'))
+      .filter((m) => !query.kind || m.kind === query.kind)
+      .filter((m) => !q || [m.text, m.summary, ...(m.entities ?? []), ...(m.topics ?? [])].filter(Boolean).some((x) => x!.toLowerCase().includes(q)))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  async addMemory(m: MemoryItem): Promise<void> {
-    const list = await this.listMemory();
-    await kvSet(MEMORY_KEY, [m, ...list]);
+  async addMemory(input: CreateMemoryBody): Promise<MemoryRecord> {
+    const ts = nowIso();
+    const text = normalizeMemoryText(input.text);
+    const record: MemoryRecord = {
+      id: newId(),
+      userId: 'local',
+      kind: input.kind ?? 'fact',
+      status: 'active',
+      text,
+      normalizedText: text.toLowerCase(),
+      sourceRefs: [input.sourceRef ?? { type: 'manual', createdAt: ts }],
+      confidence: 1,
+      salience: 0.7,
+      pinned: input.pinned ?? false,
+      sensitive: false,
+      visibility: input.visibility ?? 'normal',
+      createdAt: ts,
+      updatedAt: ts,
+      useCount: 0,
+    };
+    const list = await this.listMemory({ status: 'active' });
+    await kvSet(MEMORY_KEY, [record, ...list]);
+    return record;
+  }
+
+  async updateMemory(id: Id, patch: PatchMemoryBody): Promise<MemoryRecord> {
+    const all = ((await kvGet<unknown[]>(MEMORY_KEY)) ?? []).map(asMemoryRecord).filter((m): m is MemoryRecord => !!m);
+    const current = all.find((m) => m.id === id);
+    if (!current) throw new Error('memory not found');
+    const next: MemoryRecord = {
+      ...current,
+      ...(patch.text !== undefined ? { text: normalizeMemoryText(patch.text), normalizedText: normalizeMemoryText(patch.text).toLowerCase() } : {}),
+      ...(patch.kind !== undefined ? { kind: patch.kind as MemoryKind } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.visibility !== undefined ? { visibility: patch.visibility } : {}),
+      ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
+      ...(patch.salience !== undefined ? { salience: patch.salience } : {}),
+      updatedAt: nowIso(),
+    };
+    await kvSet(MEMORY_KEY, all.map((m) => (m.id === id ? next : m)));
+    return next;
   }
 
   async removeMemory(id: Id): Promise<void> {
-    const list = await this.listMemory();
-    await kvSet(MEMORY_KEY, list.filter((x) => x.id !== id));
+    const all = ((await kvGet<unknown[]>(MEMORY_KEY)) ?? []).map(asMemoryRecord).filter((m): m is MemoryRecord => !!m);
+    await kvSet(MEMORY_KEY, all.map((m) => (m.id === id ? { ...m, status: 'deleted', deletedAt: nowIso(), updatedAt: nowIso() } : m)));
   }
 
   async search(query: string): Promise<SearchHit[]> {

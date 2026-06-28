@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSettings } from './useSettings';
 import { SkillsBody } from '../skills/SkillsBody';
-import { Avatar, Button, Field, IconButton, Segmented, Spinner, Switch, TextAreaField } from '../../design/ui';
+import { Avatar, Button, Field, IconButton, InlineAlert, Segmented, SelectMenu, Spinner, Switch, TextAreaField } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { Logo } from '../../design/Logo';
 import { ConfirmDialog } from '../../design/overlays';
@@ -13,11 +13,11 @@ import { repo, cloudApi } from '../../data';
 import { kvGet } from '../../data/db';
 import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import { useMe } from '../../auth/access';
-import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo } from '../../data/cloud/types';
+import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo, MemoryRecord, MemoryStatus } from '../../data/cloud/types';
 import { normalizeBaseUrl } from '../../data/secureStore';
 import { normalizeChatModelOptions } from '../../lib/modelOptions';
 import { DEFAULT_SETTINGS } from '../../lib/types';
-import type { ImageRef, Settings as SettingsModel, TextScale } from '../../lib/types';
+import type { ImageRef, MemoryKind, Settings as SettingsModel, TextScale } from '../../lib/types';
 
 const APP_VERSION = '0.1.0';
 
@@ -749,7 +749,158 @@ function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
           />
         </div>
       </div>
+      <MemoryManager enabled={p.memoryEnabled} />
     </>
+  );
+}
+
+const MANUAL_MEMORY_KINDS: Array<Exclude<MemoryKind, 'thread_summary' | 'entity'>> = [
+  'fact',
+  'preference',
+  'instruction',
+  'work_style',
+  'project_context',
+  'avoidance',
+  'procedure',
+];
+
+function memoryKindLabel(kind: MemoryKind): string {
+  return kind.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
+export function MemoryManager({ enabled }: { enabled: boolean }) {
+  const pushToast = useUi((s) => s.pushToast);
+  const [items, setItems] = useState<MemoryRecord[]>([]);
+  const [status, setStatus] = useState<Extract<MemoryStatus, 'active' | 'suppressed' | 'invalidated'>>('active');
+  const [text, setText] = useState('');
+  const [kind, setKind] = useState<Exclude<MemoryKind, 'thread_summary' | 'entity'>>('fact');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setItems(await repo.listMemory({ status, limit: 100 }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load memory.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [status]);
+
+  const add = async () => {
+    const value = text.trim();
+    if (!value) return;
+    setSaving(true);
+    try {
+      await repo.addMemory({ text: value, kind });
+      setText('');
+      setStatus('active');
+      await load();
+      pushToast('Saved to memory', 'success');
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Could not save memory.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const patch = async (id: string, update: Parameters<typeof repo.updateMemory>[1], label: string) => {
+    try {
+      await repo.updateMemory(id, update);
+      await load();
+      pushToast(label, 'success');
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Could not update memory.', 'error');
+    }
+  };
+
+  const remove = async (id: string) => {
+    try {
+      await repo.removeMemory(id);
+      await load();
+      pushToast('Deleted memory', 'success');
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Could not delete memory.', 'error');
+    }
+  };
+
+  return (
+    <div className="settings-card" style={{ marginTop: 'var(--space-5)', padding: 'var(--space-5)' }}>
+      <div className="settings-group__label" style={{ marginTop: 0 }}>Manage memory</div>
+      <div className="col" style={{ gap: 'var(--space-3)' }}>
+        <TextAreaField
+          label="Add memory"
+          hint={enabled ? 'Saved memories can be used in future server-generated replies.' : 'Memory is off; saved items are retained but not used in replies.'}
+          value={text}
+          rows={3}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="row" style={{ alignItems: 'end', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 180, flex: '0 1 220px' }}>
+            <SelectMenu
+              value={kind}
+              label="Type"
+              options={MANUAL_MEMORY_KINDS.map((value) => ({ value, label: memoryKindLabel(value) }))}
+              onChange={setKind}
+            />
+          </div>
+          <Button variant="primary" icon="plus" loading={saving} disabled={!text.trim()} onClick={add}>Add</Button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 'var(--space-5)' }}>
+        <Segmented
+          value={status}
+          options={[
+            { value: 'active', label: 'Active' },
+            { value: 'suppressed', label: 'Hidden' },
+            { value: 'invalidated', label: 'Outdated' },
+          ]}
+          onChange={setStatus}
+        />
+      </div>
+
+      {loading ? (
+        <div className="setting-row"><Spinner size="sm" /><div className="setting-row__body"><div className="setting-row__sub">Loading memory…</div></div></div>
+      ) : error ? (
+        <InlineAlert tone="danger">{error}</InlineAlert>
+      ) : items.length === 0 ? (
+        <div className="setting-row"><div className="setting-row__body"><div className="setting-row__title">No {status === 'active' ? 'active' : status} memories</div><div className="setting-row__sub">Items you add here appear in this list.</div></div></div>
+      ) : (
+        <div className="col" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
+          {items.map((item) => (
+            <div key={item.id} className="setting-row" style={{ alignItems: 'flex-start' }}>
+              <Avatar size="md" variant={item.visibility === 'top_of_mind' ? 'assistant' : undefined}>
+                <Icon name={item.pinned || item.visibility === 'top_of_mind' ? 'pin' : 'sparkle'} size={16} />
+              </Avatar>
+              <div className="setting-row__body">
+                <div className="setting-row__title">{item.text}</div>
+                <div className="setting-row__sub">{memoryKindLabel(item.kind)} · {item.visibility.replace(/_/g, ' ')}</div>
+                <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
+                  {item.status !== 'active' ? (
+                    <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'active' }, 'Memory restored')}>Restore</Button>
+                  ) : (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => patch(item.id, { visibility: item.visibility === 'top_of_mind' ? 'normal' : 'top_of_mind', pinned: item.visibility !== 'top_of_mind' }, item.visibility === 'top_of_mind' ? 'Memory unpinned' : 'Memory pinned')}>{item.visibility === 'top_of_mind' ? 'Unpin' : 'Pin'}</Button>
+                      <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'suppressed' }, 'Memory hidden')}>Hide</Button>
+                      <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'invalidated' }, 'Memory marked outdated')}>Outdated</Button>
+                    </>
+                  )}
+                  <Button size="sm" variant="danger" onClick={() => remove(item.id)}>Delete</Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -4,7 +4,7 @@
 // All of this is gated on Settings.data.sync, so with sync off it is a pure
 // passthrough to the local store. The token provider is injected via the CloudApi,
 // so this whole engine is unit-testable without MSAL.
-import type { Id, ImageRef, Message, MemoryItem, Settings, Thread, ThreadLock } from '../../lib/types';
+import type { Id, ImageRef, Message, Settings, Thread, ThreadLock } from '../../lib/types';
 import type { Repository, RunLockResult, SearchHit, SyncLocalStore } from '../repository';
 import { CloudError, type CloudApi } from '../cloud/apiClient';
 import { getDeviceId, getDeviceLabel } from '../../lib/device';
@@ -14,7 +14,11 @@ import {
   threadFromRecord,
   updateBodyFromPatch,
   type AppendMessageBody,
+  type CreateMemoryBody,
   type CreateThreadBody,
+  type ListMemoryQuery,
+  type MemoryRecord,
+  type PatchMemoryBody,
   type MessageRecord,
   type ThreadRecord,
   type UpdateThreadBody,
@@ -115,8 +119,16 @@ export class SyncRepository implements Repository {
   getSettings(): Promise<Settings> {
     return this.local.getSettings();
   }
-  listMemory(): Promise<MemoryItem[]> {
-    return this.local.listMemory();
+  async listMemory(query?: ListMemoryQuery): Promise<MemoryRecord[]> {
+    if (await this.syncEnabled()) {
+      try {
+        const out = await this.cloud.listMemory(query);
+        return out.memories;
+      } catch {
+        return this.local.listMemory(query);
+      }
+    }
+    return this.local.listMemory(query);
   }
   search(query: string): Promise<SearchHit[]> {
     return this.local.search(query);
@@ -243,11 +255,16 @@ export class SyncRepository implements Repository {
   getBlob(key: string): Promise<Blob | null> {
     return this.local.getBlob(key);
   }
-  addMemory(m: MemoryItem): Promise<void> {
-    return this.local.addMemory(m);
+  async addMemory(input: CreateMemoryBody): Promise<MemoryRecord> {
+    if (await this.syncEnabled()) return this.cloud.createMemory(input);
+    return this.local.addMemory(input);
+  }
+  async updateMemory(id: Id, patch: PatchMemoryBody): Promise<MemoryRecord> {
+    if (await this.syncEnabled()) return this.cloud.patchMemory(id, patch);
+    return this.local.updateMemory(id, patch);
   }
   removeMemory(id: Id): Promise<void> {
-    return this.local.removeMemory(id);
+    return this.syncEnabled().then((enabled) => (enabled ? this.cloud.deleteMemory(id) : this.local.removeMemory(id)));
   }
 
   async saveSettings(s: Settings): Promise<void> {

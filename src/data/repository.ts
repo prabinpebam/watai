@@ -1,4 +1,5 @@
-import type { Id, ImageRef, Message, Settings, Thread, ThreadLock, MemoryItem } from '../lib/types';
+import type { Id, ImageRef, Message, Settings, Thread, ThreadLock } from '../lib/types';
+import type { CreateMemoryBody, ListMemoryQuery, MemoryRecord, PatchMemoryBody } from './cloud/types';
 
 export interface SearchHit {
   thread: Thread;
@@ -47,8 +48,9 @@ export interface Repository {
 
   getSettings(): Promise<Settings>;
   saveSettings(s: Settings): Promise<void>;
-  listMemory(): Promise<MemoryItem[]>;
-  addMemory(m: MemoryItem): Promise<void>;
+  listMemory(query?: ListMemoryQuery): Promise<MemoryRecord[]>;
+  addMemory(input: CreateMemoryBody): Promise<MemoryRecord>;
+  updateMemory(id: Id, patch: PatchMemoryBody): Promise<MemoryRecord>;
   removeMemory(id: Id): Promise<void>;
 
   search(query: string): Promise<SearchHit[]>;
