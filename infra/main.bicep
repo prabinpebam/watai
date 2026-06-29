@@ -42,7 +42,7 @@ param memoryModel string = 'gpt-5.4-mini'
 @description('Server-decided deployment used for heavier memory operations — rebuilds, merges, conflict resolution. Kept on the full model. Users never select this.')
 param memoryDeepModel string = 'gpt-5.4'
 
-@description('Embedding deployment name for semantic memory retrieval. Empty disables vector retrieval (the app falls back to lexical) and skips write-time embeddings. Set to a deployed embedding model (e.g. text-embedding-3-small) to enable.')
+@description('Embedding deployment name for semantic memory retrieval. Empty disables vector retrieval (memory contributes only the always-on profile) and skips write-time embeddings. Set to a deployed embedding model (e.g. text-embedding-3-small) to enable.')
 param memoryEmbedModel string = ''
 
 @description('When "true", injects an always-on identity profile (durable facts, instructions, avoidances) into every run. Sensitive memories are always excluded.')
