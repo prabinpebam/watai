@@ -857,16 +857,17 @@ a:hover {
   transition: transform var(--motion-base) var(--ease-standard), height var(--motion-fast),
     background var(--motion-fast), opacity var(--motion-fast);
 }
+.prompt-minimap__mark--current span {
+  height: 4px;
+  background: var(--color-accent);
+  transform: scale(1.5);
+}
 .prompt-minimap__mark:hover span,
 .prompt-minimap__mark:focus-visible span,
 .prompt-minimap__mark--active span {
   height: 4px;
   background: var(--color-text-primary);
-}
-.prompt-minimap__mark--current span {
-  height: 4px;
-  background: var(--color-accent);
-  transform: scale(1.1);
+  transform: scaleX(calc(1 + (1.9 * var(--wave))));
 }
 .prompt-minimap__tip {
   position: absolute;
