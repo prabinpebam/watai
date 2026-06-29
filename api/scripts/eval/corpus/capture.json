@@ -37,7 +37,7 @@
 
   { "id": "cap-avoidance-emoji", "category": "capture.avoidance", "difficulty": "easy",
     "conversation": [{ "role": "user", "content": "Never use emojis in your responses." }],
-    "expect": { "op": "add", "kind": ["avoidance", "instruction"] }, "why": "explicit avoidance (avoidance or instruction acceptable)" },
+    "expect": { "op": "add", "kind": ["avoidance", "instruction", "preference"] }, "why": "explicit avoidance (avoidance/instruction/preference all route to the profile)" },
 
   { "id": "cap-project-deploy", "category": "capture.project", "difficulty": "medium",
     "conversation": [{ "role": "user", "content": "we deploy watai to the resource group rg-watai-dev" }],
