@@ -153,4 +153,21 @@ describe('normalizeMemoryExtractionJson', () => {
       sourceMessageIds: ['u1'],
     });
   });
+
+  it('lifts fields nested under a memory wrapper (type/source aliases) into a flat add', () => {
+    const normalized = normalizeMemoryExtractionJson({
+      operations: [
+        { op: 'add', memory: { type: 'fact', text: "User's favorite color is teal.", source: 'm1' } },
+      ],
+    });
+
+    expect(parseMemoryExtractionOutput(normalized).operations[0]).toMatchObject({
+      op: 'add',
+      kind: 'fact',
+      text: "User's favorite color is teal.",
+      sourceMessageIds: ['m1'],
+      confidence: 0.75,
+      salience: 0.6,
+    });
+  });
 });

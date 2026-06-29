@@ -36,10 +36,10 @@ param authAudience string = ''
 @description('JWKS (signing keys) URI used to validate access token signatures.')
 param authJwksUri string = ''
 
-@description('Server-decided deployment used for background memory extraction. Use a model strong enough for reliable structured JSON (mini-tier models are not). Users never select this.')
-param memoryModel string = 'gpt-5.4'
+@description('Routine background memory extraction (command/turn lanes). Defaults to a mini-tier model — benchmarked reliable for the strict-JSON extraction payload; heavier merges/conflict resolution use memoryDeepModel. Users never select this.')
+param memoryModel string = 'gpt-5.4-mini'
 
-@description('Server-decided deployment used for heavier memory operations — rebuilds, merges, conflict resolution. Users never select this.')
+@description('Server-decided deployment used for heavier memory operations — rebuilds, merges, conflict resolution. Kept on the full model. Users never select this.')
 param memoryDeepModel string = 'gpt-5.4'
 
 var suffix = uniqueString(resourceGroup().id)

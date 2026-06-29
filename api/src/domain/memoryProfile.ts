@@ -244,8 +244,8 @@ function placeRoutedItem(profile: MemoryProfileView, memory: MemoryRecord): bool
   return false;
 }
 
-function bucketFor(memory: MemoryRecord): Array<'today' | 'week' | 'month'> {
-  const ageMs = Date.now() - Date.parse(memory.updatedAt || memory.createdAt);
+function bucketFor(memory: MemoryRecord, nowMs: number): Array<'today' | 'week' | 'month'> {
+  const ageMs = nowMs - Date.parse(memory.updatedAt || memory.createdAt);
   const day = 24 * 60 * 60 * 1000;
   const buckets: Array<'today' | 'week' | 'month'> = [];
   if (ageMs <= day) buckets.push('today');
@@ -282,10 +282,11 @@ export function buildMemoryProfile(userId: string, now: string, memories: Memory
     temporal: { today: { items: [] }, week: { items: [] }, month: { items: [] } },
   };
 
+  const nowMs = Number.isNaN(Date.parse(now)) ? Date.now() : Date.parse(now);
   const activeMemories = memories.filter((memory) => memory.status === 'active');
 
   for (const memory of activeMemories) {
-    for (const bucket of bucketFor(memory)) profile.temporal[bucket].items.push({ memoryId: memory.id, text: memory.text, kind: memory.kind, updatedAt: memory.updatedAt });
+    for (const bucket of bucketFor(memory, nowMs)) profile.temporal[bucket].items.push({ memoryId: memory.id, text: memory.text, kind: memory.kind, updatedAt: memory.updatedAt });
     const child = routedChild(memory) ?? extractChild(memory);
     if (child) mergeChild(profile.profile.user.family.children, child);
     const pet = extractPet(memory);
