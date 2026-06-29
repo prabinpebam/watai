@@ -844,6 +844,8 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [jsonSaving, setJsonSaving] = useState(false);
   const [activeById, setActiveById] = useState<Map<string, MemoryRecord>>(new Map());
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; text: string } | null>(null);
 
   const load = async (nextStatus = status) => {
     setLoading(true);
@@ -857,6 +859,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
       setProfile(nextProfile);
       const active = nextStatus === 'active' ? nextItems : await repo.listMemory({ status: 'active', limit: 100 });
       setActiveById(new Map(active.map((m) => [m.id, m])));
+      setRemovedIds(new Set());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load memory.');
     } finally {
@@ -905,24 +908,21 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
     }
   };
 
-  const remove = async (id: string) => {
-    try {
-      await repo.removeMemory(id);
-      await load();
-      pushToast('Deleted memory', 'success');
-    } catch (e) {
-      pushToast(e instanceof Error ? e.message : 'Could not delete memory.', 'error');
-    }
+  const requestDelete = (ids: string[], text: string) => {
+    const unique = [...new Set(ids.filter(Boolean))];
+    if (unique.length) setPendingDelete({ ids: unique, text });
   };
 
-  const removeMany = async (ids: string[]) => {
-    const unique = [...new Set(ids.filter(Boolean))];
-    if (!unique.length) return;
-    if (unique.length > 1 && !window.confirm(`Delete ${unique.length} source memories for this item?`)) return;
+  /** Optimistically hide the deleted item(s) instead of reloading the whole view. */
+  const performDelete = async (ids: string[]) => {
     try {
-      for (const id of unique) await repo.removeMemory(id);
-      await load();
-      pushToast('Deleted memory', 'success');
+      for (const id of ids) await repo.removeMemory(id);
+      setRemovedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.add(id);
+        return next;
+      });
+      pushToast(ids.length > 1 ? `Deleted ${ids.length} memories` : 'Deleted memory', 'success');
     } catch (e) {
       pushToast(e instanceof Error ? e.message : 'Could not delete memory.', 'error');
     }
@@ -943,7 +943,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
 
   useEffect(() => {
     if (view === 'json') {
-      setJsonText(memoryToEditableJson(items));
+      setJsonText(memoryToEditableJson(items.filter((i) => !removedIds.has(i.id))));
       setJsonError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1028,8 +1028,10 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
     }
   };
 
+  const visibleItems = items.filter((i) => !removedIds.has(i.id));
   const structuredActions: StructuredActions = {
     activeById,
+    removedIds,
     editingId,
     editText,
     editKind,
@@ -1038,10 +1040,11 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
     onStartEdit: startEdit,
     onSaveEdit: saveEdit,
     onCancelEdit: () => setEditingId(null),
-    onDelete: removeMany,
+    onDelete: requestDelete,
   };
 
   return (
+    <>
     <div className="settings-card" style={{ marginTop: 'var(--space-5)', padding: 'var(--space-5)' }}>
       <div className="settings-group__label" style={{ marginTop: 0 }}>Manage memory</div>
       <div className="col" style={{ gap: 'var(--space-3)' }}>
@@ -1106,7 +1109,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
           ) : view === 'json' ? (
             <div className="col" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
               <div className="setting-row__sub">
-                Editing {items.length} {status === 'active' ? 'active' : status} item(s) as raw JSON. Editable fields: <code>text</code>, <code>kind</code>, <code>status</code>, <code>visibility</code>, <code>pinned</code>, <code>salience</code>. Remove an object to delete it; omit <code>id</code> to create a new one. Basic formatting (code fences, trailing commas) is corrected on save.
+                Editing {visibleItems.length} {status === 'active' ? 'active' : status} item(s) as raw JSON. Editable fields: <code>text</code>, <code>kind</code>, <code>status</code>, <code>visibility</code>, <code>pinned</code>, <code>salience</code>. Remove an object to delete it; omit <code>id</code> to create a new one. Basic formatting (code fences, trailing commas) is corrected on save.
               </div>
               <textarea
                 className="memory-json-editor"
@@ -1119,14 +1122,14 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
               <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                 <Button variant="primary" loading={jsonSaving} onClick={saveJson}>Save JSON</Button>
                 <Button variant="outline" onClick={formatJson}>Format</Button>
-                <Button variant="outline" onClick={() => { setJsonText(memoryToEditableJson(items)); setJsonError(null); }}>Reset</Button>
+                <Button variant="outline" onClick={() => { setJsonText(memoryToEditableJson(visibleItems)); setJsonError(null); }}>Reset</Button>
               </div>
             </div>
-          ) : items.length === 0 ? (
+          ) : visibleItems.length === 0 ? (
             <div className="setting-row"><div className="setting-row__body"><div className="setting-row__title">No {status === 'active' ? 'active' : status} memories</div><div className="setting-row__sub">Items you add here appear in this list.</div></div></div>
           ) : (
             <div className="col" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
-              {items.map((item) => (
+              {visibleItems.map((item) => (
                 <div key={item.id} className="setting-row" style={{ alignItems: 'flex-start' }}>
                   <Avatar size="md" variant={item.visibility === 'top_of_mind' ? 'assistant' : undefined}>
                     <Icon name={item.pinned || item.visibility === 'top_of_mind' ? 'pin' : 'sparkle'} size={16} />
@@ -1161,7 +1164,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
                               <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'invalidated' }, 'Memory marked outdated')}>Outdated</Button>
                             </>
                           )}
-                          <Button size="sm" variant="danger" onClick={() => remove(item.id)}>Delete</Button>
+                          <Button size="sm" variant="danger" onClick={() => requestDelete([item.id], item.text)}>Delete</Button>
                         </div>
                       </>
                     )}
@@ -1173,11 +1176,25 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
         </>
       )}
     </div>
+    {pendingDelete && (
+      <ConfirmDialog
+        title="Delete memory?"
+        message={pendingDelete.ids.length > 1
+          ? `"${pendingDelete.text.slice(0, 120)}" and its ${pendingDelete.ids.length} source memories will be permanently deleted.`
+          : `"${pendingDelete.text.slice(0, 120)}" will be permanently deleted.`}
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => performDelete(pendingDelete.ids)}
+        onClose={() => setPendingDelete(null)}
+      />
+    )}
+    </>
   );
 }
 
 interface StructuredActions {
   activeById: Map<string, MemoryRecord>;
+  removedIds: Set<string>;
   editingId: string | null;
   editText: string;
   editKind: Exclude<MemoryKind, 'thread_summary' | 'entity'>;
@@ -1186,7 +1203,7 @@ interface StructuredActions {
   onStartEdit: (memory: MemoryRecord) => void;
   onSaveEdit: (id: string) => void;
   onCancelEdit: () => void;
-  onDelete: (ids: string[]) => void;
+  onDelete: (ids: string[], text: string) => void;
 }
 
 function StructuredMemoryView({ profile, actions }: { profile: MemoryProfileView | null; actions: StructuredActions }) {
@@ -1247,11 +1264,12 @@ function TreeSection({ title, icon, compact, children }: { title: string; icon?:
 }
 
 function TreeList({ title, items, actions }: { title: string; items: MemoryProfileItem[]; actions: StructuredActions }) {
-  if (!items.length) return null;
+  const visible = items.filter((item) => !item.sourceMemoryIds.length || !item.sourceMemoryIds.every((id) => actions.removedIds.has(id)));
+  if (!visible.length) return null;
   return (
     <div className="memory-tree__group">
       <div className="memory-tree__label">{title}</div>
-      {items.map((item, index) => {
+      {visible.map((item, index) => {
         const sourceId = item.sourceMemoryIds[0];
         const record = sourceId ? actions.activeById.get(sourceId) : undefined;
         const isEditing = !!sourceId && actions.editingId === sourceId;
@@ -1273,7 +1291,7 @@ function TreeList({ title, items, actions }: { title: string; items: MemoryProfi
                 <span style={{ flex: 1, minWidth: 0 }}>{item.text}</span>
                 <span className="memory-tree__item-actions">
                   {record && <IconButton name="edit" label="Edit" size={16} onClick={() => actions.onStartEdit(record)} />}
-                  {!!item.sourceMemoryIds.length && <IconButton name="trash" label="Delete" size={16} onClick={() => actions.onDelete(item.sourceMemoryIds)} />}
+                  {!!item.sourceMemoryIds.length && <IconButton name="trash" label="Delete" size={16} onClick={() => actions.onDelete(item.sourceMemoryIds, item.text)} />}
                 </span>
               </div>
             )}
