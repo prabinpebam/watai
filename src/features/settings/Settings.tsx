@@ -1212,6 +1212,7 @@ function StructuredMemoryView({ profile, actions }: { profile: MemoryProfileView
   }
   const user = profile.profile.user;
   const work = profile.profile.work;
+  const todayIds = new Set(profile.temporal.today.items.map((i) => i.memoryId));
   return (
     <div className="col" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
       <TreeSection title="User" icon="user">
@@ -1241,7 +1242,7 @@ function StructuredMemoryView({ profile, actions }: { profile: MemoryProfileView
 
       <TreeSection title="Recent" icon="history">
         <TreeList title="Today" actions={actions} items={profile.temporal.today.items.map((item) => ({ text: item.text, confidence: 1, sourceMemoryIds: [item.memoryId] }))} />
-        <TreeList title="This week" actions={actions} items={profile.temporal.week.items.map((item) => ({ text: item.text, confidence: 1, sourceMemoryIds: [item.memoryId] }))} />
+        <TreeList title="This week" actions={actions} items={profile.temporal.week.items.filter((i) => !todayIds.has(i.memoryId)).map((item) => ({ text: item.text, confidence: 1, sourceMemoryIds: [item.memoryId] }))} />
       </TreeSection>
 
       <TreeSection title="Avoidances" icon="alert">

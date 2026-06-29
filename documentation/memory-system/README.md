@@ -38,10 +38,14 @@ Memory in Watai is a **serving system**, not a passive database. Every run shoul
 
 This means the MVP should be intentionally simple but not simplistic: start with Cosmos-backed records and deterministic lexical/entity/salience retrieval, then add embeddings or Azure AI Search only when evals show the simpler path is insufficient.
 
+> **Update (2026-06):** Evals and a real session showed the deterministic regex/lexical path is insufficient (it silently dropped multi-turn personal facts). The decision direction has since evolved to **remove the regex gates entirely** — the mini extractor's own `ignore` output is the write decision, and an always-on capped profile plus embedding retrieval (with a similarity threshold) replaces the read gate. See [11-decoupled-memory-architecture.md](11-decoupled-memory-architecture.md).
+
 ## Documents
 
 | Doc | Purpose |
 | --- | --- |
+| [memory-architecture.md](memory-architecture.md) | **Canonical architecture.** The absolute, final statement of the memory system: principles, record model, capture (write) path, serve (read) path with profile + relevance channels, retrieval scoring, Azure substrate, governance, and interfaces. |
+| [memory-implementation-plan.md](memory-implementation-plan.md) | **Implementation plan + test framework.** PR-sized build slices (interfaces → capture → embeddings → relevance → profile → structuring → Cosmos vector → polish) with files, work, acceptance, EDD gates, the offline/live eval harness, fixtures, semantic-invariant claims, numeric regression targets, rollout flags, and the tuning loop. |
 | [01-research-and-benchmarks.md](01-research-and-benchmarks.md) | Product patterns from ChatGPT, Claude, Gemini, LangGraph, Zep, Mem0, and MemGPT; benchmark landscape and lessons. |
 | [02-watai-memory-spec.md](02-watai-memory-spec.md) | Product, architecture, data model, retrieval, extraction, API, privacy, and UI spec for Watai. |
 | [03-implementation-plan.md](03-implementation-plan.md) | Phased implementation plan mapped to Watai's current frontend/backend files and Azure infrastructure. |
@@ -52,6 +56,7 @@ This means the MVP should be intentionally simple but not simplistic: start with
 | [08-build-slices-and-acceptance.md](08-build-slices-and-acceptance.md) | PR-sized implementation slices with touched files, work items, and acceptance criteria. |
 | [09-background-extraction-system.md](09-background-extraction-system.md) | Implementation-ready design for the active asynchronous memory learner: triggers, queue jobs, LLM extraction contract, validation gates, apply semantics, and tests. |
 | [10-structured-hierarchical-memory.md](10-structured-hierarchical-memory.md) | Directional architecture for profile-tree memory, typed temporal graph records, day/week/month buckets, structured retrieval, and migration from flat atomic evidence. |
+| [11-decoupled-memory-architecture.md](11-decoupled-memory-architecture.md) | Decision record + research: remove regex gates (write = mini extractor's `ignore`; read = always-on capped profile + embedding RAG with a similarity threshold); critique vs MemGPT/Mem0/Generative Agents; Azure storage/retrieval options (in-proc cosine → Cosmos vector → AI Search). Supersedes the regex-gate + lexical MVP in doc 07. |
 
 ## What "Implementation-Ready" Means Here
 

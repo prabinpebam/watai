@@ -127,7 +127,22 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
     for (const message of messages) items.push({ kind: 'message', key: message.id, ts: message.createdAt, message });
     for (const notice of Array.isArray(memoryNotices) ? memoryNotices : []) items.push({ kind: 'memory', key: `mem:${notice.id}`, ts: notice.updatedAt, notice });
     items.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
-    return items;
+    // The command + turn extraction lanes both fire per exchange, so collapse consecutive memory
+    // notices (no message between them) into one to avoid duplicate "Memory updated" lines.
+    const collapsed: typeof items = [];
+    for (const item of items) {
+      const prev = collapsed[collapsed.length - 1];
+      if (item.kind === 'memory' && prev?.kind === 'memory') {
+        collapsed[collapsed.length - 1] = {
+          ...prev,
+          ts: item.ts,
+          notice: { ...prev.notice, acceptedCount: Math.max(prev.notice.acceptedCount, item.notice.acceptedCount), updatedAt: item.ts },
+        };
+        continue;
+      }
+      collapsed.push(item);
+    }
+    return collapsed;
   }, [messages, memoryNotices]);
 
   return (
