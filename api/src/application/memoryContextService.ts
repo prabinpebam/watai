@@ -33,7 +33,7 @@ const EMPTY: Omit<MemoryContextBlock, 'latencyBudgetMs'> = {
 const DEFAULT_TOKEN_BUDGET = 400;
 const MAX_SELECTED_MEMORIES = 3;
 const VECTOR_CANDIDATE_LIMIT = 200;
-const RELEVANCE_FLOOR = 0.3;
+const RELEVANCE_FLOOR = 0.25;
 const W_RELEVANCE = 0.6;
 const W_IMPORTANCE = 0.25;
 const W_RECENCY = 0.15;
@@ -87,7 +87,10 @@ export class MemoryContextService {
   /** Semantic retrieval: embed the query, vector-rank candidates above a relevance floor.
    *  Embedding failure or no relevant match yields an empty block (the reply is never blocked). */
   private async buildVector(input: MemoryContextInput): Promise<MemoryContextBlock> {
-    const queryVec = await this.embedder!.embed(input.creds!, input.latestUserText).catch(() => null);
+    const queryVec = await this.embedder!.embed(input.creds!, input.latestUserText).catch((e) => {
+      console.warn('[memory] query embed failed', e instanceof Error ? e.message : String(e));
+      return null;
+    });
     if (!queryVec) return { ...EMPTY, latencyBudgetMs: 250 };
     const scored = await this.retriever!
       .retrieve(input.userId, queryVec, { now: input.now, limit: MAX_SELECTED_MEMORIES, candidateLimit: VECTOR_CANDIDATE_LIMIT })
@@ -107,6 +110,7 @@ export class MemoryContextService {
       selected.push(item);
       tokenEstimate += cost;
     }
+    console.log(`[memory] retrieval candidates=${scored.length} cleared=${ranked.length} selected=${selected.length} top=${(scored[0]?.relevance ?? 0).toFixed(3)} floor=${RELEVANCE_FLOOR}`);
     if (!selected.length) return { ...EMPTY, latencyBudgetMs: 250 };
     return {
       instructions: selected.filter((item) => item.memory.kind === 'instruction').map((item) => item.memory.text),

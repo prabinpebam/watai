@@ -4,9 +4,11 @@ import { InMemoryMemoryJobStore } from '../adapters/memory/memoryJobStore';
 import { InMemoryMessageStore } from '../adapters/memory/messageStore';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import { DEFAULT_SETTINGS } from '../domain/settings';
+import { parseMemoryRecord } from '../domain/memory';
+import type { Embedder } from '../ports/embedder';
 import { MemoryExtractionService, type MemoryExtractorPort, type MemoryQueuePort } from './memoryExtractionService';
 
-function setup(extractor: MemoryExtractorPort) {
+function setup(extractor: MemoryExtractorPort, embedder?: Embedder) {
   const memoryStore = new InMemoryMemoryStore();
   const jobStore = new InMemoryMemoryJobStore();
   const messageStore = new InMemoryMessageStore();
@@ -20,7 +22,7 @@ function setup(extractor: MemoryExtractorPort) {
   const credentials = { getDecrypted: async () => ({ baseUrl: 'https://example.com/openai/v1', key: 'k', models: { chat: 'gpt-4.1' } }) };
   const sends: Array<{ target: string; payload: unknown }> = [];
   const signalr = { negotiate: () => ({}) as never, sendToUser: async (_userId: string, target: string, payload: unknown) => void sends.push({ target, payload }) };
-  const svc = new MemoryExtractionService({ memoryStore, jobStore, messageStore, threadStore, queue, settings, credentials, extractor, signalr: signalr as never, clock });
+  const svc = new MemoryExtractionService({ memoryStore, jobStore, messageStore, threadStore, queue, settings, credentials, extractor, embedder, signalr: signalr as never, clock });
   return { svc, memoryStore, jobStore, messageStore, threadStore, enqueued, sends };
 }
 
@@ -59,7 +61,7 @@ describe('MemoryExtractionService', () => {
     expect(memories[0]).toMatchObject({ kind: 'preference', text: 'User prefers concise implementation plans.' });
     expect(memories[0].sourceRefs[0]).toMatchObject({ type: 'message', threadId: 't1', messageId: 'u1' });
     expect((await ctx.jobStore.get('userA', first!.id))?.status).toBe('completed');
-    expect(ctx.sends).toEqual([{ target: 'memory', payload: expect.objectContaining({ acceptedCount: 1, threadId: 't1' }) }]);
+    expect(ctx.sends).toEqual([{ target: 'memory', payload: expect.objectContaining({ acceptedCount: 1, threadId: 't1', assistantMessageId: 'a1' }) }]);
   });
 
   it('records ignored decisions and rejects one-off/low-confidence output', async () => {
@@ -174,5 +176,24 @@ describe('MemoryExtractionService', () => {
     expect(memories).toHaveLength(1);
     expect(memories[0].route).toMatchObject({ layer: 'long_term_profile', profilePath: 'user.family.children' });
     expect(memories[0].route?.relationship?.attributes).toMatchObject({ relationship: 'daughter', age: 9 });
+  });
+
+  it('backfills embeddings for active memories that lack a current-model vector', async () => {
+    const embedder: Embedder = { model: 'stub-embed', embed: async (_c, text) => [text.length % 5, 1, 0] };
+    const ctx = setup(async () => ({ operations: [{ op: 'ignore', reason: 'nothing durable' }] }), embedder);
+    await seedThread(ctx);
+    await ctx.memoryStore.put(parseMemoryRecord({
+      id: 'old', userId: 'userA', kind: 'fact', status: 'active', text: 'User likes tea.',
+      confidence: 0.9, salience: 0.7, pinned: false, sensitive: false, visibility: 'normal', useCount: 0,
+      createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      sourceRefs: [{ type: 'manual', createdAt: '2026-01-01T00:00:00Z' }],
+    }));
+
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    await ctx.svc.processJob('userA', job!.id);
+
+    const healed = (await ctx.memoryStore.list('userA', { status: 'active' })).memories.find((m) => m.id === 'old');
+    expect(healed?.embedding?.length).toBeGreaterThan(0);
+    expect(healed?.embeddingModel).toBe('stub-embed');
   });
 });

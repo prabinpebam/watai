@@ -12,6 +12,8 @@ interface StreamState {
 export interface MemoryNotice {
   id: string;
   threadId: string;
+  /** The assistant message (turn) whose extraction produced this notice, when known. */
+  messageId?: string;
   acceptedCount: number;
   updatedAt: string;
 }
@@ -143,7 +145,7 @@ export const useUi = create<UiState>()(
           if (list.some((n) => n.id === id)) return {};
           const next = [
             ...list,
-            { id, threadId: notice.threadId, acceptedCount: notice.acceptedCount, updatedAt: notice.updatedAt },
+            { id, threadId: notice.threadId, ...(notice.messageId ? { messageId: notice.messageId } : {}), acceptedCount: notice.acceptedCount, updatedAt: notice.updatedAt },
           ].slice(-50);
           return { memoryNotices: { ...s.memoryNotices, [notice.threadId]: next } };
         }),

@@ -26,7 +26,7 @@ import { parseMemoryRecord, containsSecretLikeValue, type MemoryRecord } from '.
 import type { DecryptedCredentials } from '../src/application/credentialService';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const RELEVANCE_FLOOR = 0.3; // mirrors MemoryContextService
+const RELEVANCE_FLOOR = 0.25; // mirrors MemoryContextService
 
 /** Minimal zero-dependency .env loader: KEY=VALUE lines, # comments, optional quotes. */
 function loadEnv(file: string): void {

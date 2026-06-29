@@ -76,12 +76,15 @@ async function embedFor(
   text: string,
 ): Promise<{ embedding: number[]; model: string } | null> {
   if (!embedder) return null;
-  try {
-    const embedding = await embedder.embed(text);
-    return embedding.length ? { embedding, model: embedder.model } : null;
-  } catch {
-    return null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const embedding = await embedder.embed(text);
+      return embedding.length ? { embedding, model: embedder.model } : null;
+    } catch (e) {
+      if (attempt === 1) console.warn('[memory] write embed failed after retry', e instanceof Error ? e.message : String(e));
+    }
   }
+  return null;
 }
 
 export class MemoryExtractionService {
@@ -173,6 +176,7 @@ export class MemoryExtractionService {
         existingMemories: candidates.map((m) => ({ id: m.id, kind: m.kind, status: m.status, text: m.text, entities: m.entities, topics: m.topics, validAt: m.validAt, invalidAt: m.invalidAt })),
       });
       const result = await this.applyOperations(job.userId, job.threadId, job.kind, messages, candidates, out, embedder);
+      if (embedder) await this.backfillEmbeddings(job.userId, embedder);
       await this.finish(job, result.accepted > 0 ? 'completed' : 'ignored', result.counts, result.accepted, result.rejected);
     } catch (e) {
       await this.deps.jobStore.put({
@@ -210,6 +214,7 @@ export class MemoryExtractionService {
           jobId: job.id,
           threadId: job.threadId,
           kind: job.kind,
+          ...(job.assistantMessageId ? { assistantMessageId: job.assistantMessageId } : {}),
           acceptedCount: accepted,
           updatedAt: ts,
         })
@@ -351,5 +356,24 @@ export class MemoryExtractionService {
       ...(supersededBy ? { supersededBy } : {}),
       updatedAt: this.deps.clock.now(),
     }));
+  }
+
+  /** Best-effort: heal up to a few active memories that lack a current-model embedding, so a
+   *  transient write-time embed failure (or a pre-rollout record) becomes retrievable. */
+  private async backfillEmbeddings(userId: string, embedder: { embed: (text: string) => Promise<number[]>; model: string }): Promise<void> {
+    try {
+      const active = (await this.deps.memoryStore.list(userId, { status: 'active', limit: 50 })).memories;
+      let healed = 0;
+      for (const memory of active) {
+        if (healed >= 3) break;
+        if (memory.embedding?.length && memory.embeddingModel === embedder.model) continue;
+        const embedded = await embedFor(embedder, memory.text);
+        if (!embedded) continue;
+        await this.deps.memoryStore.put(parseMemoryRecord({ ...memory, embedding: embedded.embedding, embeddingModel: embedded.model }));
+        healed++;
+      }
+    } catch {
+      /* best-effort */
+    }
   }
 }

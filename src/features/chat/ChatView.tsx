@@ -124,9 +124,29 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
       | { kind: 'message'; key: string; ts: string; message: (typeof messages)[number] }
       | { kind: 'memory'; key: string; ts: string; notice: MemoryNotice }
     > = [];
-    for (const message of messages) items.push({ kind: 'message', key: message.id, ts: message.createdAt, message });
-    for (const notice of Array.isArray(memoryNotices) ? memoryNotices : []) items.push({ kind: 'memory', key: `mem:${notice.id}`, ts: notice.updatedAt, notice });
-    items.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+    const noticeList = Array.isArray(memoryNotices) ? memoryNotices : [];
+    const anchored = new Map<string, MemoryNotice[]>();
+    const unanchored: MemoryNotice[] = [];
+    for (const notice of noticeList) {
+      if (notice.messageId) {
+        const arr = anchored.get(notice.messageId) ?? [];
+        arr.push(notice);
+        anchored.set(notice.messageId, arr);
+      } else {
+        unanchored.push(notice);
+      }
+    }
+    for (const message of messages) {
+      items.push({ kind: 'message', key: message.id, ts: message.createdAt, message });
+      // Anchor each notice immediately after the assistant turn that produced it.
+      for (const notice of anchored.get(message.id) ?? []) items.push({ kind: 'memory', key: `mem:${notice.id}`, ts: message.createdAt, notice });
+    }
+    // Legacy/unanchored notices keep chronological placement by completion time.
+    for (const notice of unanchored) {
+      let idx = items.length;
+      for (let i = 0; i < items.length; i++) { if (items[i].ts > notice.updatedAt) { idx = i; break; } }
+      items.splice(idx, 0, { kind: 'memory', key: `mem:${notice.id}`, ts: notice.updatedAt, notice });
+    }
     // The command + turn extraction lanes both fire per exchange, so collapse consecutive memory
     // notices (no message between them) into one to avoid duplicate "Memory updated" lines.
     const collapsed: typeof items = [];

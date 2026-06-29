@@ -101,7 +101,7 @@ const MAX_ARTIFACTS = 16;
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 const ARTIFACT_CAPTURE_ATTEMPTS = 4;
 const ARTIFACT_CAPTURE_RETRY_MS = 500;
-const DEFAULT_MEMORY_CONTEXT_BUDGET_MS = 250;
+const DEFAULT_MEMORY_CONTEXT_BUDGET_MS = 3000;
 
 const DEFAULT_VISIBLE_ARTIFACT_KINDS = new Set<ArtifactKind>(['pdf', 'document', 'spreadsheet', 'presentation']);
 
@@ -651,26 +651,15 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       imageReferencePromise ??= latestUserImageReference(history, deps.resolveImageUrl, deps.fetchImpl);
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
     const latestUserText = run.prompt?.text ?? [...history].reverse().find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
-    memoryBlock = deps.memoryContext
-      ? await withTimeout(
+    // Build the memory context concurrently with the rest of run setup (skills, history) so the
+    // query-embedding round-trip overlaps instead of adding serially to time-to-first-token.
+    const memoryBlockPromise = deps.memoryContext
+      ? withTimeout(
           deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key } }),
           deps.memoryContextBudgetMs ?? DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
           emptyMemoryBlock(),
         ).catch(() => emptyMemoryBlock())
-      : undefined;
-    if (memoryBlock?.memories.length) {
-      memoryRefs = memoryBlock.memories.map((memory) => {
-        const source = memoryBlock!.sourceRefs.find((ref) => ref.memoryId === memory.id);
-        return {
-          memoryId: memory.id,
-          kind: memory.kind,
-          text: memory.text,
-          ...(source?.threadId ? { sourceThreadId: source.threadId } : {}),
-          ...(source?.messageId ? { sourceMessageId: source.messageId } : {}),
-          score: memory.score,
-        };
-      });
-    }
+      : Promise.resolve(undefined);
     const explicitSkillNames = slashSkillTags(run.prompt?.text ?? firstUser);
     const codeOn = run.tools.includes('code_interpreter');
 
@@ -700,6 +689,20 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     const ciSection = codeOn
       ? codeInterpreterSection(selectSkills(run.prompt?.text ?? firstUser), skillMounts, explicitSkillNames)
       : '';
+    memoryBlock = await memoryBlockPromise;
+    if (memoryBlock?.memories.length) {
+      memoryRefs = memoryBlock.memories.map((memory) => {
+        const source = memoryBlock!.sourceRefs.find((ref) => ref.memoryId === memory.id);
+        return {
+          memoryId: memory.id,
+          kind: memory.kind,
+          text: memory.text,
+          ...(source?.threadId ? { sourceThreadId: source.threadId } : {}),
+          ...(source?.messageId ? { sourceMessageId: source.messageId } : {}),
+          score: memory.score,
+        };
+      });
+    }
     const turns = await buildTurns(
       systemPrompt(c, settings, ciSection, memoryBlock ? renderMemoryContext(memoryBlock) : ''),
       history,
