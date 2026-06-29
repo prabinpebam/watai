@@ -119,35 +119,50 @@ function makeRecord(seed: SeedMemory, now: string, embedding?: number[]): Memory
 async function runCapture(creds: DecryptedCredentials, model: string, c: EvalCase): Promise<CaseResult> {
   const now = new Date().toISOString();
   const messages = (c.conversation ?? []).map((t, i) => ({ id: `m${i}`, role: t.role, content: t.content, createdAt: now }));
-  const out = await extractMemories(
-    creds,
-    {
-      mode: 'turn',
-      now,
-      threadId: 'eval',
-      threadTitle: 'eval',
-      messages,
-      existingMemories: (c.seedMemories ?? []).map((s) => ({ id: s.id, kind: s.kind ?? 'fact', status: 'active', text: s.text })),
-    },
-    { model },
-  );
+  const expected = c.expect?.op ?? 'ignore';
+  let out;
+  try {
+    out = await extractMemories(
+      creds,
+      {
+        mode: 'turn',
+        now,
+        threadId: 'eval',
+        threadTitle: 'eval',
+        messages,
+        existingMemories: (c.seedMemories ?? []).map((s) => ({ id: s.id, kind: s.kind ?? 'fact', status: 'active', text: s.text })),
+      },
+      { model },
+    );
+  } catch (e) {
+    // A refusal/empty completion for a reject case means nothing was stored — the desired outcome.
+    if (expected === 'reject') return { id: c.id, category: c.category, stage: 'capture', pass: true, detail: `refused: ${(e as Error).message}` };
+    return { id: c.id, category: c.category, stage: 'capture', pass: false, detail: `error: ${(e as Error).message}` };
+  }
   const ops = out.operations as Array<Record<string, unknown>>;
   const order = ['add', 'merge', 'invalidate', 'suppress'];
   const dominant = order.find((op) => ops.some((o) => o.op === op)) ?? 'ignore';
-  const expected = c.expect?.op ?? 'ignore';
   const addOp = ops.find((o) => o.op === 'add');
   let pass: boolean;
+  let detail = `predicted=${dominant}`;
   if (expected === 'reject') {
     pass = dominant === 'ignore' || (!!addOp && containsSecretLikeValue(String(addOp.text ?? '')));
+    if (!pass) detail = `stored op=${dominant} (expected reject)`;
   } else {
     pass = dominant === expected;
+    if (!pass) detail = `op ${dominant} != ${expected}`;
     if (pass && expected === 'add') {
       const text = String(addOp?.text ?? '').toLowerCase();
-      if (c.expect?.mustContain?.length) pass = c.expect.mustContain.every((s) => text.includes(s.toLowerCase()));
-      if (pass && c.expect?.kind) pass = addOp?.kind === c.expect.kind;
+      if (c.expect?.mustContain?.length && !c.expect.mustContain.every((s) => text.includes(s.toLowerCase()))) {
+        pass = false;
+        detail = `text missing ${JSON.stringify(c.expect.mustContain)}`;
+      } else if (c.expect?.kind && addOp?.kind !== c.expect.kind) {
+        pass = false;
+        detail = `kind ${String(addOp?.kind)} != ${c.expect.kind}`;
+      }
     }
   }
-  return { id: c.id, category: c.category, stage: 'capture', pass, detail: `predicted=${dominant} expected=${expected}` };
+  return { id: c.id, category: c.category, stage: 'capture', pass, detail };
 }
 
 async function runRetrieval(creds: DecryptedCredentials, embedModel: string, c: EvalCase): Promise<CaseResult> {
