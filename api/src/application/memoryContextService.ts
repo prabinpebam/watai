@@ -150,11 +150,14 @@ export class MemoryContextService {
   private async buildVector(input: MemoryContextInput): Promise<MemoryContextBlock | null> {
     const queryVec = await this.embedder!.embed(input.creds!, input.latestUserText).catch(() => null);
     if (!queryVec) return null;
-    const scored = await this.retriever!
+    const result = await this.retriever!
       .retrieve(input.userId, queryVec, { now: input.now, limit: MAX_SELECTED_MEMORIES, candidateLimit: VECTOR_CANDIDATE_LIMIT })
-      .catch(() => []);
+      .catch(() => null);
+    // No embedded candidates yet (e.g. memories predate the embedding rollout) → fall back to
+    // lexical so retrieval never regresses while embeddings backfill on subsequent writes.
+    if (!result || result.embeddedCandidates === 0) return null;
     const nowMs = Date.parse(input.now);
-    const ranked = scored
+    const ranked = result.scored
       .filter((item) => item.relevance >= RELEVANCE_FLOOR || item.memory.pinned || item.memory.visibility === 'top_of_mind')
       .map((item) => ({ memory: item.memory, score: compositeScore(item.relevance, item.memory, nowMs) }))
       .sort((a, b) => b.score - a.score || b.memory.updatedAt.localeCompare(a.memory.updatedAt));

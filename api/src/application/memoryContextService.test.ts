@@ -168,6 +168,17 @@ describe('MemoryContextService', () => {
     expect(block.memories.map((m) => m.id)).toEqual(['mem_dog']);
   });
 
+  it('falls back to lexical when no memories are embedded yet (migration safety)', async () => {
+    const store = new InMemoryMemoryStore();
+    const embedder: Embedder = { model: 'stub', embed: async (_c, text) => stubEmbed(text) };
+    const ctx = new MemoryContextService(store, settingsReader(), { embedder, retriever: new InProcessRetriever(store) });
+    await store.put(rec({ id: 'mem_dog', kind: 'fact', text: 'User has a dog named Chopper.' }));
+
+    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: "what is my dog's name?", now: '2026-01-02T00:00:00Z', creds: { baseUrl: 'b', key: 'k' } });
+    expect(block.retrievalMode).toBe('lexical');
+    expect(block.memories.map((m) => m.id)).toEqual(['mem_dog']);
+  });
+
   it('keeps pinned memories even below the relevance floor', async () => {
     const store = new InMemoryMemoryStore();
     const embedder: Embedder = { model: 'stub', embed: async (_c, text) => stubEmbed(text) };

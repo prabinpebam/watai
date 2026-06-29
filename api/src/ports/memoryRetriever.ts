@@ -20,6 +20,13 @@ export interface MemoryRetrieveOptions {
  * implementation scans in-process; a Cosmos `VectorDistance` implementation can be swapped in behind
  * the same contract without changing the serve path.
  */
+export interface RetrieveResult {
+  scored: ScoredMemory[];
+  /** Number of active candidates that actually carried an embedding. 0 ⇒ embeddings have not
+   *  reached this user's data yet, so the caller should fall back to lexical retrieval. */
+  embeddedCandidates: number;
+}
+
 export interface MemoryRetriever {
-  retrieve(userId: string, queryEmbedding: number[], opts: MemoryRetrieveOptions): Promise<ScoredMemory[]>;
+  retrieve(userId: string, queryEmbedding: number[], opts: MemoryRetrieveOptions): Promise<RetrieveResult>;
 }
