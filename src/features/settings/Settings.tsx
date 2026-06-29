@@ -1271,9 +1271,9 @@ function TreeList({ title, items, actions }: { title: string; items: MemoryProfi
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', width: '100%' }}>
                 <span style={{ flex: 1, minWidth: 0 }}>{item.text}</span>
-                <span className="row" style={{ flex: 'none', gap: 'var(--space-1)' }}>
-                  {record && <Button size="sm" variant="outline" onClick={() => actions.onStartEdit(record)}>Edit</Button>}
-                  {!!item.sourceMemoryIds.length && <Button size="sm" variant="danger" onClick={() => actions.onDelete(item.sourceMemoryIds)}>Delete</Button>}
+                <span className="memory-tree__item-actions">
+                  {record && <IconButton name="edit" label="Edit" size={16} onClick={() => actions.onStartEdit(record)} />}
+                  {!!item.sourceMemoryIds.length && <IconButton name="trash" label="Delete" size={16} onClick={() => actions.onDelete(item.sourceMemoryIds)} />}
                 </span>
               </div>
             )}

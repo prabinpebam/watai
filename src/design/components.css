@@ -908,6 +908,26 @@
   background: var(--color-surface-2);
   font-size: var(--text-callout-size);
 }
+.memory-tree__item-actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+  opacity: 0;
+  transition: opacity var(--motion-fast);
+}
+.memory-tree__item:hover .memory-tree__item-actions,
+.memory-tree__item:focus-within .memory-tree__item-actions {
+  opacity: 1;
+}
+.memory-tree__item-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+  color: var(--color-text-secondary);
+}
+.memory-tree__item-actions .icon-btn:hover {
+  background: var(--color-surface-3);
+  color: var(--color-text-primary);
+}
 
 /* Agentic tool-activity cards (in assistant messages) */
 .tool-cards {
