@@ -17,6 +17,15 @@ function decodeCursor(cursor?: string): { updatedAt: string; id: string } | null
   }
 }
 
+/** Cosmos adds system metadata (_rid, _self, _etag, _attachments, _ts) to every item. Strip it so
+ *  the domain layer — including strict re-validation on update/delete — sees a clean record. */
+function strip<T>(resource: T): T {
+  if (!resource || typeof resource !== 'object') return resource;
+  const clean = { ...(resource as Record<string, unknown>) };
+  for (const key of ['_rid', '_self', '_etag', '_attachments', '_ts']) delete clean[key];
+  return clean as T;
+}
+
 /** Cosmos-backed memory store. Container `memory`, partition key /userId. */
 export class CosmosMemoryStore implements MemoryStore {
   private readonly container: Container;
@@ -52,7 +61,7 @@ export class CosmosMemoryStore implements MemoryStore {
     const { resources } = await this.container.items
       .query<MemoryRecord>({ query, parameters }, { partitionKey: userId })
       .fetchAll();
-    const page = resources.slice(0, limit);
+    const page = resources.slice(0, limit).map(strip);
     return {
       memories: page,
       ...(resources.length > limit && page.length ? { cursor: encodeCursor(page[page.length - 1]) } : {}),
@@ -62,7 +71,7 @@ export class CosmosMemoryStore implements MemoryStore {
   async get(userId: string, memoryId: string): Promise<MemoryRecord | null> {
     try {
       const { resource } = await this.container.item(memoryId, userId).read<MemoryRecord>();
-      return resource ?? null;
+      return resource ? strip(resource) : null;
     } catch (err) {
       if ((err as { code?: number }).code === 404) return null;
       throw err;
@@ -77,7 +86,7 @@ export class CosmosMemoryStore implements MemoryStore {
   async getSummary(userId: string): Promise<MemorySummaryRecord | null> {
     try {
       const { resource } = await this.container.item('memory-summary', userId).read<MemorySummaryRecord>();
-      return resource ?? null;
+      return resource ? strip(resource) : null;
     } catch (err) {
       if ((err as { code?: number }).code === 404) return null;
       throw err;
