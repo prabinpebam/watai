@@ -288,12 +288,17 @@ function SourcesStrip({ citations }: { citations: Citation[] }) {
 
 function MemoryUsedStrip({ memories }: { memories: MessageMemoryRef[] }) {
   const [open, setOpen] = useState(false);
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
   const pushToast = useUi((s) => s.pushToast);
-  if (!memories.length) return null;
+  const visible = memories.filter((m) => !removed.has(m.memoryId));
+  if (!visible.length) return null;
+
+  const drop = (memoryId: string) => setRemoved((prev) => { const next = new Set(prev); next.add(memoryId); return next; });
 
   const hide = async (memoryId: string) => {
     try {
       await repo.updateMemory(memoryId, { status: 'suppressed' });
+      drop(memoryId);
       pushToast('Memory hidden', 'success');
     } catch (e) {
       pushToast(e instanceof Error ? e.message : 'Could not hide memory.', 'error');
@@ -303,6 +308,7 @@ function MemoryUsedStrip({ memories }: { memories: MessageMemoryRef[] }) {
   const remove = async (memoryId: string) => {
     try {
       await repo.removeMemory(memoryId);
+      drop(memoryId);
       pushToast('Memory deleted', 'success');
     } catch (e) {
       pushToast(e instanceof Error ? e.message : 'Could not delete memory.', 'error');
@@ -314,13 +320,13 @@ function MemoryUsedStrip({ memories }: { memories: MessageMemoryRef[] }) {
       <button type="button" className="sources__toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
         <Icon name="database" size={14} />
         <span className="sources__toggle-label">
-          {memories.length} memory used{memories.length === 1 ? '' : 's'}
+          {visible.length} memory used{visible.length === 1 ? '' : 's'}
         </span>
         <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} className="sources__caret" />
       </button>
       {open && (
         <div className="sources__list">
-          {memories.map((memory, index) => (
+          {visible.map((memory, index) => (
             <div key={memory.memoryId} className="source-chip source-chip--memory" style={{ alignItems: 'flex-start' }}>
               <span className="source-chip__num">{index + 1}</span>
               <span className="source-chip__text" style={{ whiteSpace: 'normal' }}>

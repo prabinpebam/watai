@@ -843,6 +843,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
   const [jsonText, setJsonText] = useState('');
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [jsonSaving, setJsonSaving] = useState(false);
+  const [activeById, setActiveById] = useState<Map<string, MemoryRecord>>(new Map());
 
   const load = async (nextStatus = status) => {
     setLoading(true);
@@ -854,6 +855,8 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
       ]);
       setItems(nextItems);
       setProfile(nextProfile);
+      const active = nextStatus === 'active' ? nextItems : await repo.listMemory({ status: 'active', limit: 100 });
+      setActiveById(new Map(active.map((m) => [m.id, m])));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load memory.');
     } finally {
@@ -905,6 +908,19 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
   const remove = async (id: string) => {
     try {
       await repo.removeMemory(id);
+      await load();
+      pushToast('Deleted memory', 'success');
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Could not delete memory.', 'error');
+    }
+  };
+
+  const removeMany = async (ids: string[]) => {
+    const unique = [...new Set(ids.filter(Boolean))];
+    if (!unique.length) return;
+    if (unique.length > 1 && !window.confirm(`Delete ${unique.length} source memories for this item?`)) return;
+    try {
+      for (const id of unique) await repo.removeMemory(id);
       await load();
       pushToast('Deleted memory', 'success');
     } catch (e) {
@@ -1012,6 +1028,19 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
     }
   };
 
+  const structuredActions: StructuredActions = {
+    activeById,
+    editingId,
+    editText,
+    editKind,
+    setEditText,
+    setEditKind,
+    onStartEdit: startEdit,
+    onSaveEdit: saveEdit,
+    onCancelEdit: () => setEditingId(null),
+    onDelete: removeMany,
+  };
+
   return (
     <div className="settings-card" style={{ marginTop: 'var(--space-5)', padding: 'var(--space-5)' }}>
       <div className="settings-group__label" style={{ marginTop: 0 }}>Manage memory</div>
@@ -1054,7 +1083,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
         ) : error ? (
           <InlineAlert tone="danger">{error}</InlineAlert>
         ) : (
-          <StructuredMemoryView profile={profile} />
+          <StructuredMemoryView profile={profile} actions={structuredActions} />
         )
       ) : (
         <>
@@ -1147,7 +1176,20 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
   );
 }
 
-function StructuredMemoryView({ profile }: { profile: MemoryProfileView | null }) {
+interface StructuredActions {
+  activeById: Map<string, MemoryRecord>;
+  editingId: string | null;
+  editText: string;
+  editKind: Exclude<MemoryKind, 'thread_summary' | 'entity'>;
+  setEditText: (v: string) => void;
+  setEditKind: (v: Exclude<MemoryKind, 'thread_summary' | 'entity'>) => void;
+  onStartEdit: (memory: MemoryRecord) => void;
+  onSaveEdit: (id: string) => void;
+  onCancelEdit: () => void;
+  onDelete: (ids: string[]) => void;
+}
+
+function StructuredMemoryView({ profile, actions }: { profile: MemoryProfileView | null; actions: StructuredActions }) {
   if (!profile || profile.evidenceCount === 0) {
     return <div className="setting-row"><div className="setting-row__body"><div className="setting-row__title">No structured memory yet</div><div className="setting-row__sub">As Watai learns, memories will appear as a profile tree.</div></div></div>;
   }
@@ -1157,36 +1199,36 @@ function StructuredMemoryView({ profile }: { profile: MemoryProfileView | null }
     <div className="col" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
       <TreeSection title="User" icon="user">
         <TreeSection title="Family" compact>
-          <TreeList title="Pets" items={user.family.pets.map((pet) => ({ text: `${pet.name}${pet.species ? ` · ${pet.species}` : ''}${pet.inspiredBy.length ? ` · inspired by ${pet.inspiredBy.join(', ')}` : ''}`, confidence: pet.confidence, sourceMemoryIds: pet.sourceMemoryIds }))} />
-          <TreeList title="Spouse" items={user.family.spouse} />
-          <TreeList title="Children" items={user.family.children} />
+          <TreeList title="Pets" actions={actions} items={user.family.pets.map((pet) => ({ text: `${pet.name}${pet.species ? ` · ${pet.species}` : ''}${pet.inspiredBy.length ? ` · inspired by ${pet.inspiredBy.join(', ')}` : ''}`, confidence: pet.confidence, sourceMemoryIds: pet.sourceMemoryIds }))} />
+          <TreeList title="Spouse" actions={actions} items={user.family.spouse} />
+          <TreeList title="Children" actions={actions} items={user.family.children} />
         </TreeSection>
         <TreeSection title="Preferences" compact>
-          <TreeList title="Communication" items={user.preferences.communication} />
-          <TreeList title="Engineering" items={user.preferences.engineering} />
-          <TreeList title="Design" items={user.preferences.design} />
-          <TreeList title="Tools" items={user.preferences.tools} />
-          <TreeList title="Other" items={user.preferences.other} />
+          <TreeList title="Communication" actions={actions} items={user.preferences.communication} />
+          <TreeList title="Engineering" actions={actions} items={user.preferences.engineering} />
+          <TreeList title="Design" actions={actions} items={user.preferences.design} />
+          <TreeList title="Tools" actions={actions} items={user.preferences.tools} />
+          <TreeList title="Other" actions={actions} items={user.preferences.other} />
         </TreeSection>
         <TreeSection title="Interests" compact>
-          <TreeList title="Media" items={user.interests.media.map((interest) => ({ text: interest.name, confidence: 1, sourceMemoryIds: interest.sourceMemoryIds }))} />
+          <TreeList title="Media" actions={actions} items={user.interests.media.map((interest) => ({ text: interest.name, confidence: 1, sourceMemoryIds: interest.sourceMemoryIds }))} />
         </TreeSection>
       </TreeSection>
 
       <TreeSection title="Work" icon="code">
-        <TreeList title="Projects" items={work.projects} />
-        <TreeList title="Repositories" items={work.repositories} />
-        <TreeList title="Deployments" items={work.deployments} />
-        <TreeList title="Current focus" items={work.currentFocus} />
+        <TreeList title="Projects" actions={actions} items={work.projects} />
+        <TreeList title="Repositories" actions={actions} items={work.repositories} />
+        <TreeList title="Deployments" actions={actions} items={work.deployments} />
+        <TreeList title="Current focus" actions={actions} items={work.currentFocus} />
       </TreeSection>
 
       <TreeSection title="Recent" icon="history">
-        <TreeList title="Today" items={profile.temporal.today.items.map((item) => ({ text: item.text, confidence: 1, sourceMemoryIds: [item.memoryId] }))} />
-        <TreeList title="This week" items={profile.temporal.week.items.map((item) => ({ text: item.text, confidence: 1, sourceMemoryIds: [item.memoryId] }))} />
+        <TreeList title="Today" actions={actions} items={profile.temporal.today.items.map((item) => ({ text: item.text, confidence: 1, sourceMemoryIds: [item.memoryId] }))} />
+        <TreeList title="This week" actions={actions} items={profile.temporal.week.items.map((item) => ({ text: item.text, confidence: 1, sourceMemoryIds: [item.memoryId] }))} />
       </TreeSection>
 
       <TreeSection title="Avoidances" icon="alert">
-        <TreeList title="Do not use" items={profile.profile.avoidances} />
+        <TreeList title="Do not use" actions={actions} items={profile.profile.avoidances} />
       </TreeSection>
     </div>
   );
@@ -1204,16 +1246,40 @@ function TreeSection({ title, icon, compact, children }: { title: string; icon?:
   );
 }
 
-function TreeList({ title, items }: { title: string; items: MemoryProfileItem[] }) {
+function TreeList({ title, items, actions }: { title: string; items: MemoryProfileItem[]; actions: StructuredActions }) {
   if (!items.length) return null;
   return (
     <div className="memory-tree__group">
       <div className="memory-tree__label">{title}</div>
-      {items.map((item, index) => (
-        <div key={`${title}-${index}-${item.sourceMemoryIds.join('-')}`} className="memory-tree__item">
-          {item.text}
-        </div>
-      ))}
+      {items.map((item, index) => {
+        const sourceId = item.sourceMemoryIds[0];
+        const record = sourceId ? actions.activeById.get(sourceId) : undefined;
+        const isEditing = !!sourceId && actions.editingId === sourceId;
+        return (
+          <div key={`${title}-${index}-${item.sourceMemoryIds.join('-')}`} className="memory-tree__item">
+            {isEditing && record ? (
+              <div className="col" style={{ gap: 'var(--space-2)', width: '100%' }}>
+                <TextAreaField label="Memory text" value={actions.editText} rows={3} onChange={(e) => actions.setEditText(e.target.value)} />
+                <div className="row" style={{ alignItems: 'end', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+                  <div style={{ minWidth: 180, flex: '0 1 220px' }}>
+                    <SelectMenu value={actions.editKind} label="Type" options={MANUAL_MEMORY_KINDS.map((value) => ({ value, label: memoryKindLabel(value) }))} onChange={actions.setEditKind} />
+                  </div>
+                  <Button size="sm" variant="primary" disabled={!actions.editText.trim()} onClick={() => actions.onSaveEdit(sourceId)}>Save</Button>
+                  <Button size="sm" variant="outline" onClick={actions.onCancelEdit}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', width: '100%' }}>
+                <span style={{ flex: 1, minWidth: 0 }}>{item.text}</span>
+                <span className="row" style={{ flex: 'none', gap: 'var(--space-1)' }}>
+                  {record && <Button size="sm" variant="outline" onClick={() => actions.onStartEdit(record)}>Edit</Button>}
+                  {!!item.sourceMemoryIds.length && <Button size="sm" variant="danger" onClick={() => actions.onDelete(item.sourceMemoryIds)}>Delete</Button>}
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
