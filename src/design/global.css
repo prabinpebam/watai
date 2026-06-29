@@ -863,6 +863,10 @@ a:hover {
   height: 4px;
   background: var(--color-text-primary);
 }
+.prompt-minimap__mark--current span {
+  height: 4px;
+  background: var(--color-accent);
+}
 .prompt-minimap__tip {
   position: absolute;
   right: calc(100% + var(--space-3));
