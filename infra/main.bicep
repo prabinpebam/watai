@@ -42,6 +42,12 @@ param memoryModel string = 'gpt-5.4-mini'
 @description('Server-decided deployment used for heavier memory operations — rebuilds, merges, conflict resolution. Kept on the full model. Users never select this.')
 param memoryDeepModel string = 'gpt-5.4'
 
+@description('Embedding deployment name for semantic memory retrieval. Empty disables vector retrieval (the app falls back to lexical) and skips write-time embeddings. Set to a deployed embedding model (e.g. text-embedding-3-small) to enable.')
+param memoryEmbedModel string = ''
+
+@description('When "true", injects an always-on identity profile (durable facts, instructions, avoidances) into every run. Sensitive memories are always excluded.')
+param memoryProfile string = 'true'
+
 var suffix = uniqueString(resourceGroup().id)
 var tags = {
   app: 'watai'
@@ -271,6 +277,8 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
         { name: 'AUTH_JWKS_URI', value: authJwksUri }
         { name: 'MEMORY_MODEL', value: memoryModel }
         { name: 'MEMORY_DEEP_MODEL', value: memoryDeepModel }
+        { name: 'MEMORY_EMBED_MODEL', value: memoryEmbedModel }
+        { name: 'MEMORY_PROFILE', value: memoryProfile }
       ]
     }
   }

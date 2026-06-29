@@ -23,3 +23,9 @@ param authJwksUri = 'https://wataiexternal.ciamlogin.com/f009d35a-019c-4374-8987
 // full model. See documentation/memory-system/pipeline-probe-report.md.
 param memoryModel = 'gpt-5.4-mini'
 param memoryDeepModel = 'gpt-5.4'
+// Semantic memory retrieval. Embedding deployment name (must exist on the inference endpoint;
+// deployed on ai-project-deployments-resource). If a user's endpoint lacks it, retrieval falls
+// back to lexical, so enabling this never regresses a user. Empty = vector off (lexical only).
+param memoryEmbedModel = 'text-embedding-3-small'
+// Always-on identity profile injected into every run (sensitive memories always excluded).
+param memoryProfile = 'true'

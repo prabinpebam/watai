@@ -157,15 +157,15 @@ describe('MemoryContextService', () => {
     expect(block.retrievalMode).toBe('empty');
   });
 
-  it('falls open to an empty block when the embedder throws', async () => {
+  it('falls back to lexical retrieval when the embedder fails (no regression)', async () => {
     const store = new InMemoryMemoryStore();
     const embedder: Embedder = { model: 'stub', embed: async () => { throw new Error('boom'); } };
     const ctx = new MemoryContextService(store, settingsReader(), { embedder, retriever: new InProcessRetriever(store) });
-    await store.put(rec({ id: 'mem_dog', text: 'User has a dog.', embedding: [1, 0, 0] }));
+    await store.put(rec({ id: 'mem_dog', kind: 'fact', text: 'User has a dog named Chopper.', embedding: [1, 0, 0] }));
 
-    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: 'tell me about my dog', now: '2026-01-02T00:00:00Z', creds: { baseUrl: 'b', key: 'k' } });
-    expect(block.memories).toEqual([]);
-    expect(block.retrievalMode).toBe('empty');
+    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: "what is my dog's name?", now: '2026-01-02T00:00:00Z', creds: { baseUrl: 'b', key: 'k' } });
+    expect(block.retrievalMode).toBe('lexical');
+    expect(block.memories.map((m) => m.id)).toEqual(['mem_dog']);
   });
 
   it('keeps pinned memories even below the relevance floor', async () => {

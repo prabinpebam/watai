@@ -50,7 +50,7 @@ interface EvalCase {
   locale?: string;
   conversation?: Turn[];
   seedMemories?: SeedMemory[];
-  expect?: { op: string; kind?: string; mustContain?: string[] };
+  expect?: { op: string; kind?: string | string[]; mustContain?: string[] };
   query?: string;
   expectRetrieved?: string[];
   expectExcluded?: string[];
@@ -156,9 +156,12 @@ async function runCapture(creds: DecryptedCredentials, model: string, c: EvalCas
       if (c.expect?.mustContain?.length && !c.expect.mustContain.every((s) => text.includes(s.toLowerCase()))) {
         pass = false;
         detail = `text missing ${JSON.stringify(c.expect.mustContain)}`;
-      } else if (c.expect?.kind && addOp?.kind !== c.expect.kind) {
-        pass = false;
-        detail = `kind ${String(addOp?.kind)} != ${c.expect.kind}`;
+      } else if (c.expect?.kind) {
+        const want = Array.isArray(c.expect.kind) ? c.expect.kind : [c.expect.kind];
+        if (!want.includes(String(addOp?.kind))) {
+          pass = false;
+          detail = `kind ${String(addOp?.kind)} not in ${JSON.stringify(want)}`;
+        }
       }
     }
   }

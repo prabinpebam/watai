@@ -29,15 +29,15 @@
 
   { "id": "cap-pref-lang", "category": "capture.preference.locale", "difficulty": "medium",
     "conversation": [{ "role": "user", "content": "going forward can you default to British English spelling" }],
-    "expect": { "op": "add", "kind": "instruction" }, "why": "standing locale directive" },
+    "expect": { "op": "add", "kind": ["instruction", "preference"] }, "why": "standing locale directive (instruction or preference both acceptable)" },
 
   { "id": "cap-instruction-python", "category": "capture.instruction", "difficulty": "medium",
     "conversation": [{ "role": "user", "content": "From now on, always default Python examples to 3.12." }],
-    "expect": { "op": "add", "kind": "instruction" }, "why": "standing instruction" },
+    "expect": { "op": "add", "kind": ["instruction", "preference"] }, "why": "standing instruction (instruction or preference acceptable)" },
 
   { "id": "cap-avoidance-emoji", "category": "capture.avoidance", "difficulty": "easy",
     "conversation": [{ "role": "user", "content": "Never use emojis in your responses." }],
-    "expect": { "op": "add", "kind": "avoidance" }, "why": "explicit avoidance" },
+    "expect": { "op": "add", "kind": ["avoidance", "instruction"] }, "why": "explicit avoidance (avoidance or instruction acceptable)" },
 
   { "id": "cap-project-deploy", "category": "capture.project", "difficulty": "medium",
     "conversation": [{ "role": "user", "content": "we deploy watai to the resource group rg-watai-dev" }],

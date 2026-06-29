@@ -23,7 +23,10 @@ export async function embedText(creds: EmbedCredentials, text: string, opts: Emb
       body: JSON.stringify({ model: opts.model, input: text }),
       signal: ctrl.signal,
     });
-    if (!res.ok) throw new Error(`Embeddings request failed: ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Embeddings request failed: ${res.status} ${body.slice(0, 300)}`.trim());
+    }
     const json = (await res.json()) as { data?: Array<{ embedding?: number[] }> };
     const vector = json.data?.[0]?.embedding;
     if (!vector || !vector.length) throw new Error('Embeddings response contained no vector.');

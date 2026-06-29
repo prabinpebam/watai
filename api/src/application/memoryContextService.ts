@@ -140,16 +140,16 @@ export class MemoryContextService {
       const memory = effectiveMemorySettings(settings);
       if (!memory.enabled || memory.paused || !memory.referenceSaved) return { ...EMPTY, latencyBudgetMs: 250 };
     }
-    const base = this.embedder && this.retriever && input.creds
-      ? await this.buildVector(input)
-      : await this.buildLexical(input);
+    const vector = this.embedder && this.retriever && input.creds ? await this.buildVector(input) : null;
+    const base = vector ?? (await this.buildLexical(input));
     return this.profileEnabled ? this.withProfile(base, input) : base;
   }
 
-  /** Semantic retrieval: embed the query, vector-rank candidates above a relevance floor. */
-  private async buildVector(input: MemoryContextInput): Promise<MemoryContextBlock> {
+  /** Semantic retrieval: embed the query, vector-rank candidates above a relevance floor.
+   *  Returns null when the embedding call itself fails, so the caller falls back to lexical. */
+  private async buildVector(input: MemoryContextInput): Promise<MemoryContextBlock | null> {
     const queryVec = await this.embedder!.embed(input.creds!, input.latestUserText).catch(() => null);
-    if (!queryVec) return { ...EMPTY, latencyBudgetMs: 250 };
+    if (!queryVec) return null;
     const scored = await this.retriever!
       .retrieve(input.userId, queryVec, { now: input.now, limit: MAX_SELECTED_MEMORIES, candidateLimit: VECTOR_CANDIDATE_LIMIT })
       .catch(() => []);
