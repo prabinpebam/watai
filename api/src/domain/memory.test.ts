@@ -177,9 +177,9 @@ describe('summary and context schemas', () => {
       sourceRefs: [{ memoryId: 'mem_1', threadId: 'thr_1', messageId: 'msg_1' }],
       tokenEstimate: 120,
       latencyBudgetMs: 250,
-      retrievalMode: 'lexical',
+      retrievalMode: 'vector',
     };
-    expect(parseMemoryContextBlock(context)).toMatchObject({ retrievalMode: 'lexical' });
+    expect(parseMemoryContextBlock(context)).toMatchObject({ retrievalMode: 'vector' });
     expect(code(() => parseMemoryContextBlock({ ...context, retrievalMode: 'magic' }))).toBe('validation');
   });
 });

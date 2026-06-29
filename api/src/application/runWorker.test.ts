@@ -4,6 +4,7 @@ import { InMemoryRunStore } from '../adapters/memory/runStore';
 import { InMemoryMessageStore } from '../adapters/memory/messageStore';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import { InMemoryMemoryStore } from '../adapters/memory/memoryStore';
+import { InProcessRetriever } from '../adapters/memory/inProcessRetriever';
 import { MemoryService } from './memoryService';
 import { MemoryContextService } from './memoryContextService';
 import type { RunRecord } from '../ports/runStore';
@@ -487,9 +488,15 @@ describe('processRun', () => {
       text: 'Watai deploy target is rg-watai-dev.',
       kind: 'project_context',
     });
-    const memoryContext = new MemoryContextService(memoryStore, {
-      get: async () => DEFAULT_SETTINGS,
-    });
+    await memoryStore.put({ ...saved, embedding: [1, 0, 0] });
+    const memoryContext = new MemoryContextService(
+      memoryStore,
+      { get: async () => DEFAULT_SETTINGS },
+      {
+        embedder: { model: 'stub', embed: async (_c, text) => [/deploy|resource group|rg-|watai|azure/i.test(text) ? 1 : 0, 0, 0] },
+        retriever: new InProcessRetriever(memoryStore),
+      },
+    );
     const run = await ctx.runStore.get('t1', 'r1');
     await ctx.runStore.put({ ...run!, prompt: { text: 'What resource group should I deploy Watai to?' } });
 

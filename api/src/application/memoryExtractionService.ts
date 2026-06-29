@@ -84,11 +84,6 @@ async function embedFor(
   }
 }
 
-export function hasExtractionSignal(text: string): boolean {
-  const value = text.toLowerCase();
-  return /\b(remember|forget|memory|preference|prefer|usually|always|never|avoid|correction|actually|from now on|do not|don't use|don't mention|nickname|call me|name is|named|is called|favou?rite|birthday|allergic|my (dog|cat|pet|puppy|kitten|wife|husband|partner|spouse|son|daughter|child|children|kid|kids|family|mom|dad|mother|father|brother|sister|name|team|company|repo|repository|project|job|role|manager|boss|address|email|phone|hometown|car|house|favou?rite)|our (team|company|repo|repository|project|dog|cat|pet|family)|(his|her|their|its) name|i (have|own|got|adopted|bought|made|started|joined|moved|use|prefer|like|love|hate|am|live|work)|we (have|own|got|adopted)|dog|cat|pet|puppy|kitten|daughter|son|watai|deploy target|resource group)\b/i.test(value);
-}
-
 export class MemoryExtractionService {
   constructor(private readonly deps: MemoryExtractionDeps) {}
 

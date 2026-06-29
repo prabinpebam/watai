@@ -1,6 +1,6 @@
 import { isRetrievableMemory } from '../../domain/memory';
 import type { MemoryStore } from '../../ports/memoryStore';
-import type { MemoryRetriever, MemoryRetrieveOptions, RetrieveResult, ScoredMemory } from '../../ports/memoryRetriever';
+import type { MemoryRetriever, MemoryRetrieveOptions, ScoredMemory } from '../../ports/memoryRetriever';
 
 /** Cosine similarity, clamped to 0..1 (negative similarities are treated as "not similar"). */
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -26,18 +26,16 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 export class InProcessRetriever implements MemoryRetriever {
   constructor(private readonly store: MemoryStore) {}
 
-  async retrieve(userId: string, queryEmbedding: number[], opts: MemoryRetrieveOptions): Promise<RetrieveResult> {
-    if (!queryEmbedding.length) return { scored: [], embeddedCandidates: 0 };
+  async retrieve(userId: string, queryEmbedding: number[], opts: MemoryRetrieveOptions): Promise<ScoredMemory[]> {
+    if (!queryEmbedding.length) return [];
     const page = await this.store.list(userId, { status: 'active', limit: opts.candidateLimit ?? 200 });
-    let embeddedCandidates = 0;
     const scored: ScoredMemory[] = [];
     for (const memory of page.memories) {
       if (!memory.embedding?.length) continue;
-      embeddedCandidates++;
       if (!isRetrievableMemory(memory, opts.now)) continue;
       scored.push({ memory, relevance: cosineSimilarity(queryEmbedding, memory.embedding) });
     }
     scored.sort((a, b) => b.relevance - a.relevance || b.memory.updatedAt.localeCompare(a.memory.updatedAt));
-    return { scored: scored.slice(0, opts.limit), embeddedCandidates };
+    return scored.slice(0, opts.limit);
   }
 }

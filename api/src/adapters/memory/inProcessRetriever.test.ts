@@ -39,10 +39,9 @@ describe('InProcessRetriever', () => {
     const retriever = new InProcessRetriever(store);
 
     const out = await retriever.retrieve('userA', [1, 0, 0], { now: '2026-02-01T00:00:00Z', limit: 5 });
-    expect(out.scored.map((s) => s.memory.id)).toEqual(['a', 'b']);
-    expect(out.embeddedCandidates).toBe(2);
-    expect(out.scored[0].relevance).toBeCloseTo(1);
-    expect(out.scored[1].relevance).toBe(0);
+    expect(out.map((s) => s.memory.id)).toEqual(['a', 'b']);
+    expect(out[0].relevance).toBeCloseTo(1);
+    expect(out[1].relevance).toBe(0);
   });
 
   it('excludes temporally invalid memories and respects the limit', async () => {
@@ -52,13 +51,13 @@ describe('InProcessRetriever', () => {
     const retriever = new InProcessRetriever(store);
 
     const out = await retriever.retrieve('userA', [1, 0, 0], { now: '2026-02-01T00:00:00Z', limit: 1 });
-    expect(out.scored.map((s) => s.memory.id)).toEqual(['valid']);
+    expect(out.map((s) => s.memory.id)).toEqual(['valid']);
   });
 
   it('returns nothing for an empty query vector', async () => {
     const store = new InMemoryMemoryStore();
     await store.put(rec({ id: 'a', text: 'a', embedding: [1, 0, 0] }));
     const retriever = new InProcessRetriever(store);
-    expect((await retriever.retrieve('userA', [], { now: '2026-02-01T00:00:00Z', limit: 5 })).scored).toEqual([]);
+    expect(await retriever.retrieve('userA', [], { now: '2026-02-01T00:00:00Z', limit: 5 })).toEqual([]);
   });
 });

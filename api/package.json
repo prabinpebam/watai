@@ -9,7 +9,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "probe": "npx --yes tsx scripts/memory-pipeline-probe.ts",
     "memory:smoke": "npx --yes tsx scripts/memory-smoke.ts",
     "eval": "npx --yes tsx scripts/memory-eval.ts",
     "embed-check": "npx --yes tsx scripts/embed-check.ts",

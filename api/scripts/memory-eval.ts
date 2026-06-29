@@ -176,7 +176,7 @@ async function runRetrieval(creds: DecryptedCredentials, embedModel: string, c: 
     await store.put(makeRecord(seed, now, vector));
   }
   const queryVec = await embedText(creds, c.query ?? '', { model: embedModel });
-  const { scored } = await new InProcessRetriever(store).retrieve('eval', queryVec, { now, limit: 5 });
+  const scored = await new InProcessRetriever(store).retrieve('eval', queryVec, { now, limit: 5 });
   const selected = scored.filter((s) => s.relevance >= RELEVANCE_FLOOR).map((s) => s.memory.id);
   const gotAll = (c.expectRetrieved ?? []).every((id) => selected.includes(id));
   const noExcluded = (c.expectExcluded ?? []).every((id) => !selected.includes(id));

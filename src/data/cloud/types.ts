@@ -169,7 +169,7 @@ export interface MemoryContextBlock {
   }>;
   tokenEstimate: number;
   latencyBudgetMs: number;
-  retrievalMode: 'lexical' | 'hybrid' | 'cached' | 'empty' | 'vector' | 'profile';
+  retrievalMode: 'empty' | 'vector' | 'profile';
   profile?: string;
 }
 
