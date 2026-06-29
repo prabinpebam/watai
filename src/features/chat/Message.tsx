@@ -321,7 +321,7 @@ function MemoryUsedStrip({ memories }: { memories: MessageMemoryRef[] }) {
       {open && (
         <div className="sources__list">
           {memories.map((memory, index) => (
-            <div key={memory.memoryId} className="source-chip" style={{ alignItems: 'flex-start' }}>
+            <div key={memory.memoryId} className="source-chip source-chip--memory" style={{ alignItems: 'flex-start' }}>
               <span className="source-chip__num">{index + 1}</span>
               <span className="source-chip__text" style={{ whiteSpace: 'normal' }}>
                 <strong>{memory.kind.replace(/_/g, ' ')}</strong>: {memory.text}
