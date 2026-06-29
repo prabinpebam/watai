@@ -172,7 +172,7 @@ export function PromptMinimap({ messages, scrollRef }: PromptMinimapProps) {
 
   if (prompts.length < 1) return null;
 
-  const activeIndex = prompts.findIndex((message) => message.id === (activeId ?? pinnedId ?? currentId));
+  const activeIndex = prompts.findIndex((message) => message.id === (activeId ?? pinnedId));
 
   return (
     <nav className="prompt-minimap" aria-label="User prompts in this chat" ref={rootRef}>
