@@ -54,16 +54,16 @@ const STOP = new Set([
   'write',
 ]);
 
-function shouldConsiderMemory(raw: string, query: Set<string>): boolean {
+export function shouldConsiderMemory(raw: string, query: Set<string>): boolean {
   if (!query.size) return false;
   return /\b(my|mine|our|ours|remember|memory|profile|preference|prefer|usually|previously|last time|what did we|what do you know about me|wife|husband|son|daughter|family|pet|dog|cat|chopper|one piece|project|repo|repository|deploy|watai|azure|github)\b/i.test(raw);
 }
 
-function broadProfileQuery(raw: string): boolean {
+export function broadProfileQuery(raw: string): boolean {
   return /\b(what do you know about me|my profile|remember about me|my memory|what have you remembered)\b/i.test(raw);
 }
 
-function candidateQuery(raw: string, query: Set<string>): string | undefined {
+export function candidateQuery(raw: string, query: Set<string>): string | undefined {
   if (broadProfileQuery(raw)) return undefined;
   const priority = ['watai', 'deploy', 'azure', 'github', 'repo', 'repository', 'project', 'dog', 'cat', 'pet', 'chopper', 'one', 'piece', 'preference', 'prefer'];
   const terms = [...query];
@@ -87,6 +87,10 @@ function lexicalScore(query: Set<string>, memory: MemoryRecord): number {
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+export function memoryQueryTokens(text: string): Set<string> {
+  return tokens(text);
 }
 
 export class MemoryContextService {

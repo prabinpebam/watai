@@ -65,7 +65,7 @@ function turnDedupe(assistantMessageId: string): string {
   return `memory-turn:${assistantMessageId}`;
 }
 
-function hasExtractionSignal(text: string): boolean {
+export function hasExtractionSignal(text: string): boolean {
   const value = text.toLowerCase();
   return /\b(remember|forget|memory|preference|prefer|usually|always|never|avoid|correction|actually|from now on|do not|don't use|don't mention|my (dog|cat|pet|wife|husband|partner|son|daughter|child|children|team|company|repo|repository|project)|our (team|company|repo|repository|project)|i (have|own|work on|use|prefer|like|hate|am|live|work)|watai|deploy target|resource group)\b/i.test(value);
 }
