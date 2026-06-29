@@ -141,6 +141,7 @@ export async function extractMemories(
     'Example high-salience memory: if the user says "Remember that my dog is called Chopper", add a fact memory. Example lower-salience or ignore: a casual one-off example unless future usefulness is clear.',
     'Do not store secrets, credentials, one-off requests, private third-party details, hidden reasoning, or guesses about emotions.',
     'Prefer concise source-linked memories. Current user corrections can invalidate older memories.',
+    'When the user gives a NEW detail (age, role, location, name, relationship, status…) about someone or something already present in existingMemories, MERGE it: set memoryId to that existing memory and provide the full updated text that includes the new detail. Do not create a duplicate. Use invalidate only when the new information contradicts and replaces the old.',
     'Return strict JSON only: {"operations":[ ... ]} — no prose, no markdown fences.',
     'Every operation uses FLAT fields with these EXACT names (never nest fields under a "memory" object):',
     '  add:        {"op":"add","kind":"fact|preference|instruction|work_style|project_context|avoidance|procedure","text":"<concise statement>","entities":["<optional>"],"confidence":0.0-1.0,"salience":0.0-1.0,"sourceMessageIds":["<id of the source message>"],"reason":"<why>"}',
