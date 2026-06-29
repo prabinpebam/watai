@@ -93,13 +93,50 @@ describe('MemoryExtractionService', () => {
     expect((await explicit.jobStore.get('userA', commandJob!.id))?.status).toBe('completed');
   });
 
-  it('does not enqueue extraction jobs for generic prompts without durable-memory signals', async () => {
+  it('enqueues substantive turns and lets the extractor decide to ignore non-durable content', async () => {
     const ctx = setup(async () => ({ operations: [{ op: 'ignore', reason: 'No durable memory.' }] }));
     await seedThread(ctx, false, 'Write a debounce hook in TypeScript.');
 
-    await expect(ctx.svc.enqueueCommand('userA', 't1', 'u1', 'run1')).resolves.toBeNull();
-    await expect(ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1')).resolves.toBeNull();
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    expect(job).not.toBeNull();
+    await ctx.svc.processJob('userA', job!.id);
+
+    expect((await ctx.memoryStore.list('userA', { status: 'active' })).memories).toEqual([]);
+    expect((await ctx.jobStore.get('userA', job!.id))?.status).toBe('ignored');
+    expect(ctx.sends).toEqual([]);
+  });
+
+  it('captures a keyword-free personal fact spread across short turns', async () => {
+    const ctx = setup(async () => ({
+      operations: [{ op: 'add', kind: 'fact', text: 'User has a dog named Chopper, a Lhasa Apso.', confidence: 0.9, salience: 0.85, sourceMessageIds: ['u2'], reason: 'Durable personal fact.' }],
+    }));
+    // No gate keyword ("my dog", "I have") anywhere — the extractor alone decides.
+    await ctx.threadStore.put({ id: 't1', userId: 'userA', title: 'T', pinned: false, archived: false, temporary: false, messageCount: 4, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', deletedAt: null });
+    await ctx.messageStore.append({ id: 'u1', threadId: 't1', userId: 'userA', role: 'user', content: 'we finally caved and got a little guy', status: 'complete', createdAt: '2026-01-01T00:00:01Z', orderAt: '2026-01-01T00:00:01Z', deletedAt: null });
+    await ctx.messageStore.append({ id: 'a1', threadId: 't1', userId: 'userA', role: 'assistant', content: 'congrats! tell me about him', status: 'complete', createdAt: '2026-01-01T00:00:02Z', orderAt: '2026-01-01T00:00:02Z', deletedAt: null });
+    await ctx.messageStore.append({ id: 'u2', threadId: 't1', userId: 'userA', role: 'user', content: "he's a lhasa apso, we went with Chopper", status: 'complete', createdAt: '2026-01-01T00:00:03Z', orderAt: '2026-01-01T00:00:03Z', deletedAt: null });
+    await ctx.messageStore.append({ id: 'a2', threadId: 't1', userId: 'userA', role: 'assistant', content: 'Chopper is a great name!', status: 'complete', createdAt: '2026-01-01T00:00:04Z', orderAt: '2026-01-01T00:00:04Z', deletedAt: null });
+
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a2', 'run1');
+    expect(job).not.toBeNull();
+    await ctx.svc.processJob('userA', job!.id);
+
+    const memories = (await ctx.memoryStore.list('userA', { status: 'active' })).memories;
+    expect(memories).toHaveLength(1);
+    expect(memories[0]).toMatchObject({ kind: 'fact', text: 'User has a dog named Chopper, a Lhasa Apso.' });
+  });
+
+  it('mechanically skips trivial windows without calling the extractor', async () => {
+    let called = false;
+    const ctx = setup(async () => {
+      called = true;
+      return { operations: [{ op: 'ignore', reason: 'x' }] };
+    });
+    await seedThread(ctx, false, 'ok');
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    expect(job).toBeNull();
     expect(ctx.enqueued).toEqual([]);
+    expect(called).toBe(false);
   });
 
   it('does not enqueue for temporary threads', async () => {

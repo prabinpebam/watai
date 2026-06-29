@@ -653,7 +653,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     const latestUserText = run.prompt?.text ?? [...history].reverse().find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
     memoryBlock = deps.memoryContext
       ? await withTimeout(
-          deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now() }),
+          deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key } }),
           deps.memoryContextBudgetMs ?? DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
           emptyMemoryBlock(),
         ).catch(() => emptyMemoryBlock())

@@ -1,0 +1,79 @@
+[
+  { "id": "cap-name-explicit", "category": "capture.identity.name", "difficulty": "easy",
+    "conversation": [{ "role": "user", "content": "My name is Prabin, by the way." }],
+    "expect": { "op": "add", "kind": "fact", "mustContain": ["Prabin"] }, "why": "explicit name" },
+
+  { "id": "cap-pet-casual-multiturn", "category": "capture.identity.pet", "difficulty": "hard",
+    "conversation": [
+      { "role": "user", "content": "we finally caved and got a little guy this weekend" },
+      { "role": "assistant", "content": "congrats! tell me about him" },
+      { "role": "user", "content": "he's a lhasa apso, we ended up going with the name Chopper" }
+    ],
+    "expect": { "op": "add", "kind": "fact", "mustContain": ["Chopper"] }, "why": "keyword-free, breed+name split across turns" },
+
+  { "id": "cap-child-age", "category": "capture.identity.family", "difficulty": "medium",
+    "conversation": [{ "role": "user", "content": "my daughter Laija just turned 9 last week" }],
+    "expect": { "op": "add", "kind": "fact", "mustContain": ["Laija"] }, "why": "family member name + age" },
+
+  { "id": "cap-job-indirect", "category": "capture.identity.job", "difficulty": "hard",
+    "conversation": [{ "role": "user", "content": "honestly after a decade doing staff-level backend work at a fintech I still get nervous before launches" }],
+    "expect": { "op": "add", "kind": "fact" }, "why": "job/role embedded indirectly, no my-keyword" },
+
+  { "id": "cap-location", "category": "capture.identity.location", "difficulty": "medium",
+    "conversation": [{ "role": "user", "content": "it's monsoon season here in Bengaluru so everything is flooded" }],
+    "expect": { "op": "add", "kind": "fact", "mustContain": ["Bengaluru"] }, "why": "location stated casually" },
+
+  { "id": "cap-pref-style", "category": "capture.preference.comms", "difficulty": "easy",
+    "conversation": [{ "role": "user", "content": "I prefer concise answers without preamble." }],
+    "expect": { "op": "add", "kind": "preference" }, "why": "explicit communication preference" },
+
+  { "id": "cap-pref-lang", "category": "capture.preference.locale", "difficulty": "medium",
+    "conversation": [{ "role": "user", "content": "going forward can you default to British English spelling" }],
+    "expect": { "op": "add", "kind": "instruction" }, "why": "standing locale directive" },
+
+  { "id": "cap-instruction-python", "category": "capture.instruction", "difficulty": "medium",
+    "conversation": [{ "role": "user", "content": "From now on, always default Python examples to 3.12." }],
+    "expect": { "op": "add", "kind": "instruction" }, "why": "standing instruction" },
+
+  { "id": "cap-avoidance-emoji", "category": "capture.avoidance", "difficulty": "easy",
+    "conversation": [{ "role": "user", "content": "Never use emojis in your responses." }],
+    "expect": { "op": "add", "kind": "avoidance" }, "why": "explicit avoidance" },
+
+  { "id": "cap-project-deploy", "category": "capture.project", "difficulty": "medium",
+    "conversation": [{ "role": "user", "content": "we deploy watai to the resource group rg-watai-dev" }],
+    "expect": { "op": "add", "kind": "project_context", "mustContain": ["rg-watai-dev"] }, "why": "durable project fact" },
+
+  { "id": "cap-neg-chitchat", "category": "capture.negative.chitchat", "difficulty": "easy",
+    "conversation": [{ "role": "user", "content": "haha nice, thanks!" }],
+    "expect": { "op": "ignore" }, "why": "no durable content" },
+
+  { "id": "cap-neg-oneoff", "category": "capture.negative.oneoff", "difficulty": "medium",
+    "conversation": [{ "role": "user", "content": "write me a haiku about the rain" }],
+    "expect": { "op": "ignore" }, "why": "one-off task, not a durable preference" },
+
+  { "id": "cap-neg-hypothetical", "category": "capture.negative.hypothetical", "difficulty": "hard",
+    "conversation": [{ "role": "user", "content": "if I ever got a dog I'd probably name it Pixel" }],
+    "expect": { "op": "ignore" }, "why": "hypothetical, not a fact about the user" },
+
+  { "id": "cap-neg-thirdparty", "category": "capture.negative.thirdparty", "difficulty": "hard",
+    "conversation": [{ "role": "user", "content": "my coworker Sam just adopted a husky named Storm" }],
+    "expect": { "op": "ignore" }, "why": "fact about a third party, not the user" },
+
+  { "id": "cap-neg-question", "category": "capture.negative.question", "difficulty": "medium",
+    "conversation": [{ "role": "user", "content": "what's a good breed of dog for apartments?" }],
+    "expect": { "op": "ignore" }, "why": "question contains an entity but asserts nothing about the user" },
+
+  { "id": "cap-neg-transient", "category": "capture.negative.transient", "difficulty": "medium",
+    "conversation": [{ "role": "user", "content": "for this answer only, use bullet points" }],
+    "expect": { "op": "ignore" }, "why": "transient formatting request, not durable" },
+
+  { "id": "cap-reconcile-merge", "category": "capture.reconcile.merge", "difficulty": "hard",
+    "seedMemories": [{ "id": "dog", "text": "User has a dog named Chopper.", "kind": "fact" }],
+    "conversation": [{ "role": "user", "content": "turns out Chopper is a Lhasa Apso" }],
+    "expect": { "op": "merge" }, "why": "new detail about a known entity should merge, not duplicate" },
+
+  { "id": "cap-reconcile-contradiction", "category": "capture.reconcile.invalidate", "difficulty": "hard",
+    "seedMemories": [{ "id": "color", "text": "User's favorite color is blue.", "kind": "preference" }],
+    "conversation": [{ "role": "user", "content": "actually my favorite color is teal now, not blue" }],
+    "expect": { "op": "invalidate" }, "why": "contradiction replaces the old fact" }
+]

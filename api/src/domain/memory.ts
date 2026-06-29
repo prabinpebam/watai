@@ -256,7 +256,8 @@ const memoryContextBlockSchema = z
       .max(32),
     tokenEstimate: z.number().int().nonnegative(),
     latencyBudgetMs: z.number().int().positive(),
-    retrievalMode: z.enum(['lexical', 'hybrid', 'cached', 'empty']),
+    retrievalMode: z.enum(['lexical', 'hybrid', 'cached', 'empty', 'vector', 'profile']),
+    profile: z.string().trim().max(4000).optional(),
   })
   .strict();
 

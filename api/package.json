@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "probe": "npx --yes tsx scripts/memory-pipeline-probe.ts",
     "memory:smoke": "npx --yes tsx scripts/memory-smoke.ts",
+    "eval": "npx --yes tsx scripts/memory-eval.ts",
     "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node20 --packages=external --outfile=dist/index.cjs",
     "prestart": "npm run build",
     "start": "func start"

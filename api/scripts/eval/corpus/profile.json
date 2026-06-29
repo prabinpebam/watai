@@ -1,0 +1,22 @@
+[
+  { "id": "prof-identity-in", "category": "profile.identity", "difficulty": "easy",
+    "seedMemories": [
+      { "id": "name", "text": "User name is Prabin.", "kind": "fact", "salience": 0.9 },
+      { "id": "pet", "text": "User has a dog named Chopper.", "kind": "fact", "salience": 0.8 }
+    ],
+    "expectProfileContains": ["Prabin", "Chopper"], "why": "identity facts are always present" },
+
+  { "id": "prof-sensitive-out", "category": "profile.sensitive", "difficulty": "medium",
+    "seedMemories": [
+      { "id": "name", "text": "User name is Prabin.", "kind": "fact", "salience": 0.9 },
+      { "id": "med", "text": "User had a medical procedure last year.", "kind": "fact", "salience": 0.95, "sensitive": true }
+    ],
+    "expectProfileContains": ["Prabin"], "expectProfileExcludes": ["medical procedure"], "why": "sensitive memories never enter the always-on profile" },
+
+  { "id": "prof-instructions-avoidances", "category": "profile.directives", "difficulty": "easy",
+    "seedMemories": [
+      { "id": "instr", "text": "Always reply in British English.", "kind": "instruction", "salience": 0.7 },
+      { "id": "avoid", "text": "Never use emojis.", "kind": "avoidance", "salience": 0.7 }
+    ],
+    "expectProfileContains": ["British English", "emojis"], "why": "standing directives and avoidances are always in scope" }
+]

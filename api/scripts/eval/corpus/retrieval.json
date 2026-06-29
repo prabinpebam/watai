@@ -1,0 +1,41 @@
+[
+  { "id": "ret-paraphrase-pet", "category": "retrieval.positive.paraphrase", "difficulty": "medium",
+    "seedMemories": [
+      { "id": "dog", "text": "User has a dog named Chopper, a Lhasa Apso." },
+      { "id": "job", "text": "User works as a staff engineer at a fintech." },
+      { "id": "deploy", "text": "Watai deploys to the resource group rg-watai-dev." }
+    ],
+    "query": "what's my pup's name again?",
+    "expectRetrieved": ["dog"], "expectExcluded": ["job", "deploy"], "why": "pup -> dog with no shared tokens" },
+
+  { "id": "ret-synonym-job", "category": "retrieval.positive.synonym", "difficulty": "medium",
+    "seedMemories": [
+      { "id": "job", "text": "User works as a staff engineer at a fintech." },
+      { "id": "pet", "text": "User has a dog named Chopper." }
+    ],
+    "query": "where am I employed?",
+    "expectRetrieved": ["job"], "expectExcluded": ["pet"], "why": "employed -> works as engineer" },
+
+  { "id": "ret-indirect-deploy", "category": "retrieval.positive.indirect", "difficulty": "hard",
+    "seedMemories": [
+      { "id": "deploy", "text": "Watai deploys to the resource group rg-watai-dev." },
+      { "id": "color", "text": "User's favorite color is teal." }
+    ],
+    "query": "which Azure resource group should I push to?",
+    "expectRetrieved": ["deploy"], "expectExcluded": ["color"], "why": "push to -> deploy target" },
+
+  { "id": "ret-offtopic-empty", "category": "retrieval.negative.offtopic", "difficulty": "medium",
+    "seedMemories": [
+      { "id": "dog", "text": "User has a dog named Chopper." },
+      { "id": "job", "text": "User works as a staff engineer." }
+    ],
+    "query": "what is the capital of France?",
+    "expectRetrieved": [], "expectExcluded": ["dog", "job"], "why": "generic knowledge needs no personalization" },
+
+  { "id": "ret-falsefriend", "category": "retrieval.negative.falsefriend", "difficulty": "hard",
+    "seedMemories": [
+      { "id": "diet", "text": "User is vegetarian and avoids meat." }
+    ],
+    "query": "write a function that meets the spec",
+    "expectRetrieved": [], "expectExcluded": ["diet"], "why": "lexical 'meets/meat' must not trigger a vegetarian recall" }
+]

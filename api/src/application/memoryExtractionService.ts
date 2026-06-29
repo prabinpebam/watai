@@ -10,6 +10,7 @@ import type { MessageRecord, MessageStore } from '../ports/messageStore';
 import type { ThreadRecord, ThreadStore } from '../ports/threadStore';
 import type { ServiceClock } from './threadService';
 import type { SignalRSender } from '../adapters/azure/signalr';
+import type { Embedder } from '../ports/embedder';
 
 export interface MemoryQueuePort {
   enqueue(job: import('../domain/memoryExtraction').MemoryExtractionJobRecord): Promise<void>;
@@ -41,6 +42,7 @@ export interface MemoryExtractionDeps {
   settings: MemorySettingsReader;
   credentials: MemoryCredentialReader;
   extractor: MemoryExtractorPort;
+  embedder?: Embedder;
   signalr?: SignalRSender;
   clock: ServiceClock;
 }
@@ -65,6 +67,23 @@ function turnDedupe(assistantMessageId: string): string {
   return `memory-turn:${assistantMessageId}`;
 }
 
+/** Mechanical floor: a window/message with less than this many non-space characters is too trivial
+ *  to be worth an extraction call. This is hygiene only — it never judges meaning. */
+const MIN_MEANINGFUL_CHARS = 3;
+
+async function embedFor(
+  embedder: { embed: (text: string) => Promise<number[]>; model: string } | undefined,
+  text: string,
+): Promise<{ embedding: number[]; model: string } | null> {
+  if (!embedder) return null;
+  try {
+    const embedding = await embedder.embed(text);
+    return embedding.length ? { embedding, model: embedder.model } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function hasExtractionSignal(text: string): boolean {
   const value = text.toLowerCase();
   return /\b(remember|forget|memory|preference|prefer|usually|always|never|avoid|correction|actually|from now on|do not|don't use|don't mention|nickname|call me|name is|named|is called|favou?rite|birthday|allergic|my (dog|cat|pet|puppy|kitten|wife|husband|partner|spouse|son|daughter|child|children|kid|kids|family|mom|dad|mother|father|brother|sister|name|team|company|repo|repository|project|job|role|manager|boss|address|email|phone|hometown|car|house|favou?rite)|our (team|company|repo|repository|project|dog|cat|pet|family)|(his|her|their|its) name|i (have|own|got|adopted|bought|made|started|joined|moved|use|prefer|like|love|hate|am|live|work)|we (have|own|got|adopted)|dog|cat|pet|puppy|kitten|daughter|son|watai|deploy target|resource group)\b/i.test(value);
@@ -85,8 +104,7 @@ export class MemoryExtractionService {
     const thread = await this.eligible(userId, threadId);
     if (!thread) return null;
     const msg = await this.deps.messageStore.get(threadId, userMessageId);
-    if (!msg || msg.userId !== userId || msg.role !== 'user' || !msg.content.trim()) return null;
-    if (!hasExtractionSignal(msg.content)) return null;
+    if (!msg || msg.userId !== userId || msg.role !== 'user' || msg.content.trim().length < MIN_MEANINGFUL_CHARS) return null;
     return this.enqueueJob(userId, threadId, 'command', commandDedupe(userMessageId), { userMessageId, runId });
   }
 
@@ -96,14 +114,15 @@ export class MemoryExtractionService {
     const msg = await this.deps.messageStore.get(threadId, assistantMessageId);
     if (!msg || msg.userId !== userId || msg.role !== 'assistant' || msg.status !== 'complete') return null;
     const window = await this.messagesAround(threadId, assistantMessageId);
-    if (!window.some((message) => message.role === 'user' && hasExtractionSignal(message.content))) return null;
+    if (!window.some((message) => message.role === 'user' && message.content.trim().length >= MIN_MEANINGFUL_CHARS)) return null;
     return this.enqueueJob(userId, threadId, 'turn', turnDedupe(assistantMessageId), { assistantMessageId, runId });
   }
 
   async enqueueAfterMessage(record: MessageRecord): Promise<void> {
-    if (record.role === 'user') {
-      await this.enqueueCommand(record.userId, record.threadId, record.id).catch(() => null);
-    } else if (record.role === 'assistant' && record.status === 'complete') {
+    // Single post-reply lane: the completed assistant turn carries the full exchange, the richest
+    // context for the extractor's write decision. The user-message lane is intentionally not fired
+    // here, so an exchange produces exactly one extraction job (no duplicate work or notices).
+    if (record.role === 'assistant' && record.status === 'complete') {
       await this.enqueueTurn(record.userId, record.threadId, record.id).catch(() => null);
     }
   }
@@ -146,6 +165,9 @@ export class MemoryExtractionService {
       const messages = await this.windowFor(job);
       if (!messages.length) return await this.finish(job, 'ignored', { ignore: 1 }, 0, 0);
       const creds = await this.deps.credentials.getDecrypted(job.userId);
+      const embedder = this.deps.embedder
+        ? { embed: (text: string) => this.deps.embedder!.embed(creds, text), model: this.deps.embedder.model }
+        : undefined;
       const candidates = (await this.deps.memoryStore.list(job.userId, { status: 'active', limit: 20 })).memories;
       const out = await this.deps.extractor(creds, {
         mode: job.kind,
@@ -155,7 +177,7 @@ export class MemoryExtractionService {
         messages: messages.map((m) => ({ id: m.id, role: m.role as 'user' | 'assistant', content: m.content.slice(0, 4096), createdAt: chrono(m) })),
         existingMemories: candidates.map((m) => ({ id: m.id, kind: m.kind, status: m.status, text: m.text, entities: m.entities, topics: m.topics, validAt: m.validAt, invalidAt: m.invalidAt })),
       });
-      const result = await this.applyOperations(job.userId, job.threadId, job.kind, messages, candidates, out);
+      const result = await this.applyOperations(job.userId, job.threadId, job.kind, messages, candidates, out, embedder);
       await this.finish(job, result.accepted > 0 ? 'completed' : 'ignored', result.counts, result.accepted, result.rejected);
     } catch (e) {
       await this.deps.jobStore.put({
@@ -230,6 +252,7 @@ export class MemoryExtractionService {
     messages: MessageRecord[],
     candidates: MemoryRecord[],
     output: MemoryExtractionOutput,
+    embedder?: { embed: (text: string) => Promise<number[]>; model: string },
   ): Promise<{ counts: Partial<Record<'add' | 'merge' | 'invalidate' | 'suppress' | 'ignore', number>>; accepted: number; rejected: number }> {
     const counts: Partial<Record<'add' | 'merge' | 'invalidate' | 'suppress' | 'ignore', number>> = {};
     let accepted = 0;
@@ -247,10 +270,11 @@ export class MemoryExtractionService {
           const hash = sourceHash(op.text, op.kind, op.entities);
           const duplicate = candidates.find((m) => m.sourceHash === hash && m.status === 'active');
           if (duplicate) {
-            await this.mergeMemory(duplicate, refs, op.confidence, op.salience, undefined, undefined, undefined, op.target);
+            await this.mergeMemory(duplicate, refs, op.confidence, op.salience, undefined, undefined, undefined, op.target, embedder);
           } else {
             const id = this.deps.clock.newId();
             for (const oldId of op.supersedes ?? []) await this.invalidateMemory(userId, oldId, id);
+            const embedded = await embedFor(embedder, op.text);
             await this.deps.memoryStore.put(parseMemoryRecord({
               id,
               userId,
@@ -267,6 +291,7 @@ export class MemoryExtractionService {
               sensitive: false,
               sourceHash: hash,
               ...(op.target ? { route: op.target } : {}),
+              ...(embedded ? { embedding: embedded.embedding, embeddingModel: embedded.model } : {}),
               visibility: op.salience >= 0.85 ? 'top_of_mind' : op.salience <= 0.35 ? 'background' : 'normal',
               validAt: op.validAt,
               createdAt: this.deps.clock.now(),
@@ -279,7 +304,7 @@ export class MemoryExtractionService {
         } else if (op.op === 'merge') {
           const current = await this.deps.memoryStore.get(userId, op.memoryId);
           if (!current || current.status === 'deleted') { rejected++; continue; }
-          await this.mergeMemory(current, refs, op.confidence, op.salience, op.text, op.entities, op.topics, op.target);
+          await this.mergeMemory(current, refs, op.confidence, op.salience, op.text, op.entities, op.topics, op.target, embedder);
           accepted++;
         } else if (op.op === 'invalidate') {
           await this.invalidateMemory(userId, op.memoryId);
@@ -297,7 +322,7 @@ export class MemoryExtractionService {
     return { counts, accepted, rejected };
   }
 
-  private async mergeMemory(memory: MemoryRecord, refs: MemorySourceRef[], confidence?: number, salience?: number, text?: string, entities?: string[], topics?: string[], route?: MemoryRecord['route']): Promise<void> {
+  private async mergeMemory(memory: MemoryRecord, refs: MemorySourceRef[], confidence?: number, salience?: number, text?: string, entities?: string[], topics?: string[], route?: MemoryRecord['route'], embedder?: { embed: (text: string) => Promise<number[]>; model: string }): Promise<void> {
     const seen = new Set(memory.sourceRefs.map((r) => `${r.type}:${r.threadId}:${r.messageId}:${r.createdAt}`));
     const sourceRefs = [...memory.sourceRefs];
     for (const ref of refs) {
@@ -305,6 +330,7 @@ export class MemoryExtractionService {
       if (!seen.has(key) && sourceRefs.length < 12) sourceRefs.push(ref);
     }
     const nextText = text ?? memory.text;
+    const reembed = text && text !== memory.text ? await embedFor(embedder, nextText) : null;
     await this.deps.memoryStore.put(parseMemoryRecord({
       ...memory,
       text: nextText,
@@ -313,6 +339,7 @@ export class MemoryExtractionService {
       topics: topics ?? memory.topics,
       sourceRefs,
       ...(route ? { route } : {}),
+      ...(reembed ? { embedding: reembed.embedding, embeddingModel: reembed.model } : {}),
       confidence: Math.max(memory.confidence, confidence ?? memory.confidence),
       salience: Math.max(memory.salience, salience ?? memory.salience),
       updatedAt: this.deps.clock.now(),

@@ -38,6 +38,8 @@ import { MemoryContextService } from './application/memoryContextService';
 import { MemoryExtractionService } from './application/memoryExtractionService';
 import { MemoryModelService } from './application/memoryModelService';
 import { extractMemories } from './ai/memoryExtractor';
+import { azureEmbedder } from './ai/azureEmbedder';
+import { InProcessRetriever } from './adapters/memory/inProcessRetriever';
 import type { ImageWorkerDeps } from './application/imageWorker';
 import { SkillCatalogService } from './application/skillCatalogService';
 import { createSkillProvisioner } from './application/skillProvisioner';
@@ -142,7 +144,15 @@ export function container(): ApiContainer {
   );
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
-  const memoryContextService = new MemoryContextService(memoryStore, settingsService);
+  const memoryEmbedModel = process.env.MEMORY_EMBED_MODEL?.trim();
+  const memoryEmbedder = memoryEmbedModel ? azureEmbedder(memoryEmbedModel) : undefined;
+  const memoryRetriever = memoryEmbedder ? new InProcessRetriever(memoryStore) : undefined;
+  const memoryProfileEnabled = process.env.MEMORY_PROFILE === '1' || process.env.MEMORY_PROFILE === 'true';
+  const memoryContextService = new MemoryContextService(memoryStore, settingsService, {
+    embedder: memoryEmbedder,
+    retriever: memoryRetriever,
+    profile: memoryProfileEnabled,
+  });
   const signalr: SignalRSender | null = process.env.AzureSignalRConnectionString
     ? new AzureSignalR(process.env.AzureSignalRConnectionString)
     : null;
@@ -155,6 +165,7 @@ export function container(): ApiContainer {
     settings: settingsService,
     credentials: credentialService,
     extractor: async (creds, input) => extractMemories(creds, input, { model: await memoryModelService.effectiveModel(input.mode) }),
+    embedder: memoryEmbedder,
     signalr: signalr ?? undefined,
     clock,
   });

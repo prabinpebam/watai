@@ -169,7 +169,8 @@ export interface MemoryContextBlock {
   }>;
   tokenEstimate: number;
   latencyBudgetMs: number;
-  retrievalMode: 'lexical' | 'hybrid' | 'cached' | 'empty';
+  retrievalMode: 'lexical' | 'hybrid' | 'cached' | 'empty' | 'vector' | 'profile';
+  profile?: string;
 }
 
 export interface ListMemoryQuery {

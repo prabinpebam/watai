@@ -1,4 +1,5 @@
 import type { MemoryKind, MemoryRecord } from './memory';
+import { isRetrievableMemory } from './memory';
 
 export interface ProfileItem {
   text: string;
@@ -317,4 +318,49 @@ export function buildMemoryProfile(userId: string, now: string, memories: Memory
   for (const memory of activeMemories) mergeChildAgeFromMemory(profile.profile.user.family.children, memory, childAgesUpdated);
 
   return profile;
+}
+
+const PROFILE_SECTIONS: Array<{ label: string; kinds: MemoryKind[]; max: number }> = [
+  { label: 'About the user', kinds: ['fact', 'entity'], max: 14 },
+  { label: 'Preferences', kinds: ['preference', 'work_style'], max: 10 },
+  { label: 'Standing instructions', kinds: ['instruction'], max: 8 },
+  { label: 'Avoid', kinds: ['avoidance'], max: 8 },
+  { label: 'Project context', kinds: ['project_context', 'procedure'], max: 8 },
+];
+
+/**
+ * Render a compact, always-on identity profile from a user's records, grouped by kind and ordered
+ * by salience, bounded to a character cap. Sensitive memories are excluded unconditionally — the
+ * profile is injected on every run, so private facts must never appear here. Structure comes from
+ * the typed `kind`, not from parsing memory prose.
+ */
+export function renderMemoryProfile(memories: MemoryRecord[], now: string, opts?: { maxChars?: number }): string {
+  const maxChars = opts?.maxChars ?? 2400;
+  const active = memories.filter((memory) => memory.status === 'active' && !memory.sensitive && isRetrievableMemory(memory, now));
+  if (!active.length) return '';
+  const bySalience = (a: MemoryRecord, b: MemoryRecord): number =>
+    b.salience - a.salience || (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt.localeCompare(a.updatedAt);
+  const seen = new Set<string>();
+  const blocks: string[] = [];
+  for (const section of PROFILE_SECTIONS) {
+    const items = active
+      .filter((memory) => section.kinds.includes(memory.kind))
+      .sort(bySalience)
+      .slice(0, section.max)
+      .filter((memory) => {
+        const key = memory.text.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    if (!items.length) continue;
+    blocks.push([`${section.label}:`, ...items.map((memory) => `- ${memory.text}`)].join('\n'));
+  }
+  let out = blocks.join('\n');
+  if (out.length > maxChars) {
+    out = out.slice(0, maxChars);
+    const lastNewline = out.lastIndexOf('\n');
+    if (lastNewline > 0) out = out.slice(0, lastNewline);
+  }
+  return out.trim();
 }
