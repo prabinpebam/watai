@@ -60,6 +60,11 @@ export function VoiceMode() {
   const ttsRef = useRef<TtsQueue | null>(null);
   if (!ttsRef.current) {
     const synthesize = async (text: string): Promise<TtsClip> => {
+      // Belt-and-suspenders: never synthesize with the voice unresolved (a null ref would fall back to
+      // the backend default and shift the voice mid-reply). stopListening resolves this before the reply.
+      if (!settingsRef.current) {
+        settingsRef.current = (await repo.getSettings().catch(() => null))?.voice ?? settingsRef.current;
+      }
       const v = settingsRef.current;
       const { audioBase64, mime } = await cloudApi.synthesizeSpeech({
         input: text,
@@ -150,6 +155,10 @@ export function VoiceMode() {
     }
     if (!text) return;
     setCaption(text);
+    // Resolve the current voice/rate up front so the ENTIRE reply is spoken in one voice. Without this,
+    // the first sentence can synthesize before the mount-time settings load resolves (→ backend default
+    // voice), then later sentences use the selected voice — an audible shift mid-reply.
+    settingsRef.current = (await repo.getSettings().catch(() => null))?.voice ?? settingsRef.current;
     // Start the reply stream clean, then hand off to the run store (memory + tools + skills + SignalR).
     speakerRef.current = createReplySpeaker((t) => ttsRef.current!.enqueue(t));
     lastContentRef.current = '';
