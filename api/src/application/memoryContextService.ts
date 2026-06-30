@@ -97,7 +97,10 @@ export class MemoryContextService {
       .catch(() => []);
     const nowMs = Date.parse(input.now);
     const ranked = scored
-      .filter((item) => item.relevance >= RELEVANCE_FLOOR || item.memory.pinned || item.memory.visibility === 'top_of_mind')
+      // top_of_mind only earns a ranking lift (see compositeScore), never a floor bypass — otherwise
+      // high-salience identity facts (auto-marked top_of_mind) surface on every unrelated query.
+      // Always-availability is the always-on profile's job, not the relevance channel's.
+      .filter((item) => item.relevance >= RELEVANCE_FLOOR || item.memory.pinned)
       .map((item) => ({ memory: item.memory, score: compositeScore(item.relevance, item.memory, nowMs) }))
       .sort((a, b) => b.score - a.score || b.memory.updatedAt.localeCompare(a.memory.updatedAt));
 

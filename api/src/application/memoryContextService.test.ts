@@ -71,6 +71,16 @@ describe('MemoryContextService — relevance channel', () => {
     expect(block.memories.map((m) => m.id)).toEqual(['mem_pinned']);
   });
 
+  it('does NOT inject a top_of_mind memory that is below the relevance floor (ranking lift only)', async () => {
+    const store = new InMemoryMemoryStore();
+    const ctx = new MemoryContextService(store, settingsReader(), { embedder: stubEmbedder, retriever: new InProcessRetriever(store) });
+    // High-salience identity fact, auto-marked top_of_mind, unrelated to the query (deploy axis vs dog axis).
+    await store.put(rec({ id: 'mem_tom', kind: 'fact', text: 'User has a daughter named Laija.', visibility: 'top_of_mind', embedding: [0, 1, 0] }));
+
+    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: 'tell me about my dog', now: NOW, creds: CREDS });
+    expect(block.memories).toEqual([]);
+  });
+
   it('fails open to an empty block when the embedder throws (reply never blocked)', async () => {
     const store = new InMemoryMemoryStore();
     const embedder: Embedder = { model: 'stub', embed: async () => { throw new Error('boom'); } };

@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   const client = new CosmosClient({ endpoint, aadCredentials: new DefaultAzureCredential() });
   const container = client.database('watai').container('memory');
   const { resources } = await container.items
-    .query('SELECT c.id, c.userId, c.kind, c.status, c.text, c.embeddingModel, IS_DEFINED(c.embedding) AS hasEmbedding, ARRAY_LENGTH(c.embedding) AS dims, c.updatedAt FROM c')
+    .query('SELECT c.id, c.userId, c.kind, c.status, c.text, c.embeddingModel, IS_DEFINED(c.embedding) AS hasEmbedding, ARRAY_LENGTH(c.embedding) AS dims, c.pinned, c.visibility, c.updatedAt FROM c')
     .fetchAll();
   const records = resources.filter((r) => r.kind !== 'summary');
   console.log(`memory docs: ${resources.length} (records: ${records.length})`);
@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   console.log(`distinct userIds: ${users.length} -> ${users.join(', ')}`);
   console.log('---');
   for (const r of records.sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)))) {
-    console.log(`[${r.status}] emb=${r.hasEmbedding ? `yes(${r.dims}d,${r.embeddingModel})` : 'NO'} ${r.kind} ${r.updatedAt} :: ${String(r.text).slice(0, 70)}`);
+    console.log(`[${r.status}] emb=${r.hasEmbedding ? `yes(${r.dims}d,${r.embeddingModel})` : 'NO'} pinned=${r.pinned ?? false} vis=${r.visibility ?? '-'} ${r.kind} :: ${String(r.text).slice(0, 60)}`);
   }
 }
 
