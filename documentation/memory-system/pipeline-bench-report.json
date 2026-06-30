@@ -1,51 +1,267 @@
 {
-  "ranAt": "2026-06-30T02:43:38.573Z",
-  "baseUrlHost": "ai-project-deployments-resource.cognitiveservices.azure.com",
+  "ranAt": "2026-06-30T06:49:42.537Z",
+  "baseUrlHost": "ai-project-deployments-resource.services.ai.azure.com",
   "chatModel": "gpt-5.4",
   "embedModel": "text-embedding-3-small",
+  "repeat": 3,
   "embeds": [],
   "agent": [],
+  "agentStats": [],
   "sweep": [],
-  "toolResults": [
+  "toolResults": [],
+  "context": [
     {
-      "label": "real ws+img+ci(skills) #1",
-      "prompt": "What is 2 + 2? Answer in one short sentence.",
-      "totalMs": 40011.6651000008,
-      "chars": 0,
-      "toolEvents": 0,
-      "errored": "This operation was aborted"
-    },
-    {
-      "label": "real ws+img+ci(skills) #2",
-      "prompt": "What is 2 + 2? Answer in one short sentence.",
-      "totalMs": 40000.954799994826,
-      "chars": 0,
-      "toolEvents": 0,
-      "errored": "This operation was aborted"
-    },
-    {
-      "label": "real ws+img+ci(skills) #3",
-      "prompt": "What is 2 + 2? Answer in one short sentence.",
-      "totalMs": 40002.15569999814,
-      "chars": 0,
-      "toolEvents": 0,
-      "errored": "This operation was aborted"
-    },
-    {
-      "label": "fallback ws+img (no ci)",
-      "prompt": "What is 2 + 2? Answer in one short sentence.",
-      "firstTokenMs": 2623.691200003028,
-      "totalMs": 2912.4658999964595,
-      "chars": 11,
+      "label": "~27tok",
+      "prompt": "",
+      "firstTokenMs": 3119.8628997802734,
+      "totalMs": 3167.8821997642517,
+      "chars": 49,
       "toolEvents": 0
     },
     {
-      "label": "ci(skills) alone",
-      "prompt": "What is 2 + 2? Answer in one short sentence.",
-      "firstTokenMs": 36173.00579999387,
-      "totalMs": 36393.3042999953,
-      "chars": 11,
+      "label": "~27tok",
+      "prompt": "",
+      "firstTokenMs": 1887.538300037384,
+      "totalMs": 1898.4130001068115,
+      "chars": 49,
       "toolEvents": 0
+    },
+    {
+      "label": "~27tok",
+      "prompt": "",
+      "firstTokenMs": 971.0967001914978,
+      "totalMs": 1012.3376998901367,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~1178tok",
+      "prompt": "",
+      "firstTokenMs": 772.1659002304077,
+      "totalMs": 798.931300163269,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~1178tok",
+      "prompt": "",
+      "firstTokenMs": 904.7540998458862,
+      "totalMs": 992.2740998268127,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~1178tok",
+      "prompt": "",
+      "firstTokenMs": 1000.7299003601074,
+      "totalMs": 1869.6031002998352,
+      "chars": 54,
+      "toolEvents": 0
+    },
+    {
+      "label": "~4174tok",
+      "prompt": "",
+      "firstTokenMs": 855.4832997322083,
+      "totalMs": 862.6935997009277,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~4174tok",
+      "prompt": "",
+      "firstTokenMs": 736.4571003913879,
+      "totalMs": 756.9303002357483,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~4174tok",
+      "prompt": "",
+      "firstTokenMs": 879.7859997749329,
+      "totalMs": 907.336199760437,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~12241tok",
+      "prompt": "",
+      "firstTokenMs": 945.1145000457764,
+      "totalMs": 963.9390997886658,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~12241tok",
+      "prompt": "",
+      "firstTokenMs": 1020.5123000144958,
+      "totalMs": 1050.8475999832153,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~12241tok",
+      "prompt": "",
+      "firstTokenMs": 1019.2487998008728,
+      "totalMs": 1047.6875,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~24229tok",
+      "prompt": "",
+      "firstTokenMs": 1305.1996002197266,
+      "totalMs": 1321.6378002166748,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~24229tok",
+      "prompt": "",
+      "firstTokenMs": 1005.222400188446,
+      "totalMs": 1056.1128001213074,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~24229tok",
+      "prompt": "",
+      "firstTokenMs": 2200.31920003891,
+      "totalMs": 2216.9513001441956,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~48227tok",
+      "prompt": "",
+      "firstTokenMs": 1393.535400390625,
+      "totalMs": 1422.877799987793,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~48227tok",
+      "prompt": "",
+      "firstTokenMs": 1493.9322996139526,
+      "totalMs": 1519.5114998817444,
+      "chars": 49,
+      "toolEvents": 0
+    },
+    {
+      "label": "~48227tok",
+      "prompt": "",
+      "totalMs": 1205.9395999908447,
+      "chars": 0,
+      "toolEvents": 0
+    }
+  ],
+  "contextStats": [
+    {
+      "label": "~27tok",
+      "ttft": {
+        "n": 3,
+        "min": 971.0967001914978,
+        "median": 1887.538300037384,
+        "p95": 3119.8628997802734,
+        "max": 3119.8628997802734
+      },
+      "total": {
+        "n": 3,
+        "min": 1012.3376998901367,
+        "median": 1898.4130001068115,
+        "p95": 3167.8821997642517,
+        "max": 3167.8821997642517
+      },
+      "errors": 0
+    },
+    {
+      "label": "~1178tok",
+      "ttft": {
+        "n": 3,
+        "min": 772.1659002304077,
+        "median": 904.7540998458862,
+        "p95": 1000.7299003601074,
+        "max": 1000.7299003601074
+      },
+      "total": {
+        "n": 3,
+        "min": 798.931300163269,
+        "median": 992.2740998268127,
+        "p95": 1869.6031002998352,
+        "max": 1869.6031002998352
+      },
+      "errors": 0
+    },
+    {
+      "label": "~4174tok",
+      "ttft": {
+        "n": 3,
+        "min": 736.4571003913879,
+        "median": 855.4832997322083,
+        "p95": 879.7859997749329,
+        "max": 879.7859997749329
+      },
+      "total": {
+        "n": 3,
+        "min": 756.9303002357483,
+        "median": 862.6935997009277,
+        "p95": 907.336199760437,
+        "max": 907.336199760437
+      },
+      "errors": 0
+    },
+    {
+      "label": "~12241tok",
+      "ttft": {
+        "n": 3,
+        "min": 945.1145000457764,
+        "median": 1019.2487998008728,
+        "p95": 1020.5123000144958,
+        "max": 1020.5123000144958
+      },
+      "total": {
+        "n": 3,
+        "min": 963.9390997886658,
+        "median": 1047.6875,
+        "p95": 1050.8475999832153,
+        "max": 1050.8475999832153
+      },
+      "errors": 0
+    },
+    {
+      "label": "~24229tok",
+      "ttft": {
+        "n": 3,
+        "min": 1005.222400188446,
+        "median": 1305.1996002197266,
+        "p95": 2200.31920003891,
+        "max": 2200.31920003891
+      },
+      "total": {
+        "n": 3,
+        "min": 1056.1128001213074,
+        "median": 1321.6378002166748,
+        "p95": 2216.9513001441956,
+        "max": 2216.9513001441956
+      },
+      "errors": 0
+    },
+    {
+      "label": "~48227tok",
+      "ttft": {
+        "n": 2,
+        "min": 1393.535400390625,
+        "median": 1493.9322996139526,
+        "p95": 1493.9322996139526,
+        "max": 1493.9322996139526
+      },
+      "total": {
+        "n": 3,
+        "min": 1205.9395999908447,
+        "median": 1422.877799987793,
+        "p95": 1519.5114998817444,
+        "max": 1519.5114998817444
+      },
+      "errors": 0
     }
   ]
 }
