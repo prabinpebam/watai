@@ -241,9 +241,10 @@ prior branch remains accessible via a small branch switcher on the edited messag
 - Auto-growing text area (max ~40% viewport height, then scrolls internally).
 - **Attach (+):** opens picker (S13) — photo library, camera, files. Attachments become
   vision inputs to chat where supported (see [03-api-integration.md](03-api-integration.md)).
-- **Dictation mic:** tap to start; live waveform; speech transcribed via
-  `gpt-4o-transcribe` and inserted at the caret. Tap again or auto-stop on silence.
-  Distinct from Voice mode (S7).
+- **Dictation mic:** tap to open a recording bar (amplitude waveform + timer + Cancel/Accept);
+  Accept transcribes via `gpt-4o-transcribe` and **inserts the text at the caret** without
+  clobbering what's typed. Never auto-sends; Cancel restores the field. Distinct from Voice mode
+  (S7). See [ui-design V-14](ui-design/05-screens-history-voice-images.md).
 - **Primary button morphing:** voice-mode glyph (empty) → send (has text) → stop
   (streaming). Send is also bound to Enter on desktop (Shift+Enter = newline).
 - **Drafts:** per-thread composer draft persisted locally; restored on return.
@@ -284,29 +285,28 @@ prior branch remains accessible via a small branch switcher on the edited messag
 
 ### 5.7 S7 — Voice mode (full screen)
 
-Hands-free spoken conversation. The flagship "talk" experience.
+Hands-free, continuous spoken conversation — the flagship "talk" experience, modeled on ChatGPT's
+Voice mode. **Every turn runs through the same server-authoritative agentic run as text chat**
+(`POST /runs`), so voice has full parity: memory, tools (web/code/files/image), skills, streaming,
+sync, and persistence. See [ui-design V-15](ui-design/05-screens-history-voice-images.md) for the
+full UX.
 
-- **Visual:** a single animated orb/visualizer that reflects state — idle, listening
-  (reacts to input amplitude), thinking, and speaking. Minimal text; a live caption of
-  the latest transcript/response for accessibility.
-- **Controls:** mute mic, end session, switch to keyboard, and a captions toggle.
-- **Conversation loop:**
-  1. Capture mic audio (with voice-activity detection / push-to-talk option).
-  2. Transcribe via `gpt-4o-transcribe`.
-  3. Send transcript to `gpt-5.4` (streaming).
-  4. Speak the response via TTS, **or** use the Realtime API for full-duplex
-     low-latency dialog — **pending D4/O3**.
-- **Interruptions:** if the user speaks while the assistant talks, duck/stop playback and
-  start listening (barge-in). Only feasible cleanly with Realtime; with STT+TTS we
-  approximate via mic monitoring.
-- **Persistence:** voice turns are written into the underlying thread as normal messages
-  (with an audio attachment reference where retained), so the conversation continues
-  seamlessly in text.
-- **Fallbacks:** if mic permission denied or models unavailable, degrade to dictation or
-  text with a clear explanation.
+- **Visual:** a single amplitude-reactive orb reflecting state — listening, thinking, working
+  (tool), and speaking — plus a live caption (default on for a11y).
+- **Controls:** mute (gates the mic), end, switch to keyboard, captions toggle, voice settings.
+- **Continuous loop (no taps):** VAD endpoints the user's speech → `gpt-4o-transcribe` → submit as a
+  normal user message + **`POST /runs`** (memory + tools + skills, streamed over SignalR) → speak the
+  reply **sentence-by-sentence** via TTS as it streams → auto-return to listening.
+- **Barge-in:** speaking over the assistant immediately stops playback (<150 ms), cancels the
+  in-flight run, and starts the next turn.
+- **Persistence:** turns are real runs — written server-side, synced to all devices, and fed to
+  memory extraction. No separate voice path.
+- **Fallbacks:** mic denied → prime/permission; transcribe down → offer dictation/text; TTS down →
+  keep the loop with silent text replies; offline/error → Retry/End.
 
-> Voice **output** depends on resolving D4 (no TTS/realtime model is named in the seed).
-> The UI and flow are specified here so the decision is the only blocker.
+> **D4 resolved:** v1 ships the **STT → agentic run → streaming TTS** loop (ChatGPT "standard
+> voice"), which keeps full agentic parity. A native **Realtime** speech-to-speech path (lower
+> latency, native barge-in) is a later enhancement, not a v1 blocker.
 
 ### 5.8 S8 — Image viewer / gallery
 
@@ -334,7 +334,7 @@ A stacked hub with these sections:
 | **Account** | Identity, sign out, delete account, switch local/synced mode, devices. |
 | **Models & keys** | Endpoint, API version, per-model deployment names, API key (masked), Test connection, default model params (temperature, max tokens, system prompt). |
 | **Personalization** | Custom instructions ("about you" / "how to respond"), memory toggle and memory viewer/eraser, suggestion chips. |
-| **Voice** | Voice-mode engine (TTS vs realtime), voice selection, speed, VAD sensitivity, auto-send on silence, captions default. |
+| **Voice** | Voice selection, speaking rate, mic sensitivity (VAD endpoint), live-captions default, dictation auto-stop on silence. (Engine is STT→run→TTS in v1; Realtime is a future toggle.) |
 | **Data controls** | Export all data, delete all data, history sync on/off, temporary-chat default, retention preference, where data is stored. |
 | **Appearance** | Theme (system/light/dark), text size, message density, reduced motion override, language. |
 | **About** | Version, changelog, licenses, privacy & security explainer, support links. |

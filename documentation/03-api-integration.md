@@ -23,12 +23,17 @@ Cross-references: [02-architecture.md](02-architecture.md) ·
 | --- | --- | --- |
 | Chat / agent loop | `POST /responses` (preferred) or `/chat/completions` | **Run activity** (server) |
 | Image generation/edit | `POST /images/generations`, `/images/edits` | **Run activity** (server) |
-| Transcription (async) | `POST /audio/transcriptions` | **Run activity** (server) — when a voice note is attached to a prompt |
-| Text-to-speech (read-aloud) | `POST /audio/speech` | **API** on demand (server) → returns audio asset |
-| Live voice (Realtime) | Realtime socket | **Client**, using a server-minted ephemeral token ([02](02-architecture.md) §8) |
+| Transcription | `POST /audio/transcriptions` | **API** (server) — composer dictation, each voice-mode turn, and voice-note attachments on a run |
+| Text-to-speech | `POST /audio/speech` | **API** (server) — read-aloud, and voice-mode reply playback (sentence-streamed) |
+| Live voice (Realtime) | Realtime socket | **Future** — client via a server-minted ephemeral token ([02](02-architecture.md) §8) |
 
 Everything except the live-voice transport is a **server** call. The browser only calls
 the Watai API (Functions), never Azure OpenAI directly.
+
+**Voice mode** chains these: transcribe the spoken turn → submit it as a normal **agentic run**
+(`POST /threads/:id/runs`, so memory + tools + skills apply) → speak the streamed reply
+sentence-by-sentence via `/audio/speech`. It is not a separate model path. See
+[ui-design V-15](ui-design/05-screens-history-voice-images.md).
 
 ---
 

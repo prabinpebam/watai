@@ -110,10 +110,13 @@ Components from [02-components.md](02-components.md); tokens from
 
 ## V-14 — Dictation (in composer)
 
-- **Purpose:** speech-to-text into the composer field (distinct from Voice mode).
-- **Trigger:** composer 🎙 IconButton (visible when transcribe is configured + mic
-  permitted; first use triggers V-05 priming).
-- **In-composer wireframe (active):**
+- **Purpose:** speech-to-text that drops a transcript into the composer field. It is a *compose
+  aid* only — it never sends and never starts a run. Distinct from Voice mode (V-15). Behaves like
+  ChatGPT's composer mic.
+- **Trigger:** composer 🎙 IconButton, shown whenever a transcription model is configured. First
+  tap requests mic permission (first ever → V-05 priming sheet); a denied mic shows an inline hint
+  and a route to V-05.
+- **Recording bar (replaces the input row while active):**
 
 ```
 ┌───────────────────────────────────────┐
@@ -122,23 +125,50 @@ Components from [02-components.md](02-components.md); tokens from
 └───────────────────────────────────────┘
 ```
 
-- **Components:** IconButton (mic), WaveformVisualizer (B14), interim text, Stop control.
-- **States:** `idle` (mic glyph), `requesting-permission`, `listening` (waveform + interim
-  text + Stop; mic glyph → recording dot), `transcribing` (brief spinner after stop),
-  `inserted` (final text placed at caret, editable), `denied` (tooltip + route to V-05),
-  `error` (toast; keep any partial).
-- **Behavior:** tap to start; VAD auto-stops on silence (sensitivity from Settings →
-  Voice) or tap Stop; final transcript inserted at the caret without clobbering typed
-  text; never auto-sends.
-- **Acceptance:** real transcription via `gpt-4o-transcribe`; interim + final text;
-  caret-safe insertion; permission and error paths handled.
+- **Components:** IconButton (mic), WaveformVisualizer (B14, amplitude-reactive from the live mic
+  analyser), elapsed timer, Cancel and Accept controls, optional interim-text line.
+- **State machine:**
+
+| State | UI | Notes |
+| --- | --- | --- |
+| `idle` | mic glyph in the composer | tap → `requesting` |
+| `requesting` | mic glyph + spinner | OS permission prompt; denied → `denied` |
+| `recording` | recording bar: waveform + timer + Cancel + Accept | mic capturing; waveform tracks amplitude |
+| `transcribing` | bar dims, spinner on Accept | batch transcription after Accept |
+| `inserted` | back to composer, caret after inserted text | final transcript merged into the field |
+| `denied` | inline hint + "Enable mic" → V-05 | |
+| `error` | toast; composer restored with prior text intact | retry available |
+
+- **Behavior (ChatGPT-parity):**
+  - **Accept** stops capture, transcribes the full clip via `gpt-4o-transcribe`, and **inserts the
+    text at the caret** inside whatever the user already typed — it never clobbers or reorders
+    existing text. Mid-word carets get sensible spacing.
+  - **Cancel** discards the clip and restores the prior field value untouched.
+  - **Never auto-sends.** The user reviews/edits, then sends with the normal primary button.
+  - **Optional silence auto-stop** (Settings → Voice → *Auto-stop on silence*, default off) ends
+    capture and behaves like Accept, so dictation stays manual like ChatGPT unless opted in.
+  - **Interim text (best-effort):** show a live partial transcript under the waveform when the
+    provider streams one; otherwise show "Listening…". Final text always replaces interim.
+  - **Long clips:** soft cap ~10 min with a warning near the limit.
+- **Persistence:** none server-side — dictation only mutates local composer text (and the per-thread
+  draft).
+- **Accessibility:** the bar is a live region announcing `recording`/`transcribing`; Cancel/Accept
+  are keyboard-reachable; reduced motion swaps the waveform for a static level meter.
+- **Acceptance:** real `gpt-4o-transcribe`; amplitude waveform + timer; **caret-safe insertion** into
+  existing text; Cancel restores prior text; never sends; permission/denial/error paths handled.
 
 ---
 
 ## V-15 — Voice mode (full screen)
 
-- **Purpose:** hands-free spoken conversation; the flagship "talk" surface. Writes turns
-  back into the underlying thread.
+- **Purpose:** hands-free, continuous spoken conversation — the flagship "talk to Watai" surface,
+  modeled on ChatGPT's Voice mode. **Every spoken turn runs through the exact same
+  server-authoritative agentic run as text chat** (`POST /runs`), so voice has full parity: memory
+  (retrieval + extraction), tools (web search, code interpreter, file search, image), skills,
+  streaming, sync, and persistence. Voice is a *front-end on the normal run*, never a separate
+  model call.
+- **Entry:** the composer's empty-state primary control (voice-mode glyph) and `/voice/:threadId?`.
+  Opens over the active thread so the conversation continues in text on exit.
 - **Wireframe:**
 
 ```
@@ -157,40 +187,74 @@ Components from [02-components.md](02-components.md); tokens from
 └───────────────────────────────────────┘
 ```
 
-- **Layout:** full-window overlay (`--z-voice`), `--color-bg`; orb centered (`--size-orb`,
-  220 compact / larger expanded); caption line below; control row pinned bottom above safe
-  area; top row close (✕) + captions (CC) + settings (⚙).
-- **Components:** VoiceOrb (B15), WaveformVisualizer (optional ring), caption live region,
-  IconButtons (mute/keyboard/end/close/captions/settings).
-- **Machine states (orb + status):**
+- **Layout:** full-window overlay (`--z-voice`), `--color-bg`; amplitude-reactive orb centered
+  (`--size-orb`, 220 compact / larger expanded); caption line + optional tool-status chip below;
+  control row pinned bottom above the safe area; top row close (✕) + captions (CC) + settings (⚙).
+- **Components:** VoiceOrb (B15, amplitude-driven), caption live region, tool-status chip,
+  IconButtons (mute / keyboard / end / close / captions / settings).
+- **Hands-free loop (continuous, VAD-driven — no taps):**
+  1. **Listen.** Mic open; client VAD tracks amplitude; the orb reacts to the user's voice.
+  2. **Endpoint.** On end-of-speech (trailing silence ≈ Settings → Voice → *Mic sensitivity*),
+     capture stops automatically and the turn submits. A tap on the orb is a manual endpoint for
+     noisy rooms / push-to-talk.
+  3. **Transcribe.** `gpt-4o-transcribe` → the user-turn text.
+  4. **Run.** Submit it as a normal user message + **`POST /runs`** on the thread — the same path
+     text chat uses. The worker generates with memory + tools + skills and streams over SignalR.
+  5. **Speak as it streams.** As the streamed reply completes **sentence by sentence**, synthesize
+     each sentence with TTS (selected voice + rate) and play them back-to-back, so speech starts ~1
+     sentence after the first token instead of waiting for the whole reply.
+  6. **Loop.** When playback drains and the run is complete, return to **Listen** automatically.
+- **Barge-in (interrupt) — the most important "feels alive" behavior:** if the mic detects the user
+  speaking during `speaking`, **duck then stop TTS within <150 ms**, drop queued sentences, cancel
+  the in-flight run (`DELETE /threads/:id/runs/:id`), and switch to `listening` so the new turn is
+  next.
+- **Tool turns:** when the run invokes a tool, the orb shows `working` and a status chip
+  ("Searching the web…", "Running code…", "Creating an image…"); the spoken reply summarizes the
+  result. Generated images land in the thread (seen on exit), not read out byte-by-byte.
+- **Machine states (orb + caption + audio):**
 
-| State | Orb | Caption | Audio |
-| --- | --- | --- | --- |
-| `connecting` | settle-in | "Starting…" | — |
-| `listening` | amplitude ring | interim transcript | mic on |
-| `thinking` | rotating sweep | last user line | mic paused |
-| `speaking` | pulse w/ playback | assistant text (karaoke optional) | TTS playing |
-| `paused`/`muted` | dimmed | "Muted" | mic off |
-| `error` | danger tint settle | error message | — |
-| `ended` | fade out | — | — |
+| State | Orb | Caption | Mic | TTS |
+| --- | --- | --- | --- | --- |
+| `connecting` | settle-in | "Starting…" | warming | — |
+| `listening` | amplitude bloom (tracks user) | live interim transcript | open (VAD) | — |
+| `thinking` | gentle rotating sweep | last user line | paused | — |
+| `working` | sweep + tool chip | tool status | paused | — |
+| `speaking` | pulse synced to playback | assistant text (sentence highlight) | monitoring for barge-in | playing |
+| `muted` | dimmed ring | "Muted" | off | — |
+| `error` | danger settle | error + Retry | — | — |
+| `ended` | fade out | — | off | — |
 
-- **Loop (TTS path, default per [../03-api-integration.md](../03-api-integration.md) §5):**
-  capture (VAD) → `gpt-4o-transcribe` → `gpt-5.4` (stream) → TTS playback → back to
-  listening. Each completed turn is written to the thread as user/assistant messages (so
-  it continues in text after exit).
-- **Barge-in:** if mic detects speech during `speaking`, duck/stop playback and return to
-  `listening` (approximate on TTS path; native on Realtime path if adopted).
-- **Controls:** Mute (mic), Keyboard (switch to text — exits to thread with composer
-  focused), End (exit). Captions toggle shows/hides the live text (default on for a11y).
-- **States/fallbacks:** `mic-denied` → explain + route to V-05; `tts-unavailable` →
-  read-aloud disabled, still transcribes + shows text replies; `offline`/AI error →
-  ErrorState with Retry/End.
-- **Reduced motion:** orb becomes static with a textual state label; no pulsing.
-- **Responsive:** compact full-screen; expanded centered overlay (orb larger, controls
-  centered).
-- **Acceptance:** full spoken loop works; turns persist to the thread; captions present;
-  mute/keyboard/end function; reduced-motion + denial + error paths handled; orb reflects
-  each machine state.
+- **Controls:**
+  - **Mute** — actually gates the mic (stops VAD/endpointing), orb dims; tap to unmute. Not cosmetic.
+  - **Keyboard** — exit to the thread with the composer focused (the conversation is already there).
+  - **End (⏹)** — stop everything, persist, return to the thread.
+  - **Captions (CC)** — show/hide live text; default from Settings → Voice → *Live captions* (on for
+    a11y).
+  - **Settings (⚙)** — quick access to voice / rate / mic-sensitivity (Settings → Voice).
+- **Persistence & sync:** because each turn is a real run, user + assistant messages are written
+  server-side, synced to every device, and fed to memory extraction — identical to text chat. There
+  is no separate "voice persistence" path. (A retained audio attachment is optional, out of scope
+  for v1.)
+- **Settings honored (Settings → Voice):** voice selection, speaking rate, mic sensitivity (VAD
+  endpoint), captions default, dictation auto-stop. These must be wired (today they are inert).
+- **Latency targets:** end-of-speech → first spoken word ≤ ~1.5 s on a warm path (transcribe + first
+  token + first-sentence TTS overlapped); barge-in → silence < 150 ms.
+- **Fallbacks:** `mic-denied` → explain + V-05; `transcribe-unavailable` → can't run voice, offer
+  dictation/text; `tts-unavailable` → keep the full loop but show text replies silently; `offline` /
+  run error → ErrorState with Retry/End; a failed run settles the orb to `error` with the partial
+  transcript preserved.
+- **Reduced motion:** orb becomes a static disc with a textual state label; no pulsing/sweeps.
+- **Responsive:** compact full-screen (mobile); centered overlay with a larger orb (desktop).
+- **Acceptance:** continuous VAD loop with **no taps**; turns go through `POST /runs` (memory + tools
+  + skills present — verify with a tool turn and a memory turn); **sentence-streamed** TTS;
+  **barge-in** stops speech < 150 ms and starts a new turn; mute truly gates the mic; captions +
+  keyboard + end work; voice / rate / sensitivity from Settings are applied; reduced-motion +
+  denial + tts-down + error paths handled.
+
+> **Realtime (Advanced Voice) — future.** A native speech-to-speech path via the Realtime API
+> (server-minted ephemeral token, client socket) would cut latency and make barge-in native. It is a
+> later enhancement; **v1 ships the STT → run → TTS loop above**, which already delivers ChatGPT's
+> standard-voice experience while keeping full agentic parity.
 
 ---
 
