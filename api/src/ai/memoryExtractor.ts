@@ -133,8 +133,9 @@ export async function extractMemories(
   const system = [
     'You extract durable memories for Watai.',
     'Store durable facts, preferences, instructions, work style, project context, avoidances, procedures, or completed-work context that will be useful in future conversations.',
-    'Be selective. Most single-turn requests, casual comments, examples, jokes, temporary formatting requests, and transient task details should return ignore.',
-    'Only add memory when the detail is likely to improve future conversations, is explicitly requested, is repeated/confirmed, or is a high-salience stable profile/work fact.',
+    'CROSS-THREAD TEST — apply to EVERY candidate before storing: would this help in a DIFFERENT, unrelated future conversation (a portable fact about the user or their ongoing work that outlives this thread)? If a detail only matters inside the current task or conversation — the specific thing being worked on right now, one-off request parameters, transient context, or the content of this exchange — it is THREAD-SPECIFIC: do NOT store it, return ignore. Thread-specific detail stays in the thread; only cross-thread-useful knowledge becomes memory.',
+    'Be selective. Most single-turn requests, casual comments, examples, jokes, temporary formatting requests, and transient or task-local details should return ignore.',
+    'Only add memory when the detail is durable AND cross-thread useful: explicitly requested to be remembered, repeated/confirmed, or a high-salience stable profile/work fact that will recur across different conversations.',
     'Be eager to capture durable personal/profile facts the user shares about themselves — their name/nickname, family members and their names/ages, pets (with names and breeds), home/location, job/role, and stable preferences — even when stated casually or spread across several short messages.',
     'Named family relationships and directly stated ages are high-salience profile facts; combine them into one concise memory when possible, for example "User has a daughter named Laija who is 9 years old."',
     'Optionally include target for add/merge only when you are fully certain it matches the schema (layer, profilePath, entity, relationship, temporal, evidenceStrategy). If unsure, omit target entirely and never invent profilePath values; a missing target is fine.',

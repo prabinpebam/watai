@@ -123,7 +123,7 @@ describe('MemoryContextService — relevance channel', () => {
 });
 
 describe('MemoryContextService — profile channel', () => {
-  it('injects an always-on identity profile and never includes sensitive memories', async () => {
+  it('falls back to an always-on identity profile when no embedder is configured (cannot judge relevance), and never includes sensitive memories', async () => {
     const store = new InMemoryMemoryStore();
     const ctx = new MemoryContextService(store, settingsReader(), { profile: true });
     await store.put(rec({ id: 'm1', kind: 'fact', text: 'User name is Prabin.', salience: 0.9 }));
@@ -133,6 +133,26 @@ describe('MemoryContextService — profile channel', () => {
     expect(block.profile ?? '').toContain('Prabin');
     expect(block.profile ?? '').not.toContain('SSN');
     expect(block.retrievalMode).toBe('profile');
+  });
+
+  it('relevance-gates the profile: no profile for a query unrelated to anything known', async () => {
+    const store = new InMemoryMemoryStore();
+    const ctx = new MemoryContextService(store, settingsReader(), { embedder: stubEmbedder, retriever: new InProcessRetriever(store), profile: true });
+    await store.put(rec({ id: 'm1', kind: 'fact', text: 'User name is Prabin.', salience: 0.9, embedding: stubEmbed('dog') }));
+
+    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: 'what is the capital of France?', now: NOW, creds: CREDS });
+    expect(block.profile).toBeUndefined();
+    expect(block.memories).toEqual([]);
+    expect(block.retrievalMode).toBe('empty');
+  });
+
+  it('injects the profile when the query relates to something known (gate opens)', async () => {
+    const store = new InMemoryMemoryStore();
+    const ctx = new MemoryContextService(store, settingsReader(), { embedder: stubEmbedder, retriever: new InProcessRetriever(store), profile: true });
+    await store.put(rec({ id: 'm1', kind: 'fact', text: 'User name is Prabin.', salience: 0.9, embedding: stubEmbed('dog') }));
+
+    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: 'tell me about my dog', now: NOW, creds: CREDS });
+    expect(block.profile ?? '').toContain('Prabin');
   });
 
   it('combines profile with vector retrieval when both are enabled', async () => {

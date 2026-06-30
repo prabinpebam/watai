@@ -37,6 +37,9 @@ const DEFAULT_TOKEN_BUDGET = 400;
 const MAX_SELECTED_MEMORIES = 3;
 const VECTOR_CANDIDATE_LIMIT = 200;
 const RELEVANCE_FLOOR = 0.25;
+// The always-on profile is relevance-gated a touch below the retrieval floor: identity grounding
+// should surface for queries related to what we know about the user, but never on unrelated ones.
+const PROFILE_RELEVANCE_FLOOR = 0.2;
 const W_RELEVANCE = 0.6;
 const W_IMPORTANCE = 0.25;
 const W_RECENCY = 0.15;
@@ -49,6 +52,23 @@ function estimateTokens(text: string): number {
 
 function clamp01(value: number): number {
   return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+/** Cosine similarity clamped to 0..1 (negatives treated as not-similar). Local copy so the read
+ *  path's profile relevance gate does not depend on the retriever adapter. */
+function cosine(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0;
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  if (na === 0 || nb === 0) return 0;
+  const c = dot / (Math.sqrt(na) * Math.sqrt(nb));
+  return c > 0 ? Math.min(1, c) : 0;
 }
 
 /** Composite relevance·importance·recency score used to rank vector candidates. */
@@ -91,17 +111,27 @@ export class MemoryContextService {
             .then((p) => p.memories)
             .catch(() => [])
         : [];
-    const base = retrievalOn ? await this.buildVector(input, candidates) : { ...EMPTY, latencyBudgetMs: 250 };
-    return this.profileEnabled ? this.withProfile(base, input, candidates) : base;
+    // Embed the query once and reuse it for the relevance channel AND the profile relevance gate.
+    const queryVec = retrievalOn
+      ? await this.embedder!.embed(input.creds!, input.latestUserText).catch((e) => {
+          console.warn('[memory] query embed failed', e instanceof Error ? e.message : String(e));
+          return null;
+        })
+      : null;
+    const base = retrievalOn ? await this.buildVector(input, candidates, queryVec) : { ...EMPTY, latencyBudgetMs: 250 };
+    if (!this.profileEnabled) return base;
+    // Relevance-gate the always-on profile: inject identity grounding only when the query relates to
+    // something we know about the user (at least one active fact clears the profile floor). Without an
+    // embedder configured we cannot judge relevance, so fall back to always-on (legacy behavior).
+    const profileRelevant = queryVec
+      ? candidates.some((m) => m.embedding?.length && cosine(queryVec, m.embedding) >= PROFILE_RELEVANCE_FLOOR)
+      : true;
+    return profileRelevant ? this.withProfile(base, input, candidates) : base;
   }
 
-  /** Semantic retrieval: embed the query, vector-rank candidates above a relevance floor.
-   *  Embedding failure or no relevant match yields an empty block (the reply is never blocked). */
-  private async buildVector(input: MemoryContextInput, candidates: MemoryRecord[]): Promise<MemoryContextBlock> {
-    const queryVec = await this.embedder!.embed(input.creds!, input.latestUserText).catch((e) => {
-      console.warn('[memory] query embed failed', e instanceof Error ? e.message : String(e));
-      return null;
-    });
+  /** Semantic retrieval: vector-rank candidates above a relevance floor against the (pre-computed)
+   *  query embedding. A missing embedding or no relevant match yields an empty block (never blocks). */
+  private async buildVector(input: MemoryContextInput, candidates: MemoryRecord[], queryVec: number[] | null): Promise<MemoryContextBlock> {
     if (!queryVec) return { ...EMPTY, latencyBudgetMs: 250 };
     const scored = await this.retriever!
       .retrieve(input.userId, queryVec, { now: input.now, limit: MAX_SELECTED_MEMORIES, candidateLimit: VECTOR_CANDIDATE_LIMIT, candidates })
