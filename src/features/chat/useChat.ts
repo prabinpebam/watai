@@ -48,9 +48,24 @@ async function serverRunTools(forceCodeInterpreter = false): Promise<string[]> {
   return tools;
 }
 
+// Skills (which `/tags` are usable) change rarely, so cache the list briefly. It sits on the send
+// critical path (parsing `/tags` before the run is submitted), and re-listing on every message added
+// a ~1s round-trip to time-to-first-token. Cache only on success so a transient failure never
+// poisons a good list; fall back to the last-known set on error.
+let skillsCache: { at: number; names: Set<string> } | null = null;
+const SKILLS_TTL_MS = 5 * 60_000;
 async function activeSkillNames(): Promise<Set<string>> {
-  const skills = await skillsApi.list().catch(() => []);
-  return new Set(skills.filter((skill) => skill.enabled && skill.status === 'ready').map((skill) => skill.name));
+  if (skillsCache && Date.now() - skillsCache.at < SKILLS_TTL_MS) return skillsCache.names;
+  try {
+    const skills = await skillsApi.list();
+    const names = new Set(
+      skills.filter((skill) => skill.enabled && skill.status === 'ready').map((skill) => skill.name),
+    );
+    skillsCache = { at: Date.now(), names };
+    return names;
+  } catch {
+    return skillsCache?.names ?? new Set<string>();
+  }
 }
 
 function taggedSkillNames(text: string, available: Set<string>): string[] {

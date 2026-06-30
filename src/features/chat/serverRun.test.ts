@@ -27,6 +27,7 @@ const ack = { runId: 'r1', assistantMessageId: 'm2', status: 'queued' as const }
 
 function baseDeps(over: Partial<ServerRunDeps> = {}): ServerRunDeps {
   return {
+    ensureThread: vi.fn(async () => {}),
     sync: vi.fn(async () => new Set<string>()),
     submitRun: vi.fn(async () => ack),
     getRun: vi.fn(async () => runRec('running')),
@@ -41,12 +42,11 @@ function baseDeps(over: Partial<ServerRunDeps> = {}): ServerRunDeps {
 }
 
 describe('runOnServer', () => {
-  it('syncs (pushes the thread) before submitting so the server can find it', async () => {
+  it('ensures the thread exists before submitting so the server can find it', async () => {
     const order: string[] = [];
     const deps = baseDeps({
-      sync: vi.fn(async () => {
-        order.push('sync');
-        return new Set<string>();
+      ensureThread: vi.fn(async () => {
+        order.push('ensureThread');
       }),
       submitRun: vi.fn(async () => {
         order.push('submit');
@@ -57,7 +57,7 @@ describe('runOnServer', () => {
 
     await runOnServer(deps, 't1', { text: 'hi', clientMessageId: 'm1' });
 
-    expect(order[0]).toBe('sync');
+    expect(order[0]).toBe('ensureThread');
     expect(order[1]).toBe('submit');
     expect(deps.submitRun).toHaveBeenCalledWith('t1', { text: 'hi', clientMessageId: 'm1' });
   });

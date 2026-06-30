@@ -12,7 +12,13 @@ import type { Message } from '../../lib/types';
 import type { RunRecord, SubmitRunBody, SubmitRunResult } from '../../data/cloud/types';
 
 export interface ServerRunDeps {
-  /** Push local changes + pull remote deltas; resolves with the thread ids that changed locally. */
+  /** Ensure the thread exists server-side so `submitRun` can find it. Idempotent and cheap (one
+   *  small write that returns the existing row untouched on a repeat) — replaces the full
+   *  pre-submit bidirectional sync on the time-to-first-token path. `POST /runs` appends the user
+   *  message itself (idempotent on `clientMessageId`), so only the thread row needs to pre-exist. */
+  ensureThread: (threadId: string) => Promise<void>;
+  /** Push local changes + pull remote deltas; resolves with the thread ids that changed locally.
+   *  Used only for the post-completion reconcile (title/preview), off the first-token path. */
   sync: () => Promise<Set<string>>;
   submitRun: (threadId: string, body: SubmitRunBody) => Promise<SubmitRunResult>;
   getRun: (threadId: string, runId: string) => Promise<RunRecord>;
@@ -64,8 +70,11 @@ export async function runOnServer(
   const interval = deps.pollIntervalMs ?? 450;
   const timeout = deps.timeoutMs ?? 5 * 60_000;
 
-  // Push the lazily-created thread + the user message so the server can find the thread on submit.
-  deps.onThreadsChanged(await deps.sync());
+  // Ensure the lazily-created thread exists server-side so the submit can find it. This is a single
+  // idempotent write instead of a full bidirectional sync — the submit appends the user message
+  // itself, so the previous pre-submit `sync()` only added serial round-trips before the first
+  // token. The full reconcile (title/preview, remote deltas) still runs after the run finishes.
+  await deps.ensureThread(threadId);
 
   const ack = await deps.submitRun(threadId, body);
 

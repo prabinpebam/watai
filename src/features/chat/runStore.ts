@@ -134,6 +134,15 @@ export const useRuns = create<RunsStore>((set, get) => ({
     try {
       const { run, assistant } = await runOnServer(
         {
+          ensureThread: async (tid) => {
+            // One idempotent server write so the submit can find the thread, instead of a full
+            // pre-submit sync. Skip local-only temporary threads (the server rejects them); the
+            // server create returns the existing row untouched on a repeat. Best-effort: a failure
+            // here just means the submit may 404, which surfaces as a normal error toast.
+            const t = await repo.getThread(tid).catch(() => null);
+            if (t?.temporary) return;
+            await cloudApi.createThread({ id: tid, title: t?.title || 'New chat' }).catch(() => {});
+          },
           sync: syncNow,
           submitRun: async (tid, b) => {
             const ack = await cloudApi.submitRun(tid, b);
