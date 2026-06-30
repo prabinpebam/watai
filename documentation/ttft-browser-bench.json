@@ -1,0 +1,205 @@
+{
+  "ranAt": "2026-06-30T10:14:05.356Z",
+  "url": "https://prabinpebam.github.io/watai/",
+  "reps": 5,
+  "byPrompt": [
+    {
+      "prompt": "Hi",
+      "n": 5,
+      "ttftMin": 66,
+      "ttftMed": 9166,
+      "ttftP95": 20617,
+      "totalMed": 13646,
+      "runsMed": 0
+    },
+    {
+      "prompt": "What is the capital of France?",
+      "n": 5,
+      "ttftMin": 7668,
+      "ttftMed": 8482,
+      "ttftP95": 17190,
+      "totalMed": 13237,
+      "runsMed": 0
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "n": 5,
+      "ttftMin": 7735,
+      "ttftMed": 8124,
+      "ttftP95": 18396,
+      "totalMed": 13677,
+      "runsMed": 0
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "n": 5,
+      "ttftMin": 7960,
+      "ttftMed": 8086,
+      "ttftP95": 8344,
+      "totalMed": 13520,
+      "runsMed": 0
+    }
+  ],
+  "rows": [
+    {
+      "prompt": "Hi",
+      "rep": 1,
+      "ttftMs": 11209,
+      "totalMs": 15079,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Hi",
+      "rep": 2,
+      "ttftMs": 20617,
+      "totalMs": 25327,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Hi",
+      "rep": 3,
+      "ttftMs": 66,
+      "totalMs": 10383,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Hi",
+      "rep": 4,
+      "ttftMs": 8725,
+      "totalMs": 13228,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Hi",
+      "rep": 5,
+      "ttftMs": 9166,
+      "totalMs": 13646,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "What is the capital of France?",
+      "rep": 1,
+      "ttftMs": 7668,
+      "totalMs": 11615,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "What is the capital of France?",
+      "rep": 2,
+      "ttftMs": 8482,
+      "totalMs": 12504,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "What is the capital of France?",
+      "rep": 3,
+      "ttftMs": 8491,
+      "totalMs": 13292,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "What is the capital of France?",
+      "rep": 4,
+      "ttftMs": 8028,
+      "totalMs": 13237,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "What is the capital of France?",
+      "rep": 5,
+      "ttftMs": 17190,
+      "totalMs": 21483,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "rep": 1,
+      "ttftMs": 7735,
+      "totalMs": 13027,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "rep": 2,
+      "ttftMs": 18396,
+      "totalMs": 23662,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "rep": 3,
+      "ttftMs": 8124,
+      "totalMs": 13677,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "rep": 4,
+      "ttftMs": 8238,
+      "totalMs": 13242,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "rep": 5,
+      "ttftMs": 7947,
+      "totalMs": 16473,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "rep": 1,
+      "ttftMs": 7960,
+      "totalMs": 13520,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "rep": 2,
+      "ttftMs": 8344,
+      "totalMs": 14191,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "rep": 3,
+      "ttftMs": 8086,
+      "totalMs": 13249,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "rep": 4,
+      "ttftMs": 8045,
+      "totalMs": 13743,
+      "runsMs": 0,
+      "ok": true
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "rep": 5,
+      "ttftMs": 8246,
+      "totalMs": 13160,
+      "runsMs": 0,
+      "ok": true
+    }
+  ]
+}
