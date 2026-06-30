@@ -107,6 +107,19 @@ const citationSchema = z
 
 export type MessageCitation = z.infer<typeof citationSchema>;
 
+/** An image surfaced by web search: shown inline and offered as a one-tap chat attachment. The bytes
+ *  are NOT stored here — `url` is the external source, fetched on demand when the user taps "Use". */
+const webImageSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    url: z.string().url().max(2048),
+    description: z.string().max(1000).optional(),
+    sourceUrl: z.string().url().max(2048).optional(),
+  })
+  .strict();
+
+export type MessageWebImage = z.infer<typeof webImageSchema>;
+
 /** Memories selected into an assistant response context, stored for transparent UI. */
 const memoryRefSchema = z
   .object({
@@ -151,6 +164,7 @@ const appendSchema = z
     attachments: z.array(attachmentSchema).max(16).optional(),
     toolCalls: z.array(toolCallSchema).max(32).optional(),
     citations: z.array(citationSchema).max(64).optional(),
+    webImages: z.array(webImageSchema).max(12).optional(),
     memoryRefs: z.array(memoryRefSchema).max(16).optional(),
     artifacts: z.array(artifactSchema).max(16).optional(),
   })

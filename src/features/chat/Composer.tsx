@@ -107,6 +107,8 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   const recStartRef = useRef(0);
   const [recElapsed, setRecElapsed] = useState(0);
   const pushToast = useUi((s) => s.pushToast);
+  const stagedFiles = useUi((s) => s.stagedFiles);
+  const clearStagedFiles = useUi((s) => s.clearStagedFiles);
 
   // Auto-grow
   useEffect(() => {
@@ -173,6 +175,14 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
       return prev.filter((p) => p.id !== id);
     });
   };
+
+  // Consume files staged from elsewhere (e.g. a web image's "Use" action) into the pending list.
+  useEffect(() => {
+    if (!stagedFiles.length) return;
+    addFiles(stagedFiles);
+    clearStagedFiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stagedFiles]);
 
   const submit = () => {
     if (streaming || locked) return;

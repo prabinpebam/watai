@@ -16,13 +16,44 @@ export interface TavilySearchResponse {
   query: string;
   answer?: string;
   results: TavilyResult[];
+  /** Present when include_images is requested. `string[]` normally; `{url,description}[]` when
+   *  include_image_descriptions is also on. */
+  images?: Array<string | { url?: string; description?: string }>;
   response_time?: number;
+}
+
+export interface TavilyImage {
+  url: string;
+  description?: string;
+}
+
+/** Normalize Tavily's `images` (either `string[]` or `{url,description}[]`) into a deduped, capped,
+ *  http(s)-only list. Pure — unit-tested. */
+export function normalizeTavilyImages(
+  images: TavilySearchResponse['images'],
+  cap = 8,
+): TavilyImage[] {
+  if (!Array.isArray(images)) return [];
+  const out: TavilyImage[] = [];
+  const seen = new Set<string>();
+  for (const item of images) {
+    const url = (typeof item === 'string' ? item : (item?.url ?? '')).trim();
+    if (!/^https?:\/\//i.test(url) || seen.has(url)) continue;
+    seen.add(url);
+    const description =
+      typeof item === 'object' && item?.description ? String(item.description).slice(0, 1000) : undefined;
+    out.push(description ? { url, description } : { url });
+    if (out.length >= cap) break;
+  }
+  return out;
 }
 
 export interface TavilySearchOptions {
   maxResults?: number;
   topic?: 'general' | 'news' | 'finance';
   timeRange?: 'day' | 'week' | 'month' | 'year';
+  includeImages?: boolean;
+  includeImageDescriptions?: boolean;
 }
 
 export interface TavilyDeps {
@@ -76,6 +107,8 @@ export async function tavilySearch(
     include_favicon: true,
     topic: opts.topic ?? 'general',
     ...(opts.timeRange ? { time_range: opts.timeRange } : {}),
+    ...(opts.includeImages ? { include_images: true } : {}),
+    ...(opts.includeImageDescriptions ? { include_image_descriptions: true } : {}),
   };
   const res = await tavilyFetch('/search', { method: 'POST', body: JSON.stringify(body) }, deps);
   if (!res.ok) await tavilyError(res);

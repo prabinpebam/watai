@@ -159,6 +159,15 @@ export interface Citation {
   content?: string;
 }
 
+/** An image surfaced by web search: shown inline and offered as a one-tap chat attachment. The bytes
+ *  are fetched on demand (via /web/image) only when the user taps "Use". */
+export interface WebImage {
+  id: Id;
+  url: string;
+  description?: string;
+  sourceUrl?: string;
+}
+
 /** Memories selected into an assistant response context, shown in the Memory Used panel. */
 export interface MessageMemoryRef {
   memoryId: Id;
@@ -186,6 +195,8 @@ export interface Message {
   /** Agentic activity (additive/optional). */
   toolCalls?: ToolCall[];
   citations?: Citation[];
+  /** Images surfaced by web search (inline strip + one-tap "Use" to attach). */
+  webImages?: WebImage[];
   memoryRefs?: MessageMemoryRef[];
   /** Files the agent generated this message (code interpreter outputs). */
   artifacts?: Artifact[];

@@ -7,6 +7,7 @@ import rehypeHighlight from 'rehype-highlight';
 import 'katex/dist/katex.min.css';
 import { Icon } from '../../design/icons';
 import { Lightbox } from './Lightbox';
+import { attachWebImage } from './webImageActions';
 
 function extractText(node: ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') return String(node);
@@ -15,6 +16,38 @@ function extractText(node: ReactNode): string {
     return extractText((node as any).props.children);
   }
   return '';
+}
+
+/** A markdown image with a hover "Use" action: fetch its bytes (CORS-safe) and stage it as a composer
+ *  attachment so an external image the assistant showed can be edited without a manual upload. */
+function MdImage({ src, alt, onOpen }: { src: string; alt: string; onOpen: () => void }) {
+  const [using, setUsing] = useState(false);
+  const usable = /^https?:\/\//i.test(src);
+  return (
+    <span className="md-img-wrap">
+      <img className="md-img" src={src} alt={alt} loading="lazy" onClick={onOpen} />
+      {usable && (
+        <button
+          type="button"
+          className="md-img-use"
+          title="Add this image to your message"
+          disabled={using}
+          onClick={async (e) => {
+            e.stopPropagation();
+            setUsing(true);
+            try {
+              await attachWebImage(src);
+            } finally {
+              setUsing(false);
+            }
+          }}
+        >
+          <Icon name="add-image" size={14} />
+          <span>{using ? 'Adding…' : 'Use'}</span>
+        </button>
+      )}
+    </span>
+  );
 }
 
 /** Which live preview, if any, a fenced block supports. SVG is detected from the language or a
@@ -167,13 +200,7 @@ export const Markdown = memo(function Markdown({ content }: MarkdownProps) {
           ),
           img: ({ src, alt }) =>
             typeof src === 'string' ? (
-              <img
-                className="md-img"
-                src={src}
-                alt={alt || ''}
-                loading="lazy"
-                onClick={() => setLight({ src, alt: alt || '' })}
-              />
+              <MdImage src={src} alt={alt || ''} onOpen={() => setLight({ src, alt: alt || '' })} />
             ) : null,
         }}
       >

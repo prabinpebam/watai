@@ -338,6 +338,11 @@ export class WataiApiClient implements CloudApi {
     return this.request('POST', '/ai/speech', body);
   }
 
+  /** Fetch a web image's bytes server-side (CORS-safe, SSRF-guarded) so it can be attached. */
+  fetchWebImage(body: { url: string }): Promise<{ dataBase64: string; mime: string; bytes: number }> {
+    return this.request('POST', '/web/image', body);
+  }
+
   chatComplete(messages: Array<{ role: string; content: string }>): Promise<{ text: string }> {
     return this.request('POST', '/ai/chat', { messages });
   }
@@ -467,6 +472,7 @@ export interface CloudApi {
     prompt?: string;
   }): Promise<{ text: string }>;
   synthesizeSpeech(body: { input: string; voice?: string; speed?: number }): Promise<{ audioBase64: string; mime: string }>;
+  fetchWebImage(body: { url: string }): Promise<{ dataBase64: string; mime: string; bytes: number }>;
   chatComplete(messages: Array<{ role: string; content: string }>): Promise<{ text: string }>;
   generateImage(body: { prompt: string; size?: string }): Promise<{ images: Array<{ b64: string }> }>;
   createImages(body: CreateImagesBody): Promise<StudioImage[]>;

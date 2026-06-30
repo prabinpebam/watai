@@ -55,6 +55,8 @@ interface UiState {
   sourcePane: { citations: Citation[]; index: number } | null;
   /** Open thread-files pane (the thread id whose knowledge base is shown) — transient. */
   filesPane: string | null;
+  /** Files staged into the composer (e.g. a web image's bytes via "Use") — transient. */
+  stagedFiles: File[];
 
   setTheme: (t: Theme) => void;
   setTextScale: (s: TextScale) => void;
@@ -82,6 +84,8 @@ interface UiState {
   openFilesPane: (threadId: string) => void;
   toggleFilesPane: (threadId: string) => void;
   closeFilesPane: () => void;
+  stageFiles: (files: File[]) => void;
+  clearStagedFiles: () => void;
 }
 
 export const useUi = create<UiState>()(
@@ -109,6 +113,7 @@ export const useUi = create<UiState>()(
       confirmRequest: null,
       sourcePane: null,
       filesPane: null,
+      stagedFiles: [],
 
       setTheme: (theme) => set({ theme }),
       setTextScale: (textScale) => set({ textScale }),
@@ -164,6 +169,8 @@ export const useUi = create<UiState>()(
       toggleFilesPane: (threadId) =>
         set((s) => ({ filesPane: s.filesPane === threadId ? null : threadId, sourcePane: null })),
       closeFilesPane: () => set({ filesPane: null }),
+      stageFiles: (files) => set((s) => ({ stagedFiles: [...s.stagedFiles, ...files] })),
+      clearStagedFiles: () => set({ stagedFiles: [] }),
     }),
     {
       name: 'watai.ui',

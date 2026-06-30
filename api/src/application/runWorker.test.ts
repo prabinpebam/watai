@@ -155,6 +155,28 @@ describe('processRun', () => {
     expect((await ctx.threadStore.get('userA', 't1'))?.lastMessagePreview).toBe('Hi there');
   });
 
+  it('accumulates deduped web images from the agent onto the assistant message', async () => {
+    await seed(ctx);
+    await processRun(
+      ctx.deps(
+        script([
+          { type: 'text', delta: 'Here are some cats' },
+          { type: 'webImage', webImage: { url: 'https://img.example/a.jpg', description: 'a cat' } },
+          { type: 'webImage', webImage: { url: 'https://img.example/a.jpg' } }, // duplicate URL — ignored
+          { type: 'webImage', webImage: { url: 'https://img.example/b.jpg' } },
+          { type: 'done' },
+        ]),
+      ),
+      't1',
+      'r1',
+    );
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.webImages).toHaveLength(2);
+    expect(msg?.webImages?.[0]).toMatchObject({ url: 'https://img.example/a.jpg', description: 'a cat' });
+    expect(msg?.webImages?.[1]).toMatchObject({ url: 'https://img.example/b.jpg' });
+    expect(msg?.webImages?.[0].id).toMatch(/^wimg1-/);
+  });
+
   it('retries cleanly when the first agent attempt stalls with no output', async () => {
     await seed(ctx);
     let calls = 0;

@@ -623,6 +623,32 @@ describe('cloud mappers', () => {
     ]);
   });
 
+  it('round-trips webImages through messageFromRecord and appendBodyFromMessage', () => {
+    const rec: MessageRecord = {
+      id: 'm1',
+      threadId: 't1',
+      userId: 'u',
+      role: 'assistant',
+      content: 'images',
+      status: 'complete',
+      createdAt: 'x',
+      deletedAt: null,
+      webImages: [
+        { id: 'w1', url: 'https://img.example/a.jpg', description: 'a cat' },
+        { id: 'w2', url: 'https://img.example/b.png' },
+      ],
+    };
+    const m = messageFromRecord(rec);
+    expect(m.webImages).toEqual([
+      { id: 'w1', url: 'https://img.example/a.jpg', description: 'a cat' },
+      { id: 'w2', url: 'https://img.example/b.png' },
+    ]);
+    expect(appendBodyFromMessage(m).webImages).toEqual([
+      { id: 'w1', url: 'https://img.example/a.jpg', description: 'a cat' },
+      { id: 'w2', url: 'https://img.example/b.png' },
+    ]);
+  });
+
   it('messageFromRecord surfaces synced attachments (resolved later via SAS)', () => {
     const rec: MessageRecord = {
       id: 'm1',

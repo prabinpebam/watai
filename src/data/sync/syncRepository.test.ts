@@ -494,6 +494,9 @@ class FakeCloud implements CloudApi {
   async synthesizeSpeech() {
     return { audioBase64: '', mime: 'audio/mpeg' };
   }
+  async fetchWebImage() {
+    return { dataBase64: '', mime: 'image/png', bytes: 0 };
+  }
   async chatComplete() {
     return { text: '' };
   }

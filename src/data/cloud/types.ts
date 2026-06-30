@@ -306,6 +306,7 @@ export interface MessageRecord {
   attachments?: AttachmentRecord[];
   toolCalls?: ToolCallRecord[];
   citations?: CitationRecord[];
+  webImages?: WebImageRecord[];
   memoryRefs?: MessageMemoryRefRecord[];
   artifacts?: ArtifactRecord[];
   status: ServerMessageStatus;
@@ -342,6 +343,14 @@ export interface CitationRecord {
   fileId?: string;
   startIndex?: number;
   endIndex?: number;
+}
+
+/** An image surfaced by web search (inline + one-tap "Use" to attach). */
+export interface WebImageRecord {
+  id: string;
+  url: string;
+  description?: string;
+  sourceUrl?: string;
 }
 
 /** Memories selected into an assistant response context. */
@@ -382,6 +391,7 @@ export interface AppendMessageBody {
   attachments?: AttachmentRecord[];
   toolCalls?: ToolCallRecord[];
   citations?: CitationRecord[];
+  webImages?: WebImageRecord[];
   memoryRefs?: MessageMemoryRefRecord[];
 }
 
@@ -646,6 +656,7 @@ export function messageFromRecord(r: MessageRecord): Message {
       : {}),
     ...(r.toolCalls?.length ? { toolCalls: r.toolCalls.map((t) => ({ ...t })) } : {}),
     ...(r.citations?.length ? { citations: r.citations.map((c) => ({ ...c })) } : {}),
+    ...(r.webImages?.length ? { webImages: r.webImages.map((w) => ({ ...w })) } : {}),
     ...(r.memoryRefs?.length ? { memoryRefs: r.memoryRefs.map((m) => ({ ...m })) } : {}),
     ...(r.artifacts?.length
       ? {
@@ -728,6 +739,9 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
             ...(c.endIndex !== undefined ? { endIndex: c.endIndex } : {}),
           })),
         }
+      : {}),
+    ...(m.webImages?.length
+      ? { webImages: m.webImages.map((w) => ({ id: w.id, url: w.url, ...(w.description ? { description: w.description } : {}), ...(w.sourceUrl ? { sourceUrl: w.sourceUrl } : {}) })) }
       : {}),
     ...(m.memoryRefs?.length ? { memoryRefs: m.memoryRefs.map((memoryRef) => ({ ...memoryRef })) } : {}),
   };

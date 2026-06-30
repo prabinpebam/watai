@@ -60,6 +60,8 @@ import { createMemoryController } from './http/memoryController';
 import { createSkillsController } from './http/skillsController';
 import { createNegotiateController } from './http/negotiateController';
 import { createAiProxyController } from './http/aiProxyController';
+import { createWebController } from './http/webController';
+import { WebImageService } from './application/webImageService';
 import { AppError } from './domain/errors';
 import type { TokenVerifier } from './ports/tokenVerifier';
 import type { KeyWrapper } from './ports/keyWrapper';
@@ -83,6 +85,7 @@ export interface ApiContainer {
   skills: ReturnType<typeof createSkillsController>;
   negotiate: ReturnType<typeof createNegotiateController>;
   aiProxy: ReturnType<typeof createAiProxyController>;
+  web: ReturnType<typeof createWebController>;
   /** Dependencies the queue-triggered run worker needs to process a job. */
   runWorker: RunWorkerDeps;
   /** Dependencies the queue-triggered image worker needs to process a job. */
@@ -178,6 +181,7 @@ export function container(): ApiContainer {
     uploadOriginal: makeUploadImage(assetService),
   });
   const aiProxyService = new AiProxyService(credentialService);
+  const webImageService = new WebImageService();
   const skillCatalog = new SkillCatalogService(new CosmosSkillStore(), new SasSkillBlobStore(minter), clock);
   const skillProvisioner = createSkillProvisioner(aoaiFiles);
 
@@ -212,6 +216,7 @@ export function container(): ApiContainer {
     skills: createSkillsController(skillCatalog),
     negotiate: createNegotiateController(signalr),
     aiProxy: createAiProxyController(aiProxyService),
+    web: createWebController(webImageService),
     runWorker: {
       runStore,
       messageStore,

@@ -6,6 +6,7 @@ import type {
   MessageImage,
   MessageStatus,
   MessageToolCall,
+  MessageWebImage,
   Role,
 } from '../domain/message';
 
@@ -22,6 +23,8 @@ export interface MessageRecord {
   attachments?: MessageAttachment[];
   toolCalls?: MessageToolCall[];
   citations?: MessageCitation[];
+  /** Images surfaced by web search (inline + one-tap "Use" to attach). */
+  webImages?: MessageWebImage[];
   memoryRefs?: MessageMemoryRef[];
   /** Files the agent generated this message (code interpreter outputs). */
   artifacts?: MessageArtifact[];

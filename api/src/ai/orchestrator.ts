@@ -20,11 +20,19 @@ export interface Turn {
   images?: string[];
 }
 
+/** An image surfaced by a tool (e.g. web search) that the UI can render + offer to attach. */
+export interface WebImageItem {
+  url: string;
+  description?: string;
+  sourceUrl?: string;
+}
+
 /** Result of an executed tool: `output` goes back to the model; `image` renders in chat. */
 export interface ToolResult {
   output: string;
   image?: { b64: string; prompt?: string; size?: string; expandedPrompt?: string; model?: string };
   citations?: ResponsesCitation[];
+  webImages?: WebImageItem[];
 }
 
 export type ToolExecute = (name: string, args: Record<string, unknown>) => Promise<ToolResult>;
@@ -54,7 +62,8 @@ export type AgentEvent =
     }
   | { type: 'done' }
   | { type: 'error'; message: string; code?: AiErrorCode }
-  | { type: 'citation'; citation: ResponsesCitation };
+  | { type: 'citation'; citation: ResponsesCitation }
+  | { type: 'webImage'; webImage: WebImageItem };
 
 export interface RunAgentParams {
   /** Vault-resolved inference base URL (…/openai/v1) and key. */
@@ -191,6 +200,9 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
         outputs.push({ type: 'function_call_output', call_id: call.callId, output: result.output });
         if (result.citations) {
           for (const c of result.citations) yield { type: 'citation', citation: c };
+        }
+        if (result.webImages) {
+          for (const w of result.webImages) yield { type: 'webImage', webImage: w };
         }
         yield { type: 'tool', name: call.name, status: 'done', callId: call.callId };
       } catch (e) {

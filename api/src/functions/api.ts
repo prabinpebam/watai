@@ -220,6 +220,14 @@ app.http('assets-sas', {
   handler: methodDispatch({ POST: (c) => c.assets.requestSas }, invited),
 });
 
+// Fetch a web image's bytes server-side (CORS-safe, SSRF-guarded) so the client can attach it.
+app.http('web-image', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'web/image',
+  handler: methodDispatch({ POST: (c) => c.web.fetchImage }, invited),
+});
+
 // Agent Skills — user-scoped catalog (default toggles + uploaded skills, full CRUD).
 app.http('skills', {
   methods: ['GET', 'POST'],

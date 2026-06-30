@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import { AttachmentList, ArtifactList, GeneratedImages } from './Attachments';
+import { WebImages } from './WebImages';
 import { Avatar, IconButton, InlineAlert, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
@@ -475,6 +476,8 @@ export function AssistantMessage({
             <span />
           </div>
         ) : null}
+
+        {!isStreamingThis && message.webImages?.length ? <WebImages images={message.webImages} /> : null}
 
         {!isStreamingThis && message.citations && <SourcesStrip citations={message.citations} />}
 

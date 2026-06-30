@@ -98,6 +98,40 @@ describe('runAgent', () => {
     expect(events[events.length - 1]).toEqual({ type: 'done' });
   });
 
+  it('surfaces web images returned by a tool as webImage events', async () => {
+    const execute = vi.fn(async () => ({
+      output: 'found images',
+      webImages: [
+        { url: 'https://img.example/1.jpg', description: 'a cat' },
+        { url: 'https://img.example/2.jpg' },
+      ],
+    }));
+    const events = await collect(
+      runAgent({
+        ...base,
+        turns: [{ role: 'user', text: 'cat pictures' }],
+        tools: [],
+        execute,
+        streamFn: streamOf(
+          [
+            { type: 'created', responseId: 'r1' },
+            { type: 'functionCall', callId: 'c1', name: 'web_search', arguments: '{"query":"cat"}' },
+            { type: 'completed' },
+          ],
+          [
+            { type: 'created', responseId: 'r2' },
+            { type: 'text', delta: 'here' },
+            { type: 'completed' },
+          ],
+        ),
+      }),
+    );
+    const imgs = events.filter((e): e is Extract<typeof e, { type: 'webImage' }> => e.type === 'webImage');
+    expect(imgs).toHaveLength(2);
+    expect(imgs[0].webImage).toEqual({ url: 'https://img.example/1.jpg', description: 'a cat' });
+    expect(imgs[1].webImage.url).toBe('https://img.example/2.jpg');
+  });
+
   it('surfaces server-side tool activity (code interpreter) as tool cards', async () => {
     const events = await collect(
       runAgent({

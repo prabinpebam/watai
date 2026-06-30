@@ -3,7 +3,7 @@ import type { ServiceClock } from './threadService';
 import type { DecryptedCredentials } from './credentialService';
 import type { RunStore } from '../ports/runStore';
 import type { MessageRecord, MessageStore } from '../ports/messageStore';
-import type { ArtifactKind, MessageToolCall, MessageCitation, MessageImage, MessageArtifact, MessageMemoryRef } from '../domain/message';
+import type { ArtifactKind, MessageToolCall, MessageCitation, MessageImage, MessageArtifact, MessageMemoryRef, MessageWebImage } from '../domain/message';
 import { artifactKindForMime } from '../domain/message';
 import { ALLOWED_CONTENT_TYPES } from '../domain/asset';
 import type { Settings } from '../domain/settings';
@@ -18,7 +18,7 @@ import {
   type Turn,
 } from '../ai/orchestrator';
 import type { ResponsesCitation, ResponsesTool } from '../ai/responses';
-import { tavilySearch } from '../ai/tavily';
+import { tavilySearch, normalizeTavilyImages } from '../ai/tavily';
 import { editImage, generateImage } from '../ai/image';
 import { isAiError } from '../ai/errors';
 import { listContainerFiles, getContainerFile, mimeForFilename } from '../ai/containerFiles';
@@ -319,7 +319,11 @@ function makeExecute(
       if (!creds.tavilyKey) return { output: 'Web search is not configured.' };
       const query = String((args as { query?: unknown }).query ?? '').trim();
       if (!query) return { output: 'No search query was provided.' };
-      const r = await tavilySearch(query, { key: creds.tavilyKey, fetchImpl });
+      const r = await tavilySearch(
+        query,
+        { key: creds.tavilyKey, fetchImpl },
+        { includeImages: true, includeImageDescriptions: true },
+      );
       const citations: ResponsesCitation[] = r.results.map((x) => ({
         source: 'web',
         url: x.url,
@@ -327,11 +331,16 @@ function makeExecute(
         ...(x.content ? { content: x.content.slice(0, 1000) } : {}),
         ...(x.favicon ? { favicon: x.favicon } : {}),
       }));
+      const webImages = normalizeTavilyImages(r.images);
       const body = r.results
         .map((x, i) => `[${i + 1}] ${x.title}\n${x.url}\n${(x.content ?? '').slice(0, 500)}`)
         .join('\n\n');
-      const output = (r.answer ? `Answer: ${r.answer}\n\n` : '') + body;
-      return { output, citations };
+      const imageNote = webImages.length
+        ? '\n\nImages from the web (shown to the user; they can tap "Use" to attach one for editing):\n' +
+          webImages.map((im, i) => `(image ${i + 1}) ${im.url}${im.description ? ' — ' + im.description : ''}`).join('\n')
+        : '';
+      const output = (r.answer ? `Answer: ${r.answer}\n\n` : '') + body + imageNote;
+      return { output, citations, ...(webImages.length ? { webImages } : {}) };
     }
     if (name === 'generate_image') {
       const imageModel = creds.models.image;
@@ -546,6 +555,8 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   const toolCalls = new Map<string, MessageToolCall>();
   const citations: MessageCitation[] = [];
   const seenCitations = new Set<string>();
+  const webImages: MessageWebImage[] = [];
+  const seenWebImages = new Set<string>();
   const images: MessageImage[] = [];
   const artifacts: MessageArtifact[] = [];
   const requestedKinds = requestedArtifactKinds(run.prompt?.text ?? '');
@@ -591,6 +602,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     ...(model ? { model } : {}),
     ...(toolCalls.size ? { toolCalls: [...toolCalls.values()] } : {}),
     ...(citations.length ? { citations } : {}),
+    ...(webImages.length ? { webImages } : {}),
     ...(memoryRefs.length ? { memoryRefs } : {}),
     ...(images.length ? { images } : {}),
     ...(artifacts.length ? { artifacts } : {}),
@@ -856,6 +868,18 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         if (key && !seenCitations.has(key)) {
           seenCitations.add(key);
           citations.push(mapCitation(c));
+          await flush(true);
+        }
+      } else if (ev.type === 'webImage') {
+        const w = ev.webImage;
+        if (w.url && !seenWebImages.has(w.url) && webImages.length < 12) {
+          seenWebImages.add(w.url);
+          webImages.push({
+            id: `wimg${webImages.length + 1}-${run.assistantMessageId}`.slice(0, 64),
+            url: w.url.slice(0, 2048),
+            ...(w.description ? { description: w.description.slice(0, 1000) } : {}),
+            ...(w.sourceUrl ? { sourceUrl: w.sourceUrl.slice(0, 2048) } : {}),
+          });
           await flush(true);
         }
       } else if (ev.type === 'image' && !ev.partial && deps.uploadImage) {

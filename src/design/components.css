@@ -2644,6 +2644,95 @@ button.source-chip:hover {
   background: var(--color-media-bg);
 }
 
+/* Web image results (inline strip from web search) */
+.web-images {
+  margin: var(--space-3) 0;
+}
+.web-images__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+}
+.web-images__strip {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  scrollbar-width: thin;
+}
+.web-image {
+  flex: 0 0 auto;
+  width: 144px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface-1);
+}
+.web-image__hit {
+  display: block;
+  width: 100%;
+  height: 108px;
+  padding: 0;
+  border: none;
+  background: var(--color-surface-2);
+  cursor: zoom-in;
+}
+.web-image__hit img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.web-image__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+.web-image__src {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+.web-image__src span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.web-image__src:hover {
+  color: var(--color-accent);
+}
+.web-image__use {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: var(--text-caption-size);
+  color: var(--color-accent);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+}
+.web-image__use:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-strong);
+}
+.web-image__use:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Generated (assistant) images */
 .gen-images {
   margin: var(--space-2) 0;
