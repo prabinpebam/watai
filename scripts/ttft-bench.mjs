@@ -66,22 +66,41 @@ const p95 = (xs) => {
 };
 const r0 = (n) => Math.round(n);
 
-// Injected in-page: hooks fetch to time the POST /runs ack and logs structured [bench] lines.
+// Injected in-page (before app code via addInitScript + reload): hooks fetch to time every API
+// call, normalize its path, and capture the bearer token + api base for post-run thread cleanup.
 function instrument() {
   if (window.__benchInstalled) return;
   window.__benchInstalled = true;
-  window.__bench = { runsMs: 0 };
+  window.__bench = { calls: [], token: '', apiBase: '' };
+  const norm = (p) => p.replace(/\/[0-9A-Za-z_-]{16,}/g, '/:id').replace(/\?.*$/, '');
+  const authOf = (h) => {
+    if (!h) return '';
+    if (typeof h.get === 'function') return h.get('authorization') || '';
+    return h.Authorization || h.authorization || '';
+  };
   const of = window.fetch.bind(window);
   window.fetch = async (...args) => {
     const req = args[0];
     const url = typeof req === 'string' ? req : (req && req.url) || '';
-    const method = ((args[1] && args[1].method) || (req && req.method) || 'GET').toUpperCase();
+    const init = args[1] || {};
+    const method = (init.method || (req && req.method) || 'GET').toUpperCase();
+    const isApi = /\/api\//.test(url);
+    try {
+      const auth = authOf(init.headers);
+      if (isApi && auth) {
+        window.__bench.token = String(auth).replace(/^Bearer\s+/i, '');
+        const m = url.match(/^(.*\/api)\//);
+        if (m) window.__bench.apiBase = m[1];
+      }
+    } catch {
+      /* noop */
+    }
     const t = performance.now();
     const res = await of(...args);
     try {
-      if (method === 'POST' && /\/runs(\?|$)/.test(url)) {
-        window.__bench.runsMs = performance.now() - t;
-        console.log('[bench] POST /runs ' + Math.round(window.__bench.runsMs) + 'ms');
+      if (isApi) {
+        const u = new URL(url, location.href);
+        window.__bench.calls.push({ label: method + ' ' + norm(u.pathname), ms: performance.now() - t });
       }
     } catch {
       /* noop */
@@ -105,6 +124,11 @@ async function freshChat(page) {
 
 async function runOne(page, prompt) {
   await freshChat(page);
+  const threadId = (page.url().match(/#\/c\/([^/?]+)/) || [])[1] || null;
+  await page.evaluate(() => {
+    if (window.__bench) window.__bench.calls = [];
+  });
+  const before = await page.locator('.msg-group--assistant').count();
   await page.fill(SEL.composer, prompt);
   await page.waitForFunction(
     () => {
@@ -116,15 +140,15 @@ async function runOne(page, prompt) {
   );
   const t0 = performance.now();
   await page.locator(SEL.send).first().click();
-  // first assistant token rendered in the latest assistant group
+  // Wait for a NEW assistant group with non-empty content (avoids reading a stale prior bubble).
   await page.waitForFunction(
-    () => {
+    (n) => {
       const g = document.querySelectorAll('.msg-group--assistant');
-      const last = g[g.length - 1];
-      const md = last && last.querySelector('.md');
+      if (g.length <= n) return false;
+      const md = g[g.length - 1].querySelector('.md');
       return !!md && md.textContent.trim().length > 0;
     },
-    null,
+    before,
     { timeout: 90000 },
   );
   const ttftMs = performance.now() - t0;
@@ -138,8 +162,8 @@ async function runOne(page, prompt) {
     { timeout: 180000 },
   );
   const totalMs = performance.now() - t0;
-  const runsMs = await page.evaluate(() => (window.__bench && window.__bench.runsMs) || 0);
-  return { ttftMs: r0(ttftMs), totalMs: r0(totalMs), runsMs: r0(runsMs) };
+  const calls = await page.evaluate(() => (window.__bench && window.__bench.calls) || []);
+  return { ttftMs: r0(ttftMs), totalMs: r0(totalMs), threadId, calls };
 }
 
 async function acquire() {
@@ -181,6 +205,8 @@ async function main() {
   const { closable, page } = await acquire();
   await page.bringToFront().catch(() => {});
   await page.addInitScript(instrument);
+  // Reload so the fetch hook installs BEFORE app code (captures submit/negotiate/poll timings).
+  await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
   await page.evaluate(instrument);
   page.on('console', (m) => {
     const t = m.text();
@@ -200,19 +226,39 @@ async function main() {
 
   console.log(`Benchmarking ${PROMPTS.length} prompts x ${REPS} reps against ${page.url()}\n`);
   const rows = [];
+  const createdIds = [];
   for (const prompt of PROMPTS) {
     for (let i = 0; i < REPS; i++) {
       try {
         const m = await runOne(page, prompt);
-        rows.push({ prompt, rep: i + 1, ...m, ok: true });
-        console.log(`${prompt.slice(0, 30).padEnd(30)} rep${i + 1}  TTFT ${m.ttftMs}ms  total ${m.totalMs}ms  runs ${m.runsMs}ms`);
+        if (m.threadId) createdIds.push(m.threadId);
+        rows.push({ prompt, rep: i + 1, ttftMs: m.ttftMs, totalMs: m.totalMs, calls: m.calls, ok: true });
+        console.log(`${prompt.slice(0, 30).padEnd(30)} rep${i + 1}  TTFT ${m.ttftMs}ms  total ${m.totalMs}ms`);
       } catch (e) {
-        rows.push({ prompt, rep: i + 1, ttftMs: 0, totalMs: 0, runsMs: 0, ok: false, error: String(e.message || e).slice(0, 140) });
+        rows.push({ prompt, rep: i + 1, ttftMs: 0, totalMs: 0, calls: [], ok: false, error: String(e.message || e).slice(0, 140) });
         console.log(`${prompt.slice(0, 30).padEnd(30)} rep${i + 1}  FAILED: ${String(e.message || e).slice(0, 90)}`);
       }
       await page.waitForTimeout(800);
     }
   }
+
+  // Clean up the throwaway benchmark threads via the app's authenticated context.
+  const cleanup = await page
+    .evaluate(async (ids) => {
+      const b = window.__bench || {};
+      if (!b.apiBase || !b.token) return { ok: 0, fail: ids.length, reason: 'no token/base captured' };
+      let ok = 0, fail = 0;
+      for (const id of ids) {
+        try {
+          const r = await fetch(b.apiBase + '/threads/' + encodeURIComponent(id), { method: 'DELETE', headers: { Authorization: 'Bearer ' + b.token } });
+          if (r.ok || r.status === 204 || r.status === 404) ok++; else fail++;
+        } catch { fail++; }
+      }
+      return { ok, fail };
+    }, createdIds)
+    .catch((e) => ({ ok: 0, fail: createdIds.length, reason: String(e.message || e) }));
+  console.log(`\nCleanup: deleted ${cleanup.ok}/${createdIds.length} benchmark threads${cleanup.fail ? ` (${cleanup.fail} failed${cleanup.reason ? ': ' + cleanup.reason : ''})` : ''}.`);
+
   await closable.close().catch(() => {}); // detaches CDP (leaves your Edge open) / closes the launched profile
 
   const byPrompt = [...new Set(rows.map((r) => r.prompt))].map((prompt) => {
@@ -225,22 +271,37 @@ async function main() {
       ttftMed: r0(median(ttft)),
       ttftP95: r0(p95(ttft)),
       totalMed: r0(median(ok.map((r) => r.totalMs))),
-      runsMed: r0(median(ok.map((r) => r.runsMs))),
     };
   });
+
+  // Per-endpoint client-side timing across all reps (which API calls dominate the critical path).
+  const callAgg = new Map();
+  for (const r of rows) for (const c of r.calls || []) {
+    if (!callAgg.has(c.label)) callAgg.set(c.label, []);
+    callAgg.get(c.label).push(c.ms);
+  }
+  const endpoints = [...callAgg.entries()]
+    .map(([label, xs]) => ({ label, n: xs.length, medMs: r0(median(xs)), p95Ms: r0(p95(xs)) }))
+    .sort((a, b) => b.medMs - a.medMs);
 
   const now = new Date().toISOString();
   const dir = resolve(dirname(fileURLToPath(import.meta.url)), '../documentation');
   mkdirSync(dir, { recursive: true });
-  writeFileSync(resolve(dir, 'ttft-browser-bench.json'), JSON.stringify({ ranAt: now, url: APP_URL, reps: REPS, byPrompt, rows }, null, 2));
+  writeFileSync(resolve(dir, 'ttft-browser-bench.json'), JSON.stringify({ ranAt: now, url: APP_URL, reps: REPS, byPrompt, endpoints, rows }, null, 2));
   const md = [
     '# TTFT browser benchmark (real Edge session)',
     '',
     `Run: ${now} — ${APP_URL} — ${REPS} reps/prompt. TTFT = send → first assistant token in the DOM.`,
     '',
-    '| prompt | n | TTFT min | TTFT median | TTFT p95 | total median | POST /runs median |',
-    '|--|--|--|--|--|--|--|',
-    ...byPrompt.map((b) => `| ${b.prompt.replace(/\|/g, '/')} | ${b.n} | ${b.ttftMin} | ${b.ttftMed} | ${b.ttftP95} | ${b.totalMed} | ${b.runsMed} |`),
+    '| prompt | n | TTFT min | TTFT median | TTFT p95 | total median |',
+    '|--|--|--|--|--|--|',
+    ...byPrompt.map((b) => `| ${b.prompt.replace(/\|/g, '/')} | ${b.n} | ${b.ttftMin} | ${b.ttftMed} | ${b.ttftP95} | ${b.totalMed} |`),
+    '',
+    '### Client-side API calls (median across reps)',
+    '',
+    '| endpoint | calls | median ms | p95 ms |',
+    '|--|--|--|--|',
+    ...endpoints.map((e) => `| ${e.label} | ${e.n} | ${e.medMs} | ${e.p95Ms} |`),
     '',
     '_ms unless noted. Per-rep raw data in the sibling .json._',
   ].join('\n');

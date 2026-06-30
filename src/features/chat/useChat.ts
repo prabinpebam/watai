@@ -13,6 +13,22 @@ import type { SubmitRunBody } from '../../data/cloud/types';
 
 export { DEFAULT_CHAT_MODEL } from './runStore';
 
+// Endpoint capabilities (which tools the saved Azure endpoint supports) rarely change, so cache the
+// status probe briefly. It sits on the send critical path (resolved before the run is submitted), and
+// re-fetching it on every message added a network round-trip to time-to-first-token.
+type Caps = Awaited<ReturnType<typeof cloudApi.getCredentialStatus>>['capabilities'];
+let capsCache: { at: number; caps: Caps } | null = null;
+const CAPS_TTL_MS = 5 * 60_000;
+async function cachedCapabilities(): Promise<Caps> {
+  if (capsCache && Date.now() - capsCache.at < CAPS_TTL_MS) return capsCache.caps;
+  const caps = await cloudApi
+    .getCredentialStatus()
+    .then((s) => s.capabilities)
+    .catch(() => undefined);
+  if (caps !== undefined) capsCache = { at: Date.now(), caps };
+  return caps ?? capsCache?.caps;
+}
+
 /**
  * Tools to offer a server run. `web_search` + `generate_image` are always listed (the server gates
  * them on the vault Tavily key / image model). Code interpreter + file search are listed only when
@@ -24,10 +40,7 @@ async function serverRunTools(forceCodeInterpreter = false): Promise<string[]> {
   const settings = await repo.getSettings().catch(() => null);
   const t = settings?.tools;
   if (t?.agenticMode === false) return tools; // only bail when agentic mode is explicitly off
-  const caps = await cloudApi
-    .getCredentialStatus()
-    .then((s) => s.capabilities)
-    .catch(() => undefined);
+  const caps = await cachedCapabilities();
   // Default the per-tool flags on when settings are missing/partial (code interpreter ships on),
   // so an endpoint that supports the tool always gets it unless the user explicitly disabled it.
   if (((t?.codeInterpreter ?? true) || forceCodeInterpreter) && caps?.codeInterpreter) tools.push('code_interpreter');

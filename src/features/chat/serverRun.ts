@@ -69,15 +69,11 @@ export async function runOnServer(
 
   const ack = await deps.submitRun(threadId, body);
 
-  // Anchor the read window to the run's server-assigned creation time (skew-proof), so the
-  // assistant message (orderAt === run.createdAt) is always inside the window.
-  let since: string;
-  try {
-    const r0 = await deps.getRun(threadId, ack.runId);
-    since = new Date(Date.parse(r0.createdAt) - 1000).toISOString();
-  } catch {
-    since = new Date(deps.now() - 30_000).toISOString();
-  }
+  // Anchor the read window from client time with a generous skew margin. `getAssistantMessage`
+  // matches the assistant message by its exact id, so a wider window only ever returns a few extra
+  // rows (never the wrong message) — and it avoids a round-trip that read the run back just to learn
+  // its createdAt, shaving one request off the critical path before the first token.
+  const since = new Date(deps.now() - 5 * 60_000).toISOString();
 
   const start = deps.now();
   let last: Message | null = null;

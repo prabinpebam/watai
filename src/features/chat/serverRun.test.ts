@@ -87,14 +87,17 @@ describe('runOnServer', () => {
     expect(out.assistant?.status).toBe('complete');
   });
 
-  it('anchors the read window just before the run createdAt (skew-proof)', async () => {
+  it('anchors the read window from client time with a skew margin (no extra getRun)', async () => {
     const getAssistantMessage = vi.fn(async () => asst('done', 'complete'));
-    const deps = baseDeps({ getAssistantMessage });
+    const getRun = vi.fn(async () => runRec('running'));
+    const deps = baseDeps({ getAssistantMessage, getRun });
 
     await runOnServer(deps, 't1', { text: 'hi' });
 
-    // since = run.createdAt - 1000ms
-    expect(getAssistantMessage).toHaveBeenCalledWith('t1', 'm2', '2025-12-31T23:59:59.000Z');
+    // since = now() - 5min; with now() === 0 that is 1969-12-31T23:55:00.000Z.
+    expect(getAssistantMessage).toHaveBeenCalledWith('t1', 'm2', '1969-12-31T23:55:00.000Z');
+    // getRun no longer anchors the window — it is only used (once) to return the final record.
+    expect(getRun).toHaveBeenCalledTimes(1);
   });
 
   it('keeps polling while the message is not written yet (null then throw then ready)', async () => {

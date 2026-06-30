@@ -1,6 +1,23 @@
 # TTFT fix plan — close the ~7s gap between model and browser
 
-Status: PLAN (measurement-led). Baseline: [ttft-browser-bench.md](ttft-browser-bench.md).
+Status: PLAN v2 (measurement-led). Baseline: [ttft-browser-bench.md](ttft-browser-bench.md).
+
+## 0. Critique of v1 → what changed in v2
+
+Weaknesses in the first draft, and the fixes folded into this version:
+- **Only measured the client half.** The bench's `fetch` hook sees client round-trips but not the
+  server stages (queue pickup, memory, model). v2 adds **server-side timing** (run-record
+  `queued→started→firstToken` stamps + a `Server-Timing` response header) so we split client vs server.
+- **No test-pollution story.** Re-running the browser bench creates throwaway chats. v2 makes the
+  harness **capture created thread ids and delete them** (`DELETE /threads/{id}`) at the end.
+- **Sync-removal correctness gap.** Dropping the pre-submit sync breaks **brand-new threads** (the
+  submit 404s if the thread isn't on the server). v2 specifies a **targeted thread-create** for new
+  threads + skip-for-existing, with idempotency notes.
+- **No risk register / rollback, and the riskiest change sat mid-plan.** v2 adds a risk register, a
+  test-target decision (deploy-to-prod vs local), and moves **inline execution (Phase 3) last**,
+  behind a flag.
+- **Quick wins weren't isolated for safe shipping.** v2 separates low-risk, independently-deployable
+  client wins (Phase 1) from anything touching the server.
 
 ## 1. Problem
 
@@ -61,7 +78,11 @@ Sources: [useChat.ts send](../src/features/chat/useChat.ts#L153), [runStore star
 - Upgrade [scripts/ttft-bench.mjs](../scripts/ttft-bench.mjs): **reload once after `addInitScript`** so the
   `fetch` hook installs before app code (today it misses → `POST /runs = 0`); time `getCredentialStatus`,
   `sync`, `submitRun`, `getRun`, `negotiate`, and first `message`/poll; detect SignalR-vs-poll path; add a
-  **"wait for a NEW assistant group"** guard (fixes the 66ms artifact).
+  **"wait for a NEW assistant group"** guard (fixes the 66ms artifact); **capture + delete the throwaway
+  threads** it creates (`DELETE /threads/{id}` with the bearer token sniffed from a live request).
+- **Server-side timing (the missing half):** stamp the run record with `queuedAt / startedAt /
+  firstTokenAt` (already partly present) and emit a `Server-Timing` header from `POST /runs`, so the bench
+  can subtract server time from wall-clock and isolate the client round-trips.
 - Add temporary client `performance.mark`s around prepare/sync/submit/first-token (behind a flag).
 - Re-run to get a per-stage table. **Acceptance:** we can attribute the ~7s to stages within ±0.5s.
 
@@ -108,3 +129,23 @@ Sources: [useChat.ts send](../src/features/chat/useChat.ts#L153), [runStore star
 1. Approve **Phase 2 cost** (~$21/mo more for `http=1`)?
 2. Phase 3 (inline execution) is the biggest change — do it, or stop after Phases 1+2+4 if we've hit ~3s?
 3. Keep temporary client `performance.mark` instrumentation in prod (gated) or strip after measuring?
+
+## 8. Risk register & test strategy
+
+| Risk | Likelihood | Impact | Mitigation |
+|--|--|--|--|
+| Client send-path change breaks chat (idempotency, since-window, new-thread create) | Med | High | Keep `runOnServer` unit tests green; update them to the new contract; canary one prompt before the full bench; revert deploy on any error row. |
+| Skipping pre-submit sync 404s a brand-new thread | Med | High | Targeted `createThread` (client id, idempotent — treat 409 as success) for new threads; skip only when the thread is known server-side. |
+| Stale cached capabilities request an unsupported tool | Low | Low | Short TTL (≤5 min) + background refresh; `web_search`/`generate_image` always safe; only `code_interpreter`/`file_search` gated. |
+| Deploying perf changes to prod (browser bench targets prod) | Med | Med | Run `vitest` first; deploy; canary; if regression, `git revert` + redeploy (frontend is static `docs/`). |
+| Benchmark litters history | High | Low | Harness deletes its threads via `DELETE /threads/{id}` at the end. |
+
+**Test target:** the browser bench runs against **prod** (`prabinpebam.github.io/watai/`) where the session
+lives, so each client phase must be **built + deployed to `docs/`** before benching. Local-dev testing
+(`localhost:5173`) is possible but needs a CIAM redirect-URI + a fresh login, so prod-with-revert is the
+working path. Always re-bench warm + one cold sample, and **clean up** afterward.
+
+## 9. Definition of done
+- TTFT **median ≤ ~3s**, **p95 < ~5s** in the browser bench, across the 4-prompt set ×5.
+- Per-stage breakdown shows no single client round-trip > ~0.5s on the critical path.
+- No correctness/streaming regression; `vitest` green; throwaway threads cleaned up each run.
