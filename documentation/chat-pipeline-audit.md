@@ -144,3 +144,45 @@ drop.
 
 Regenerate the benchmark: `cd api && npx tsx scripts/pipeline-bench.ts` (reads `WATAI_PROBE_BASEURL` /
 `WATAI_PROBE_KEY`). Raw numbers: `documentation/memory-system/pipeline-bench-report.{md,json}`.
+
+---
+
+# TTFT audit — prompt → first token (2026-06-30, follow-up)
+
+## Measured breakdown
+| stage | time | note |
+|--|--|--|
+| frontend submit (sync push + `POST /runs`) | ~0.5–1s | two round-trips: sync, then submitRun |
+| **storage-queue pickup** | **2s warm → 12–42s cold** | dominant + variable; `alwaysReady: null` so the app scales to zero |
+| worker pre-model (creds + history + memory embed ~1s) | ~1.5s | embed is inherent |
+| model first token (gpt-5.4, Responses API) | ~1s | reasoning effort has negligible TTFT impact (measured) |
+| SignalR push → render | fast | frontend renders each push immediately; the 450ms poll defers to push |
+
+The queue pickup is variable because HTTP and queue triggers scale **independently** on Flex
+Consumption — a warm HTTP instance (handling the POST) does not warm the queue worker, which pays its
+own scale-from-zero.
+
+## Shipped (free, deployed — commit `ccce99e`)
+- **Queue polling 60s → 1s** (`host.json` `extensions.queues.maxPollingInterval`, + `batchSize` 16,
+  `visibilityTimeout` 30s). A warm instance now grabs the run job in ~1s instead of waiting out the
+  60s poll backoff. (Helps only when an instance is alive; does not by itself fix true
+  scale-from-zero.)
+- **Parallelized worker setup** ([runWorker.ts](../api/src/application/runWorker.ts)): the memory
+  query-embedding starts from the submitted prompt text immediately and the settings + history reads
+  run via `Promise.all`, so the embed overlaps setup instead of running after it.
+
+Net: **active-session TTFT ~5s → ~3.5–4s.** The warm floor is the inherent memory embed (~1s) +
+model first token (~1s) + queue (~1s) + submit (~0.5s).
+
+## Open decision — cold start (~40s on the first prompt after the app idles to zero)
+Needs either recurring cost or an architecture change, so it's the user's call (raised, user
+delegated while away — deferred rather than spend money or deploy an unvalidated refactor):
+- **A) `alwaysReady=1`** on the Flex plan → cold ~40s → ~1–2s. Recurring cost (~1×2 GB instance
+  billed continuously). Reversible.
+- **B) Run `processRun` inline in the `POST /runs` handler** (stream via SignalR), dropping the
+  storage-queue hop → cold becomes a normal HTTP cold start (~3–5s), no recurring cost. Larger change
+  (durability on client disconnect via cooperative cancel, client-generated `runId` for Stop, the
+  frontend submit-while-streaming flow). Recommended as the next focused change **with the user
+  available to live-validate.**
+- **Measure first:** the 60s→1s polling change may already cut much of the 12–42s if it was poll
+  backoff rather than pure scale-from-zero — confirm on real cold runs before committing to A or B.
