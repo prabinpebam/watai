@@ -90,6 +90,62 @@ Shared primitives (new, in `src/lib/` or `src/features/voice/`):
 - `ttsQueue.ts` — serial TTS player: `enqueue(text)` synthesizes via `cloudApi.synthesizeSpeech`
   ({ input, voice: voiceId, rate }) and plays clips back-to-back; `stop()` clears + halts < 50 ms.
 
+### 3.1 The hard parts — audio-loop realities (make-or-break, not polish)
+
+These decide whether voice feels world-class or broken. They gate Phase 3 and are spiked in Phase 0.
+
+- **Acoustic echo / self-barge-in (the #1 bug).** TTS through speakers is picked up by the mic, which
+  a naive VAD reads as the user talking → false endpoint / false barge-in. Layered mitigations:
+  (1) `getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })`;
+  (2) **reference-gated VAD** — during `speaking`, raise the barge-in threshold / subtract known TTS
+  output energy, so only sustained mic energy above playback counts as an interrupt; (3) recommend
+  headphones in-session; (4) **half-duplex fallback** — if echo can't be tamed on a device, pause the
+  mic during playback (lose barge-in, keep the loop). *Acceptance: with speakers, the assistant's own
+  voice never starts a turn.*
+- **VAD: build vs buy (spike first).** Energy + adaptive threshold is jittery in real rooms. Evaluate
+  **Silero VAD via `@ricky0123/vad-web`** (ONNX/WASM, runs in a worklet) vs the energy detector on real
+  devices; keep the `vad.ts` interface (`speechstart`/`speechend`) stable so the engine is swappable.
+  `settings.voice.vad` maps to endpoint aggressiveness / trailing-silence.
+- **Interim transcript is not free.** `/audio/transcriptions` is **batch** (whole clip → text), so the
+  spec's "live interim transcript" during `listening` is **not deliverable in v1** — v1 shows
+  "Listening…" + the amplitude orb, and the user line appears after endpoint. Real partials need
+  streaming transcription or Realtime (future). *(Reconciles Spec V-15 `listening` caption.)*
+- **TTS latency + gapless playback.** Each sentence is a full `/audio/speech` round-trip + mp3 decode.
+  To approach the target and avoid clicks: **prefetch** the next sentence while the current plays;
+  decode to an AudioBuffer and **schedule on one Web Audio AudioContext** for gapless back-to-back;
+  coalesce one-word fragments. Realistic warm budget: endpoint→transcribe ~0.5–0.9 s, +first token
+  ~0.5 s, +sentence boundary, +TTS round-trip ~0.3–0.6 s ⇒ **~1.5–2.2 s to first spoken word**; treat
+  ≤1.5 s as the stretch goal and **measure** (telemetry, §8).
+- **Markdown → speech.** The streamed reply is markdown. A `speakableText()` normalizer runs before
+  TTS: emphasis/links → their text, **drop code blocks** ("shared a snippet" or skip), linearize
+  lists, skip tables/images (they land in the thread). Never read raw markup. Unit-tested.
+- **Browser/codec matrix.** MediaRecorder emits `audio/webm;opus` on Chromium but **`audio/mp4`/AAC on
+  Safari/iOS** — choose a supported mime at runtime and ensure `/ai/transcribe` accepts it. iOS suspends
+  mic/AudioContext in the background; the AudioContext must be **unlocked by the entry gesture** and
+  resumed on focus.
+
+### 3.2 Run-store integration contract (voice ⇄ `useRuns`)
+
+Riding the run store is the right call, but voice must respect its lifecycle:
+
+- **Submit:** one turn = `startServerRun(threadId, { text, clientMessageId, model, tools }, prepare)`.
+  Honor the **one-run-per-thread** guard — never submit while `isRunning(threadId)`; a premature
+  endpoint is ignored/queued.
+- **Read streaming text:** subscribe to `runs[threadId].message.content`; diff it through the sentence
+  splitter → `speakableText()` → `ttsQueue`.
+- **Completion:** the store **clears the overlay** on finish. Voice detects completion via
+  `isRunning(threadId)` → false and **captures the final text before it clears**, flushes the last
+  sentence, then returns to `listening`.
+- **Barge-in mid-stream:** `cancelRun(threadId, runId)` + `ttsQueue.stop()`; the partial assistant
+  message persists as `interrupted` (existing behavior) — correct and visible on exit.
+- **Shared UI side-effects:** `startServerRun` also drives `useUi.setStream`, realtime, and the
+  memory-notice toast. In voice, suppress chat-only chrome (no chat toast over the orb); surface the
+  "memory updated" signal as a subtle caption note instead.
+- **Tool turns:** while the run is using a tool, enter `working` + show the chip and **don't** start
+  TTS until prose resumes; speak a short filler only if a tool exceeds ~2.5 s ("One sec — searching…").
+  Image results are announced briefly ("I made an image — it's in the chat"), never described
+  byte-by-byte. Tool wait is bounded by the run's own timeout; on timeout → `error`.
+
 ---
 
 ## 4. Phased roadmap
@@ -110,6 +166,12 @@ flowchart LR
 
 **Goal:** the audio building blocks and the Voice settings are real and wired, so Phases 1–3 just
 compose them.
+
+**Spike first (de-risk the unknowns — execution-plan principle #1).** Before building primitives, run
+a throwaway spike on real devices (desktop + one mobile) to settle the three unknowns the rest of the
+plan rests on: (1) **VAD** quality (`@ricky0123/vad-web` Silero vs energy), (2) **echo / self-barge-in**
+with speakers, (3) **barge-in latency** with Web Audio scheduling. Output: the chosen VAD engine, the
+echo-suppression approach, and a measured barge-in number — these unblock Phase 3.
 
 **Backend** [`aiProxyService.ts`](../api/src/application/aiProxyService.ts):
 - `speak()` accepts and forwards `speed` (Azure OpenAI `/audio/speech` supports `speed` 0.25–4.0) and
@@ -193,13 +255,15 @@ streaming + sync — still tap-to-talk for now (real-time loop is Phase 3).
 - **Continuous capture + VAD endpointing:** open the mic once per session; `vad.ts` auto-submits on
   `speechend` (sensitivity from `settings.voice.vad`). Orb is **amplitude-reactive** (`readLevel`).
   Orb-tap remains a manual endpoint / push-to-talk for noisy rooms.
-- **Sentence-streamed TTS:** drive the `ttsQueue` from the streaming run text so speech starts ~1
-  sentence after first token (don’t wait for the full reply).
+- **Sentence-streamed TTS:** drive the `ttsQueue` from the streaming run text (through
+  `speakableText()`) so speech starts ~1 sentence after first token (don’t wait for the full reply),
+  with prefetch + Web Audio gapless scheduling (§3.1).
 - **Barge-in:** a lightweight VAD monitor stays active during `speaking`; on `speechstart` →
   `ttsQueue.stop()` (< 150 ms), drop queued sentences, `cloudApi.cancelRun(threadId, runId)`, return
-  to `listening`. This is the headline acceptance gate.
-- **Mute really gates the mic** (suspend VAD/endpointing; orb dims). **`working` state** + tool chip
-  while the run uses a tool.
+  to `listening`. **Reference-gate** it against the TTS output so the assistant doesn’t interrupt
+  itself (§3.1). This is the headline acceptance gate.
+- **Mute really gates the mic** (suspend VAD/endpointing; orb dims). **`working` state** + tool chip +
+  filler/announce strategy per the run-store contract (§3.2).
 - Full state machine (connecting/listening/thinking/working/speaking/muted/error/ended).
 
 **Acceptance (EDD):**
@@ -252,42 +316,99 @@ matches ChatGPT’s standard voice with full agentic parity.
 
 ---
 
-## 6. Validation strategy (EDD)
+## 6. Testing strategy
 
-- **Pure logic → unit (Vitest):** sentence splitter, VAD endpointing, caret splice, TTS-queue
-  stop/clear, settings→request plumbing.
-- **Live loop → real-browser CDP probe** (pattern of [`scripts/ttft-bench.mjs`](../scripts/ttft-bench.mjs)
-  / [`memory-tool-probe.mjs`](../scripts/memory-tool-probe.mjs)): hands-free turn with no taps;
-  tool + memory parity (proves `POST /runs`); barge-in latency; caret-safe dictation; threads cleaned
-  up after the probe.
-- **Semantic invariants, not plumbing:** assert voice turns are real synced runs (memory-eligible,
-  tool-capable), that barge-in actually cancels the run, and that each Voice setting changes a
-  captured request/behavior — never just that a component rendered.
+Voice is hard to test because it is **mic-in / audio-out**. The strategy is to make the audio
+**deterministic** and test the loop in layers.
+
+**Layer 1 — Pure logic (Vitest, in CI, no hardware).**
+- `sentences.ts` — streaming chunks, abbreviations ("e.g."), decimals, code fences, no dupes.
+- `speakableText()` — markdown → spoken text (emphasis/links → text; drop code/tables/images).
+- `vad.ts` — feed synthetic amplitude/PCM frame sequences (speech→silence); assert
+  `speechstart`/`speechend` timing at each `vad` sensitivity; no `speechend` mid-speech.
+- `ttsQueue` — enqueue/stop/order with a mocked `Audio`/`AudioContext`; `stop()` < 50 ms.
+- caret splice (Testing Library) — insert mid-text without clobbering; Cancel restores; **send never
+  called**.
+- settings→request plumbing — chosen `voiceId`/`rate` reach the `/ai/speech` body.
+
+**Layer 2 — Deterministic audio loop (real browser, local/nightly).** Drive a real Chromium with a
+**fake audio device** so "the user speaking" is a fixture WAV:
+`--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=fixtures/voice/<utterance>.wav`.
+Extend the CDP probe pattern ([`memory-tool-probe.mjs`](../scripts/memory-tool-probe.mjs)). Assert
+**semantic invariants**, not rendering:
+- **Run parity** — a "current info" utterance fires `web_search`; a self-referential one uses memory;
+  the turn appears as **real synced messages** (proves `POST /runs`, not `/ai/chat`).
+- **Hands-free** — a turn completes with **no synthetic taps** (VAD endpointed the fixture).
+- **Spoken output** — intercept `/ai/speech`: TTS requested per sentence; caption matches the reply.
+- Probe-created threads are deleted at the end (as the other probes do).
+
+**Layer 3 — Barge-in latency harness (real browser).** The make-or-break number. With the assistant
+`speaking`, inject a second fake-audio "interrupt" clip; measure onset → **audio silence** (assert
+**< 150 ms**) and → `cancelRun` sent. Run across the candidate VAD engine + Web Audio scheduling.
+
+**Layer 4 — Echo / self-trigger guard (real browser).** Route TTS output into the fake-capture path
+and assert the assistant's own speech does **not** endpoint or barge-in (echoCancellation +
+reference-gating on). Regression test for the #1 bug.
+
+**Telemetry as oracle.** The probe reads in-page telemetry marks (§8) and asserts budgets
+(endpoint→first-spoken-word; barge-in→silence), writing a sibling JSON like the TTFT bench so
+regressions are visible run-over-run.
+
+**Manual device matrix (pre-ship).** Chrome/desktop, Safari/iOS, Android/Chrome: permission flow,
+echo with speakers, codec, AudioContext unlock, background/lock — what fake-audio CI can't fully cover.
+
+**Fixtures.** `fixtures/voice/*.wav` (tiny, checked in): a known-text utterance, a current-info
+utterance (web tool), a self-referential utterance (memory), a short "interrupt" clip.
 
 ---
 
 ## 7. Risk register
 
-| Risk | Likelihood | Impact | Mitigation |
+| Risk | L | I | Mitigation |
 | --- | --- | --- | --- |
-| Browser VAD is jittery (cuts off / runs on) | High | High | Adaptive threshold + trailing-silence window from `vad`; orb-tap manual endpoint; tune via the probe |
-| Barge-in not snappy enough (> 150 ms) | Med | High | Pre-decode/queue short clips; `ttsQueue.stop()` halts current source immediately; monitor mic during `speaking` |
-| Sentence-streamed TTS sounds choppy | Med | Med | Buffer ≥ 1 full sentence; merge very short fragments; natural-break splitter |
-| Reusing the run store double-fires runs (one per thread lock) | Med | Med | Voice uses the same one-run-per-thread guard; submit only on endpoint; cancel before re-listen |
-| `gpt-4o-transcribe` latency hurts turn time | Med | Med | Cap clip length; stream partials if available; warm path |
-| TTS cost/latency per sentence | Low | Med | Coalesce sentences; cache nothing sensitive; respect rate |
-| Mic permission / autoplay policies | Med | Med | First-use priming (V-05); user-gesture to start the session unlocks audio |
+| **Acoustic echo** → assistant interrupts itself / false turns | High | High | echoCancellation + reference-gated VAD; headphones; half-duplex fallback; Layer-4 guard test |
+| Browser VAD jittery (cuts off / runs on) | High | High | Silero-web (spiked) or adaptive energy; trailing-silence from `vad`; orb-tap manual endpoint |
+| Barge-in > 150 ms | Med | High | Web Audio scheduling + prefetch; `ttsQueue.stop()` halts current source; Layer-3 harness gate |
+| Markdown read aloud verbatim | Med | Med | `speakableText()` normalizer; unit-tested; drop code/tables |
+| Sentence-streamed TTS choppy | Med | Med | Buffer ≥ 1 sentence; coalesce fragments; gapless scheduling |
+| Run store double-fires (one-run-per-thread) | Med | Med | Respect `isRunning` guard; submit only on endpoint; cancel before re-listen |
+| Safari/iOS codec + AudioContext unlock | Med | Med | Runtime mime selection; gesture-unlock + resume on focus; manual matrix |
+| Transcribe latency hurts turn time | Med | Med | Cap clip length; warm path; (streaming STT later) |
+| Per-turn/session cost (TTS×sentences + run) | Med | Low | Coalesce TTS; session guardrails (§8) |
+| Interim transcript expectation unmet | Low | Low | v1 = "Listening…" post-endpoint; documented; Realtime later |
 
 ---
 
-## 8. Definition of done
+## 8. Telemetry, rollout & cost
+
+- **Telemetry (gated, non-content):** per turn — `transcribeMs`, `runTtftMs`, `firstSpokenWordMs`,
+  `toolTurn` (kind), `bargeIns`, `vadFalseTriggers`, `ttsSentences`, `errorKind`; per session — turns,
+  duration, end reason. Drives VAD/latency tuning and is the test oracle. **No audio, no transcript
+  text** in telemetry.
+- **Feature flag + kill switch:** ship voice-mode-v2 behind a flag (reuse the capability/settings
+  plumbing). Dictation polish (Phase 1) is low-risk and ships unflagged. Keep the old tap-to-talk path
+  reachable until Phase 3 is validated — the flag is the rollback.
+- **Cost envelope:** a voice turn = transcription + a full agentic run (memory + maybe tools) +
+  per-sentence TTS; per-sentence TTS multiplies `/audio/speech` calls. Coalesce short sentences and cap
+  a single reply's spoken length; add soft **session guardrails** (max turn length, max session
+  duration). No new persisted audio (raw mic is in-memory only; the "retained audio attachment" stays
+  out of scope).
+- **Privacy:** mic capture is in-memory; nothing leaves the device except the clip sent to
+  `/ai/transcribe` (same trust boundary as today). First-use priming explains mic use.
+
+---
+
+## 9. Definition of done
 
 - Dictation: recording bar with amplitude waveform + timer; **caret-safe insertion**; Cancel restores;
   **never auto-sends**; permission/denial/error handled.
 - Voice mode: **continuous VAD loop, no taps**; every turn is a real `POST /runs` (verified
   memory + tool parity); **sentence-streamed TTS**; **barge-in stops speech < 150 ms** and starts a
   new turn; **mute truly gates the mic**; captions + keyboard + end work.
+- **Echo/self-trigger guarded** (the assistant's own speech never starts a turn); **markdown never
+  read aloud**; **Safari/iOS codec + AudioContext unlock** verified; per-turn **telemetry** emitted;
+  voice-mode-v2 **behind a flag** with a working kill switch.
 - Every Settings → Voice control changes observable behavior (no dead controls).
 - Turns persist + sync as normal messages and feed memory extraction (no separate voice path).
-- `vitest` green (both projects); the voice browser probe passes; reduced-motion + fallback paths
-  handled.
+- `vitest` green (both projects); the voice browser probe + **barge-in latency harness** pass;
+  reduced-motion + fallback paths handled.
