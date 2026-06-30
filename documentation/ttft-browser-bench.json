@@ -1,243 +1,251 @@
 {
-  "ranAt": "2026-06-30T13:27:19.732Z",
+  "ranAt": "2026-06-30T13:40:21.511Z",
   "url": "https://prabinpebam.github.io/watai/",
   "reps": 5,
   "byPrompt": [
     {
       "prompt": "Hi",
-      "n": 4,
-      "ttftMin": 7307,
-      "ttftMed": 8051,
-      "ttftP95": 8961,
-      "totalMed": 12544
+      "n": 5,
+      "ttftMin": 4086,
+      "ttftMed": 4571,
+      "ttftP95": 8010,
+      "totalMed": 10010
     },
     {
       "prompt": "What is the capital of France?",
       "n": 5,
-      "ttftMin": 6539,
-      "ttftMed": 7797,
-      "ttftP95": 8672,
-      "totalMed": 12472
+      "ttftMin": 3202,
+      "ttftMed": 3999,
+      "ttftP95": 5230,
+      "totalMed": 9954
     },
     {
       "prompt": "Explain how DNS resolution works in 3 sentences.",
       "n": 5,
-      "ttftMin": 6967,
-      "ttftMed": 7042,
-      "ttftP95": 7208,
-      "totalMed": 12379
+      "ttftMin": 3533,
+      "ttftMed": 4094,
+      "ttftP95": 4417,
+      "totalMed": 10952
     },
     {
       "prompt": "Write a TypeScript debounce function.",
       "n": 5,
-      "ttftMin": 6578,
-      "ttftMed": 8001,
-      "ttftP95": 8884,
-      "totalMed": 13322
+      "ttftMin": 4483,
+      "ttftMed": 5215,
+      "ttftP95": 5466,
+      "totalMed": 12272
     }
   ],
   "endpoints": [
     {
       "label": "GET /api/me",
       "n": 1,
-      "medMs": 1175,
-      "p95Ms": 1175
-    },
-    {
-      "label": "GET /api/skills",
-      "n": 39,
-      "medMs": 1011,
-      "p95Ms": 1731
-    },
-    {
-      "label": "POST /api/threads/:id/runs",
-      "n": 19,
-      "medMs": 898,
-      "p95Ms": 1259
-    },
-    {
-      "label": "POST /api/threads/:id/messages",
-      "n": 20,
-      "medMs": 839,
-      "p95Ms": 934
-    },
-    {
-      "label": "GET /api/threads/:id/runs/:id",
-      "n": 19,
-      "medMs": 819,
-      "p95Ms": 842
-    },
-    {
-      "label": "GET /api/threads",
-      "n": 86,
-      "medMs": 813,
-      "p95Ms": 1489
-    },
-    {
-      "label": "POST /api/threads",
-      "n": 20,
-      "medMs": 807,
-      "p95Ms": 945
-    },
-    {
-      "label": "GET /api/threads/:id/lock",
-      "n": 42,
-      "medMs": 802,
-      "p95Ms": 1163
+      "medMs": 1764,
+      "p95Ms": 1764
     },
     {
       "label": "GET /api/credentials",
-      "n": 5,
-      "medMs": 790,
-      "p95Ms": 1412
+      "n": 4,
+      "medMs": 1324,
+      "p95Ms": 2261
+    },
+    {
+      "label": "GET /api/threads",
+      "n": 70,
+      "medMs": 1177,
+      "p95Ms": 1781
+    },
+    {
+      "label": "POST /api/threads/:id/runs",
+      "n": 20,
+      "medMs": 914,
+      "p95Ms": 1027
+    },
+    {
+      "label": "GET /api/threads/:id/runs/:id",
+      "n": 20,
+      "medMs": 821,
+      "p95Ms": 919
+    },
+    {
+      "label": "POST /api/threads/:id/messages",
+      "n": 60,
+      "medMs": 819,
+      "p95Ms": 855
+    },
+    {
+      "label": "GET /api/skills",
+      "n": 22,
+      "medMs": 816,
+      "p95Ms": 2255
+    },
+    {
+      "label": "GET /api/threads/:id/lock",
+      "n": 41,
+      "medMs": 799,
+      "p95Ms": 835
+    },
+    {
+      "label": "POST /api/threads",
+      "n": 74,
+      "medMs": 794,
+      "p95Ms": 830
     },
     {
       "label": "GET /api/threads/:id/messages",
-      "n": 167,
-      "medMs": 465,
-      "p95Ms": 879
+      "n": 172,
+      "medMs": 444,
+      "p95Ms": 838
     },
     {
       "label": "POST /api/negotiate",
       "n": 3,
-      "medMs": 390,
-      "p95Ms": 1183
+      "medMs": 386,
+      "p95Ms": 1738
     }
   ],
   "rows": [
     {
       "prompt": "Hi",
       "rep": 1,
-      "ttftMs": 8961,
-      "totalMs": 13677,
+      "ttftMs": 8010,
+      "totalMs": 14003,
       "calls": [
         {
           "label": "GET /api/threads",
-          "ms": 801.5
+          "ms": 1377.7999999998137
+        },
+        {
+          "label": "POST /api/negotiate",
+          "ms": 1737.6999999997206
         },
         {
           "label": "GET /api/credentials",
-          "ms": 826.8000000002794
+          "ms": 1745.7000000001863
         },
         {
           "label": "GET /api/me",
-          "ms": 1175.3999999999069
-        },
-        {
-          "label": "POST /api/negotiate",
-          "ms": 1183.3999999999069
+          "ms": 1763.7999999998137
         },
         {
           "label": "GET /api/skills",
-          "ms": 1199.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 1162.7999999998137
+          "ms": 1710
         },
         {
           "label": "GET /api/threads",
-          "ms": 1233.6000000000931
+          "ms": 1939.3999999999069
         },
         {
-          "label": "GET /api/credentials",
-          "ms": 1411.7999999998137
-        },
-        {
-          "label": "POST /api/negotiate",
-          "ms": 390
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1578.6000000000931
-        },
-        {
-          "label": "GET /api/credentials",
-          "ms": 776.7999999998137
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1781.1999999997206
-        },
-        {
-          "label": "GET /api/credentials",
-          "ms": 422
+          "label": "GET /api/threads/:id/lock",
+          "ms": 1994.6000000000931
         },
         {
           "label": "POST /api/negotiate",
-          "ms": 382.5
+          "ms": 383.39999999990687
+        },
+        {
+          "label": "GET /api/skills",
+          "ms": 2254.9000000003725
+        },
+        {
+          "label": "GET /api/credentials",
+          "ms": 2260.6999999997206
+        },
+        {
+          "label": "GET /api/credentials",
+          "ms": 903.2000000001863
+        },
+        {
+          "label": "GET /api/skills",
+          "ms": 2477.7999999998137
+        },
+        {
+          "label": "GET /api/credentials",
+          "ms": 567.0999999996275
         },
         {
           "label": "POST /api/threads",
-          "ms": 800.1000000000931
+          "ms": 814.5
         },
         {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 847.2999999998137
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 424.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 436.10000000009313
+          "label": "POST /api/negotiate",
+          "ms": 386
         },
         {
           "label": "POST /api/threads/:id/runs",
-          "ms": 1218.1000000000931
+          "ms": 1027.4000000003725
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 825.2000000001863
+          "ms": 888.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 455
         },
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 790.5
+          "ms": 834.5
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 452.39999999990687
+          "ms": 450.5
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 438.39999999990687
+          "ms": 451
         },
         {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 477
+          "label": "POST /api/threads",
+          "ms": 792.8999999999069
         },
         {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 456.89999999990687
+          "label": "POST /api/threads",
+          "ms": 797.5
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 790.7999999998137
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 846.2000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 920.5
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 822.8000000002794
         },
         {
           "label": "GET /api/threads",
-          "ms": 792.4000000003725
+          "ms": 795.7999999998137
         },
         {
           "label": "GET /api/threads",
-          "ms": 1202.1000000000931
+          "ms": 1137.8000000002794
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 821.2999999998137
+          "ms": 467.1999999997206
         },
         {
           "label": "GET /api/threads",
-          "ms": 961.0999999996275
+          "ms": 1510.3000000002794
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 875.1000000000931
+          "ms": 490.60000000009313
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 860.8999999999069
+          "ms": 826.6000000000931
         },
         {
           "label": "GET /api/threads/:id/runs/:id",
-          "ms": 816
+          "ms": 919.3999999999069
         }
       ],
       "ok": true
@@ -245,88 +253,92 @@
     {
       "prompt": "Hi",
       "rep": 2,
-      "ttftMs": 7307,
-      "totalMs": 11550,
+      "ttftMs": 4086,
+      "totalMs": 9523,
       "calls": [
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 796.9000000003725
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 816.3999999999069
+          "ms": 793.5
         },
         {
           "label": "GET /api/skills",
-          "ms": 829.0999999996275
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1039.7000000001863
+          "ms": 801.3999999999069
         },
         {
           "label": "POST /api/threads",
-          "ms": 801.5
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 934
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 788.6000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 441.29999999981374
+          "ms": 813.3999999999069
         },
         {
           "label": "POST /api/threads/:id/runs",
-          "ms": 1259
+          "ms": 1005.2999999998137
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 817
+          "ms": 822.5
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 442.6999999997206
+          "ms": 493.89999999990687
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 454.09999999962747
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 406.39999999990687
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 411.1999999997206
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 425.60000000009313
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 811.3000000002794
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 814.1000000000931
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 825.3000000002794
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 782.7999999998137
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1186.3000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 434.20000000018626
         },
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 788
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 454.60000000009313
+          "ms": 790.5
         },
         {
           "label": "GET /api/threads",
-          "ms": 789.6000000000931
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1198
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1323.5
+          "ms": 1512.3999999999069
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 818.7999999998137
+          "ms": 459.40000000037253
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 859.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 879.2000000001863
+          "ms": 812.7999999998137
         },
         {
           "label": "GET /api/threads/:id/runs/:id",
-          "ms": 815.7999999998137
+          "ms": 820.6000000000931
         }
       ],
       "ok": true
@@ -334,117 +346,185 @@
     {
       "prompt": "Hi",
       "rep": 3,
-      "ttftMs": 0,
-      "totalMs": 0,
-      "calls": [],
-      "ok": false,
-      "error": "page.waitForFunction: Timeout 90000ms exceeded."
+      "ttftMs": 4419,
+      "totalMs": 8375,
+      "calls": [
+        {
+          "label": "GET /api/skills",
+          "ms": 800.5
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 799.2000000001863
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 801
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 930.5999999996275
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 818.6000000000931
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 443.60000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 529.3000000002794
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 409.29999999981374
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 814.7999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 460.90000000037253
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 438.29999999981374
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 440.1999999997206
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 792.7999999998137
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1125
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 435.79999999981374
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1355.6999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 445.89999999990687
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 788.2999999998137
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1760.4000000003725
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 821.8999999999069
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 833
+        }
+      ],
+      "ok": true
     },
     {
       "prompt": "Hi",
       "rep": 4,
-      "ttftMs": 8578,
-      "totalMs": 13030,
+      "ttftMs": 4655,
+      "totalMs": 10010,
       "calls": [
         {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 1483.8000000002794
-        },
-        {
           "label": "GET /api/skills",
-          "ms": 1530.7000000001863
+          "ms": 805.2000000001863
         },
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 1583.3999999999069
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1730.7000000001863
+          "ms": 805.1000000000931
         },
         {
           "label": "POST /api/threads",
-          "ms": 806.2999999998137
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 798.7000000001863
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 843.8000000002794
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 818.5
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 794.5999999996275
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1206.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 444.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 465.39999999990687
+          "ms": 829.5
         },
         {
           "label": "POST /api/threads/:id/runs",
-          "ms": 944.8999999999069
+          "ms": 914.7000000001863
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 814.8999999999069
+          "ms": 830.6999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 465.79999999981374
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 437.70000000018626
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 414.1999999997206
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 419.60000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 495.3000000002794
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 822
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 845
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 819.3999999999069
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 782.8999999999069
         },
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 804.2000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 448
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 442.20000000018626
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 435.5
+          "ms": 815.3000000002794
         },
         {
           "label": "GET /api/threads",
-          "ms": 792.6000000000931
+          "ms": 1164.2000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 436.20000000018626
         },
         {
           "label": "GET /api/threads",
-          "ms": 1202
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1186.5
+          "ms": 1550.3000000002794
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 827.8999999999069
+          "ms": 518.5
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 866.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 884
+          "ms": 815.7999999998137
         },
         {
           "label": "GET /api/threads/:id/runs/:id",
-          "ms": 840.6999999997206
+          "ms": 845.1999999997206
         }
       ],
       "ok": true
@@ -452,238 +532,32 @@
     {
       "prompt": "Hi",
       "rep": 5,
-      "ttftMs": 7523,
-      "totalMs": 12058,
+      "ttftMs": 4571,
+      "totalMs": 10011,
       "calls": [
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 815.3000000002794
+          "ms": 804.3999999999069
         },
         {
           "label": "GET /api/skills",
-          "ms": 841.8000000002794
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1050.6000000000931
+          "ms": 824.5
         },
         {
           "label": "POST /api/threads",
-          "ms": 944.5
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 852.5999999996275
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 795.7999999998137
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 434.40000000037253
+          "ms": 799
         },
         {
           "label": "POST /api/threads/:id/runs",
-          "ms": 889.3000000002794
+          "ms": 938.5
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 816.1999999997206
+          "ms": 814.5
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 440.60000000009313
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 802.9000000003725
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 439.39999999990687
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 440
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 794.6000000000931
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1202.7999999998137
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1210
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 834.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 859.6999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 878.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 836.7000000001863
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "What is the capital of France?",
-      "rep": 1,
-      "ttftMs": 7204,
-      "totalMs": 11158,
-      "calls": [
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 801.0999999996275
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 823.5
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1021.5
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 809.5
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 838.3000000002794
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 792.7000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 435.89999999990687
-        },
-        {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 910.5
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 810.1999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 817.3000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 437
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 795.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 438.20000000018626
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 413.70000000018626
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 438.39999999990687
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 835.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 829.2999999998137
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 517.2000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 840.6999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 878.3000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 816.6000000000931
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "What is the capital of France?",
-      "rep": 2,
-      "ttftMs": 8164,
-      "totalMs": 12961,
-      "calls": [
-        {
-          "label": "GET /api/skills",
-          "ms": 810.6000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 807.7999999998137
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 989.6000000000931
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 802
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 841
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 789.8000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 438.5
-        },
-        {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 904.6000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 816
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 437.10000000009313
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 802.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 441.20000000018626
+          "ms": 433.70000000018626
         },
         {
           "label": "GET /api/threads/:id/messages",
@@ -691,1244 +565,411 @@
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 435.89999999990687
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 797.6999999997206
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1203.3999999999069
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1467.6000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 814
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 841.6000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 866
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 818.0999999996275
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "What is the capital of France?",
-      "rep": 3,
-      "ttftMs": 6539,
-      "totalMs": 11115,
-      "calls": [
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 805.7999999998137
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 822.6000000000931
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1027
+          "ms": 431.8000000002794
         },
         {
           "label": "POST /api/threads",
-          "ms": 802.7000000001863
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 840.5
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 795.2999999998137
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 437.39999999990687
-        },
-        {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 898.2000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 820.0999999996275
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 442.10000000009313
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 793.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 443.10000000009313
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 809.3999999999069
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1221.6000000000931
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1100.2000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 973.8000000002794
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 416.40000000037253
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 1070.1999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 1127.2000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 839.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 822.2999999998137
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "What is the capital of France?",
-      "rep": 4,
-      "ttftMs": 7797,
-      "totalMs": 12472,
-      "calls": [
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 842.2999999998137
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 924.8000000002794
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1126.9000000003725
+          "ms": 410.39999999990687
         },
         {
           "label": "POST /api/threads",
-          "ms": 823.7999999998137
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 837.6999999997206
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 819.2000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 608.7000000001863
-        },
-        {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 1128.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 852.6000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 446.8000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 808.3000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 438.60000000009313
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 441.10000000009313
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 794.7000000001863
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1209.2000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 819.7000000001863
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1293.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 840.2000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 815.1000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 841.8999999999069
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "What is the capital of France?",
-      "rep": 5,
-      "ttftMs": 8672,
-      "totalMs": 13152,
-      "calls": [
-        {
-          "label": "GET /api/skills",
-          "ms": 804.6000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 802
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1040.2000000001863
+          "ms": 413.39999999990687
         },
         {
           "label": "POST /api/threads",
-          "ms": 810.3000000002794
+          "ms": 800.9000000003725
         },
         {
           "label": "POST /api/threads/:id/messages",
-          "ms": 846.6999999997206
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 805.2999999998137
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 434.89999999990687
-        },
-        {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 1037.6000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 830.8000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 437.89999999990687
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 791.1999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 441.29999999981374
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 459.10000000009313
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 434.89999999990687
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 791.5
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1207.1999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 811.5
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1485.3000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 831.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 818.9000000003725
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 818
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "Explain how DNS resolution works in 3 sentences.",
-      "rep": 1,
-      "ttftMs": 6967,
-      "totalMs": 12692,
-      "calls": [
-        {
-          "label": "GET /api/threads",
-          "ms": 891
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 822
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 829.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 1058.7000000001863
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1042.8000000002794
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 798.1000000000931
+          "ms": 808.1000000000931
         },
         {
           "label": "POST /api/threads/:id/messages",
-          "ms": 840.8000000002794
+          "ms": 843.2000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 431.10000000009313
         },
         {
           "label": "GET /api/threads",
-          "ms": 414.89999999990687
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 433.40000000037253
-        },
-        {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 880.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 812.0999999996275
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 440.60000000009313
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 447
+          "ms": 793.3000000002794
         },
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 798.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 434
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 435.89999999990687
+          "ms": 799
         },
         {
           "label": "GET /api/threads",
-          "ms": 785.1999999997206
+          "ms": 1166.6999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 431.79999999981374
         },
         {
           "label": "GET /api/threads",
-          "ms": 1191.2999999998137
+          "ms": 1287.5
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 807.7000000001863
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1596.5
+          "ms": 461.39999999990687
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 845.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 816.1000000000931
+          "ms": 837.7000000001863
         },
         {
           "label": "GET /api/threads/:id/runs/:id",
-          "ms": 838.6999999997206
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "Explain how DNS resolution works in 3 sentences.",
-      "rep": 2,
-      "ttftMs": 7208,
-      "totalMs": 11366,
-      "calls": [
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 804.2999999998137
-        },
-        {
-          "label": "GET /api/skills",
           "ms": 810.3999999999069
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1042.5
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 808.5
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 830.1999999997206
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 787.1000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 437.8000000002794
-        },
-        {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 898.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 821.1999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 440.39999999990687
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 793.7000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 431.60000000009313
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 434.10000000009313
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 787.2000000001863
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1194.6999999997206
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1599
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 814.9000000003725
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 836.7000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 833.5
         }
       ],
       "ok": true
     },
     {
-      "prompt": "Explain how DNS resolution works in 3 sentences.",
-      "rep": 3,
-      "ttftMs": 7151,
-      "totalMs": 12379,
+      "prompt": "What is the capital of France?",
+      "rep": 1,
+      "ttftMs": 3202,
+      "totalMs": 7819,
       "calls": [
         {
-          "label": "GET /api/skills",
-          "ms": 816.1000000000931
+          "label": "POST /api/threads",
+          "ms": 420.5
         },
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 814.1000000000931
+          "ms": 796.3999999999069
         },
         {
           "label": "GET /api/skills",
-          "ms": 1016.9000000003725
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 818.6000000000931
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 830.3000000002794
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 797.7000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 434.20000000018626
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 806.6000000000931
+          "ms": 806.8999999999069
         },
         {
           "label": "POST /api/threads/:id/runs",
-          "ms": 890
+          "ms": 926.6000000000931
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 805.8000000002794
+          "ms": 838.2000000001863
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 431.5
+          "ms": 439.39999999990687
         },
         {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 798.8000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 444.60000000009313
+          "label": "POST /api/threads",
+          "ms": 789.7000000001863
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 434.29999999981374
+          "ms": 435.3000000002794
         },
         {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 436.10000000009313
+          "label": "POST /api/threads",
+          "ms": 408.8000000002794
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 411.79999999981374
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 824.7999999998137
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 811.7999999998137
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 812.7000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 854.8999999999069
         },
         {
           "label": "GET /api/threads",
-          "ms": 425.29999999981374
+          "ms": 798.2999999998137
         },
         {
           "label": "GET /api/threads",
-          "ms": 833.7000000001863
+          "ms": 1109.7000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 432.79999999981374
         },
         {
           "label": "GET /api/threads",
-          "ms": 891.3000000002794
+          "ms": 1481.2000000001863
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 820.2999999998137
+          "ms": 455.39999999990687
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1849.1000000000931
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 840.2999999998137
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 864.3999999999069
+          "ms": 814.5
         },
         {
           "label": "GET /api/threads/:id/runs/:id",
-          "ms": 824
+          "ms": 833.1000000000931
         }
       ],
       "ok": true
     },
     {
-      "prompt": "Explain how DNS resolution works in 3 sentences.",
-      "rep": 4,
-      "ttftMs": 7012,
-      "totalMs": 12504,
+      "prompt": "What is the capital of France?",
+      "rep": 2,
+      "ttftMs": 3999,
+      "totalMs": 9954,
       "calls": [
         {
-          "label": "GET /api/skills",
-          "ms": 801.5
+          "label": "POST /api/threads",
+          "ms": 424.5
         },
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 796.8000000002794
+          "ms": 810.7000000001863
         },
         {
           "label": "GET /api/skills",
-          "ms": 1033.7000000001863
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 804.5
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 839.1000000000931
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 822
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 438.5
+          "ms": 830.2999999998137
         },
         {
           "label": "POST /api/threads/:id/runs",
-          "ms": 894.8999999999069
+          "ms": 900.1000000000931
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 814.5999999996275
+          "ms": 814.7000000001863
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 441.20000000018626
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 791
+          "ms": 438.29999999981374
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 435.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 440.10000000009313
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 431.60000000009313
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 794.7999999998137
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1210
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 947.2999999998137
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 824.1999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 849.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 880.5
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 816.8000000002794
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "Explain how DNS resolution works in 3 sentences.",
-      "rep": 5,
-      "ttftMs": 7042,
-      "totalMs": 12075,
-      "calls": [
-        {
-          "label": "GET /api/skills",
-          "ms": 797.6999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 817.8999999999069
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1156.1999999997206
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 795.3999999999069
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 832.5999999996275
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 785.1000000000931
+          "ms": 437
         },
         {
           "label": "GET /api/threads/:id/messages",
           "ms": 434.39999999990687
         },
         {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 879.6000000000931
+          "label": "POST /api/threads",
+          "ms": 795.3000000002794
         },
         {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 805.4000000003725
+          "label": "POST /api/threads",
+          "ms": 797.5
         },
         {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 440.29999999981374
+          "label": "POST /api/threads",
+          "ms": 793.1999999997206
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 814.3999999999069
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 857.0999999996275
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 822.4000000003725
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 793.8000000002794
         },
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 790.4000000003725
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 444.3000000002794
+          "ms": 789.5
         },
         {
           "label": "GET /api/threads",
-          "ms": 782.7000000001863
+          "ms": 1165.3999999999069
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 431.20000000018626
+          "ms": 441.5
         },
         {
           "label": "GET /api/threads",
-          "ms": 408.09999999962747
+          "ms": 1276.8999999999069
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 431.5
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 815
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 659.1000000000931
+          "ms": 466.20000000018626
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 816.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 841.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 864
+          "ms": 814.7999999998137
         },
         {
           "label": "GET /api/threads/:id/runs/:id",
-          "ms": 809.3999999999069
+          "ms": 809.1000000000931
         }
       ],
       "ok": true
     },
     {
-      "prompt": "Write a TypeScript debounce function.",
-      "rep": 1,
-      "ttftMs": 6578,
-      "totalMs": 12755,
+      "prompt": "What is the capital of France?",
+      "rep": 3,
+      "ttftMs": 4398,
+      "totalMs": 11182,
       "calls": [
         {
-          "label": "GET /api/skills",
-          "ms": 797.2000000001863
-        },
-        {
           "label": "GET /api/threads/:id/lock",
-          "ms": 794.7999999998137
+          "ms": 802.6000000000931
         },
         {
           "label": "GET /api/skills",
-          "ms": 1007.3999999999069
+          "ms": 816.6000000000931
         },
         {
           "label": "POST /api/threads",
-          "ms": 807.1000000000931
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 837.6000000000931
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 800.8000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 439.20000000018626
+          "ms": 835
         },
         {
           "label": "POST /api/threads/:id/runs",
-          "ms": 883
+          "ms": 911.6000000000931
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 825.6999999997206
+          "ms": 816.1999999997206
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 436.5
+          "ms": 439.09999999962747
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 434.39999999990687
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 436.60000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 456.5
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 796.5999999996275
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 828.0999999996275
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 416.39999999990687
         },
         {
           "label": "GET /api/threads/:id/lock",
-          "ms": 816.2000000001863
+          "ms": 800.5
         },
         {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 437.89999999990687
+          "label": "POST /api/threads/:id/messages",
+          "ms": 807.7999999998137
         },
         {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 437.60000000009313
+          "label": "POST /api/threads/:id/messages",
+          "ms": 822.6999999997206
         },
         {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 435.89999999990687
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 781.3999999999069
+          "label": "POST /api/threads/:id/messages",
+          "ms": 822.8999999999069
         },
         {
           "label": "GET /api/threads",
-          "ms": 1191.6000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 812.7999999998137
+          "ms": 784.1000000000931
         },
         {
           "label": "GET /api/threads",
-          "ms": 1317.2999999998137
+          "ms": 1144.2000000001863
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 835.2999999998137
+          "ms": 432.70000000018626
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1522.2000000001863
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 815.2999999998137
+          "ms": 456
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 817.7999999998137
         },
         {
           "label": "GET /api/threads/:id/runs/:id",
-          "ms": 815.5
+          "ms": 829
         }
       ],
       "ok": true
     },
     {
-      "prompt": "Write a TypeScript debounce function.",
-      "rep": 2,
-      "ttftMs": 8001,
-      "totalMs": 14171,
+      "prompt": "What is the capital of France?",
+      "rep": 4,
+      "ttftMs": 3938,
+      "totalMs": 8126,
       "calls": [
         {
-          "label": "GET /api/skills",
-          "ms": 805
-        },
-        {
           "label": "GET /api/threads/:id/lock",
-          "ms": 819.1999999997206
+          "ms": 801.6000000000931
         },
         {
           "label": "GET /api/skills",
-          "ms": 1018.7000000001863
+          "ms": 813.6000000000931
         },
         {
           "label": "POST /api/threads",
-          "ms": 795.5
+          "ms": 788.7000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 901.5
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 413.10000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 806.1000000000931
         },
         {
           "label": "POST /api/threads/:id/messages",
-          "ms": 824.0999999996275
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 800.1000000000931
+          "ms": 814.7999999998137
         },
         {
           "label": "GET /api/threads/:id/messages",
           "ms": 430.5
         },
         {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 876.1000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 808.1999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 431
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 802.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 476
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 431.10000000009313
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 438.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 431.5
-        },
-        {
           "label": "GET /api/threads",
-          "ms": 790.3000000002794
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1194.2999999998137
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1194.3999999999069
+          "ms": 796.6999999997206
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 812.8999999999069
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1867.6000000000931
+          "ms": 432.5
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 853.7000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 878.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 820.7999999998137
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 812.3999999999069
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "Write a TypeScript debounce function.",
-      "rep": 3,
-      "ttftMs": 8884,
-      "totalMs": 13930,
-      "calls": [
-        {
-          "label": "GET /api/skills",
-          "ms": 807.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 805.1999999997206
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1037.1000000000931
-        },
-        {
-          "label": "GET /api/credentials",
-          "ms": 790
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 807
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 827.2999999998137
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 792.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 459.89999999990687
-        },
-        {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 884.1999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 815.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 785.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 444.3000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 483.90000000037253
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 484.09999999962747
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 439.10000000009313
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 789
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1194
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1518.8000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 812.2999999998137
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 839.3999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 868.2999999998137
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 822.8999999999069
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "Write a TypeScript debounce function.",
-      "rep": 4,
-      "ttftMs": 8031,
-      "totalMs": 13322,
-      "calls": [
-        {
-          "label": "GET /api/skills",
-          "ms": 794.9000000003725
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 808.6000000000931
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1010.9000000003725
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 810.5
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 832.2000000001863
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 805.2000000001863
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 441.10000000009313
-        },
-        {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 888.8000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 850
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 441.39999999990687
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 787.3000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 437.5
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 439.70000000018626
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 445.10000000009313
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 437.29999999981374
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 797.8999999999069
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1206.8999999999069
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 848
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 843.5
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 871.6000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 869.2999999998137
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 901.5999999996275
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 811.1999999997206
-        },
-        {
-          "label": "GET /api/threads/:id/runs/:id",
-          "ms": 819.2999999998137
-        }
-      ],
-      "ok": true
-    },
-    {
-      "prompt": "Write a TypeScript debounce function.",
-      "rep": 5,
-      "ttftMs": 7753,
-      "totalMs": 13192,
-      "calls": [
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 794.6000000000931
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 798.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 795.2999999998137
-        },
-        {
-          "label": "GET /api/skills",
-          "ms": 1014.5
-        },
-        {
-          "label": "POST /api/threads",
-          "ms": 810.6000000000931
-        },
-        {
-          "label": "POST /api/threads/:id/messages",
-          "ms": 848.3999999999069
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 790.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 435.20000000018626
-        },
-        {
-          "label": "POST /api/threads/:id/runs",
-          "ms": 1041.1000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 818.8999999999069
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 438.3000000002794
-        },
-        {
-          "label": "GET /api/threads/:id/lock",
-          "ms": 789.1000000000931
-        },
-        {
-          "label": "GET /api/threads/:id/messages",
-          "ms": 445.5
+          "ms": 429
         },
         {
           "label": "GET /api/threads/:id/messages",
@@ -1936,35 +977,1258 @@
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 444.79999999981374
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 794.8999999999069
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1201.6000000000931
-        },
-        {
-          "label": "GET /api/threads",
-          "ms": 1488.8999999999069
+          "ms": 436.1999999997206
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 839.6000000000931
+          "ms": 432
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 791.3000000002794
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 809.3000000002794
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 861.3000000002794
+          "ms": 814.0999999996275
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1644.8999999999069
         },
         {
           "label": "GET /api/threads/:id/messages",
-          "ms": 889.1000000000931
+          "ms": 841.3000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 842.7999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 788.9000000003725
         },
         {
           "label": "GET /api/threads/:id/runs/:id",
-          "ms": 819.6000000000931
+          "ms": 818.7999999998137
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "What is the capital of France?",
+      "rep": 5,
+      "ttftMs": 5230,
+      "totalMs": 15945,
+      "calls": [
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 793.5
+        },
+        {
+          "label": "GET /api/skills",
+          "ms": 854.8000000002794
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 806.6000000000931
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 913
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 815.7999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 438.20000000018626
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 440.5
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 447.59999999962747
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 451.70000000018626
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 439.60000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 798.3000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 829.1000000000931
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 438.10000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 440.60000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 437
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 801.5
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 804
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 423.1999999997206
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 815.7000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 848.8999999999069
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 806.8999999999069
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 797.8999999999069
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1170.8999999999069
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 434.29999999981374
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1441.2000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 461.79999999981374
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 790.4000000003725
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 832.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 842
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "rep": 1,
+      "ttftMs": 3533,
+      "totalMs": 10682,
+      "calls": [
+        {
+          "label": "GET /api/skills",
+          "ms": 825.8000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 823.6999999997206
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 825.5
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 956.7000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 813.5999999996275
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 445.40000000037253
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 433.89999999990687
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 430.39999999990687
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 827.4000000003725
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 834.6999999997206
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 804.6999999997206
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 421.1999999997206
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 818.2000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 812.9000000003725
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 806
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 818
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 845.6000000000931
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 810
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1220.1000000000931
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 449.29999999981374
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1545.1000000000931
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 480.20000000018626
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1780.6999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 809.2000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 844.7000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 822.7000000001863
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "rep": 2,
+      "ttftMs": 4389,
+      "totalMs": 11313,
+      "calls": [
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 807
+        },
+        {
+          "label": "GET /api/skills",
+          "ms": 813.6999999997206
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 807.6000000000931
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 911.7000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 822.3999999999069
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 435.29999999981374
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 441.29999999981374
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 437.10000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 437.89999999990687
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 781.2999999998137
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 792.6000000000931
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 789
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 809.1000000000931
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 807.8999999999069
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 819.2999999998137
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 811.9000000003725
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 788.7000000001863
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1189.8000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 431.89999999990687
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1313.8999999999069
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 444.59999999962747
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 820.5
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 828.6000000000931
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "rep": 3,
+      "ttftMs": 4417,
+      "totalMs": 17005,
+      "calls": [
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 803.7000000001863
+        },
+        {
+          "label": "GET /api/skills",
+          "ms": 837.8000000002794
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 805.8000000002794
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 899.5
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 839.7999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 453
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 435.8000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 432
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 436.20000000018626
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 435.39999999990687
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 795.6999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 807.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 432.10000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 431.89999999990687
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 434.5
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 441.89999999990687
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 789.6000000000931
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 790.6000000000931
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 414.6999999997206
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 814.7999999998137
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 817.2000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 822.7000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 818.9000000003725
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 796.5
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1206.8999999999069
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 437.70000000018626
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 794.3000000002794
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1356.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 471.39999999990687
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1656.6000000000931
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 820.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 848.5
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 821.5
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "rep": 4,
+      "ttftMs": 4094,
+      "totalMs": 10952,
+      "calls": [
+        {
+          "label": "GET /api/skills",
+          "ms": 808.1999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 801.2000000001863
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 817.8999999999069
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 918
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 828.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 439.8000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 437.70000000018626
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 442.10000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 466.79999999981374
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 788.8999999999069
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 807.6000000000931
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 413.10000000009313
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 808.6000000000931
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 819.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 801.5
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 840.7000000001863
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 802.2999999998137
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1183.6000000000931
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 431
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1265.1000000000931
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 455
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 819.5
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 821
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "Explain how DNS resolution works in 3 sentences.",
+      "rep": 5,
+      "ttftMs": 3585,
+      "totalMs": 10935,
+      "calls": [
+        {
+          "label": "GET /api/skills",
+          "ms": 815.7999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 816.5
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 817.2000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 909.8999999999069
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 811.1000000000931
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 437.5
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 435.5
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 433.09999999962747
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 441.70000000018626
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 785.8999999999069
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 802.8000000002794
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 417.10000000009313
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 814.7999999998137
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 820.6999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 790.5
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 822
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 784.8000000002794
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1169
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 436.6999999997206
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1325.7999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 465.3000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 817.5
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 813.3999999999069
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "rep": 1,
+      "ttftMs": 5318,
+      "totalMs": 10841,
+      "calls": [
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 797
+        },
+        {
+          "label": "GET /api/skills",
+          "ms": 804.8999999999069
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 803
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 415.89999999990687
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 895.1000000000931
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 819.5
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 814.6000000000931
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 793.7000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 436.79999999981374
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 437
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 435.79999999981374
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 439
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 431.6999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 436.29999999981374
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 786.0999999996275
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 790.1999999997206
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1198.5
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1549
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 817.5
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 859
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 887.1000000000931
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 816.7999999998137
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "rep": 2,
+      "ttftMs": 5110,
+      "totalMs": 12439,
+      "calls": [
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 807.5
+        },
+        {
+          "label": "GET /api/skills",
+          "ms": 842.2000000001863
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 815.3999999999069
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 920
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 818.6999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 435.60000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 438.20000000018626
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 436
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 439.29999999981374
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 452
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 792
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 786.7999999998137
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 809.1999999997206
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 799.6000000000931
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 810.7999999998137
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 820.3999999999069
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 824.2999999998137
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 783.8999999999069
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1167
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 431.39999999990687
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1525.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 445.8000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 817.3000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 814.4000000003725
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "rep": 3,
+      "ttftMs": 4483,
+      "totalMs": 11576,
+      "calls": [
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 791.9000000003725
+        },
+        {
+          "label": "GET /api/skills",
+          "ms": 813.3000000002794
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 797.1999999997206
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 900
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 823.8999999999069
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 434.39999999990687
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 432.6999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 435.10000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 437.39999999990687
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 796.3999999999069
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 410.70000000018626
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 413.79999999981374
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 406.39999999990687
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 833.7999999998137
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 816
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 813.8999999999069
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 813.1000000000931
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 822.5
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 792.3999999999069
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1204.7000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 436
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1593.7999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 468.10000000009313
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 2007.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 808.1999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 832.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 814
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "rep": 4,
+      "ttftMs": 5466,
+      "totalMs": 12272,
+      "calls": [
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 815.3999999999069
+        },
+        {
+          "label": "GET /api/skills",
+          "ms": 835.6999999997206
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 799.3999999999069
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 905.6000000000931
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 815.7000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 437.40000000037253
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 434
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 434.3000000002794
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 439.60000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 439
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 791
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 806.6000000000931
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 817.2000000001863
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 787.3999999999069
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 806.7999999998137
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 820.2000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 819.4000000003725
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 783.3999999999069
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1208.2999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 432.89999999990687
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1424.7999999998137
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 444.20000000018626
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 825
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 819.2000000001863
+        }
+      ],
+      "ok": true
+    },
+    {
+      "prompt": "Write a TypeScript debounce function.",
+      "rep": 5,
+      "ttftMs": 5215,
+      "totalMs": 12581,
+      "calls": [
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 799.2000000001863
+        },
+        {
+          "label": "GET /api/skills",
+          "ms": 813.6000000000931
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 803.7000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/runs",
+          "ms": 915.3999999999069
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 812.0999999996275
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 433.89999999990687
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 438.39999999990687
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 433.1999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 434.60000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 475.10000000009313
+        },
+        {
+          "label": "GET /api/threads/:id/lock",
+          "ms": 790.1000000000931
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 801.5
+        },
+        {
+          "label": "POST /api/threads",
+          "ms": 841.7000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 826
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 830
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 829.7000000001863
+        },
+        {
+          "label": "POST /api/threads/:id/messages",
+          "ms": 429.29999999981374
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 800.5
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1166.5
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 436.60000000009313
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 1566.2000000001863
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 457.6999999997206
+        },
+        {
+          "label": "GET /api/threads",
+          "ms": 850.9000000003725
+        },
+        {
+          "label": "GET /api/threads/:id/messages",
+          "ms": 814.6999999997206
+        },
+        {
+          "label": "GET /api/threads/:id/runs/:id",
+          "ms": 831.6000000000931
         }
       ],
       "ok": true

@@ -88,11 +88,22 @@ Sources: [useChat.ts send](../src/features/chat/useChat.ts#L153), [runStore star
 
 ### Phase 1 — Client quick wins (no server change, low risk) — biggest, cheapest
 - **Skip the pre-submit full `sync()`** when the thread already exists server-side; for a brand-new thread
-  do a **targeted thread-create** (one small write) instead of a full bidirectional sync.
-- **Drop the post-submit `getRun()`** — anchor `since` from the submit ack / client time.
-- **Take `getCredentialStatus` off the critical path** — cache capabilities (TTL) so `prepare()` resolves
-  instantly; refresh in the background.
-- **Read immediately** instead of sleeping 450ms before the first poll.
+  do a **targeted thread-create** (one small write) instead of a full bidirectional sync. **[DONE 3e83665]** -
+  replaced with an idempotent `ensureThread` (server `create` returns the existing row untouched on a
+  repeat, rejects temporary/local-only threads which we skip). Removes the `GET /threads` cluster
+  (~1.5-2s of serial round-trips) from the first-token path; the full reconcile sync still runs after
+  the run finishes.
+- **Drop the post-submit `getRun()`** - anchor `since` from the submit ack / client time. **[DONE d13d646]**
+- **Take `getCredentialStatus` off the critical path** - cache capabilities (TTL) so `prepare()` resolves
+  instantly; refresh in the background. **[DONE d13d646]** (bench confirms: 5 `GET /credentials` across 20 runs).
+- **Cache the skills list** (`GET /skills`, measured ~1s and listed twice per send in the baseline) with a
+  5min TTL like the capability probe, cached only on success. **[DONE 3e83665]** - added measurement-led
+  (it was the single biggest client call in the baseline breakdown).
+- ~~**Read immediately** instead of sleeping 450ms before the first poll.~~ **[SKIPPED - measurement-led]**
+  The first token reaches the DOM via the SignalR push (`onAssistant` defers to realtime within 3s), so the
+  poll loop is a fallback, not the first-token path. An immediate poll costs a ~465ms `GET /messages`
+  round-trip that returns null (the worker hasn't written yet), so it would add a wasted request without
+  moving TTFT. The 450ms initial sleep is well-matched to the worker's first-write latency; left as-is.
 - Expected: removes ~2-3s of serial latency. Deploy, re-measure.
 
 ### Phase 2 — Infra: warm the front door
@@ -119,6 +130,18 @@ Sources: [useChat.ts send](../src/features/chat/useChat.ts#L153), [runStore star
 | Phase 2 (front door warm) | ~5s, p95 collapses toward median |
 | Phase 3 (no queue hop) | ~3-4s |
 | Phase 4 (memory trims) | **~2-3s** |
+
+### Measured (this device, real Edge session)
+
+| Stage | TTFT median | p95 | notes |
+|--|--|--|--|
+| Baseline (d13d646) | **~7.5s** | ~9s | pre-submit full sync + uncached skills on the path |
+| **Phase 1 (3e83665)** | **~4.4s** | ~5.5s (8.0s first-send) | beat the ~5-6s target; **~3.1s / ~41% off** |
+
+The Phase 1 breakdown shows the client round-trips before submit are now just `ensureThread`
+(`POST /threads` ~0.8s, idempotent) + `POST /runs` (~0.9s); `GET /threads` fell 86→70 calls and
+`GET /skills` 39→22. The remaining ~4s is **server-side** (queue pickup + memory retrieval + model)
+plus the front-door cold start that still shows as the ~8s first-send spike — i.e. Phases 2–4.
 
 ## 6. Validation & rollback
 - Re-run the browser bench after **each** phase (same prompts ×5, warm + one cold sample). Keep the per-stage breakdown.
