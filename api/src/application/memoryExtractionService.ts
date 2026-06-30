@@ -71,6 +71,12 @@ function turnDedupe(assistantMessageId: string): string {
  *  to be worth an extraction call. This is hygiene only — it never judges meaning. */
 const MIN_MEANINGFUL_CHARS = 3;
 
+/** How many trailing messages of the thread to pass to the extractor as context. The extractor needs
+ *  the threaded conversation — not just the latest turn — to attribute statements correctly (e.g. to
+ *  tell the user's own facts apart from content they are authoring for someone else, like a child's
+ *  speech). Capped to bound token cost on very long threads. */
+const CONTEXT_WINDOW_MESSAGES = 40;
+
 async function embedFor(
   embedder: { embed: (text: string) => Promise<number[]>; model: string } | undefined,
   text: string,
@@ -232,7 +238,11 @@ export class MemoryExtractionService {
       .sort((a, b) => chrono(a).localeCompare(chrono(b)));
     const index = all.findIndex((m) => m.id === targetId);
     if (index < 0) return [];
-    return all.slice(Math.max(0, index - 4), index + 1);
+    // Pass the full threaded conversation up to and including the target turn (capped), so the
+    // extractor sees the context that disambiguates authorship — a short window misreads task content
+    // (e.g. a speech the user is drafting for their child) as durable facts about the user.
+    const end = index + 1;
+    return all.slice(Math.max(0, end - CONTEXT_WINDOW_MESSAGES), end);
   }
 
   private sourceRefs(threadId: string, messages: MessageRecord[], ids: string[]): MemorySourceRef[] | null {

@@ -128,6 +128,37 @@ describe('MemoryExtractionService', () => {
     expect(memories[0]).toMatchObject({ kind: 'fact', text: 'User has a dog named Chopper, a Lhasa Apso.' });
   });
 
+  it('passes the full threaded conversation (not just the last few messages) to the extractor', async () => {
+    let seen: Array<{ id: string; role: string }> = [];
+    const ctx = setup(async (_creds, input) => {
+      seen = input.messages.map((m) => ({ id: m.id, role: m.role }));
+      return { operations: [{ op: 'ignore', reason: 'context only' }] };
+    });
+    await ctx.threadStore.put({ id: 't1', userId: 'userA', title: 'T', pinned: false, archived: false, temporary: false, messageCount: 8, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', deletedAt: null });
+    // The thread's framing ("a speech for my son") is the FIRST message — outside the old 5-message
+    // window. The extractor must still receive it so it can attribute the later speech lines correctly.
+    const seq: Array<[string, 'user' | 'assistant', string]> = [
+      ['u1', 'user', 'Help me write a school speech for my 5-year-old son.'],
+      ['a1', 'assistant', 'Sure — share the details.'],
+      ['u2', 'user', 'one moment'],
+      ['a2', 'assistant', 'Take your time.'],
+      ['u3', 'user', 'here goes'],
+      ['a3', 'assistant', 'Ready.'],
+      ['u4', 'user', 'My school is Keystone. I like cars. My favorite place is Fun Zone.'],
+      ['a4', 'assistant', 'Done — here is the speech.'],
+    ];
+    let s = 1;
+    for (const [id, role, content] of seq) {
+      await ctx.messageStore.append({ id, threadId: 't1', userId: 'userA', role, content, status: 'complete', createdAt: `2026-01-01T00:00:0${s}Z`, orderAt: `2026-01-01T00:00:0${s}Z`, deletedAt: null });
+      s++;
+    }
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a4', 'run1');
+    await ctx.svc.processJob('userA', job!.id);
+
+    // All eight messages reach the extractor (the old window would have dropped u1/a1/u2).
+    expect(seen.map((m) => m.id)).toEqual(['u1', 'a1', 'u2', 'a2', 'u3', 'a3', 'u4', 'a4']);
+  });
+
   it('mechanically skips trivial windows without calling the extractor', async () => {
     let called = false;
     const ctx = setup(async () => {
