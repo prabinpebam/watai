@@ -48,6 +48,16 @@ param memoryEmbedModel string = ''
 @description('When "true", injects an always-on identity profile (durable facts, instructions, avoidances) into every run. Sensitive memories are always excluded.')
 param memoryProfile string = 'true'
 
+@description('Always-ready instances for the HTTP+SignalR group (0 disables). Keeps POST /runs and SignalR negotiate warm so the send path never cold-starts.')
+@minValue(0)
+@maxValue(5)
+param alwaysReadyHttp int = 1
+
+@description('Always-ready instances for the run worker queue trigger (0 disables). Removes the storage-queue scale-from-zero cold start (~12-42s) that dominates first-prompt TTFT.')
+@minValue(0)
+@maxValue(5)
+param alwaysReadyRunWorker int = 1
+
 var suffix = uniqueString(resourceGroup().id)
 var tags = {
   app: 'watai'
@@ -247,6 +257,15 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
       scaleAndConcurrency: {
         maximumInstanceCount: 40
         instanceMemoryMB: 2048
+        // Always-ready keeps these scale units loaded so an idle app no longer pays the
+        // queue worker's 12-42s scale-from-zero on the first prompt. Queue triggers are
+        // addressed individually as `function:<name>`; only `runWorker` is on the hot path
+        // (memoryWorker/imageWorker are intentionally left to scale from zero). A count of 0
+        // omits the entry. See documentation/cold-start-fix-plan.md.
+        alwaysReady: concat(
+          alwaysReadyHttp > 0 ? [ { name: 'http', instanceCount: alwaysReadyHttp } ] : [],
+          alwaysReadyRunWorker > 0 ? [ { name: 'function:runWorker', instanceCount: alwaysReadyRunWorker } ] : []
+        )
       }
       runtime: {
         name: 'node'

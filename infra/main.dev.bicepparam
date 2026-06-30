@@ -6,6 +6,13 @@ param env = 'dev'
 // Function App uses Flex Consumption (FC1) — bypasses the consumption (Y1) VM-quota
 // wall that blocked this subscription in every region tested.
 param deployFunctionApp = true
+// Always-ready instances to kill the first-prompt cold start (see
+// documentation/cold-start-fix-plan.md). Option B (worker-only): runWorker=1 removes the
+// storage-queue scale-from-zero (~12-42s) for ~$21/mo; http stays at 0 so the front door
+// scales to zero (accepts a ~3-5s cold start on the first POST after idle).
+// memoryWorker/imageWorker stay cold. Dial runWorker to 0 to disable entirely.
+param alwaysReadyHttp = 0
+param alwaysReadyRunWorker = 1
 // Admin account object-id (oid claim). Only the local email/password account
 // (d7755720) can sign into the app via the user flow, so it is the sole app admin.
 // The federated guest (cbc85566) is the CIAM tenant administrator, not an app
