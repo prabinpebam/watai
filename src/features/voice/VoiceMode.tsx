@@ -5,9 +5,11 @@ import { startRecording, type Recorder } from '../../lib/audio';
 import { cloudApi, repo } from '../../data';
 import { fileToBase64, base64ToBlob } from '../../lib/files';
 import { newId } from '../../lib/ids';
-import { useUi } from '../../state/store';
-
-type VoiceTurn = { role: 'user' | 'assistant'; content: string };
+import { useRuns } from '../chat/runStore';
+import { useChat } from '../chat/useChat';
+import { createReplySpeaker, type ReplySpeaker } from '../../lib/replySpeaker';
+import { createTtsQueue, type TtsClip, type TtsQueue } from '../../lib/ttsQueue';
+import type { Settings } from '../../lib/types';
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'muted' | 'error';
 
@@ -22,130 +24,180 @@ const PHASE_LABEL: Record<Phase, string> = {
 
 export function VoiceMode() {
   const navigate = useNavigate();
-  const { threadId } = useParams();
-  const [phase, setPhase] = useState<Phase>('idle');
+  const { threadId: routeThreadId } = useParams();
+  // Voice mode always operates on a real thread so the conversation persists in history and gets
+  // memory + tools + skills. Mint one when entered fresh (the run lazily creates it on first send).
+  const tidRef = useRef(routeThreadId ?? newId());
+  const tid = tidRef.current;
+  const { send } = useChat(tid);
+  const run = useRuns((s) => s.runs[tid]);
+
+  const [listening, setListening] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [errored, setErrored] = useState(false);
   const [caption, setCaption] = useState('');
+
   const recRef = useRef<Recorder | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const historyRef = useRef<VoiceTurn[]>([]);
+  const settingsRef = useRef<Settings['voice'] | null>(null);
+  const speakerRef = useRef<ReplySpeaker | null>(null);
+  const lastContentRef = useRef('');
+  const runningRef = useRef(false);
+  const turnedRef = useRef(false);
 
-  const exit = useCallback(() => {
-    recRef.current?.cancel();
-    audioRef.current?.pause();
-    navigate(threadId ? `/c/${threadId}` : '/new');
-  }, [navigate, threadId]);
+  // Load the voice settings once so each TTS clip doesn't await the repo on the playback path.
+  useEffect(() => {
+    repo
+      .getSettings()
+      .then((s) => {
+        settingsRef.current = s.voice;
+      })
+      .catch(() => {});
+  }, []);
 
-  const speak = useCallback(
-    async (text: string) => {
-      setPhase('speaking');
-      setCaption(text);
-      try {
-        const { audioBase64, mime } = await cloudApi.synthesizeSpeech({ input: text.slice(0, 4000) });
-        if (!audioBase64) {
-          setPhase('idle');
-          return;
-        }
-        const url = URL.createObjectURL(base64ToBlob(audioBase64, mime));
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          setPhase('idle');
-        };
-        await audio.play();
-      } catch {
-        setPhase('idle');
-      }
-    },
-    [],
-  );
-
-  const think = useCallback(
-    async (userText: string) => {
-      setPhase('thinking');
-      historyRef.current.push({ role: 'user', content: userText });
-
-      let acc = '';
-      try {
-        const { text } = await cloudApi.chatComplete(historyRef.current);
-        acc = text;
-        setCaption(acc);
-      } catch (e) {
-        setPhase('error');
-        setCaption(e instanceof Error ? e.message : 'Error');
-        return;
-      }
-      historyRef.current.push({ role: 'assistant', content: acc });
-
-      // Persist to the thread if we have one
-      if (threadId) {
-        await repo.appendMessage({
-          id: newId(),
-          threadId,
-          role: 'user',
-          content: userText,
-          status: 'complete',
-          createdAt: new Date().toISOString(),
-        });
-        await repo.appendMessage({
-          id: newId(),
-          threadId,
-          role: 'assistant',
-          content: acc,
-          status: 'complete',
-          createdAt: new Date().toISOString(),
-        });
-      }
-      await speak(acc);
-    },
-    [speak, threadId],
-  );
-
-  const stopListening = useCallback(async () => {
-    const rec = recRef.current;
-    recRef.current = null;
-    if (!rec) return;
-    setPhase('thinking');
-    try {
-      const blob = await rec.stop();
-      const { text } = await cloudApi.transcribeAudio({
-        audioBase64: await fileToBase64(blob),
-        mime: blob.type || 'audio/webm',
+  // Serial TTS player (created once). Speaks sentence-by-sentence as the reply streams; `stop()`
+  // halts the current clip + clears the queue synchronously for snappy barge-in.
+  const ttsRef = useRef<TtsQueue | null>(null);
+  if (!ttsRef.current) {
+    const synthesize = async (text: string): Promise<TtsClip> => {
+      const v = settingsRef.current;
+      const { audioBase64, mime } = await cloudApi.synthesizeSpeech({
+        input: text,
+        voice: v?.voiceId,
+        speed: v?.rate,
       });
-      if (!text.trim()) {
-        setPhase('idle');
-        return;
-      }
-      setCaption(text);
-      await think(text);
-    } catch (e) {
-      setPhase('error');
-      setCaption(e instanceof Error ? e.message : 'Could not transcribe');
+      const url = URL.createObjectURL(base64ToBlob(audioBase64, mime));
+      const audio = new Audio(url);
+      return {
+        play: () =>
+          new Promise<void>((resolve) => {
+            audio.onended = () => {
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            audio.onerror = () => {
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            void audio.play().catch(() => {
+              URL.revokeObjectURL(url);
+              resolve();
+            });
+          }),
+        stop: () => {
+          audio.pause();
+          URL.revokeObjectURL(url);
+        },
+      };
+    };
+    ttsRef.current = createTtsQueue({ synthesize, onPlayingChange: setPlaying });
+  }
+  if (!speakerRef.current) {
+    speakerRef.current = createReplySpeaker((t) => ttsRef.current!.enqueue(t));
+  }
+
+  // Stream the assistant reply into the TTS queue as it grows. The sentence splitter is prefix-stable,
+  // so each push yields only newly completed sentences; speakableText runs per complete sentence (never
+  // partial markdown) so code blocks / tables are dropped cleanly before synthesis.
+  const content = run?.message.content ?? '';
+  useEffect(() => {
+    if (!content || content === lastContentRef.current) return;
+    lastContentRef.current = content;
+    speakerRef.current!.push(content);
+    if (settingsRef.current?.captions !== false) setCaption(content);
+  }, [content]);
+
+  // When a run finishes, flush the trailing (unterminated) sentence and reset for the next turn.
+  useEffect(() => {
+    const running = !!run;
+    if (runningRef.current && !running) {
+      speakerRef.current!.flush();
+      speakerRef.current = createReplySpeaker((t) => ttsRef.current!.enqueue(t));
+      lastContentRef.current = '';
     }
-  }, [think]);
+    runningRef.current = running;
+  }, [run]);
 
   const startListening = useCallback(async () => {
+    setErrored(false);
     try {
       recRef.current = await startRecording();
       setCaption('');
-      setPhase('listening');
+      setListening(true);
     } catch {
-      setPhase('error');
+      setErrored(true);
       setCaption('Microphone permission is needed for voice mode.');
     }
   }, []);
 
+  const stopListening = useCallback(async () => {
+    const rec = recRef.current;
+    recRef.current = null;
+    setListening(false);
+    if (!rec) return;
+    let text = '';
+    try {
+      const blob = await rec.stop();
+      const res = await cloudApi.transcribeAudio({
+        audioBase64: await fileToBase64(blob),
+        mime: blob.type || 'audio/webm',
+      });
+      text = res.text.trim();
+    } catch (e) {
+      setErrored(true);
+      setCaption(e instanceof Error ? e.message : 'Could not transcribe');
+      return;
+    }
+    if (!text) return;
+    setCaption(text);
+    // Start the reply stream clean, then hand off to the run store (memory + tools + skills + SignalR).
+    speakerRef.current = createReplySpeaker((t) => ttsRef.current!.enqueue(t));
+    lastContentRef.current = '';
+    turnedRef.current = true;
+    await send(text);
+  }, [send]);
+
   const onOrbTap = () => {
-    if (phase === 'listening') stopListening();
-    else if (phase === 'idle' || phase === 'error') startListening();
+    if (listening) {
+      void stopListening();
+      return;
+    }
+    if (muted) return;
+    // Barge-in: interrupt any in-flight reply + speech, then start listening.
+    if (run) useRuns.getState().stop(tid);
+    ttsRef.current?.stop();
+    void startListening();
   };
 
-  useEffect(() => {
-    return () => {
+  const exit = useCallback(() => {
+    recRef.current?.cancel();
+    ttsRef.current?.stop();
+    // The server run keeps generating after we leave, so land back in the thread to see the reply.
+    navigate(turnedRef.current || routeThreadId ? `/c/${tid}` : '/new');
+  }, [navigate, routeThreadId, tid]);
+
+  // Stop local mic + audio on unmount; the server run is untouched (it persists into the thread).
+  useEffect(
+    () => () => {
       recRef.current?.cancel();
-      audioRef.current?.pause();
-    };
-  }, []);
+      ttsRef.current?.stop();
+    },
+    [],
+  );
+
+  const phase: Phase = errored
+    ? 'error'
+    : listening
+      ? 'listening'
+      : playing
+        ? 'speaking'
+        : run
+          ? 'thinking'
+          : muted
+            ? 'muted'
+            : 'idle';
+
+  const showCaption = settingsRef.current?.captions !== false && !!caption;
 
   const orbClass =
     phase === 'listening'
@@ -165,19 +217,19 @@ export function VoiceMode() {
 
       <div className="col" style={{ alignItems: 'center', gap: 'var(--space-7)' }}>
         <div className="voice__status">{PHASE_LABEL[phase]}</div>
-        <button className={orbClass} onClick={onOrbTap} aria-label="Tap to speak">
+        <button className={orbClass} onClick={onOrbTap} aria-label={listening ? 'Stop and send' : 'Tap to speak'}>
           {phase === 'thinking' && <Spinner size="lg" />}
         </button>
-        <div className="voice__caption">{caption}</div>
+        {showCaption && <div className="voice__caption">{caption}</div>}
       </div>
 
       <div className="voice__controls">
         <IconButton
-          name={phase === 'muted' ? 'mic-off' : 'mic'}
-          label="Toggle microphone"
+          name={muted ? 'mic-off' : 'mic'}
+          label={muted ? 'Unmute microphone' : 'Mute microphone'}
           big
           variant="muted"
-          onClick={() => setPhase((p) => (p === 'muted' ? 'idle' : 'muted'))}
+          onClick={() => setMuted((m) => !m)}
         />
         <IconButton name="close" label="End" big variant="accent" onClick={exit} />
       </div>
