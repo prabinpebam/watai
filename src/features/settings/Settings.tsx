@@ -1407,6 +1407,15 @@ function ToolsBody({ ctx }: { ctx: SettingsCtx }) {
   );
 }
 
+const VOICE_OPTIONS: { value: string; label: string; description?: string }[] = [
+  { value: 'alloy', label: 'Alloy', description: 'Balanced, neutral' },
+  { value: 'echo', label: 'Echo', description: 'Warm, mellow' },
+  { value: 'fable', label: 'Fable', description: 'Expressive, bright' },
+  { value: 'onyx', label: 'Onyx', description: 'Deep, resonant' },
+  { value: 'nova', label: 'Nova', description: 'Crisp, energetic' },
+  { value: 'shimmer', label: 'Shimmer', description: 'Soft, airy' },
+];
+
 function VoiceBody({ ctx }: { ctx: SettingsCtx }) {
   const { settings, setSettings } = ctx;
   const v = settings.voice;
@@ -1415,17 +1424,15 @@ function VoiceBody({ ctx }: { ctx: SettingsCtx }) {
     <div className="settings-card">
       <div className="setting-row">
         <div className="setting-row__body">
-          <div className="setting-row__title">Auto-send after dictation</div>
-          <div className="setting-row__sub">Send as soon as you stop speaking.</div>
+          <div className="setting-row__title">Voice</div>
+          <div className="setting-row__sub">Spoken voice for read-aloud and voice mode.</div>
         </div>
-        <Switch checked={v.autoSend} onChange={(x) => set({ autoSend: x })} label="Auto-send" />
-      </div>
-      <div className="setting-row">
-        <div className="setting-row__body">
-          <div className="setting-row__title">Live captions</div>
-          <div className="setting-row__sub">Show text during voice mode.</div>
-        </div>
-        <Switch checked={v.captions} onChange={(x) => set({ captions: x })} label="Captions" />
+        <SelectMenu
+          value={v.voiceId ?? 'alloy'}
+          label="Voice"
+          options={VOICE_OPTIONS}
+          onChange={(x) => set({ voiceId: x })}
+        />
       </div>
       <div className="setting-row">
         <div className="setting-row__body">
@@ -1441,6 +1448,35 @@ function VoiceBody({ ctx }: { ctx: SettingsCtx }) {
           onChange={(e) => set({ rate: Number(e.target.value) })}
           aria-label="Speaking rate"
         />
+      </div>
+      <div className="setting-row">
+        <div className="setting-row__body">
+          <div className="setting-row__title">Mic sensitivity</div>
+          <div className="setting-row__sub">Higher picks up quieter speech sooner.</div>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={v.vad}
+          onChange={(e) => set({ vad: Number(e.target.value) })}
+          aria-label="Mic sensitivity"
+        />
+      </div>
+      <div className="setting-row">
+        <div className="setting-row__body">
+          <div className="setting-row__title">Auto-stop on silence (dictation)</div>
+          <div className="setting-row__sub">End dictation automatically when you stop speaking.</div>
+        </div>
+        <Switch checked={v.autoSend} onChange={(x) => set({ autoSend: x })} label="Auto-stop on silence" />
+      </div>
+      <div className="setting-row">
+        <div className="setting-row__body">
+          <div className="setting-row__title">Live captions</div>
+          <div className="setting-row__sub">Show text during voice mode.</div>
+        </div>
+        <Switch checked={v.captions} onChange={(x) => set({ captions: x })} label="Captions" />
       </div>
     </div>
   );

@@ -4,6 +4,8 @@ import { Icon } from '../../design/icons';
 import { startRecording, type Recorder } from '../../lib/audio';
 import { cloudApi, skillsApi } from '../../data';
 import { fileToBase64 } from '../../lib/files';
+import { insertAtCaret } from '../../lib/caret';
+import { WaveformVisualizer } from '../voice/WaveformVisualizer';
 import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
 import type { SkillSummary } from '../../lib/types';
@@ -31,6 +33,13 @@ interface SkillQuery {
   start: number;
   end: number;
   query: string;
+}
+
+function formatElapsed(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function skillQueryAt(value: string, caret: number): SkillQuery | null {
@@ -94,6 +103,9 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   const [skillQuery, setSkillQuery] = useState<SkillQuery | null>(null);
   const [skillIndex, setSkillIndex] = useState(0);
   const recRef = useRef<Recorder | null>(null);
+  const recCaretRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  const recStartRef = useRef(0);
+  const [recElapsed, setRecElapsed] = useState(0);
   const pushToast = useUi((s) => s.pushToast);
 
   // Auto-grow
@@ -131,6 +143,14 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
   useEffect(() => () => pendingRef.current.forEach((p) => p.url && URL.revokeObjectURL(p.url)), []);
+
+  // Dictation recording timer; also stop the recorder if the composer unmounts mid-capture.
+  useEffect(() => {
+    if (!recording) return;
+    const id = window.setInterval(() => setRecElapsed(Date.now() - recStartRef.current), 250);
+    return () => window.clearInterval(id);
+  }, [recording]);
+  useEffect(() => () => recRef.current?.cancel(), []);
 
   const addFiles = (list: FileList | File[]) => {
     const all = Array.from(list);
@@ -240,34 +260,58 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
     }
   };
 
-  const toggleDictation = async () => {
-    if (recording) {
-      const rec = recRef.current;
-      recRef.current = null;
-      setRecording(false);
-      if (!rec) return;
-      setTranscribing(true);
-      try {
-        const blob = await rec.stop();
-        const { text } = await cloudApi.transcribeAudio({
-          audioBase64: await fileToBase64(blob),
-          mime: blob.type || 'audio/webm',
-        });
-        onChange(value ? `${value} ${text}` : text);
-        taRef.current?.focus();
-      } catch (e) {
-        pushToast(e instanceof Error ? e.message : 'Transcription failed', 'error');
-      } finally {
-        setTranscribing(false);
-      }
-      return;
-    }
+  const startDictation = async () => {
+    const ta = taRef.current;
+    recCaretRef.current = {
+      start: ta?.selectionStart ?? value.length,
+      end: ta?.selectionEnd ?? value.length,
+    };
     try {
       recRef.current = await startRecording();
+      recStartRef.current = Date.now();
+      setRecElapsed(0);
       setRecording(true);
     } catch {
       pushToast('Microphone permission is needed for dictation', 'error');
     }
+  };
+
+  const acceptDictation = async () => {
+    const rec = recRef.current;
+    recRef.current = null;
+    setRecording(false);
+    if (!rec) return;
+    setTranscribing(true);
+    try {
+      const blob = await rec.stop();
+      const { text } = await cloudApi.transcribeAudio({
+        audioBase64: await fileToBase64(blob),
+        mime: blob.type || 'audio/webm',
+      });
+      const trimmed = text.trim();
+      if (trimmed) {
+        const { start, end } = recCaretRef.current;
+        const next = insertAtCaret(value, start, end, trimmed);
+        onChange(next.value);
+        requestAnimationFrame(() => {
+          const ta = taRef.current;
+          if (ta) {
+            ta.focus();
+            ta.setSelectionRange(next.caret, next.caret);
+          }
+        });
+      }
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Transcription failed', 'error');
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  const cancelDictation = () => {
+    recRef.current?.cancel();
+    recRef.current = null;
+    setRecording(false);
   };
 
   const onDrop = (e: React.DragEvent) => {
@@ -330,6 +374,18 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
       >
+        {(recording || transcribing) && (
+          <div className="composer__rec">
+            <IconButton name="close" label="Cancel dictation" onClick={cancelDictation} disabled={transcribing} />
+            <WaveformVisualizer analyser={recRef.current?.analyser ?? null} className="composer__rec-wave" />
+            <span className="composer__rec-timer">{formatElapsed(recElapsed)}</span>
+            {transcribing ? (
+              <Spinner size="sm" />
+            ) : (
+              <IconButton name="check" label="Insert transcript" variant="accent" onClick={acceptDictation} />
+            )}
+          </div>
+        )}
         <IconButton name="plus" label="Attach image or file" onClick={() => fileRef.current?.click()} />
         <input
           ref={fileRef}
@@ -399,12 +455,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
         {transcribing ? (
           <Spinner size="sm" className="composer__spinner" />
         ) : (
-          <IconButton
-            name={recording ? 'mic-off' : 'mic'}
-            label={recording ? 'Stop dictation' : 'Dictate'}
-            variant={recording ? 'accent' : 'muted'}
-            onClick={toggleDictation}
-          />
+          <IconButton name="mic" label="Dictate" variant="muted" onClick={startDictation} />
         )}
         {streaming ? (
           <IconButton key="stop" className="composer__primary" name="stop" label="Stop generating" variant="accent" onClick={onStop} />

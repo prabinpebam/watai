@@ -4,8 +4,9 @@ import { AttachmentList, ArtifactList, GeneratedImages } from './Attachments';
 import { Avatar, IconButton, InlineAlert, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
-import { cloudApi } from '../../data';
+import { repo, cloudApi } from '../../data';
 import { base64ToBlob } from '../../lib/files';
+import { speakableText } from '../../lib/speakable';
 import type { Citation, ImageRef, Message, MessageMemoryRef, PendingImage, ToolCall } from '../../lib/types';
 
 function domainOf(url: string): string {
@@ -406,8 +407,12 @@ export function AssistantMessage({
     }
     setSpeaking(true);
     try {
+      const settings = await repo.getSettings().catch(() => null);
+      const spoken = speakableText(message.content).slice(0, 4000);
       const { audioBase64, mime } = await cloudApi.synthesizeSpeech({
-        input: message.content.slice(0, 4000),
+        input: spoken || message.content.slice(0, 4000),
+        voice: settings?.voice.voiceId,
+        speed: settings?.voice.rate,
       });
       if (!audioBase64) {
         setSpeaking(false);

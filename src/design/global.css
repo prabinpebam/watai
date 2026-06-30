@@ -939,6 +939,7 @@ a:hover {
   border-radius: var(--radius-xl);
   padding: var(--space-2);
   box-shadow: var(--elevation-1);
+  position: relative;
   transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
 }
 .composer--focus {
@@ -948,6 +949,42 @@ a:hover {
 .composer--drag {
   border-color: var(--color-accent);
   border-style: dashed;
+}
+/* Dictation recording bar (V-14): overlays the composer while capturing/transcribing. */
+.composer__rec {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-1);
+  border-radius: inherit;
+  z-index: 4;
+  animation: composer-rec-in var(--motion-fast) var(--ease-standard);
+}
+.composer__rec-wave {
+  flex: 1;
+  height: 28px;
+  min-width: 0;
+  color: var(--color-accent);
+}
+.composer__rec-timer {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-body-sm-size);
+  color: var(--color-text-secondary);
+  min-width: 40px;
+  text-align: right;
+}
+@keyframes composer-rec-in {
+  from {
+    opacity: 0;
+  }
+}
+.waveform {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .composer__input {
   position: relative;
