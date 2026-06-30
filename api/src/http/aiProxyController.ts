@@ -30,9 +30,9 @@ export function createAiProxyController(svc: AiProxyService) {
     speak: (req: ApiRequest): Promise<HttpResult> =>
       respond(200, async () => {
         const { userId } = identityFromClaims(req.claims);
-        const b = (req.body ?? {}) as { input?: string; voice?: string };
+        const b = (req.body ?? {}) as { input?: string; voice?: string; speed?: number };
         if (!b.input) throw new AppError('validation', 'input is required.');
-        return svc.speak(userId, { input: b.input, voice: b.voice });
+        return svc.speak(userId, { input: b.input, voice: b.voice, speed: b.speed });
       }),
 
     chat: (req: ApiRequest): Promise<HttpResult> =>

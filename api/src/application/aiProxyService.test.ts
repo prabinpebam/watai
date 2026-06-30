@@ -31,6 +31,25 @@ describe('AiProxyService', () => {
     expect(Buffer.from(out.audioBase64, 'base64').toString()).toBe('MP3');
   });
 
+  it('forwards the selected voice and a clamped speed to /audio/speech', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new TextEncoder().encode('MP3').buffer });
+    const svc = new AiProxyService(creds({ tts: 'tts-1' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
+    await svc.speak('u', { input: 'hello', voice: 'nova', speed: 5 }); // 5 is out of range → clamped to 4
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(String(url)).toContain('/audio/speech');
+    const body = JSON.parse(init.body as string);
+    expect(body).toMatchObject({ model: 'tts-1', voice: 'nova', speed: 4, input: 'hello' });
+  });
+
+  it('defaults speed to 1 and voice to alloy when unspecified, and floors speed at 0.25', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new TextEncoder().encode('MP3').buffer });
+    const svc = new AiProxyService(creds({ tts: 'tts-1' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
+    await svc.speak('u', { input: 'hi' });
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body as string)).toMatchObject({ voice: 'alloy', speed: 1 });
+    await svc.speak('u', { input: 'hi', speed: 0 }); // below range → floored to 0.25
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body as string).speed).toBe(0.25);
+  });
+
   it('proxies a non-streaming chat completion', async () => {
     const fetchImpl = vi
       .fn()

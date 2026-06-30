@@ -334,7 +334,7 @@ export class WataiApiClient implements CloudApi {
     return this.request('POST', '/ai/transcribe', body);
   }
 
-  synthesizeSpeech(body: { input: string; voice?: string }): Promise<{ audioBase64: string; mime: string }> {
+  synthesizeSpeech(body: { input: string; voice?: string; speed?: number }): Promise<{ audioBase64: string; mime: string }> {
     return this.request('POST', '/ai/speech', body);
   }
 
@@ -466,7 +466,7 @@ export interface CloudApi {
     language?: string;
     prompt?: string;
   }): Promise<{ text: string }>;
-  synthesizeSpeech(body: { input: string; voice?: string }): Promise<{ audioBase64: string; mime: string }>;
+  synthesizeSpeech(body: { input: string; voice?: string; speed?: number }): Promise<{ audioBase64: string; mime: string }>;
   chatComplete(messages: Array<{ role: string; content: string }>): Promise<{ text: string }>;
   generateImage(body: { prompt: string; size?: string }): Promise<{ images: Array<{ b64: string }> }>;
   createImages(body: CreateImagesBody): Promise<StudioImage[]>;

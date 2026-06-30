@@ -14,6 +14,8 @@ export interface TranscribeInput {
 export interface SpeakInput {
   input: string;
   voice?: string;
+  /** Playback speed for Azure OpenAI `/audio/speech` (0.25–4.0). Clamped; defaults to 1.0. */
+  speed?: number;
 }
 export interface ChatProxyInput {
   messages: ChatMessage[];
@@ -25,6 +27,12 @@ export interface ImageProxyInput {
 
 function decodeBase64(data: string): Uint8Array {
   return new Uint8Array(Buffer.from(data.replace(/^data:[^;]*;base64,/, ''), 'base64'));
+}
+
+/** Azure OpenAI `/audio/speech` accepts `speed` 0.25–4.0; clamp into range and default to 1.0. */
+function clampSpeed(speed: number | undefined): number {
+  if (typeof speed !== 'number' || !Number.isFinite(speed)) return 1;
+  return Math.min(4, Math.max(0.25, speed));
 }
 
 /**
@@ -74,6 +82,7 @@ export class AiProxyService {
         model: c.models.tts,
         input: (input.input ?? '').slice(0, 4000),
         voice: input.voice ?? 'alloy',
+        speed: clampSpeed(input.speed),
         response_format: 'mp3',
       },
       fetchImpl: this.opts.fetchImpl,
