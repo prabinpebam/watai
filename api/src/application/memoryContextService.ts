@@ -15,6 +15,9 @@ export interface MemoryContextInput {
    *  query without a second credential unwrap. When absent (or embeddings unconfigured) the
    *  relevance channel is skipped and only the always-on profile contributes. */
   creds?: EmbedCredentials;
+  /** Already-loaded settings, supplied by the run worker so the gate check reuses the worker's
+   *  read instead of issuing a second one. Falls back to a store read when omitted. */
+  settings?: Settings;
 }
 
 export interface MemorySettingsReader {
@@ -73,27 +76,35 @@ export class MemoryContextService {
   }
 
   async buildForRun(input: MemoryContextInput): Promise<MemoryContextBlock> {
-    const settings = await this.settings.get(input.userId).catch(() => undefined);
+    const settings = input.settings ?? (await this.settings.get(input.userId).catch(() => undefined));
     if (settings) {
       const memory = effectiveMemorySettings(settings);
       if (!memory.enabled || memory.paused || !memory.referenceSaved) return { ...EMPTY, latencyBudgetMs: 250 };
     }
-    const base = this.embedder && this.retriever && input.creds
-      ? await this.buildVector(input)
-      : { ...EMPTY, latencyBudgetMs: 250 };
-    return this.profileEnabled ? this.withProfile(base, input) : base;
+    const retrievalOn = !!(this.embedder && this.retriever && input.creds);
+    // Read the active candidate set once and share it between vector ranking and the always-on
+    // profile, instead of listing the same (up to 200) records twice per run.
+    const candidates: MemoryRecord[] =
+      retrievalOn || this.profileEnabled
+        ? await this.store
+            .list(input.userId, { status: 'active', limit: VECTOR_CANDIDATE_LIMIT })
+            .then((p) => p.memories)
+            .catch(() => [])
+        : [];
+    const base = retrievalOn ? await this.buildVector(input, candidates) : { ...EMPTY, latencyBudgetMs: 250 };
+    return this.profileEnabled ? this.withProfile(base, input, candidates) : base;
   }
 
   /** Semantic retrieval: embed the query, vector-rank candidates above a relevance floor.
    *  Embedding failure or no relevant match yields an empty block (the reply is never blocked). */
-  private async buildVector(input: MemoryContextInput): Promise<MemoryContextBlock> {
+  private async buildVector(input: MemoryContextInput, candidates: MemoryRecord[]): Promise<MemoryContextBlock> {
     const queryVec = await this.embedder!.embed(input.creds!, input.latestUserText).catch((e) => {
       console.warn('[memory] query embed failed', e instanceof Error ? e.message : String(e));
       return null;
     });
     if (!queryVec) return { ...EMPTY, latencyBudgetMs: 250 };
     const scored = await this.retriever!
-      .retrieve(input.userId, queryVec, { now: input.now, limit: MAX_SELECTED_MEMORIES, candidateLimit: VECTOR_CANDIDATE_LIMIT })
+      .retrieve(input.userId, queryVec, { now: input.now, limit: MAX_SELECTED_MEMORIES, candidateLimit: VECTOR_CANDIDATE_LIMIT, candidates })
       .catch(() => []);
     const nowMs = Date.parse(input.now);
     const ranked = scored
@@ -141,9 +152,8 @@ export class MemoryContextService {
   }
 
   /** Always-on identity profile, prepended to every run when enabled. Sensitive memories excluded. */
-  private async withProfile(base: MemoryContextBlock, input: MemoryContextInput): Promise<MemoryContextBlock> {
-    const page = await this.store.list(input.userId, { status: 'active', limit: VECTOR_CANDIDATE_LIMIT }).catch(() => ({ memories: [] as MemoryRecord[] }));
-    const profile = renderMemoryProfile(page.memories, input.now, { maxChars: PROFILE_MAX_CHARS });
+  private async withProfile(base: MemoryContextBlock, input: MemoryContextInput, candidates: MemoryRecord[]): Promise<MemoryContextBlock> {
+    const profile = renderMemoryProfile(candidates, input.now, { maxChars: PROFILE_MAX_CHARS });
     if (!profile) return base;
     const retrievalMode = base.memories.length || base.instructions.length ? base.retrievalMode : 'profile';
     return { ...base, profile, tokenEstimate: base.tokenEstimate + estimateTokens(profile), retrievalMode };

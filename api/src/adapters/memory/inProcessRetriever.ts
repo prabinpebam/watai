@@ -28,9 +28,11 @@ export class InProcessRetriever implements MemoryRetriever {
 
   async retrieve(userId: string, queryEmbedding: number[], opts: MemoryRetrieveOptions): Promise<ScoredMemory[]> {
     if (!queryEmbedding.length) return [];
-    const page = await this.store.list(userId, { status: 'active', limit: opts.candidateLimit ?? 200 });
+    const memories =
+      opts.candidates ??
+      (await this.store.list(userId, { status: 'active', limit: opts.candidateLimit ?? 200 })).memories;
     const scored: ScoredMemory[] = [];
-    for (const memory of page.memories) {
+    for (const memory of memories) {
       if (!memory.embedding?.length) continue;
       if (!isRetrievableMemory(memory, opts.now)) continue;
       scored.push({ memory, relevance: cosineSimilarity(queryEmbedding, memory.embedding) });

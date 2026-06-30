@@ -13,6 +13,10 @@ export interface MemoryRetrieveOptions {
   limit: number;
   /** Upper bound on candidates scanned before ranking. */
   candidateLimit?: number;
+  /** Pre-fetched active candidate set. When provided, an in-process retriever ranks over it instead
+   *  of re-listing the store, so a caller that also needs the active set (e.g. the always-on
+   *  profile) can share a single read. A vector-native retriever may ignore it. */
+  candidates?: MemoryRecord[];
 }
 
 /**

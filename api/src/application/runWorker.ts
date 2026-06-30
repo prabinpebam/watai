@@ -710,15 +710,22 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     // without loading history), so the query-embedding round-trip overlaps the settings + history
     // reads instead of adding serially to time-to-first-token.
     const submittedText = run.prompt?.text;
+    // Load settings once and share it: the early memory build reuses it for its gate check (instead
+    // of a second store read), and the worker awaits the same promise below alongside history.
+    const settingsPromise = deps.settings
+      ? deps.settings.get(run.userId).catch(() => undefined)
+      : Promise.resolve(undefined);
     const earlyMemoryPromise = deps.memoryContext && submittedText
-      ? withTimeout(
-          deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText: submittedText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key } }),
-          deps.memoryContextBudgetMs ?? DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
-          emptyMemoryBlock(),
-        ).catch(() => emptyMemoryBlock())
+      ? settingsPromise.then((settings) =>
+          withTimeout(
+            deps.memoryContext!.buildForRun({ userId: run.userId, threadId, latestUserText: submittedText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key }, settings }),
+            deps.memoryContextBudgetMs ?? DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
+            emptyMemoryBlock(),
+          ).catch(() => emptyMemoryBlock()),
+        )
       : undefined;
     const [settings, history] = await Promise.all([
-      deps.settings ? deps.settings.get(run.userId).catch(() => undefined) : Promise.resolve(undefined),
+      settingsPromise,
       messageStore.list(threadId),
     ]);
     let imageReferencePromise: Promise<ImageReference | undefined> | undefined;
@@ -729,7 +736,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     // Fall back to a history-derived query when there was no submitted prompt text (e.g. regenerate).
     const memoryBlockPromise = earlyMemoryPromise ?? (deps.memoryContext
       ? withTimeout(
-          deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key } }),
+          deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key }, settings }),
           deps.memoryContextBudgetMs ?? DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
           emptyMemoryBlock(),
         ).catch(() => emptyMemoryBlock())
