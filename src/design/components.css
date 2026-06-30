@@ -1052,6 +1052,17 @@ button.tool-card__head:hover {
   opacity: 0.6;
   user-select: none;
 }
+.assistant__memory-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-lh);
+  opacity: 0.7;
+  user-select: none;
+}
 .tool-group {
   display: flex;
   flex-direction: column;

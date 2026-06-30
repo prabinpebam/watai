@@ -4,7 +4,7 @@ import { AttachmentList, ArtifactList, GeneratedImages } from './Attachments';
 import { Avatar, IconButton, InlineAlert, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { useUi } from '../../state/store';
-import { cloudApi, repo } from '../../data';
+import { cloudApi } from '../../data';
 import { base64ToBlob } from '../../lib/files';
 import type { Citation, ImageRef, Message, MessageMemoryRef, PendingImage, ToolCall } from '../../lib/types';
 
@@ -286,55 +286,31 @@ function SourcesStrip({ citations }: { citations: Citation[] }) {
   );
 }
 
+function memoryUpdateLabel(count: number): string {
+  return count > 1 ? `${count} memories updated` : 'Memory updated';
+}
+
+/** The memories pulled into this response — an expand/collapse card (read-only; manage memories in Settings). */
 function MemoryUsedStrip({ memories }: { memories: MessageMemoryRef[] }) {
   const [open, setOpen] = useState(false);
-  const [removed, setRemoved] = useState<Set<string>>(new Set());
-  const pushToast = useUi((s) => s.pushToast);
-  const visible = memories.filter((m) => !removed.has(m.memoryId));
-  if (!visible.length) return null;
-
-  const drop = (memoryId: string) => setRemoved((prev) => { const next = new Set(prev); next.add(memoryId); return next; });
-
-  const hide = async (memoryId: string) => {
-    try {
-      await repo.updateMemory(memoryId, { status: 'suppressed' });
-      drop(memoryId);
-      pushToast('Memory hidden', 'success');
-    } catch (e) {
-      pushToast(e instanceof Error ? e.message : 'Could not hide memory.', 'error');
-    }
-  };
-
-  const remove = async (memoryId: string) => {
-    try {
-      await repo.removeMemory(memoryId);
-      drop(memoryId);
-      pushToast('Memory deleted', 'success');
-    } catch (e) {
-      pushToast(e instanceof Error ? e.message : 'Could not delete memory.', 'error');
-    }
-  };
+  if (!memories.length) return null;
 
   return (
     <div className={`sources ${open ? 'sources--open' : ''}`}>
       <button type="button" className="sources__toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
         <Icon name="database" size={14} />
         <span className="sources__toggle-label">
-          {visible.length} memory used{visible.length === 1 ? '' : 's'}
+          {memories.length} {memories.length === 1 ? 'memory' : 'memories'} used
         </span>
         <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} className="sources__caret" />
       </button>
       {open && (
         <div className="sources__list">
-          {visible.map((memory, index) => (
+          {memories.map((memory, index) => (
             <div key={memory.memoryId} className="source-chip source-chip--memory" style={{ alignItems: 'flex-start' }}>
               <span className="source-chip__num">{index + 1}</span>
               <span className="source-chip__text" style={{ whiteSpace: 'normal' }}>
                 <strong>{memory.kind.replace(/_/g, ' ')}</strong>: {memory.text}
-              </span>
-              <span className="row" style={{ gap: 4, marginLeft: 'auto' }}>
-                <button type="button" className="source-chip source-chip--bing" onClick={() => hide(memory.memoryId)}>Hide</button>
-                <button type="button" className="source-chip source-chip--bing" onClick={() => remove(memory.memoryId)}>Delete</button>
               </span>
             </div>
           ))}
@@ -371,6 +347,7 @@ interface AssistantProps {
   message: Message;
   streaming: boolean;
   onRegenerate: () => void;
+  memoryUpdateCount?: number;
   threadImages?: ImageRef[];
   viewerImageId?: string | null;
   onOpenImage?: (image: ImageRef) => void;
@@ -382,6 +359,7 @@ export function AssistantMessage({
   message,
   streaming,
   onRegenerate,
+  memoryUpdateCount,
   threadImages,
   viewerImageId,
   onOpenImage,
@@ -496,6 +474,13 @@ export function AssistantMessage({
         {!isStreamingThis && message.citations && <SourcesStrip citations={message.citations} />}
 
         {!isStreamingThis && message.memoryRefs?.length ? <MemoryUsedStrip memories={message.memoryRefs} /> : null}
+
+        {!isStreamingThis && memoryUpdateCount ? (
+          <div className="assistant__memory-note" role="note">
+            <Icon name="database" size={13} />
+            {memoryUpdateLabel(memoryUpdateCount)}
+          </div>
+        ) : null}
 
         <ArtifactList artifacts={message.artifacts} />
 

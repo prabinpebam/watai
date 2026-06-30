@@ -7,13 +7,9 @@ import { SourcePane } from './SourcePane';
 import { ThreadFilesPane } from './ThreadFilesPane';
 import { Icon } from '../../design/icons';
 import { Avatar, Spinner } from '../../design/ui';
-import { useUi, type MemoryNotice } from '../../state/store';
+import { useUi } from '../../state/store';
 import { greeting } from '../../lib/format';
 import type { ImageRef } from '../../lib/types';
-
-function memoryLogLabel(count: number): string {
-  return count > 1 ? `${count} memories updated` : 'Memory updated';
-}
 
 const SUGGESTIONS = [
   { title: 'Explain a concept', sub: 'Break down quantum entanglement simply', prompt: 'Explain quantum entanglement in simple terms.' },
@@ -117,52 +113,18 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
     }
   }, [threadImages, viewerImageId]);
 
-  // Interleave assistant/user messages with memory-update logs in chronological order, so a
-  // memory update appears as a quiet system-log line at the point in time it actually happened.
-  const timeline = useMemo(() => {
-    const items: Array<
-      | { kind: 'message'; key: string; ts: string; message: (typeof messages)[number] }
-      | { kind: 'memory'; key: string; ts: string; notice: MemoryNotice }
-    > = [];
+  // Map each assistant message to the number of memories saved from that turn, so the
+  // "Memory updated" note renders inside the message instead of as a separate log line below it.
+  const memoryByMessage = useMemo(() => {
     const noticeList = Array.isArray(memoryNotices) ? memoryNotices : [];
-    const anchored = new Map<string, MemoryNotice[]>();
-    const unanchored: MemoryNotice[] = [];
+    const byMessage = new Map<string, number>();
+    const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
     for (const notice of noticeList) {
-      if (notice.messageId) {
-        const arr = anchored.get(notice.messageId) ?? [];
-        arr.push(notice);
-        anchored.set(notice.messageId, arr);
-      } else {
-        unanchored.push(notice);
-      }
+      const target = notice.messageId ?? lastAssistantId;
+      if (!target) continue;
+      byMessage.set(target, Math.max(byMessage.get(target) ?? 0, notice.acceptedCount));
     }
-    for (const message of messages) {
-      items.push({ kind: 'message', key: message.id, ts: message.createdAt, message });
-      // Anchor each notice immediately after the assistant turn that produced it.
-      for (const notice of anchored.get(message.id) ?? []) items.push({ kind: 'memory', key: `mem:${notice.id}`, ts: message.createdAt, notice });
-    }
-    // Legacy/unanchored notices keep chronological placement by completion time.
-    for (const notice of unanchored) {
-      let idx = items.length;
-      for (let i = 0; i < items.length; i++) { if (items[i].ts > notice.updatedAt) { idx = i; break; } }
-      items.splice(idx, 0, { kind: 'memory', key: `mem:${notice.id}`, ts: notice.updatedAt, notice });
-    }
-    // The command + turn extraction lanes both fire per exchange, so collapse consecutive memory
-    // notices (no message between them) into one to avoid duplicate "Memory updated" lines.
-    const collapsed: typeof items = [];
-    for (const item of items) {
-      const prev = collapsed[collapsed.length - 1];
-      if (item.kind === 'memory' && prev?.kind === 'memory') {
-        collapsed[collapsed.length - 1] = {
-          ...prev,
-          ts: item.ts,
-          notice: { ...prev.notice, acceptedCount: Math.max(prev.notice.acceptedCount, item.notice.acceptedCount), updatedAt: item.ts },
-        };
-        continue;
-      }
-      collapsed.push(item);
-    }
-    return collapsed;
+    return byMessage;
   }, [messages, memoryNotices]);
 
   return (
@@ -193,19 +155,16 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
           </div>
         ) : (
           <div className="chat__column" ref={setColumnRef}>
-            {timeline.map((item) =>
-              item.kind === 'memory' ? (
-                <div key={item.key} className="memory-log" role="note">
-                  {memoryLogLabel(item.notice.acceptedCount)}
-                </div>
-              ) : item.message.role === 'user' ? (
-                <UserMessage key={item.key} message={item.message} />
+            {messages.map((message) =>
+              message.role === 'user' ? (
+                <UserMessage key={message.id} message={message} />
               ) : (
                 <AssistantMessage
-                  key={item.key}
-                  message={item.message}
+                  key={message.id}
+                  message={message}
                   streaming={streaming}
                   onRegenerate={regenerate}
+                  memoryUpdateCount={memoryByMessage.get(message.id)}
                   threadImages={threadImages}
                   viewerImageId={viewerImageId}
                   onOpenImage={openImageViewer}
