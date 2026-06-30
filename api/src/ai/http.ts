@@ -57,6 +57,23 @@ export function isFoundryHost(baseUrl: string): boolean {
   }
 }
 
+/**
+ * For Azure resources, the CLASSIC data-plane base (`https://{resource}.cognitiveservices.azure.com`)
+ * used by surfaces the unified v1 API does not serve — notably `/audio/transcriptions` for transcribe
+ * deployments (e.g. gpt-4o-transcribe), which returns DeploymentNotFound on the v1 path even though
+ * `/audio/speech` works there. Returns null for non-Azure (OpenAI/compatible) endpoints, which use the
+ * v1 path with the model in the request body.
+ */
+export function azureClassicBase(baseUrl: string): string | null {
+  try {
+    const host = new URL(baseUrl).host;
+    if (!/\.(services\.ai|cognitiveservices)\.azure\.com$/i.test(host)) return null;
+    return `https://${host.replace('.services.ai.azure.com', '.cognitiveservices.azure.com')}`;
+  } catch {
+    return null;
+  }
+}
+
 function withTimeout(
   signal: AbortSignal | undefined,
   timeoutMs: number,

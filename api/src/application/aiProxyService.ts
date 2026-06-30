@@ -1,5 +1,5 @@
 import { AppError, type AppErrorCode } from '../domain/errors';
-import { aiFetch } from '../ai/http';
+import { aiFetch, azureClassicBase } from '../ai/http';
 import { normalizeHttpError, type AiError } from '../ai/errors';
 import { completeChat, type ChatMessage } from '../ai/chat';
 import { generateImage } from '../ai/image';
@@ -74,7 +74,12 @@ export class AiProxyService {
     if (!bytes.byteLength) throw new AppError('validation', 'No audio was provided.');
     const mime = input.mime || 'audio/webm';
     const form = new FormData();
-    form.append('model', c.models.transcribe);
+    // Azure resources serve audio transcription only on the CLASSIC deployment surface
+    // (/openai/deployments/{model}/audio/transcriptions?api-version=…) — the unified v1 path returns
+    // DeploymentNotFound for transcribe models (e.g. gpt-4o-transcribe), even though /audio/speech
+    // works on v1. For OpenAI/compatible endpoints, use the v1 path with the model in the body.
+    const azureBase = azureClassicBase(c.baseUrl);
+    if (!azureBase) form.append('model', c.models.transcribe);
     form.append('file', new Blob([bytes], { type: mime }), mime.includes('wav') ? 'audio.wav' : 'audio.webm');
     form.append('response_format', 'json');
     if (input.language) form.append('language', input.language);
@@ -82,7 +87,9 @@ export class AiProxyService {
     const res = await aiFetch({
       baseUrl: c.baseUrl,
       key: c.key,
-      path: '/audio/transcriptions',
+      ...(azureBase
+        ? { url: `${azureBase}/openai/deployments/${encodeURIComponent(c.models.transcribe)}/audio/transcriptions?api-version=2024-10-21` }
+        : { path: '/audio/transcriptions' }),
       body: form,
       fetchImpl: this.opts.fetchImpl,
       timeoutMs: 120_000,

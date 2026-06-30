@@ -48,6 +48,27 @@ describe('AiProxyService', () => {
     expect(err).toMatchObject({ name: 'AppError', code: 'not_found' });
   });
 
+  it('routes Azure transcription via the classic deployment path (the v1 surface 404s for transcribe models)', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ text: 'hi' }) });
+    const svc = new AiProxyService(creds({ transcribe: 'gpt-4o-transcribe' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
+    await svc.transcribe('u', { audioBase64: Buffer.from('A').toString('base64') });
+    const url = String(fetchImpl.mock.calls[0][0]);
+    expect(url).toContain('.cognitiveservices.azure.com/openai/deployments/gpt-4o-transcribe/audio/transcriptions');
+    expect(url).toContain('api-version=');
+  });
+
+  it('routes non-Azure (OpenAI) transcription via the v1 path with the model in the body', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ text: 'hi' }) });
+    const openai = {
+      getDecrypted: async () => ({ baseUrl: 'https://api.openai.com/v1', key: 'k', models: { chat: 'g', transcribe: 'whisper-1' } }),
+    };
+    const svc = new AiProxyService(openai, { fetchImpl: fetchImpl as unknown as typeof fetch });
+    await svc.transcribe('u', { audioBase64: Buffer.from('A').toString('base64') });
+    const url = String(fetchImpl.mock.calls[0][0]);
+    expect(url).not.toContain('/openai/deployments/');
+    expect(url).toContain('/audio/transcriptions');
+  });
+
   it('synthesizes speech and returns base64 audio', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new TextEncoder().encode('MP3').buffer });
     const svc = new AiProxyService(creds({ tts: 'tts-1' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
