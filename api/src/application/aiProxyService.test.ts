@@ -23,6 +23,31 @@ describe('AiProxyService', () => {
     await expect(svc.transcribe('u', { audioBase64: 'AAA' })).rejects.toThrow();
   });
 
+  it('surfaces an upstream transcription failure with its real cause (not a generic 500)', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({ error: { message: 'Audio file could not be decoded.' } }),
+    });
+    const svc = new AiProxyService(creds({ transcribe: 'whisper' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
+    const err = await svc.transcribe('u', { audioBase64: Buffer.from('A').toString('base64') }).catch((e) => e);
+    expect(err).toMatchObject({ name: 'AppError', code: 'validation' });
+    expect(String(err.message)).toContain('Audio file could not be decoded.');
+  });
+
+  it('maps an upstream 404 (deployment not found) to a not_found error', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({ error: { message: 'The API deployment for this resource does not exist.' } }),
+    });
+    const svc = new AiProxyService(creds({ transcribe: 'whisper' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
+    const err = await svc.transcribe('u', { audioBase64: Buffer.from('A').toString('base64') }).catch((e) => e);
+    expect(err).toMatchObject({ name: 'AppError', code: 'not_found' });
+  });
+
   it('synthesizes speech and returns base64 audio', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new TextEncoder().encode('MP3').buffer });
     const svc = new AiProxyService(creds({ tts: 'tts-1' }), { fetchImpl: fetchImpl as unknown as typeof fetch });

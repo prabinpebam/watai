@@ -24,6 +24,12 @@ describe('parseSettingsPatch', () => {
     });
   });
 
+  it('accepts a voice patch with the selected voice + input device', () => {
+    expect(parseSettingsPatch({ voice: { voiceId: 'nova', inputDeviceId: 'mic-abc-123' } })).toEqual({
+      voice: { voiceId: 'nova', inputDeviceId: 'mic-abc-123' },
+    });
+  });
+
   it('rejects invalid enum values', () => {
     expect(code(() => parseSettingsPatch({ appearance: { theme: 'neon' } }))).toBe('validation');
     expect(code(() => parseSettingsPatch({ appearance: { textScale: 2 } }))).toBe('validation');

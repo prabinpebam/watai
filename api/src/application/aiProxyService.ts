@@ -1,6 +1,6 @@
-import { AppError } from '../domain/errors';
+import { AppError, type AppErrorCode } from '../domain/errors';
 import { aiFetch } from '../ai/http';
-import { normalizeHttpError } from '../ai/errors';
+import { normalizeHttpError, type AiError } from '../ai/errors';
 import { completeChat, type ChatMessage } from '../ai/chat';
 import { generateImage } from '../ai/image';
 import type { CredentialDecryptor } from './threadFilesService';
@@ -36,6 +36,27 @@ function clampSpeed(speed: number | undefined): number {
 }
 
 /**
+ * Map an upstream Azure OpenAI failure (a normalized AiError) to a typed AppError so the real cause —
+ * unsupported audio format, wrong deployment name, rate limit, expired key — surfaces with a meaningful
+ * status + message instead of collapsing to a generic 500 (anything that isn't an AppError does).
+ */
+function upstreamError(e: AiError): AppError {
+  const code: AppErrorCode =
+    e.code === 'unauthorized'
+      ? 'unauthorized'
+      : e.code === 'forbidden' || e.code === 'tool_unauthorized'
+        ? 'forbidden'
+        : e.code === 'deployment_not_found'
+          ? 'not_found'
+          : e.code === 'rate_limited'
+            ? 'rate_limited'
+            : e.code === 'server_error'
+              ? 'internal'
+              : 'validation';
+  return new AppError(code, e.detail ? `${e.message} (${e.detail})` : e.message);
+}
+
+/**
  * Server-side proxies for the audio + simple-chat features (dictation, voice mode) so the client
  * never needs the AI key locally. Each call decrypts the user's vault credentials and forwards to
  * Azure OpenAI; nothing here is persisted.
@@ -66,7 +87,7 @@ export class AiProxyService {
       fetchImpl: this.opts.fetchImpl,
       timeoutMs: 120_000,
     });
-    if (!res.ok) throw await normalizeHttpError(res, 'transcribe');
+    if (!res.ok) throw upstreamError(await normalizeHttpError(res, 'transcribe'));
     const json = (await res.json()) as { text?: string };
     return { text: json.text ?? '' };
   }
@@ -88,7 +109,7 @@ export class AiProxyService {
       fetchImpl: this.opts.fetchImpl,
       timeoutMs: 120_000,
     });
-    if (!res.ok) throw await normalizeHttpError(res, 'tts');
+    if (!res.ok) throw upstreamError(await normalizeHttpError(res, 'tts'));
     const buf = new Uint8Array(await res.arrayBuffer());
     return { audioBase64: Buffer.from(buf).toString('base64'), mime: 'audio/mpeg' };
   }

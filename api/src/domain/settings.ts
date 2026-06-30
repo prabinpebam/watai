@@ -32,6 +32,7 @@ const appearanceBase = z.object({
 const voiceBase = z.object({
   engine,
   voiceId: z.string().max(50).optional(),
+  inputDeviceId: z.string().max(200).optional(),
   rate: z.number().min(0.5).max(2),
   vad: z.number().min(0).max(1),
   autoSend: z.boolean(),
