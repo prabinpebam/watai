@@ -870,6 +870,157 @@
   color: var(--color-text-primary);
 }
 
+/* Settings row that stacks its control beneath the label (mic picker + level meter). */
+.setting-row--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+.setting-row--stack .setting-row__body {
+  margin-bottom: var(--space-3);
+}
+
+/* Microphone picker (Settings → Voice) */
+.mic-select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.mic-select__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.mic-select__menu {
+  flex: 1;
+  min-width: 0;
+}
+.mic-select__meter {
+  height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-accent);
+}
+.mic-select__hint {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font-size: var(--text-caption-size);
+  text-align: left;
+  cursor: pointer;
+}
+.mic-select__hint:hover {
+  text-decoration: underline;
+}
+
+/* Voice trigger button (opens the voice picker modal) */
+.voice-trigger {
+  gap: var(--space-2);
+}
+.voice-trigger__icon {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+.voice-trigger__action {
+  flex: none;
+  color: var(--color-accent);
+  font-size: var(--text-caption-size);
+}
+
+/* Voice picker modal */
+.voice-picker__hint {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+}
+.voice-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.voice-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+}
+.voice-option:hover {
+  background: var(--color-surface-2);
+}
+.voice-option:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+.voice-option.is-selected {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+.voice-option__radio {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--color-border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-on-accent);
+}
+.voice-option.is-selected .voice-option__radio {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.voice-option__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.voice-option__name {
+  font-size: var(--text-body-size);
+  color: var(--color-text-primary);
+}
+.voice-option__desc {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+}
+.voice-option__play {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+}
+.voice-option__play:hover {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-strong);
+}
+.voice-option__play.is-playing {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+.voice-picker__error {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-caption-size);
+  color: var(--color-danger);
+}
+
 .memory-tree {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);

@@ -236,6 +236,8 @@ export interface Settings {
   voice: {
     engine: 'tts' | 'realtime';
     voiceId?: string;
+    /** Preferred microphone input device id (empty/undefined = system default). */
+    inputDeviceId?: string;
     rate: number;
     vad: number;
     autoSend: boolean;

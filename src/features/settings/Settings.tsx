@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSettings } from './useSettings';
 import { SkillsBody } from '../skills/SkillsBody';
+import { MicSelect } from '../voice/MicSelect';
+import { VoicePicker } from '../voice/VoicePicker';
 import { Avatar, Button, Field, IconButton, InlineAlert, Segmented, SelectMenu, Spinner, Switch, TextAreaField } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { Logo } from '../../design/Logo';
@@ -1420,19 +1422,32 @@ function VoiceBody({ ctx }: { ctx: SettingsCtx }) {
   const { settings, setSettings } = ctx;
   const v = settings.voice;
   const set = (patch: Partial<typeof v>) => setSettings({ ...settings, voice: { ...v, ...patch } });
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const currentVoice = VOICE_OPTIONS.find((o) => o.value === (v.voiceId ?? 'alloy')) ?? VOICE_OPTIONS[0];
   return (
     <div className="settings-card">
+      <div className="setting-row setting-row--stack">
+        <div className="setting-row__body">
+          <div className="setting-row__title">Microphone</div>
+          <div className="setting-row__sub">Input device for dictation and voice mode.</div>
+        </div>
+        <MicSelect value={v.inputDeviceId} onChange={(id) => set({ inputDeviceId: id })} />
+      </div>
       <div className="setting-row">
         <div className="setting-row__body">
           <div className="setting-row__title">Voice</div>
           <div className="setting-row__sub">Spoken voice for read-aloud and voice mode.</div>
         </div>
-        <SelectMenu
-          value={v.voiceId ?? 'alloy'}
-          label="Voice"
-          options={VOICE_OPTIONS}
-          onChange={(x) => set({ voiceId: x })}
-        />
+        <button
+          type="button"
+          className="select-menu voice-trigger"
+          aria-haspopup="dialog"
+          onClick={() => setPickerOpen(true)}
+        >
+          <Icon name="speaker" size={16} className="voice-trigger__icon" />
+          <span className="select-menu__label">{currentVoice.label}</span>
+          <span className="voice-trigger__action">Preview</span>
+        </button>
       </div>
       <div className="setting-row">
         <div className="setting-row__body">
@@ -1478,6 +1493,15 @@ function VoiceBody({ ctx }: { ctx: SettingsCtx }) {
         </div>
         <Switch checked={v.captions} onChange={(x) => set({ captions: x })} label="Captions" />
       </div>
+      {pickerOpen && (
+        <VoicePicker
+          value={v.voiceId ?? 'alloy'}
+          rate={v.rate}
+          options={VOICE_OPTIONS}
+          onChange={(id) => set({ voiceId: id })}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }

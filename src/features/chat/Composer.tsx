@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconButton, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { startRecording, type Recorder } from '../../lib/audio';
-import { cloudApi, skillsApi } from '../../data';
+import { repo, cloudApi, skillsApi } from '../../data';
 import { fileToBase64 } from '../../lib/files';
 import { insertAtCaret } from '../../lib/caret';
 import { WaveformVisualizer } from '../voice/WaveformVisualizer';
@@ -267,7 +267,8 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
       end: ta?.selectionEnd ?? value.length,
     };
     try {
-      recRef.current = await startRecording();
+      const settings = await repo.getSettings().catch(() => null);
+      recRef.current = await startRecording(settings?.voice.inputDeviceId);
       recStartRef.current = Date.now();
       setRecElapsed(0);
       setRecording(true);

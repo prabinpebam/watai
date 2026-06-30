@@ -121,7 +121,7 @@ export function VoiceMode() {
   const startListening = useCallback(async () => {
     setErrored(false);
     try {
-      recRef.current = await startRecording();
+      recRef.current = await startRecording(settingsRef.current?.inputDeviceId);
       setCaption('');
       setListening(true);
     } catch {
