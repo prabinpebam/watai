@@ -32,3 +32,6 @@ tavily-test.mjs
 
 # Generated memory eval run reports (reproducible via `npm run eval`)
 documentation/memory-system/eval-runs/
+
+# Playwright TTFT bench profile
+.bench-edge/
