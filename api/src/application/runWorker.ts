@@ -54,6 +54,10 @@ export interface RunWorkerDeps {
   memoryExtraction?: MemoryExtractionService;
   /** The agentic loop (Responses API). Injectable for tests. */
   runAgent?: (p: RunAgentParams) => AsyncGenerator<AgentEvent>;
+  /** Max agent attempts when the Responses stream stalls with no output (default 2). */
+  maxAgentAttempts?: number;
+  /** First-token watchdog: abort + retry a stalled attempt after this many ms (default 45000). */
+  firstTokenWatchdogMs?: number;
   clock: ServiceClock;
   /** ms between throttled incremental message upserts (default 250). */
   flushIntervalMs?: number;
@@ -102,6 +106,12 @@ const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 const ARTIFACT_CAPTURE_ATTEMPTS = 4;
 const ARTIFACT_CAPTURE_RETRY_MS = 500;
 const DEFAULT_MEMORY_CONTEXT_BUDGET_MS = 3000;
+
+/** First-token watchdog: abort + cleanly retry an agent attempt that yields NOTHING within this
+ *  window. The Azure Responses API can intermittently stall (no output at all) when code_interpreter
+ *  is offered alongside function tools, hanging until the 120s fetch timeout and failing the run
+ *  with an empty message. Kept above the slowest healthy first-token time (tool container spin-up). */
+const DEFAULT_FIRST_TOKEN_WATCHDOG_MS = 45_000;
 
 const DEFAULT_VISIBLE_ARTIFACT_KINDS = new Set<ArtifactKind>(['pdf', 'document', 'spreadsheet', 'presentation']);
 
@@ -460,6 +470,49 @@ function emptyMemoryBlock(): MemoryContextBlock {
 }
 
 /**
+ * Wrap the agent stream with a first-token watchdog + clean retry. If an attempt yields no event
+ * within `watchdogMs`, abort it and retry from scratch — safe precisely because nothing was emitted
+ * yet, so the consumer's accumulated state is untouched and no output is duplicated. Once any event
+ * is produced the watchdog is cleared and the stream runs to completion as normal; a mid-stream
+ * failure (after output) is re-thrown rather than retried.
+ */
+async function* streamAgentWithRetry(
+  runAgent: (p: RunAgentParams) => AsyncGenerator<AgentEvent>,
+  params: Omit<RunAgentParams, 'signal'>,
+  opts: { maxAttempts: number; watchdogMs: number; onStall?: (attempt: number, message: string) => void },
+): AsyncGenerator<AgentEvent> {
+  for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
+    const ctrl = new AbortController();
+    let produced = false;
+    let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => ctrl.abort(), opts.watchdogMs);
+    const clear = (): void => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    };
+    try {
+      for await (const ev of runAgent({ ...params, signal: ctrl.signal })) {
+        if (!produced) {
+          produced = true;
+          clear();
+        }
+        yield ev;
+      }
+      return;
+    } catch (e) {
+      if (attempt < opts.maxAttempts && !produced) {
+        opts.onStall?.(attempt, e instanceof Error ? e.message : String(e));
+        continue;
+      }
+      throw e;
+    } finally {
+      clear();
+    }
+  }
+}
+
+/**
  * Process one run end-to-end on the server, independently of any client: load the user's decrypted
  * credentials, assemble the history, run the agentic loop (Responses API — text + web search + any
  * future tools), and upsert the assistant message into Cosmos incrementally (text, tool cards,
@@ -712,7 +765,17 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     const tools = assembleTools(c, run, thread, skillFileIds);
     const execute = makeExecute(c, deps.fetchImpl, getImageReference);
 
-    for await (const ev of runAgent({ baseUrl: c.baseUrl, key: c.key, model, turns, tools, execute })) {
+    const agentStream = streamAgentWithRetry(
+      runAgent,
+      { baseUrl: c.baseUrl, key: c.key, model, turns, tools, execute },
+      {
+        maxAttempts: deps.maxAgentAttempts ?? 2,
+        watchdogMs: deps.firstTokenWatchdogMs ?? DEFAULT_FIRST_TOKEN_WATCHDOG_MS,
+        onStall: (attempt, message) =>
+          console.warn('[run] responses stream stalled with no output; retrying', { runId, attempt, message }),
+      },
+    );
+    for await (const ev of agentStream) {
       if (ev.type === 'text') {
         acc += ev.delta;
         await flush();

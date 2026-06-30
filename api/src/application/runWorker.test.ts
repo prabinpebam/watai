@@ -154,6 +154,38 @@ describe('processRun', () => {
     expect((await ctx.threadStore.get('userA', 't1'))?.lastMessagePreview).toBe('Hi there');
   });
 
+  it('retries cleanly when the first agent attempt stalls with no output', async () => {
+    await seed(ctx);
+    let calls = 0;
+    const flaky: RunAgentFn = async function* (): AsyncGenerator<AgentEvent> {
+      calls++;
+      if (calls === 1) throw new Error('This operation was aborted'); // simulate the upstream stall→abort
+      yield { type: 'text', delta: 'Recovered' };
+      yield { type: 'done' };
+    };
+    await processRun(ctx.deps(flaky), 't1', 'r1');
+
+    expect(calls).toBe(2); // first attempt stalled, second succeeded
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.content).toBe('Recovered');
+    expect(msg?.status).toBe('complete');
+  });
+
+  it('fails the run as error (no duplicate output) when every attempt stalls', async () => {
+    await seed(ctx);
+    let calls = 0;
+    const alwaysStall: RunAgentFn = async function* (): AsyncGenerator<AgentEvent> {
+      calls++;
+      throw new Error('This operation was aborted');
+    };
+    await processRun(ctx.deps(alwaysStall), 't1', 'r1');
+
+    expect(calls).toBe(2); // first attempt + one clean retry, then give up
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.status).toBe('error');
+    expect(msg?.content).toBe('');
+  });
+
   it('uses the run model override when one is supplied', async () => {
     const run = await seed(ctx);
     await ctx.runStore.put({ ...run, model: 'gpt-5.4' });

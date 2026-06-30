@@ -1,0 +1,43 @@
+{
+  "ranAt": "2026-06-30T02:19:47.400Z",
+  "baseUrlHost": "ai-project-deployments-resource.cognitiveservices.azure.com",
+  "chatModel": "gpt-5.4",
+  "embedModel": "text-embedding-3-small",
+  "embeds": [],
+  "agent": [],
+  "sweep": [],
+  "toolResults": [
+    {
+      "label": "ws + ci",
+      "prompt": "What is 2 + 2? Answer in one short sentence.",
+      "totalMs": 40012.352799996734,
+      "chars": 0,
+      "toolEvents": 0,
+      "errored": "This operation was aborted"
+    },
+    {
+      "label": "img + ci",
+      "prompt": "What is 2 + 2? Answer in one short sentence.",
+      "firstTokenMs": 30555.917199999094,
+      "totalMs": 30970.55989999324,
+      "chars": 11,
+      "toolEvents": 0
+    },
+    {
+      "label": "ws + img",
+      "prompt": "What is 2 + 2? Answer in one short sentence.",
+      "firstTokenMs": 2679.966200001538,
+      "totalMs": 2989.4077000021935,
+      "chars": 11,
+      "toolEvents": 0
+    },
+    {
+      "label": "all 3 (ws+img+ci)",
+      "prompt": "What is 2 + 2? Answer in one short sentence.",
+      "firstTokenMs": 4647.576999999583,
+      "totalMs": 5015.798599995673,
+      "chars": 11,
+      "toolEvents": 0
+    }
+  ]
+}
