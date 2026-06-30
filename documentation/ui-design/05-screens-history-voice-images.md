@@ -216,7 +216,7 @@ Components from [02-components.md](02-components.md); tokens from
 | State | Orb | Caption | Mic | TTS |
 | --- | --- | --- | --- | --- |
 | `connecting` | settle-in | "Starting…" | warming | — |
-| `listening` | amplitude bloom (tracks user) | live interim transcript | open (VAD) | — |
+| `listening` | amplitude bloom (tracks user) | "Listening…" (live partial = Realtime, future) | open (VAD) | — |
 | `thinking` | gentle rotating sweep | last user line | paused | — |
 | `working` | sweep + tool chip | tool status | paused | — |
 | `speaking` | pulse synced to playback | assistant text (sentence highlight) | monitoring for barge-in | playing |

@@ -167,11 +167,15 @@ flowchart LR
 **Goal:** the audio building blocks and the Voice settings are real and wired, so Phases 1–3 just
 compose them.
 
-**Spike first (de-risk the unknowns — execution-plan principle #1).** Before building primitives, run
-a throwaway spike on real devices (desktop + one mobile) to settle the three unknowns the rest of the
-plan rests on: (1) **VAD** quality (`@ricky0123/vad-web` Silero vs energy), (2) **echo / self-barge-in**
-with speakers, (3) **barge-in latency** with Web Audio scheduling. Output: the chosen VAD engine, the
-echo-suppression approach, and a measured barge-in number — these unblock Phase 3.
+**Slice 0 — Spike (the one device-dependent gate; runs in parallel with Phase 1).** The defaults are
+already decided (§10), so this *validates and tunes* rather than discovers. On real devices (desktop +
+one mobile), confirm: (1) **VAD** — `@ricky0123/vad-web` (Silero) endpoints cleanly; fall back to the
+energy detector if model load/perf is unacceptable; (2) **echo** — with `echoCancellation` +
+reference-gating, the assistant's own speech does not false-trigger over speakers (else flip that
+device to half-duplex); (3) **barge-in** — Web Audio scheduling stops playback < 150 ms. **Exit
+criteria:** VAD engine confirmed, an echo result per device class, a measured barge-in number, and a
+throwaway orb prototype — recorded back into §10. If any fails, the documented fallback (energy VAD /
+half-duplex) ships instead; the loop is never blocked.
 
 **Backend** [`aiProxyService.ts`](../api/src/application/aiProxyService.ts):
 - `speak()` accepts and forwards `speed` (Azure OpenAI `/audio/speech` supports `speed` 0.25–4.0) and
@@ -412,3 +416,40 @@ utterance (web tool), a self-referential utterance (memory), a short "interrupt"
 - Turns persist + sync as normal messages and feed memory extraction (no separate voice path).
 - `vitest` green (both projects); the voice browser probe + **barge-in latency harness** pass;
   reduced-motion + fallback paths handled.
+
+---
+
+## 10. Resolved decisions (was “open”)
+
+These were the gap between “a good plan” and “implementation-ready.” All are now decided with a
+fallback, so no choice is deferred onto the critical path; Slice 0 validates the device-dependent ones.
+
+| # | Decision | Choice | Fallback / notes |
+| --- | --- | --- | --- |
+| D1 | **VAD engine** | `@ricky0123/vad-web` (Silero ONNX, MIT), **lazy-loaded on voice-mode entry** so it never bloats the main bundle or dictation | Energy detector (`readLevel`) behind the same `vad.ts` `speechstart`/`speechend` interface if the model is too heavy on a device |
+| D2 | **Duplex / echo** | Ship **full-duplex** with `echoCancellation` + `noiseSuppression` + `autoGainControl` and reference-gated barge-in; recommend headphones | **Half-duplex** per-session (mic paused during playback + “tap to interrupt”) when the runtime false-trigger rate is high; never *require* headphones |
+| D3 | **Feature flag** | `voiceModeV2` boolean in the `useUi` store (off by default), flipped on after Slice 3 validation; **dictation ships unflagged** | The flag is the kill switch; the existing tap-to-talk voice mode stays reachable until then |
+| D4 | **TTS voices** | The six OpenAI voices — `alloy` (default), `echo`, `fable`, `onyx`, `nova`, `shimmer` — in the Settings dropdown | From `voice.voiceId`; unknown id → `alloy` |
+| D5 | **Interim transcript** | **Cut for v1** (batch `/audio/transcriptions`): show “Listening…” + the amplitude orb; the user line appears post-endpoint | Real partials need streaming STT / Realtime (Future); spec V-15 synced to match |
+| D6 | **VoiceOrb (B15) contract** | `<VoiceOrb state level />` — `state ∈ {connecting,listening,thinking,working,speaking,muted,error}`, `level` 0..1 from `readLevel`; per-state motion (bloom/sweep/pulse) from existing motion tokens | **Reduced-motion → static disc + state label.** Visual polish is a design task, but the prop/state contract is fixed so the component is buildable now |
+
+## 11. Definition of ready (DoR)
+
+Implementation-ready when every box is checked:
+
+- [x] Target behavior unambiguous — spec V-14/V-15 + per-phase state machines.
+- [x] Architecture decided + integration points **verified to exist** (run store, `SubmitRunBody`,
+      `aiProxyService`, settings model) — §1.
+- [x] Make-or-break audio realities named with mitigations — §3.1.
+- [x] Run-store lifecycle contract specified — §3.2.
+- [x] All open decisions resolved with fallbacks — §10.
+- [x] Spec ↔ plan consistent (interim transcript reconciled) — D5.
+- [x] Sliced into PR-sized, sequenced increments with acceptance — §Phases.
+- [x] Testing strategy concrete + deterministic (fake-audio, latency harness, echo guard) — §6.
+- [x] Non-functionals covered — telemetry / flag / cost / privacy (§8), a11y + fallbacks (Phase 4).
+- [x] The **one device-dependent unknown is a defined first slice** (Slice 0: VAD/echo/barge-in) with
+      decided defaults + fallbacks (§10), so it gates only Phase 3 — never the start.
+
+**Bottom line: ready to build.** Phase 0 + Phase 1 (dictation) start now; Slice 0 validates the
+voice-mode assumptions in parallel; Phase 3 begins once Slice 0 reports its numbers. Nothing is blocked
+on an undecided choice.
