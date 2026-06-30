@@ -136,7 +136,7 @@ export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProp
       {confirmDelete && (
         <ConfirmDialog
           title="Delete conversation?"
-          message={`“${confirmDelete.title}” and its messages will be permanently deleted. This can’t be undone.`}
+          message={`“${confirmDelete.title}” — including its messages and any uploaded or generated files — will be permanently deleted from your devices and the cloud. This can’t be undone.`}
           confirmLabel="Delete"
           icon="trash"
           danger

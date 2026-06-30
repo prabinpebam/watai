@@ -11,6 +11,7 @@ import { CosmosMemoryStore } from './adapters/cosmos/memoryStore';
 import { CosmosMemoryJobStore } from './adapters/cosmos/memoryJobStore';
 import { CosmosAppConfigStore } from './adapters/cosmos/appConfigStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
+import { AzureThreadAssetStore } from './adapters/azure/threadAssetStore';
 import { SasSkillBlobStore } from './adapters/azure/sasSkillBlobStore';
 import { KeyVaultWrapper } from './adapters/azure/keyVaultWrapper';
 import { LocalKeyWrapper } from './adapters/local/keyWrapper';
@@ -128,7 +129,9 @@ export function container(): ApiContainer {
   const memoryStore = new CosmosMemoryStore();
   const memoryJobStore = new CosmosMemoryJobStore();
   const appConfigStore = new CosmosAppConfigStore();
-  const minter = new AzureSasMinter();  const access = new AccessService(
+  const minter = new AzureSasMinter();
+  const threadAssetStore = new AzureThreadAssetStore();
+  const access = new AccessService(
     inviteStore,
     process.env.ADMIN_EMAIL ?? '',
     (process.env.ADMIN_OID ?? '').split(',').map((s) => s.trim()).filter(Boolean),
@@ -183,7 +186,16 @@ export function container(): ApiContainer {
     access,
     threads: createThreadsController(
       new ThreadService(threadStore, clock),
-      (userId, id) => threadFilesService.cleanup(userId, id),
+      async (userId, id) => {
+        // Permanent thread delete: a best-effort cascade so nothing is left orphaned after the
+        // tombstone written by softDelete. (1) the AI vector store + file_search files, (2) every
+        // blob under the thread's `{userId}/{threadId}/` prefix (attachments, document originals,
+        // generated images, code-interpreter artifacts), (3) the Cosmos message records. Each step
+        // swallows its own errors so one failure never blocks the others.
+        await threadFilesService.cleanup(userId, id).catch(() => {});
+        await threadAssetStore.deleteThreadAssets(userId, id).catch(() => {});
+        await messageStore.deleteByThread(id).catch(() => {});
+      },
     ),
     threadLock: createThreadLockController(new ThreadLockService(threadStore, clock)),
     messages: createMessagesController(messageService),

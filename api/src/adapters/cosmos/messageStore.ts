@@ -42,4 +42,16 @@ export class CosmosMessageStore implements MessageStore {
     await this.container.items.upsert(record);
     return record;
   }
+
+  async deleteByThread(threadId: string): Promise<void> {
+    const { resources } = await this.container.items
+      .query<{ id: string }>(
+        { query: 'SELECT c.id FROM c WHERE c.threadId = @threadId', parameters: [{ name: '@threadId', value: threadId }] },
+        { partitionKey: threadId },
+      )
+      .fetchAll();
+    for (const { id } of resources) {
+      await this.container.item(id, threadId).delete().catch(() => {});
+    }
+  }
 }
