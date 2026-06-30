@@ -98,26 +98,36 @@ Tool-isolation benchmark (40s abort), two consecutive runs showing the **nondete
 | all 3 | **hang → abort** ❌ | 5s ✅ |
 
 **Conclusion:** combining the `code_interpreter` server tool with custom function tools destabilizes
-the Responses stream (intermittent zero-output stall). `aiFetch`'s 120s default timeout
+the Responses stream (zero-output stall). `aiFetch`'s 120s default timeout
 ([api/src/ai/http.ts](../api/src/ai/http.ts)) then aborts it, and the worker finalizes the run as an
-empty `error`. The memory query embedding (my recent change) is bounded to 3s by `withTimeout` and is
-not in the failure path.
+empty `error`. **Mounting skill file_ids makes it deterministic:** `code_interpreter` with skill
+files takes ~36s to first byte and, combined with the function tools, hangs every time (bench: 3/3;
+prod: 3/3 errored). The worker mounted skills on *every* `code_interpreter` run, so every run
+deadlocked. The memory query embedding is bounded to 3s by `withTimeout` and is not in the failure
+path.
 
 ## Fix
 
-First-token **watchdog + clean retry** in the worker
-([api/src/application/runWorker.ts](../api/src/application/runWorker.ts)):
+Four coordinated changes in [api/src/application/runWorker.ts](../api/src/application/runWorker.ts):
 
-- `streamAgentWithRetry` wraps `runAgent`. Each attempt runs under an `AbortController`; if **no
-  event** arrives within `firstTokenWatchdogMs` (default **45s** — above the slowest healthy
-  first-token time), the attempt is aborted.
-- A stalled attempt is **retried from scratch** only while **nothing has been emitted** (so the
-  consumer's accumulated state is untouched and no output is duplicated). `maxAgentAttempts` default
-  **2**. Once any event is produced, the watchdog clears and the stream runs to completion normally;
-  a mid-stream failure (after output) is re-thrown, not retried.
-- Result: an intermittent zero-output stall self-heals within ~45s instead of failing the run after
-  120s. Tests: clean retry on stall → `complete`; persistent stall → `error` with no duplicate
-  output ([runWorker.test.ts](../api/src/application/runWorker.test.ts)).
+1. **Skill-mounting gate.** Skills are provisioned + mounted only when the prompt actually calls for
+   one (`selectSkills` keyword match or a `/tag`). Ordinary chat → no skill files → `code_interpreter`
+   stays on its fast path, so no deterministic deadlock.
+2. **Drop function tools when skills are mounted** (`assembleTools`). A skill/code run offers
+   `code_interpreter` (+ `file_search`) *without* `web_search`/`generate_image`, so the slow skill
+   container can't deadlock against the function tools.
+3. **Graceful tool degradation** (`streamAgentWithRetry` + `toolsForAttempt`). On a zero-output
+   stall, retry attempt 2 with `code_interpreter` dropped, then attempt 3 with no tools (always
+   answers). Retrying only while nothing has been emitted keeps it duplicate-free. `maxAgentAttempts`
+   default **3**.
+4. **Adaptive first-token watchdog.** **15s** when no skills are mounted (fast container — surface a
+   stall quickly), **50s** when skills are mounted (the container legitimately needs ~36s).
+
+Together: ordinary chat is fast again; skill prompts run `code_interpreter` without deadlocking; any
+residual stall self-heals via degradation instead of failing empty after 120s. Tests in
+[runWorker.test.ts](../api/src/application/runWorker.test.ts) cover clean retry → `complete`,
+persistent stall → `error` (no duplicate), tool degradation, the mounting gate, and the function-tool
+drop.
 
 ## Recommendations / follow-ups
 

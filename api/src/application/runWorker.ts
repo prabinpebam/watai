@@ -54,7 +54,7 @@ export interface RunWorkerDeps {
   memoryExtraction?: MemoryExtractionService;
   /** The agentic loop (Responses API). Injectable for tests. */
   runAgent?: (p: RunAgentParams) => AsyncGenerator<AgentEvent>;
-  /** Max agent attempts when the Responses stream stalls with no output (default 2). */
+  /** Max agent attempts when the Responses stream stalls (default 3: full → drop code_interpreter → no tools). */
   maxAgentAttempts?: number;
   /** First-token watchdog: abort + retry a stalled attempt after this many ms (default 45000). */
   firstTokenWatchdogMs?: number;
@@ -108,10 +108,12 @@ const ARTIFACT_CAPTURE_RETRY_MS = 500;
 const DEFAULT_MEMORY_CONTEXT_BUDGET_MS = 3000;
 
 /** First-token watchdog: abort + cleanly retry an agent attempt that yields NOTHING within this
- *  window. The Azure Responses API can intermittently stall (no output at all) when code_interpreter
- *  is offered alongside function tools, hanging until the 120s fetch timeout and failing the run
- *  with an empty message. Kept above the slowest healthy first-token time (tool container spin-up). */
-const DEFAULT_FIRST_TOKEN_WATCHDOG_MS = 45_000;
+ *  window. The Azure Responses API can stall (no output at all) when code_interpreter is offered
+ *  alongside function tools, hanging until the 120s fetch timeout. Without skill files mounted the
+ *  container is quick, so a stall surfaces fast; with skills mounted the container legitimately
+ *  needs ~36s to first byte, so the watchdog must be more patient. */
+const DEFAULT_FIRST_TOKEN_WATCHDOG_MS = 15_000;
+const SKILLS_FIRST_TOKEN_WATCHDOG_MS = 50_000;
 
 const DEFAULT_VISIBLE_ARTIFACT_KINDS = new Set<ArtifactKind>(['pdf', 'document', 'spreadsheet', 'presentation']);
 
@@ -244,7 +246,12 @@ function assembleTools(
     requested === null ? name === 'web_search' : requested.has(name);
 
   const tools: ResponsesTool[] = [];
-  if (wants('web_search') && creds.tavilyKey) {
+  // The Responses API deadlocks when the code_interpreter container has skill files mounted AND
+  // custom function tools are offered alongside it (zero output until the request times out). When
+  // skills are mounted this is a skill/code-oriented run, so prioritise code_interpreter and omit
+  // the function tools (web_search, generate_image) to keep the stream flowing.
+  const skillsMounted = skillFileIds.length > 0;
+  if (!skillsMounted && wants('web_search') && creds.tavilyKey) {
     tools.push({
       type: 'function',
       name: 'web_search',
@@ -280,7 +287,7 @@ function assembleTools(
   if (storeIds.length && (thread?.vectorStoreId || wants('file_search'))) {
     tools.push({ type: 'file_search', vector_store_ids: storeIds });
   }
-  if (wants('generate_image') && creds.models.image) {
+  if (!skillsMounted && wants('generate_image') && creds.models.image) {
     tools.push({
       type: 'function',
       name: 'generate_image',
@@ -470,15 +477,19 @@ function emptyMemoryBlock(): MemoryContextBlock {
 }
 
 /**
- * Wrap the agent stream with a first-token watchdog + clean retry. If an attempt yields no event
- * within `watchdogMs`, abort it and retry from scratch — safe precisely because nothing was emitted
- * yet, so the consumer's accumulated state is untouched and no output is duplicated. Once any event
- * is produced the watchdog is cleared and the stream runs to completion as normal; a mid-stream
- * failure (after output) is re-thrown rather than retried.
+ * Wrap the agent stream with a first-token watchdog + degrading retry. If an attempt yields no event
+ * within `watchdogMs`, abort it and retry from scratch with the tools `toolsForAttempt(attempt)`
+ * returns — safe precisely because nothing was emitted yet, so the consumer's accumulated state is
+ * untouched and no output is duplicated. The caller degrades the tool set on later attempts (the
+ * Responses API deadlocks when the code_interpreter container is combined with function tools), so a
+ * stalled run recovers with fewer tools instead of failing empty. Once any event is produced the
+ * watchdog clears and the stream runs to completion; a mid-stream failure (after output) is
+ * re-thrown rather than retried.
  */
 async function* streamAgentWithRetry(
   runAgent: (p: RunAgentParams) => AsyncGenerator<AgentEvent>,
-  params: Omit<RunAgentParams, 'signal'>,
+  params: Omit<RunAgentParams, 'signal' | 'tools'>,
+  toolsForAttempt: (attempt: number) => ResponsesTool[],
   opts: { maxAttempts: number; watchdogMs: number; onStall?: (attempt: number, message: string) => void },
 ): AsyncGenerator<AgentEvent> {
   for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
@@ -492,7 +503,7 @@ async function* streamAgentWithRetry(
       }
     };
     try {
-      for await (const ev of runAgent({ ...params, signal: ctrl.signal })) {
+      for await (const ev of runAgent({ ...params, tools: toolsForAttempt(attempt), signal: ctrl.signal })) {
         if (!produced) {
           produced = true;
           clear();
@@ -713,15 +724,22 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
           emptyMemoryBlock(),
         ).catch(() => emptyMemoryBlock())
       : Promise.resolve(undefined);
-    const explicitSkillNames = slashSkillTags(run.prompt?.text ?? firstUser);
+    const promptForSkills = run.prompt?.text ?? firstUser;
+    const explicitSkillNames = slashSkillTags(promptForSkills);
+    const selectedSkills = selectSkills(promptForSkills);
     const codeOn = run.tools.includes('code_interpreter');
 
     // Canonical skills: provision the user's effective set onto their endpoint (zips + bootstrap),
     // mount the file_ids, and describe them in the prompt. Best-effort — a failure here must not
     // break the run (the model still has the inline playbooks + its own abilities).
+    // Gate mounting on actual relevance: mounting skill file_ids makes the code_interpreter container
+    // slow to provision (~30s to first byte) and, combined with the function tools, deterministically
+    // deadlocks the Responses stream. Mount only when the prompt matches a skill (keyword or /tag) so
+    // ordinary chat keeps the fast code_interpreter path; skills still load when actually needed.
+    const needsSkills = selectedSkills.length > 0 || explicitSkillNames.length > 0;
     let skillFileIds: string[] = [];
     let skillMounts: MountedSkill[] = [];
-    if (codeOn && deps.skillProvisioner) {
+    if (codeOn && deps.skillProvisioner && needsSkills) {
       try {
         const effective = deps.resolveSkills
           ? await deps.resolveSkills(run.userId)
@@ -740,7 +758,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     }
 
     const ciSection = codeOn
-      ? codeInterpreterSection(selectSkills(run.prompt?.text ?? firstUser), skillMounts, explicitSkillNames)
+      ? codeInterpreterSection(selectedSkills, skillMounts, explicitSkillNames)
       : '';
     memoryBlock = await memoryBlockPromise;
     if (memoryBlock?.memories.length) {
@@ -762,17 +780,27 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       run.assistantMessageId,
       deps.resolveImageUrl,
     );
-    const tools = assembleTools(c, run, thread, skillFileIds);
+    const fullTools = assembleTools(c, run, thread, skillFileIds);
     const execute = makeExecute(c, deps.fetchImpl, getImageReference);
 
+    // Graceful tool degradation across attempts. The Responses API deadlocks (zero output) when the
+    // code_interpreter container (slow to provision, esp. with mounted skill files) is offered
+    // alongside function tools. On a stall we retry with code_interpreter dropped, then — if still
+    // stalling — with no tools, which always yields a text answer. The happy path is unchanged.
+    const toolsForAttempt = (attempt: number): ResponsesTool[] => {
+      if (attempt <= 1) return fullTools;
+      if (attempt === 2) return fullTools.filter((t) => t.type !== 'code_interpreter');
+      return [];
+    };
     const agentStream = streamAgentWithRetry(
       runAgent,
-      { baseUrl: c.baseUrl, key: c.key, model, turns, tools, execute },
+      { baseUrl: c.baseUrl, key: c.key, model, turns, execute },
+      toolsForAttempt,
       {
-        maxAttempts: deps.maxAgentAttempts ?? 2,
-        watchdogMs: deps.firstTokenWatchdogMs ?? DEFAULT_FIRST_TOKEN_WATCHDOG_MS,
+        maxAttempts: deps.maxAgentAttempts ?? 3,
+        watchdogMs: deps.firstTokenWatchdogMs ?? (needsSkills ? SKILLS_FIRST_TOKEN_WATCHDOG_MS : DEFAULT_FIRST_TOKEN_WATCHDOG_MS),
         onStall: (attempt, message) =>
-          console.warn('[run] responses stream stalled with no output; retrying', { runId, attempt, message }),
+          console.warn('[run] responses stream stalled; retrying with reduced tools', { runId, attempt, message }),
       },
     );
     for await (const ev of agentStream) {

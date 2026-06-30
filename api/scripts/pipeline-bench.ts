@@ -152,6 +152,10 @@ const genImageTool = {
   parameters: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'], additionalProperties: false },
 };
 const codeInterpTool = { type: 'code_interpreter' as const, container: { type: 'auto' as const } };
+const SKILL_FILE_IDS = (process.env.WATAI_PROBE_SKILL_FILE_IDS
+  ?? 'assistant-U3okAHLurr7L5xouUPbf4V,assistant-9FLRKfhKkkjz7GeuwEXEyw,assistant-AJRZosbZGJ8WgbJ6J5DBkt')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+const codeInterpWithSkills = { type: 'code_interpreter' as const, container: { type: 'auto' as const, file_ids: SKILL_FILE_IDS } };
 
 /** Run the agent loop with a specific tool set and a hard abort, to detect tool-induced hangs. */
 async function timeAgentTools(label: string, prompt: string, tools: unknown[], timeoutMs = 40_000): Promise<AgentTiming> {
@@ -199,7 +203,7 @@ async function main(): Promise<void> {
   }
   const ranAt = new Date().toISOString();
   console.error(`pipeline-bench: endpoint=${new URL(baseUrl).host} chat=${CHAT_MODEL} embed=${EMBED_MODEL}`);
-  const toolsOnly = process.env.BENCH_TOOLS_ONLY === '1';
+  const toolsOnly = process.env.BENCH_TOOLS_ONLY === '1' || process.env.BENCH_REAL === '1';
 
   // --- Phase A: embeddings (memory retrieval hot-path add-on) ---
   const embeds: Array<{ label: string; ms: number; dims: number; err?: string }> = [];
@@ -231,15 +235,23 @@ async function main(): Promise<void> {
     }
   }
 
-  // --- Phase D: tool isolation (reproduce the 120s hang the failing runs hit) ---
-  console.error('Phase D: tool isolation (simple prompt, 40s abort) …');
+  // --- Phase D: tool isolation / real-combo reproduction ---
+  console.error('Phase D: tool combos (simple prompt, 40s abort) …');
   const toolPrompt = 'What is 2 + 2? Answer in one short sentence.';
-  const toolCases: Array<[string, unknown[]]> = [
-    ['ws + ci', [webSearchTool, codeInterpTool]],
-    ['img + ci', [genImageTool, codeInterpTool]],
-    ['ws + img', [webSearchTool, genImageTool]],
-    ['all 3 (ws+img+ci)', [webSearchTool, genImageTool, codeInterpTool]],
-  ];
+  const toolCases: Array<[string, unknown[]]> = process.env.BENCH_REAL === '1'
+    ? [
+        ['real ws+img+ci(skills) #1', [webSearchTool, genImageTool, codeInterpWithSkills]],
+        ['real ws+img+ci(skills) #2', [webSearchTool, genImageTool, codeInterpWithSkills]],
+        ['real ws+img+ci(skills) #3', [webSearchTool, genImageTool, codeInterpWithSkills]],
+        ['fallback ws+img (no ci)', [webSearchTool, genImageTool]],
+        ['ci(skills) alone', [codeInterpWithSkills]],
+      ]
+    : [
+        ['ws + ci', [webSearchTool, codeInterpTool]],
+        ['img + ci', [genImageTool, codeInterpTool]],
+        ['ws + img', [webSearchTool, genImageTool]],
+        ['all 3 (ws+img+ci)', [webSearchTool, genImageTool, codeInterpTool]],
+      ];
   const toolResults: AgentTiming[] = [];
   for (const [label, tools] of toolCases) {
     console.error(`  · ${label} …`);

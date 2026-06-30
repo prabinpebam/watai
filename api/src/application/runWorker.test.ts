@@ -12,6 +12,7 @@ import type { MessageRecord } from '../ports/messageStore';
 import type { RunStatus } from '../domain/run';
 import type { AgentEvent, RunAgentParams } from '../ai/orchestrator';
 import { DEFAULT_SETTINGS } from '../domain/settings';
+import { DEFAULT_SKILLS } from '../skills';
 import { AppError } from '../domain/errors';
 
 type RunAgentFn = NonNullable<RunWorkerDeps['runAgent']>;
@@ -49,7 +50,7 @@ function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string;
   return { runStore, messageStore, threadStore, clock, credentials, deps };
 }
 
-async function seed(ctx: ReturnType<typeof setup>, runStatus: RunStatus = 'queued'): Promise<RunRecord> {
+async function seed(ctx: ReturnType<typeof setup>, runStatus: RunStatus = 'queued', tools: string[] = [], userText = 'hello'): Promise<RunRecord> {
   await ctx.threadStore.put({
     id: 't1',
     userId: 'userA',
@@ -67,7 +68,7 @@ async function seed(ctx: ReturnType<typeof setup>, runStatus: RunStatus = 'queue
     threadId: 't1',
     userId: 'userA',
     role: 'user',
-    content: 'hello',
+    content: userText,
     status: 'complete',
     createdAt: '2026-06-01T00:00:01Z',
     orderAt: '2026-06-01T00:00:01Z',
@@ -80,7 +81,7 @@ async function seed(ctx: ReturnType<typeof setup>, runStatus: RunStatus = 'queue
     assistantMessageId: 'am1',
     status: runStatus,
     instanceId: 'inst',
-    tools: [],
+    tools,
     allowDestructive: [],
     createdAt: '2026-06-01T00:00:02Z',
     heartbeatAt: '2026-06-01T00:00:02Z',
@@ -180,10 +181,82 @@ describe('processRun', () => {
     };
     await processRun(ctx.deps(alwaysStall), 't1', 'r1');
 
-    expect(calls).toBe(2); // first attempt + one clean retry, then give up
+    expect(calls).toBe(3); // first attempt + two degrading retries (full → no-CI → no-tools), then give up
     const msg = await ctx.messageStore.get('t1', 'am1');
     expect(msg?.status).toBe('error');
     expect(msg?.content).toBe('');
+  });
+
+  it('degrades tools (drops code_interpreter) on the retry after a stall', async () => {
+    await seed(ctx, 'queued', ['code_interpreter']);
+    let calls = 0;
+    const hadCodeInterpreter: boolean[] = [];
+    const flaky: RunAgentFn = async function* (params): AsyncGenerator<AgentEvent> {
+      calls++;
+      hadCodeInterpreter.push(params.tools.some((t) => t.type === 'code_interpreter'));
+      if (calls === 1) throw new Error('This operation was aborted');
+      yield { type: 'text', delta: 'recovered' };
+      yield { type: 'done' };
+    };
+    await processRun(ctx.deps(flaky), 't1', 'r1');
+
+    expect(calls).toBe(2);
+    expect(hadCodeInterpreter[0]).toBe(true); // attempt 1 offers the full set incl. code_interpreter
+    expect(hadCodeInterpreter[1]).toBe(false); // attempt 2 drops code_interpreter so the stream recovers
+    const msg = await ctx.messageStore.get('t1', 'am1');
+    expect(msg?.content).toBe('recovered');
+    expect(msg?.status).toBe('complete');
+  });
+
+  it('skips skill mounting for an ordinary prompt (keeps the fast code_interpreter path)', async () => {
+    await seed(ctx, 'queued', ['code_interpreter'], 'how are you today?');
+    let ensureCalls = 0;
+    const deps: RunWorkerDeps = {
+      ...ctx.deps(script([{ type: 'text', delta: 'hi' }, { type: 'done' }])),
+      skillProvisioner: { ensure: async () => { ensureCalls++; return { fileIds: ['s1'], skills: [] }; } },
+      resolveSkills: async () => DEFAULT_SKILLS,
+    };
+    await processRun(deps, 't1', 'r1');
+    expect(ensureCalls).toBe(0); // no skill keyword/tag → container mounts no skill files
+  });
+
+  it('mounts skills when the prompt explicitly tags one', async () => {
+    await seed(ctx, 'queued', ['code_interpreter'], 'please format this with /pdf');
+    let ensureCalls = 0;
+    const deps: RunWorkerDeps = {
+      ...ctx.deps(script([{ type: 'text', delta: 'hi' }, { type: 'done' }])),
+      skillProvisioner: {
+        ensure: async () => {
+          ensureCalls++;
+          return { fileIds: ['s1'], skills: [{ name: 'pdf', description: 'd', path: '/mnt/data/skills/pdf/' }] };
+        },
+      },
+      resolveSkills: async () => DEFAULT_SKILLS,
+    };
+    await processRun(deps, 't1', 'r1');
+    expect(ensureCalls).toBe(1); // explicit /pdf tag → skills provisioned + mounted
+  });
+
+  it('drops function tools when skills are mounted (avoids the code_interpreter deadlock)', async () => {
+    const ctx2 = setup({ tavily: true, image: true });
+    await seed(ctx2, 'queued', ['web_search', 'generate_image', 'code_interpreter'], 'please use /pdf');
+    let capturedTools: Array<{ type: string; name?: string }> = [];
+    const runAgent: RunAgentFn = async function* (params): AsyncGenerator<AgentEvent> {
+      capturedTools = params.tools as Array<{ type: string; name?: string }>;
+      yield { type: 'text', delta: 'ok' };
+      yield { type: 'done' };
+    };
+    const deps: RunWorkerDeps = {
+      ...ctx2.deps(runAgent),
+      skillProvisioner: { ensure: async () => ({ fileIds: ['s1'], skills: [{ name: 'pdf', description: 'd', path: '/mnt/data/skills/pdf/' }] }) },
+      resolveSkills: async () => DEFAULT_SKILLS,
+    };
+    await processRun(deps, 't1', 'r1');
+
+    const names = capturedTools.map((t) => t.name ?? t.type);
+    expect(names).toContain('code_interpreter');
+    expect(names).not.toContain('web_search');
+    expect(names).not.toContain('generate_image');
   });
 
   it('uses the run model override when one is supplied', async () => {
