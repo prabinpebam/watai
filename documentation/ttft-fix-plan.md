@@ -107,14 +107,16 @@ Sources: [useChat.ts send](../src/features/chat/useChat.ts#L153), [runStore star
 - Expected: removes ~2-3s of serial latency. Deploy, re-measure.
 
 ### Phase 2 — Infra: warm the front door
-- Set **`alwaysReadyHttp = 1`** (the change already costed at +~$21/mo → ~$42/mo total). Kills the
-  front-door cold start on submit + SignalR negotiate ⇒ removes the 17-20s p95 spikes and first-prompt
-  penalty. One-line bicepparam + `az functionapp scale config always-ready set`.
+- **DROPPED (user decision, 2026-06-30).** Set `alwaysReadyHttp = 1` would kill the front-door cold
+  start, but that penalty only hits the **first prompt after idle** (start of a session); the recurring
+  ~$21/mo is not justified for a once-per-session few seconds. Worker always-ready
+  (`alwaysReadyRunWorker = 1`, already live via dfbc13d) stays.
 
 ### Phase 3 — Architecture: drop the queue hop (Option B from the audit)
-- Run `processRun` **inline in the `POST /runs` handler** and stream via SignalR, instead of enqueue →
-  separate queue-worker. Removes ~0.5-1s queue latency and the warm-worker dependency. Larger change
-  (client-supplied runId for Stop, cooperative cancel on disconnect) — do with live validation.
+- **DEFERRED (2026-06-30).** Run `processRun` **inline in the `POST /runs` handler** and stream via
+  SignalR instead of enqueue → separate queue-worker. Removes ~0.5-1s queue latency + the warm-worker
+  dependency, but it is the largest/riskiest change (client-supplied runId for Stop, cooperative cancel
+  on disconnect) and needs live validation — revisit only if the queue latency becomes the priority.
 
 ### Phase 4 — Memory retrieval trims (worker path)
 - Pass the **already-loaded settings** into `buildForRun` (drop the duplicate Cosmos read).
@@ -137,6 +139,7 @@ Sources: [useChat.ts send](../src/features/chat/useChat.ts#L153), [runStore star
 |--|--|--|--|
 | Baseline (d13d646) | **~7.5s** | ~9s | pre-submit full sync + uncached skills on the path |
 | **Phase 1 (3e83665)** | **~4.4s** | ~5.5s (8.0s first-send) | beat the ~5-6s target; **~3.1s / ~41% off** |
+| **Phase 4 (8d7e814)** | **~4.3s** | ~5.1s (11s post-deploy cold rep) | **no measurable TTFT change** — the duplicate Cosmos reads were not on the critical path; kept anyway as a correctness-neutral load/cost trim |
 
 The Phase 1 breakdown shows the client round-trips before submit are now just `ensureThread`
 (`POST /threads` ~0.8s, idempotent) + `POST /runs` (~0.9s); `GET /threads` fell 86→70 calls and
@@ -172,3 +175,24 @@ working path. Always re-bench warm + one cold sample, and **clean up** afterward
 - TTFT **median ≤ ~3s**, **p95 < ~5s** in the browser bench, across the 4-prompt set ×5.
 - Per-stage breakdown shows no single client round-trip > ~0.5s on the critical path.
 - No correctness/streaming regression; `vitest` green; throwaway threads cleaned up each run.
+
+## 10. Redirection (2026-06-30): memory correctness + tool calling
+
+Latency work paused at **~4.4s median** (from ~7.5s). Phase 2 dropped, Phase 3 deferred (above). The
+remaining focus is **correctness**, not latency — memory is firing where it shouldn't and capturing
+thread-local detail it shouldn't.
+
+### A. Memory retrieval over-triggers (injected even when irrelevant)
+Two channels feed each run:
+1. **Relevance channel** ([memoryContextService.buildVector](../api/src/application/memoryContextService.ts#L93)) — floor `RELEVANCE_FLOOR=0.25`; already query-gated, fine.
+2. **Always-on profile** (`memoryProfile=true` → [withProfile](../api/src/application/memoryContextService.ts#L150)) — injects the **whole identity profile into every run** regardless of relevance. This is why "memory used" lights up on unrelated prompts (e.g. "capital of France").
+
+**Fix options:**
+- **(recommended) Relevance-gate the profile** — score profile facts against the query embedding (already computed in `buildVector`) and include only those above a floor; emit no profile when none clear it. Relevant identity queries ("what's my dog's name") still surface; unrelated queries get nothing. Code-level, testable, reversible.
+- (blunt) flip `memoryProfile=false` so memory only fires via the gated relevance channel (param change → infra deploy; coarser).
+
+### B. Memory extraction not scoped to cross-thread usefulness
+The extractor prompt ([memoryExtractor.ts](../api/src/ai/memoryExtractor.ts#L133)) says "useful in future conversations" but does not distinguish **cross-thread durable facts** from **thread-specific task detail**, so thread-local ephemera can be stored globally. **Fix:** tighten the system prompt to require cross-thread / cross-topic usefulness — store identity, preferences, durable project context that recurs across *different* threads; let thread-specific task detail stay in the thread (return `ignore`).
+
+### C. Tool calling — gains to investigate
+Every agentic run offers `web_search` (+ `code_interpreter`/`file_search`/`generate_image` when enabled) via [assembleTools](../api/src/application/runWorker.ts#L238). For simple known-answer prompts the model may still invoke `web_search`, adding a tool round-trip (seconds) + citation noise. **Investigate:** (1) does `web_search` fire on prompts answerable from parametric knowledge? (2) does offering tools raise first-token latency? (3) tighten tool-use guidance so `web_search` only fires on genuinely current/factual-web intent. Measure the tool-call rate on the 4-prompt bench set.
