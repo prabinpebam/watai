@@ -706,24 +706,34 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     const c = await credentials.getDecrypted(run.userId);
     creds = c;
     model = run.model ?? c.models.chat;
-    const settings = deps.settings
-      ? await deps.settings.get(run.userId).catch(() => undefined)
+    // Kick off memory retrieval as early as possible using the submitted prompt text (available
+    // without loading history), so the query-embedding round-trip overlaps the settings + history
+    // reads instead of adding serially to time-to-first-token.
+    const submittedText = run.prompt?.text;
+    const earlyMemoryPromise = deps.memoryContext && submittedText
+      ? withTimeout(
+          deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText: submittedText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key } }),
+          deps.memoryContextBudgetMs ?? DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
+          emptyMemoryBlock(),
+        ).catch(() => emptyMemoryBlock())
       : undefined;
-    const history = await messageStore.list(threadId);
+    const [settings, history] = await Promise.all([
+      deps.settings ? deps.settings.get(run.userId).catch(() => undefined) : Promise.resolve(undefined),
+      messageStore.list(threadId),
+    ]);
     let imageReferencePromise: Promise<ImageReference | undefined> | undefined;
     const getImageReference = (): Promise<ImageReference | undefined> =>
       imageReferencePromise ??= latestUserImageReference(history, deps.resolveImageUrl, deps.fetchImpl);
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
-    const latestUserText = run.prompt?.text ?? [...history].reverse().find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
-    // Build the memory context concurrently with the rest of run setup (skills, history) so the
-    // query-embedding round-trip overlaps instead of adding serially to time-to-first-token.
-    const memoryBlockPromise = deps.memoryContext
+    const latestUserText = submittedText ?? [...history].reverse().find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
+    // Fall back to a history-derived query when there was no submitted prompt text (e.g. regenerate).
+    const memoryBlockPromise = earlyMemoryPromise ?? (deps.memoryContext
       ? withTimeout(
           deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key } }),
           deps.memoryContextBudgetMs ?? DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
           emptyMemoryBlock(),
         ).catch(() => emptyMemoryBlock())
-      : Promise.resolve(undefined);
+      : Promise.resolve(undefined));
     const promptForSkills = run.prompt?.text ?? firstUser;
     const explicitSkillNames = slashSkillTags(promptForSkills);
     const selectedSkills = selectSkills(promptForSkills);
