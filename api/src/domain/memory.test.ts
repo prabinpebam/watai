@@ -116,6 +116,8 @@ describe('memory API request schemas', () => {
     });
     expect(code(() => parseCreateMemory({ text: 'summary', kind: 'thread_summary' }))).toBe('validation');
     expect(code(() => parseCreateMemory({ text: 'entity', kind: 'entity' }))).toBe('validation');
+    // Project/work context is not storable at all — it must not cross-bleed across isolated threads.
+    expect(code(() => parseCreateMemory({ text: 'Watai deploys to rg-watai-dev.', kind: 'project_context' }))).toBe('validation');
   });
 
   it('accepts patchable fields but rejects deleted status and unknown fields', () => {

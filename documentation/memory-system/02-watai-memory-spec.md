@@ -4,6 +4,20 @@ This document specifies the product behavior, architecture, data model, retrieva
 
 Cross-references: [../02-architecture.md](../02-architecture.md), [../04-data-model.md](../04-data-model.md), [../06-server-runs-and-migration.md](../06-server-runs-and-migration.md), [01-research-and-benchmarks.md](01-research-and-benchmarks.md).
 
+> **POLICY UPDATE (2026-07-01) — Project/work context is NOT stored in memory.**
+> Users intentionally open separate threads to isolate different approaches and avoid cross-thread
+> "baggage." Storing project / work-in-progress context (the `project_context` kind) breaks that
+> isolation by bleeding one thread's task context into unrelated threads. Therefore, for now:
+> - Auto-extraction **never** produces `project_context` (excluded from `autoKinds`).
+> - Manual creation of `project_context` is **not offered / rejected** (excluded from `manualMemoryKinds`
+>   and the Settings add-memory picker).
+> - `project_context` is **never injected** into prompts — `MemoryContextService` filters it out of the
+>   candidate set, so neither vector retrieval nor the always-on profile can surface it (including any
+>   pre-existing records, which remain stored but dormant and are non-destructively kept).
+> - The `project_context` value is retained in `MEMORY_KINDS` only so existing records still validate and
+>   display in Settings. It is effectively deprecated for new storage.
+> References below to storing "project context" are superseded by this policy.
+
 ## 1. Problem Statement
 
 Watai currently has a memory toggle and local `MemoryItem` storage, but the server-run architecture means the browser is no longer the agent. If generation runs on the server, memory retrieval and memory writing must be server-owned too.

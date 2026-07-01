@@ -64,6 +64,14 @@ describe('memory extraction domain', () => {
         }),
       ),
     ).toBe('validation');
+    // project_context is not auto-extractable — thread work context must not cross-bleed.
+    expect(
+      code(() =>
+        parseMemoryExtractionOutput({
+          operations: [{ op: 'add', kind: 'project_context', text: 'x', confidence: 0.9, salience: 0.5, sourceMessageIds: ['m1'], reason: 'x' }],
+        }),
+      ),
+    ).toBe('validation');
     expect(
       code(() =>
         parseMemoryExtractionOutput({

@@ -791,12 +791,13 @@ export function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
   );
 }
 
-const MANUAL_MEMORY_KINDS: Array<Exclude<MemoryKind, 'thread_summary' | 'entity'>> = [
+// Project/work context is intentionally NOT offered: we do not store project work context in memory
+// (it must not cross-bleed across intentionally-isolated threads).
+const MANUAL_MEMORY_KINDS: Array<Exclude<MemoryKind, 'thread_summary' | 'entity' | 'project_context'>> = [
   'fact',
   'preference',
   'instruction',
   'work_style',
-  'project_context',
   'avoidance',
   'procedure',
 ];

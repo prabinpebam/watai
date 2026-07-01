@@ -19,7 +19,7 @@ describe('memoryController', () => {
   beforeEach(() => (ctrl = makeController()));
 
   it('creates, lists, patches, and deletes caller-owned memories', async () => {
-    const created = await ctrl.create({ claims: { sub: 'userA' }, body: { text: 'Remember rg-watai-dev.', kind: 'project_context' } });
+    const created = await ctrl.create({ claims: { sub: 'userA' }, body: { text: 'Remember rg-watai-dev.', kind: 'fact' } });
     expect(created.status).toBe(201);
     const id = (created.body as any).id;
 

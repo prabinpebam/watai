@@ -113,9 +113,14 @@ const memoryRecordSchema = z
 
 export type MemoryRecord = z.infer<typeof memoryRecordSchema>;
 
-const manualMemoryKinds = MEMORY_KINDS.filter((kind) => kind !== 'thread_summary' && kind !== 'entity') as [
-  Exclude<MemoryKind, 'thread_summary' | 'entity'>,
-  ...Array<Exclude<MemoryKind, 'thread_summary' | 'entity'>>,
+// Manual memories exclude project / work context too — we do not store project work context at all
+// (it must not cross-bleed across intentionally-isolated threads). thread_summary + entity are
+// system-managed kinds users never author directly.
+const manualMemoryKinds = MEMORY_KINDS.filter(
+  (kind) => kind !== 'thread_summary' && kind !== 'entity' && kind !== 'project_context',
+) as [
+  Exclude<MemoryKind, 'thread_summary' | 'entity' | 'project_context'>,
+  ...Array<Exclude<MemoryKind, 'thread_summary' | 'entity' | 'project_context'>>,
 ];
 
 const createMemorySchema = z

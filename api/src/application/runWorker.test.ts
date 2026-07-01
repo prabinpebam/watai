@@ -613,7 +613,7 @@ describe('processRun', () => {
     const memory = new MemoryService(memoryStore, ctx.clock);
     const saved = await memory.createManual('userA', {
       text: 'Watai deploy target is rg-watai-dev.',
-      kind: 'project_context',
+      kind: 'fact',
     });
     await memoryStore.put({ ...saved, embedding: [1, 0, 0] });
     const memoryContext = new MemoryContextService(
@@ -640,7 +640,7 @@ describe('processRun', () => {
     expect(msg?.memoryRefs).toEqual([
       {
         memoryId: saved.id,
-        kind: 'project_context',
+        kind: 'fact',
         text: 'Watai deploy target is rg-watai-dev.',
         score: expect.any(Number),
       },

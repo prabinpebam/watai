@@ -15,9 +15,14 @@ const text = z.string().trim().min(1).max(2000).refine((value) => !containsSecre
 });
 const reason = z.string().trim().min(1).max(800);
 const score = z.number().min(0).max(1);
-const autoKinds = MEMORY_KINDS.filter((kind) => kind !== 'thread_summary' && kind !== 'entity') as [
-  Exclude<(typeof MEMORY_KINDS)[number], 'thread_summary' | 'entity'>,
-  ...Array<Exclude<(typeof MEMORY_KINDS)[number], 'thread_summary' | 'entity'>>,
+// Auto-extraction never stores project / work-in-progress context: it is thread-specific and must not
+// cross-bleed into other threads (users open separate threads to isolate approaches). thread_summary
+// and entity are rebuild-only kinds, not turn-extractable.
+const autoKinds = MEMORY_KINDS.filter(
+  (kind) => kind !== 'thread_summary' && kind !== 'entity' && kind !== 'project_context',
+) as [
+  Exclude<(typeof MEMORY_KINDS)[number], 'thread_summary' | 'entity' | 'project_context'>,
+  ...Array<Exclude<(typeof MEMORY_KINDS)[number], 'thread_summary' | 'entity' | 'project_context'>>,
 ];
 
 const addOperationSchema = z

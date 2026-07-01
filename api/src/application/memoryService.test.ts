@@ -25,14 +25,14 @@ describe('MemoryService', () => {
     const { service } = makeService();
     const record = await service.createManual('userA', {
       text: '  Remember that Watai deploys to rg-watai-dev.  ',
-      kind: 'project_context',
+      kind: 'fact',
       pinned: true,
       visibility: 'top_of_mind',
     });
     expect(record).toMatchObject({
       id: 'mem_1',
       userId: 'userA',
-      kind: 'project_context',
+      kind: 'fact',
       status: 'active',
       text: 'Remember that Watai deploys to rg-watai-dev.',
       normalizedText: 'remember that watai deploys to rg-watai-dev.',
@@ -49,7 +49,7 @@ describe('MemoryService', () => {
   it('lists caller-scoped memories with status, kind, q, and limit filters', async () => {
     const { service } = makeService();
     await service.createManual('userA', { text: 'User prefers short implementation plans.', kind: 'preference' });
-    await service.createManual('userA', { text: 'Watai deploys to rg-watai-dev.', kind: 'project_context' });
+    await service.createManual('userA', { text: 'Watai deploys to rg-watai-dev.', kind: 'fact' });
     await service.createManual('userB', { text: 'Other user prefers verbose plans.', kind: 'preference' });
 
     const q = await service.list('userA', { q: 'deploy', limit: 10 });

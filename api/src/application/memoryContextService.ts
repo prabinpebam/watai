@@ -108,7 +108,9 @@ export class MemoryContextService {
       retrievalOn || this.profileEnabled
         ? await this.store
             .list(input.userId, { status: 'active', limit: VECTOR_CANDIDATE_LIMIT })
-            .then((p) => p.memories)
+            // Project / work-in-progress context is never injected into prompts — threads are isolated
+            // by design and this context must not cross-bleed between them.
+            .then((p) => p.memories.filter((m) => m.kind !== 'project_context'))
             .catch(() => [])
         : [];
     // Embed the query once and reuse it for the relevance channel AND the profile relevance gate.

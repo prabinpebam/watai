@@ -52,6 +52,15 @@ describe('MemoryContextService — relevance channel', () => {
     expect(block.memories.map((m) => m.id)).toEqual(['mem_dog']);
   });
 
+  it('never injects project_context memories, even a relevant one (threads are isolated by design)', async () => {
+    const store = new InMemoryMemoryStore();
+    const ctx = new MemoryContextService(store, settingsReader(), { embedder: stubEmbedder, retriever: new InProcessRetriever(store) });
+    await store.put(rec({ id: 'mem_proj', kind: 'project_context', text: 'Watai deploys to rg-watai-dev.', embedding: stubEmbed('deploy resource group') }));
+
+    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: 'what resource group do we deploy Watai to?', now: NOW, creds: CREDS });
+    expect(block.memories).toEqual([]);
+  });
+
   it('returns an empty block when nothing clears the relevance floor', async () => {
     const store = new InMemoryMemoryStore();
     const ctx = new MemoryContextService(store, settingsReader(), { embedder: stubEmbedder, retriever: new InProcessRetriever(store) });
