@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { processRun, type RunWorkerDeps } from './runWorker';
+import { processRun, isImageGenerationRequest, type RunWorkerDeps } from './runWorker';
 import { InMemoryRunStore } from '../adapters/memory/runStore';
 import { InMemoryMessageStore } from '../adapters/memory/messageStore';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
@@ -131,6 +131,32 @@ function artifactFetch(): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
+describe('isImageGenerationRequest', () => {
+  it('matches clear image create/edit requests', () => {
+    for (const t of [
+      'Generate Watercolor image of a Manipuri woman, use image as reference',
+      'Generate a clean image, keep the watercolor style, improve the explosions',
+      'make it kawaii with marker doodles all around it',
+      'draw a picture of a cat',
+      'restyle this photo as an oil painting',
+      'remove the text from the poster image',
+    ])
+      expect(isImageGenerationRequest(t), t).toBe(true);
+  });
+
+  it('does not match data / document / vision-query requests', () => {
+    for (const t of [
+      'create a bar chart of the sales data',
+      'make me a PDF report from this',
+      'what is in this image?',
+      'extract the text from this image',
+      'write python to count objects',
+      '',
+    ])
+      expect(isImageGenerationRequest(t), t).toBe(false);
+  });
+});
+
 describe('processRun', () => {
   let ctx: ReturnType<typeof setup>;
   beforeEach(() => (ctx = setup()));
@@ -228,6 +254,38 @@ describe('processRun', () => {
     const msg = await ctx.messageStore.get('t1', 'am1');
     expect(msg?.content).toBe('recovered');
     expect(msg?.status).toBe('complete');
+  });
+
+  it('drops code_interpreter and offers generate_image for a clear image-generation request', async () => {
+    const ctx2 = setup({ image: true });
+    await seed(
+      ctx2,
+      'queued',
+      ['code_interpreter', 'generate_image'],
+      'Generate a watercolor image of a woman; use the uploaded photo as reference',
+    );
+    let tools: Array<{ type: string; name?: string }> = [];
+    const capture: RunAgentFn = async function* (params): AsyncGenerator<AgentEvent> {
+      tools = params.tools as Array<{ type: string; name?: string }>;
+      yield { type: 'text', delta: 'ok' };
+      yield { type: 'done' };
+    };
+    await processRun(ctx2.deps(capture), 't1', 'r1');
+    expect(tools.some((t) => t.type === 'code_interpreter')).toBe(false);
+    expect(tools.some((t) => t.name === 'generate_image')).toBe(true);
+  });
+
+  it('keeps code_interpreter for a data/chart request even when it mentions an image', async () => {
+    const ctx2 = setup({ image: true });
+    await seed(ctx2, 'queued', ['code_interpreter', 'generate_image'], 'create a bar chart image from this CSV of sales');
+    let tools: Array<{ type: string; name?: string }> = [];
+    const capture: RunAgentFn = async function* (params): AsyncGenerator<AgentEvent> {
+      tools = params.tools as Array<{ type: string; name?: string }>;
+      yield { type: 'text', delta: 'ok' };
+      yield { type: 'done' };
+    };
+    await processRun(ctx2.deps(capture), 't1', 'r1');
+    expect(tools.some((t) => t.type === 'code_interpreter')).toBe(true);
   });
 
   it('skips skill mounting for an ordinary prompt (keeps the fast code_interpreter path)', async () => {

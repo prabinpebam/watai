@@ -184,6 +184,26 @@ async function latestUserImageReference(
   return undefined;
 }
 
+/** True when the prompt is unambiguously a request to CREATE or EDIT a picture / artwork, so the image
+ *  model (generate_image) should handle it rather than the code interpreter. Requires an image verb AND
+ *  an image noun/style, and bails when the ask is a data / plot / document deliverable (code-interpreter
+ *  territory). Used to drop code_interpreter for the run so its "use the python tool" directive can't
+ *  hijack an image task. */
+export function isImageGenerationRequest(text: string): boolean {
+  const t = (text ?? '').toLowerCase();
+  if (!t.trim()) return false;
+  // Deliverables that belong to the code interpreter even when the word "image" appears.
+  if (
+    /\b(chart|plot|graph|histogram|scatter|dataframe|matplotlib|csv|spreadsheet|excel|xlsx?|pdf|docx?|document|report|slides?|deck|presentation|powerpoint|pptx?)\b/.test(t)
+  )
+    return false;
+  const verb =
+    /\b(generate|create|make|draw|paint|render|design|illustrate|redraw|re-?draw|restyle|re-?style|recreate|edit|retouch|convert|transform|stylize|stylise|cartoonize|cartoonise|sketch|colou?rize|colou?rise|enhance|improve|remove)\b/;
+  const noun =
+    /\b(image|picture|photo|portrait|artwork|art|illustration|drawing|painting|poster|logo|sticker|avatar|wallpaper|watercolou?r|oil\s+painting|anime|manga|kawaii|caricature)\b/;
+  return verb.test(t) && noun.test(t);
+}
+
 /** Build the system prompt from the user's personalization (about-you / response-style) plus a
  *  base persona and light tool guidance. */
 function systemPrompt(
@@ -781,7 +801,16 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     const promptForSkills = run.prompt?.text ?? firstUser;
     const explicitSkillNames = slashSkillTags(promptForSkills);
     const selectedSkills = selectSkills(promptForSkills);
-    const codeOn = run.tools.includes('code_interpreter');
+    // A clear image-create/edit request must go to generate_image, not the code interpreter. When the
+    // image model is available and the prompt is unambiguously about making/editing a picture (and no
+    // skill was explicitly tagged), drop code_interpreter for this run so its "use the python tool"
+    // directive can't hijack the image task. Prompt guidance alone did not reliably steer this.
+    const suppressCodeForImage =
+      !!c.models.image && explicitSkillNames.length === 0 && isImageGenerationRequest(latestUserText);
+    const offeredToolNames = suppressCodeForImage
+      ? run.tools.filter((t) => t !== 'code_interpreter')
+      : run.tools;
+    const codeOn = offeredToolNames.includes('code_interpreter');
 
     // Canonical skills: provision the user's effective set onto their endpoint (zips + bootstrap),
     // mount the file_ids, and describe them in the prompt. Best-effort — a failure here must not
@@ -834,7 +863,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       run.assistantMessageId,
       deps.resolveImageUrl,
     );
-    const fullTools = assembleTools(c, run, thread, skillFileIds);
+    const fullTools = assembleTools(c, { ...run, tools: offeredToolNames }, thread, skillFileIds);
     const execute = makeExecute(c, deps.fetchImpl, getImageReference);
 
     // Graceful tool degradation across attempts. The Responses API deadlocks (zero output) when the
