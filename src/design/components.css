@@ -2657,15 +2657,11 @@ button.source-chip:hover {
   color: var(--color-text-secondary);
 }
 .web-images__strip {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: var(--space-3);
-  overflow-x: auto;
-  padding-bottom: var(--space-2);
-  scrollbar-width: thin;
 }
 .web-image {
-  flex: 0 0 auto;
-  width: 144px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   overflow: hidden;
