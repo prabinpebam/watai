@@ -50,6 +50,14 @@ describe('codeInterpreterSection', () => {
     expect(s.toLowerCase()).toContain('do not put a download link');
   });
 
+  it('steers image creation/editing to generate_image, not the python tool', () => {
+    const s = codeInterpreterSection([]);
+    expect(s).toContain('generate_image');
+    // The MUST-use-python file list must NOT include bare "image" (that mis-triaged edits to PIL).
+    expect(s).not.toMatch(/CSV, image,/);
+    expect(s.toLowerCase()).toContain('edit_reference=true');
+  });
+
   it('embeds each selected skill body alongside the directive', () => {
     const section = codeInterpreterSection(selectSkills('build an excel budget spreadsheet with formulas'));
     expect(section).toContain('Excel spreadsheets');

@@ -186,15 +186,34 @@ async function latestUserImageReference(
 
 /** Build the system prompt from the user's personalization (about-you / response-style) plus a
  *  base persona and light tool guidance. */
-function systemPrompt(creds: DecryptedCredentials, settings?: Settings, skillsSection?: string, memorySection?: string): string {
+function systemPrompt(
+  creds: DecryptedCredentials,
+  settings?: Settings,
+  skillsSection?: string,
+  memorySection?: string,
+  imageAttached = false,
+): string {
   const lines = ['You are Watai, a helpful AI assistant. Be accurate and concise.'];
   const p = settings?.personalization;
   if (p?.aboutYou?.trim()) lines.push(`About the user:\n${p.aboutYou.trim()}`);
   if (p?.howRespond?.trim()) lines.push(`How the user wants you to respond:\n${p.howRespond.trim()}`);
   const hints: string[] = [];
   if (creds.tavilyKey) hints.push('use web_search for current or factual web information and cite the sources');
-  if (creds.models.image) hints.push('use generate_image when the user asks for an image, illustration, or diagram; if the user references an uploaded image, set edit_reference=true');
+  if (creds.models.image)
+    hints.push(
+      'use generate_image to CREATE or EDIT images (illustrations, artwork, photos, diagrams, logos); ' +
+        'when the user wants to edit, restyle, clean up, remove text from, improve, extend, or transform an ' +
+        'image — including one they uploaded — call generate_image with edit_reference=true, and do NOT use the ' +
+        'code interpreter to edit or produce pictures/artwork',
+    );
   if (hints.length) lines.push(`When helpful, ${hints.join('; ')}.`);
+  if (imageAttached && creds.models.image) {
+    lines.push(
+      'The user has attached an image. If they ask to edit, clean up, remove text from, restyle, improve, ' +
+        'extend, transform, or regenerate it, you MUST call generate_image with edit_reference=true — do not ' +
+        'use the code interpreter to edit the image.',
+    );
+  }
   if (memorySection) lines.push(memorySection);
   if (skillsSection) lines.push(skillsSection);
   return lines.join('\n\n');
@@ -292,13 +311,13 @@ function assembleTools(
       type: 'function',
       name: 'generate_image',
       description:
-        'Generate an image from a text description. Use when the user asks for an image, illustration, diagram, logo, or picture.',
+        'Create OR edit an image with an image model. Use whenever the user wants to make, edit, restyle, clean up, remove text from, extend, improve, regenerate, or transform a picture, photo, artwork, illustration, diagram, or logo — including edits of an image the user uploaded (set edit_reference=true). Preferred over the code interpreter for anything involving pictures or artwork; it regenerates the image and preserves the requested style.',
       parameters: {
         type: 'object',
         properties: {
-          prompt: { type: 'string', description: 'A detailed description of the image to generate.' },
+          prompt: { type: 'string', description: 'A detailed description of the image (or the requested edit).' },
           size: { type: 'string', description: 'Optional size, e.g. 1024x1024, 1024x1536, or 1536x1024.' },
-          edit_reference: { type: 'boolean', description: 'Set true when the user wants to edit, remix, transform, or use the latest uploaded image as the image-model input/reference.' },
+          edit_reference: { type: 'boolean', description: 'Set true to edit, restyle, clean up, improve, or transform the latest image the user uploaded (used as the image-model reference; preserves its style).' },
         },
         required: ['prompt'],
         additionalProperties: false,
@@ -745,6 +764,12 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       imageReferencePromise ??= latestUserImageReference(history, deps.resolveImageUrl, deps.fetchImpl);
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
     const latestUserText = submittedText ?? [...history].reverse().find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
+    // Does the most recent user turn carry an uploaded image? Steers image-edit requests to
+    // generate_image (edit_reference) rather than the code interpreter.
+    const hasUserImage =
+      [...history].reverse().find((m) => !m.deletedAt && m.role === 'user')?.attachments?.some(
+        (a) => a.kind === 'image' && a.blobPath,
+      ) ?? false;
     // Fall back to a history-derived query when there was no submitted prompt text (e.g. regenerate).
     const memoryBlockPromise = earlyMemoryPromise ?? (deps.memoryContext
       ? withTimeout(
@@ -804,7 +829,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       });
     }
     const turns = await buildTurns(
-      systemPrompt(c, settings, ciSection, memoryBlock ? renderMemoryContext(memoryBlock) : ''),
+      systemPrompt(c, settings, ciSection, memoryBlock ? renderMemoryContext(memoryBlock) : '', hasUserImage),
       history,
       run.assistantMessageId,
       deps.resolveImageUrl,

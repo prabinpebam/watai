@@ -38,8 +38,14 @@ export function slashSkillTags(prompt: string): string[] {
  *  /mnt/data/ outputs and surfaces them as downloadable attachments in the chat. */
 const CODE_INTERPRETER_DIRECTIVE =
   'You have a code interpreter (the "python tool") and you CAN create real, downloadable files. ' +
-  'When the user asks for a document, PDF, Word doc, spreadsheet, slide deck, chart, CSV, image, ' +
-  'or any file, you MUST use the python tool to generate it and save it under /mnt/data/. Files ' +
+  'When the user asks for a document, PDF, Word doc, spreadsheet, slide deck, chart, CSV, ' +
+  'or any file, you MUST use the python tool to generate it and save it under /mnt/data/. ' +
+  'EXCEPTION — pictures & artwork: to create, edit, restyle, clean up, remove text from, improve, ' +
+  'extend, regenerate, or transform a picture, photo, artwork, illustration, or an image the user ' +
+  'uploaded, use the generate_image tool (with edit_reference=true for an uploaded image), NOT the ' +
+  'python tool — generate_image regenerates the image with an image model and preserves the style, ' +
+  'whereas the python tool can only crop/erase pixels and cannot improve or restyle artwork. Use the ' +
+  'python tool for images ONLY for data-driven charts/plots (e.g. matplotlib). Files ' +
   'saved under /mnt/data/ are automatically delivered to the user as downloadable attachments in ' +
   'this chat — the user can download them directly. Never say you cannot create, attach, host, ' +
   'email, or deliver files; you can. Do not paste a long document as plain text when the user ' +
