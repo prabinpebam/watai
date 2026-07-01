@@ -801,6 +801,103 @@ describe('SyncRepository — pull', () => {
     expect(messages[0].toolCalls?.[0].status).toBe('done');
     expect(await kv.get('sync.cursor.messages.t1')).toBe('2026-02-01T00:00:09Z');
   });
+
+  it('reconciles a stale terminal assistant message that gained web images on the server', async () => {
+    const { repo, local, cloud } = setup(true);
+    cloud.seedThread({ id: 't1', title: 'T', updatedAt: '2026-02-01T00:00:05Z' });
+    // A terminal copy this device stored before the web images were attached to the reply.
+    await local.putMessageRaw(
+      msg({
+        id: 'am1',
+        threadId: 't1',
+        role: 'assistant',
+        content: 'Here are some cats.',
+        status: 'complete',
+        createdAt: '2026-02-01T00:00:02Z',
+      }),
+    );
+    cloud.seedMessage({
+      id: 'am1',
+      threadId: 't1',
+      role: 'assistant',
+      content: 'Here are some cats.',
+      status: 'complete',
+      createdAt: '2026-02-01T00:00:02Z',
+      orderAt: '2026-02-01T00:00:02Z',
+      webImages: [
+        { id: 'w1', url: 'https://img.example/cat1.jpg', description: 'a cat' },
+        { id: 'w2', url: 'https://img.example/cat2.jpg' },
+      ],
+    });
+
+    await repo.pull();
+
+    const am1 = (await local.listMessages('t1')).find((m) => m.id === 'am1');
+    expect(am1?.webImages).toHaveLength(2);
+    expect(am1?.webImages?.[0]).toMatchObject({ id: 'w1', url: 'https://img.example/cat1.jpg' });
+  });
+
+  it('heals a stale terminal message on thread open even when the delta cursor is past it', async () => {
+    const { repo, local, cloud, kv } = setup(true);
+    // Cursor already advanced past the message, so a delta pull would never re-fetch it.
+    await kv.set('sync.cursor.messages.t1', '2026-02-01T00:00:09Z');
+    await local.putMessageRaw(
+      msg({
+        id: 'am1',
+        threadId: 't1',
+        role: 'assistant',
+        content: 'Here are some cats.',
+        status: 'complete',
+        createdAt: '2026-02-01T00:00:02Z',
+      }),
+    );
+    cloud.seedMessage({
+      id: 'am1',
+      threadId: 't1',
+      role: 'assistant',
+      content: 'Here are some cats.',
+      status: 'complete',
+      createdAt: '2026-02-01T00:00:02Z',
+      orderAt: '2026-02-01T00:00:02Z',
+      webImages: [{ id: 'w1', url: 'https://img.example/cat1.jpg' }],
+    });
+
+    const messages = await repo.listMessages('t1');
+
+    expect(messages.find((m) => m.id === 'am1')?.webImages).toHaveLength(1);
+    // A full re-pull happened on first open (not gated by the delta cursor).
+    expect(cloud.calls).toContain('listMessages:t1');
+  });
+
+  it('leaves a terminal assistant message untouched when the server signature matches', async () => {
+    const { repo, local, cloud } = setup(true);
+    await local.putMessageRaw(
+      msg({
+        id: 'am1',
+        threadId: 't1',
+        role: 'assistant',
+        content: 'Here are some cats.',
+        status: 'complete',
+        createdAt: '2026-02-01T00:00:02Z',
+        webImages: [{ id: 'local-w', url: 'https://img.example/cat1.jpg' }],
+      }),
+    );
+    // Same status, content length and array counts => identical signature, so no redundant write.
+    cloud.seedMessage({
+      id: 'am1',
+      threadId: 't1',
+      role: 'assistant',
+      content: 'Here are some cats.',
+      status: 'complete',
+      createdAt: '2026-02-01T00:00:02Z',
+      orderAt: '2026-02-01T00:00:02Z',
+      webImages: [{ id: 'server-w', url: 'https://img.example/other.jpg' }],
+    });
+
+    const am1 = (await repo.listMessages('t1')).find((m) => m.id === 'am1');
+    // Not replaced: the local copy (with its own web-image id) is preserved.
+    expect(am1?.webImages?.[0].id).toBe('local-w');
+  });
 });
 
 describe('SyncRepository — run lock', () => {

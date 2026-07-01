@@ -50,8 +50,36 @@ function isStreamingAssistant(message: Message): boolean {
   return message.role === 'assistant' && message.status === 'streaming';
 }
 
-function shouldReplaceKnownMessage(existing: Message, incoming: MessageRecord): boolean {
-  return isStreamingAssistant(existing) && existing.role === incoming.role;
+/** A cheap content signature over an assistant message's server-owned fields. Compares counts (not
+ *  deep equality) so it stays O(1) and churn-free: an identical server copy yields an identical
+ *  signature, so no redundant local write. Used to detect when the server's copy has diverged from a
+ *  locally-stored TERMINAL copy — e.g. it gained webImages/citations/artifacts that landed after
+ *  this device first persisted the reply. */
+function assistantSignature(m: Message): string {
+  return [
+    m.status,
+    m.content.length,
+    m.toolCalls?.length ?? 0,
+    m.citations?.length ?? 0,
+    m.webImages?.length ?? 0,
+    m.memoryRefs?.length ?? 0,
+    m.images?.length ?? 0,
+    m.artifacts?.length ?? 0,
+  ].join(':');
+}
+
+/** Whether a pulled server message should overwrite the known local copy. Always true while the
+ *  local copy is a streaming assistant (the reply is still being written). Also true for a terminal
+ *  ASSISTANT message whose server copy differs by signature, so a stale local copy that predates
+ *  late enrichment (webImages, citations, artifacts, …) converges to the server instead of staying
+ *  frozen forever. User messages keep their local copy verbatim — they carry local-only staged
+ *  fields (localBlobKey/pendingImages) the server never sees. */
+function shouldReplaceKnownMessage(existing: Message, incoming: Message): boolean {
+  if (isStreamingAssistant(existing)) return true;
+  if (existing.role === 'assistant' && incoming.role === 'assistant') {
+    return assistantSignature(existing) !== assistantSignature(incoming);
+  }
+  return false;
 }
 
 export class SyncRepository implements Repository {
@@ -62,6 +90,10 @@ export class SyncRepository implements Repository {
     private readonly fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
   ) {}
 
+  /** Threads reconciled (a full message re-pull) once this session. A stale terminal copy that
+   *  predates late enrichment converges on first open without re-pulling on every open. */
+  private readonly reconciledThreads = new Set<Id>();
+
   // ---- reads: always local ----
   listThreads(opts?: { includeArchived?: boolean }): Promise<Thread[]> {
     return this.local.listThreads(opts);
@@ -71,8 +103,18 @@ export class SyncRepository implements Repository {
   }
   async listMessages(threadId: Id): Promise<Message[]> {
     const messages = await this.local.listMessages(threadId);
-    if (messages.some(isStreamingAssistant) && (await this.syncEnabled())) {
-      await this.pullMessages(threadId, { forceFull: true }).catch(() => false);
+    const hasStreaming = messages.some(isStreamingAssistant);
+    // Once per session, fully reconcile a thread that has assistant replies against the server: the
+    // delta cursor may already be past a message whose server copy gained late enrichment (e.g. web
+    // images that landed after this device first stored it), so only a full re-pull surfaces it.
+    const needsReconcile =
+      !this.reconciledThreads.has(threadId) && messages.some((m) => m.role === 'assistant');
+    if ((hasStreaming || needsReconcile) && (await this.syncEnabled())) {
+      const ok = await this.pullMessages(threadId, { forceFull: true }).then(
+        () => true,
+        () => false,
+      );
+      if (ok) this.reconciledThreads.add(threadId);
       return this.local.listMessages(threadId);
     }
     return messages;
@@ -415,8 +457,9 @@ export class SyncRepository implements Repository {
     let changed = false;
     for (const rec of records) {
       const existing = known.get(rec.id);
-      if (!existing || shouldReplaceKnownMessage(existing, rec as MessageRecord)) {
-        await this.local.putMessageRaw(messageFromRecord(rec as MessageRecord));
+      const incoming = messageFromRecord(rec as MessageRecord);
+      if (!existing || shouldReplaceKnownMessage(existing, incoming)) {
+        await this.local.putMessageRaw(incoming);
         changed = true;
       }
       if (rec.createdAt > maxCreated) maxCreated = rec.createdAt;
