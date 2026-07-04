@@ -1352,10 +1352,9 @@ a:hover {
 }
 
 /* ---- Empty state ---- */
-/* Greeting + composer + tips are centered as a single group on a fresh thread. The
-   composer stays mounted in one place (`.composer-slot`); `.chat--empty` just changes the
-   flex alignment so the group sits in the middle, and ChatView FLIP-slides it to the bottom
-   on the first prompt. */
+/* Greeting + composer centered as a single group on a fresh thread. The composer stays
+   mounted in one place (`.composer-slot`); `.chat--empty` just changes the flex alignment so
+   the group sits in the middle, and ChatView FLIP-slides it to the bottom on the first prompt. */
 .chat--empty {
   justify-content: center;
 }
@@ -1379,43 +1378,24 @@ a:hover {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: var(--space-4);
-  padding: var(--space-6) var(--space-5) var(--space-2);
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5) var(--space-8);
 }
 .empty__greeting {
-  margin: 0;
-  font-size: var(--text-display-size);
-  line-height: var(--text-display-lh);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.chat-tips {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-2);
-  max-width: var(--size-column-max);
-  margin: 0 auto;
-  padding: var(--space-3) var(--space-5) var(--space-4);
-  animation: tips-in var(--motion-base) var(--ease-standard);
+  flex-direction: column;
+  margin: 0;
+  font-size: var(--text-large-title-size);
+  line-height: var(--text-large-title-lh);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
 }
-.chat-tip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-1);
+.empty__greeting-line-1 {
   color: var(--color-text-secondary);
-  font-size: var(--text-body-sm-size);
-  user-select: none;
 }
-@keyframes tips-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
+.empty__greeting-line-2 {
+  color: var(--color-text-primary);
+  text-wrap: balance;
 }
 
 @media (max-width: 599px) {

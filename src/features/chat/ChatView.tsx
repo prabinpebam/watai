@@ -12,13 +12,6 @@ import { useUi } from '../../state/store';
 import { greeting } from '../../lib/format';
 import type { ImageRef } from '../../lib/types';
 
-// Non-clickable capability hints shown under the composer on the empty state.
-const TIPS = [
-  { icon: 'image', label: 'Create an image' },
-  { icon: 'edit', label: 'Write or edit' },
-  { icon: 'globe', label: 'Look something up' },
-] as const;
-
 export function ChatView({ threadId, onScrolledChange }: { threadId: string; onScrolledChange?: (v: boolean) => void }) {
   const { messages, loading, send, regenerate, stop, streaming, indexing, lockedBy } = useChat(threadId);
   const draft = useUi((s) => s.composerDrafts[threadId] ?? '');
@@ -197,7 +190,10 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
           <Avatar size="lg" variant="assistant">
             <Logo size={30} />
           </Avatar>
-          <div className="empty__greeting">{greeting()}</div>
+          <div className="empty__greeting">
+            <span className="empty__greeting-line-1">{greeting()}!</span>
+            <span className="empty__greeting-line-2">What’s on the agenda today?</span>
+          </div>
         </div>
       )}
 
@@ -225,15 +221,6 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
           locked={!!lockedBy && !streaming}
           autoFocus={isEmpty}
         />
-        {isEmpty && (
-          <div className="chat-tips">
-            {TIPS.map((tip) => (
-              <span key={tip.label} className="chat-tip">
-                <Icon name={tip.icon} size={18} /> {tip.label}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
       {!loading && !isEmpty && <PromptMinimap messages={messages} scrollRef={scrollRef} />}
       </div>
