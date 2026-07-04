@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { IconButton, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { startRecording, type Recorder } from '../../lib/audio';
@@ -93,6 +93,8 @@ function HighlightedValue({ value, skills }: { value: string; skills: SkillSumma
 export function Composer({ value, onChange, onSend, streaming, onStop, placeholder, locked, autoFocus }: ComposerProps) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const pendingFlipRef = useRef<{ rects: Map<string, DOMRect>; height: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -115,14 +117,29 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   // two-row multiline layout. The moment the text wraps past a single line the composer
   // switches to multiline (input on its own row, controls beneath) and stays there for the
   // rest of this prompt — it only relaxes back to single-line once the field is cleared
-  // (i.e. after the prompt is sent), so the layout never flickers mid-typing.
-  useEffect(() => {
+  // (i.e. after the prompt is sent), so the layout never flickers mid-typing. Runs as a
+  // layout effect so the height is settled before the FLIP effect below measures.
+  useLayoutEffect(() => {
     const ta = taRef.current;
     if (!ta) return;
+    // Snapshot geometry BEFORE mutating height/layout, so if this commit flips the mode the
+    // FLIP animates from the last on-screen single-line (or multiline) frame, not a half-grown one.
+    const snapshot = () => {
+      const root = composerRef.current;
+      if (!root) return null;
+      const rects = new Map<string, DOMRect>();
+      for (const key of ['plus', 'input', 'mic', 'primary']) {
+        const el = root.querySelector<HTMLElement>(`.composer__${key}`);
+        if (el) rects.set(key, el.getBoundingClientRect());
+      }
+      return { rects, height: root.getBoundingClientRect().height };
+    };
+    const before = snapshot();
     ta.style.height = 'auto';
     const sh = ta.scrollHeight;
     ta.style.height = `${Math.min(sh, 200)}px`;
     if (!value.trim()) {
+      if (multiline && before) pendingFlipRef.current = before;
       setMultiline(false);
       return;
     }
@@ -131,9 +148,54 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
       let lineHeight = parseFloat(cs.lineHeight);
       if (!Number.isFinite(lineHeight)) lineHeight = parseFloat(cs.fontSize) * 1.4;
       const oneLine = lineHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-      if (sh > oneLine + lineHeight * 0.5) setMultiline(true);
+      if (sh > oneLine + lineHeight * 0.5) {
+        if (before) pendingFlipRef.current = before;
+        setMultiline(true);
+      }
     }
   }, [value, multiline]);
+
+  // Smoothly animate the switch between the single-line and two-row layouts. Grid reflows
+  // are instant, so we FLIP: translate the controls + input from where they sat before the
+  // change back to their new cells (to zero) while easing the container height. The "before"
+  // geometry was captured in the layout effect above just prior to the mode flip.
+  useLayoutEffect(() => {
+    const root = composerRef.current;
+    const before = pendingFlipRef.current;
+    pendingFlipRef.current = null;
+    if (!root || !before) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+    const DURATION = 220;
+    const EASE = 'cubic-bezier(0.2, 0, 0, 1)';
+    const afterHeight = root.getBoundingClientRect().height;
+    const anims = [
+      root.animate(
+        [{ height: `${before.height}px` }, { height: `${afterHeight}px` }],
+        { duration: DURATION, easing: EASE },
+      ),
+    ];
+    for (const key of ['plus', 'input', 'mic', 'primary']) {
+      const el = root.querySelector<HTMLElement>(`.composer__${key}`);
+      const from = before.rects.get(key);
+      if (!el || !from) continue;
+      const to = el.getBoundingClientRect();
+      const dx = from.left - to.left;
+      const dy = from.top - to.top;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue;
+      anims.push(
+        el.animate(
+          [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0px, 0px)' }],
+          { duration: DURATION, easing: EASE },
+        ),
+      );
+    }
+    const restore = root.style.overflow;
+    root.style.overflow = 'clip';
+    void Promise.allSettled(anims.map((a) => a.finished)).then(() => {
+      root.style.overflow = restore;
+    });
+  }, [multiline]);
 
   // Focus the input when a new/empty chat is opened, so the user can start typing immediately.
   useEffect(() => {
@@ -394,6 +456,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
         </div>
       )}
       <div
+        ref={composerRef}
         className={`composer ${multiline ? 'composer--multiline' : ''} ${focused ? 'composer--focus' : ''} ${dragging ? 'composer--drag' : ''}`}
         onDragOver={(e) => {
           e.preventDefault();
