@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from './useChat';
 import { Composer } from './Composer';
 import { AssistantMessage, UserMessage } from './Message';
@@ -6,17 +6,18 @@ import { PromptMinimap } from './PromptMinimap';
 import { SourcePane } from './SourcePane';
 import { ThreadFilesPane } from './ThreadFilesPane';
 import { Icon } from '../../design/icons';
+import { Logo } from '../../design/Logo';
 import { Avatar, Spinner } from '../../design/ui';
 import { useUi } from '../../state/store';
 import { greeting } from '../../lib/format';
 import type { ImageRef } from '../../lib/types';
 
-const SUGGESTIONS = [
-  { title: 'Explain a concept', sub: 'Break down quantum entanglement simply', prompt: 'Explain quantum entanglement in simple terms.' },
-  { title: 'Write code', sub: 'A debounce hook in TypeScript', prompt: 'Write a React useDebounced hook in TypeScript.' },
-  { title: 'Plan something', sub: '3 days in Kyoto', prompt: 'Plan a 3-day trip to Kyoto for first-timers.' },
-  { title: 'Draft a message', sub: 'A friendly out-of-office note', prompt: 'Draft a friendly out-of-office email for next week.' },
-];
+// Non-clickable capability hints shown under the composer on the empty state.
+const TIPS = [
+  { icon: 'image', label: 'Create an image' },
+  { icon: 'edit', label: 'Write or edit' },
+  { icon: 'globe', label: 'Look something up' },
+] as const;
 
 export function ChatView({ threadId, onScrolledChange }: { threadId: string; onScrolledChange?: (v: boolean) => void }) {
   const { messages, loading, send, regenerate, stop, streaming, indexing, lockedBy } = useChat(threadId);
@@ -29,6 +30,9 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   const stickRef = useRef(true); // is the view pinned to the bottom?
   const lastTopRef = useRef(0); // previous scrollTop, to detect user-driven upward scrolls
   const roRef = useRef<ResizeObserver | null>(null);
+  const composerSlotRef = useRef<HTMLDivElement>(null);
+  const prevComposerTopRef = useRef<number | null>(null);
+  const wasEmptyRef = useRef(false);
   const [showJump, setShowJump] = useState(false);
   const [viewerImageId, setViewerImageId] = useState<string | null>(null);
 
@@ -39,6 +43,28 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
 
   const isEmpty = !loading && messages.length === 0;
   const threadImages = messages.flatMap((message) => message.images ?? []);
+
+  // On the empty state the composer sits centered with the greeting above and tips below.
+  // The first prompt turns the view into a thread, which docks the composer at the bottom —
+  // FLIP the slide so that jump reads as a smooth downward glide rather than a hard cut.
+  useLayoutEffect(() => {
+    const el = composerSlotRef.current;
+    if (!el) return;
+    const prevTop = prevComposerTopRef.current;
+    if (wasEmptyRef.current && !isEmpty && prevTop != null) {
+      const nowTop = el.getBoundingClientRect().top;
+      const dy = prevTop - nowTop;
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      if (Math.abs(dy) > 1 && !reduce) {
+        el.animate(
+          [{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
+          { duration: 260, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
+        );
+      }
+    }
+    prevComposerTopRef.current = el.getBoundingClientRect().top;
+    wasEmptyRef.current = isEmpty;
+  });
 
   const STICK_THRESHOLD = 80; // px from the bottom that still counts as "at the bottom"
 
@@ -129,31 +155,13 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
 
   return (
     <div className="chat-area">
-      <div className="chat">
+      <div className={`chat ${isEmpty ? 'chat--empty' : ''}`}>
         <div className="chat__scroll" ref={scrollRef} onScroll={onScroll}>
         {loading ? (
           <div className="center-screen">
             <Spinner size="xl" />
           </div>
-        ) : isEmpty ? (
-          <div className="empty">
-            <Avatar size="lg" variant="assistant">
-              <Icon name="sparkle" size={28} />
-            </Avatar>
-            <div>
-              <div className="empty__greeting">{greeting()}</div>
-              <div className="empty__sub">Ask anything, dictate with your voice, or generate an image.</div>
-            </div>
-            <div className="suggestions">
-              {SUGGESTIONS.map((s) => (
-                <button key={s.title} className="suggestion" onClick={() => send(s.prompt)}>
-                  <div className="suggestion__title">{s.title}</div>
-                  <div className="suggestion__sub">{s.sub}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
+        ) : isEmpty ? null : (
           <div className="chat__column" ref={setColumnRef}>
             {messages.map((message) =>
               message.role === 'user' ? (
@@ -184,6 +192,15 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
         )}
       </div>
 
+      {isEmpty && (
+        <div className="chat__intro">
+          <Avatar size="lg" variant="assistant">
+            <Logo size={30} />
+          </Avatar>
+          <div className="empty__greeting">{greeting()}</div>
+        </div>
+      )}
+
       {indexing && (
         <div className="composer-status" role="status">
           <Spinner size="sm" />
@@ -198,15 +215,26 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
           </span>
         </div>
       )}
-      <Composer
-        value={draft}
-        onChange={(v) => setDraft(threadId, v)}
-        onSend={send}
-        streaming={streaming}
-        onStop={stop}
-        locked={!!lockedBy && !streaming}
-        autoFocus={isEmpty}
-      />
+      <div className="composer-slot" ref={composerSlotRef}>
+        <Composer
+          value={draft}
+          onChange={(v) => setDraft(threadId, v)}
+          onSend={send}
+          streaming={streaming}
+          onStop={stop}
+          locked={!!lockedBy && !streaming}
+          autoFocus={isEmpty}
+        />
+        {isEmpty && (
+          <div className="chat-tips">
+            {TIPS.map((tip) => (
+              <span key={tip.label} className="chat-tip">
+                <Icon name={tip.icon} size={18} /> {tip.label}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
       {!loading && !isEmpty && <PromptMinimap messages={messages} scrollRef={scrollRef} />}
       </div>
       <SourcePane />

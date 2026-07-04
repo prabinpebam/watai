@@ -96,6 +96,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   const fileRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [multiline, setMultiline] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
@@ -110,13 +111,29 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   const stagedFiles = useUi((s) => s.stagedFiles);
   const clearStagedFiles = useUi((s) => s.clearStagedFiles);
 
-  // Auto-grow
+  // Auto-grow the textarea and decide between the compact single-line layout and the
+  // two-row multiline layout. The moment the text wraps past a single line the composer
+  // switches to multiline (input on its own row, controls beneath) and stays there for the
+  // rest of this prompt — it only relaxes back to single-line once the field is cleared
+  // (i.e. after the prompt is sent), so the layout never flickers mid-typing.
   useEffect(() => {
     const ta = taRef.current;
     if (!ta) return;
     ta.style.height = 'auto';
-    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
-  }, [value]);
+    const sh = ta.scrollHeight;
+    ta.style.height = `${Math.min(sh, 200)}px`;
+    if (!value.trim()) {
+      setMultiline(false);
+      return;
+    }
+    if (!multiline) {
+      const cs = getComputedStyle(ta);
+      let lineHeight = parseFloat(cs.lineHeight);
+      if (!Number.isFinite(lineHeight)) lineHeight = parseFloat(cs.fontSize) * 1.4;
+      const oneLine = lineHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      if (sh > oneLine + lineHeight * 0.5) setMultiline(true);
+    }
+  }, [value, multiline]);
 
   // Focus the input when a new/empty chat is opened, so the user can start typing immediately.
   useEffect(() => {
@@ -377,7 +394,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
         </div>
       )}
       <div
-        className={`composer ${focused ? 'composer--focus' : ''} ${dragging ? 'composer--drag' : ''}`}
+        className={`composer ${multiline ? 'composer--multiline' : ''} ${focused ? 'composer--focus' : ''} ${dragging ? 'composer--drag' : ''}`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragging(true);
@@ -397,7 +414,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
             )}
           </div>
         )}
-        <IconButton name="plus" label="Attach image or file" onClick={() => fileRef.current?.click()} />
+        <IconButton name="plus" className="composer__plus" label="Attach image or file" onClick={() => fileRef.current?.click()} />
         <input
           ref={fileRef}
           type="file"
@@ -464,9 +481,9 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
           />
         </div>
         {transcribing ? (
-          <Spinner size="sm" className="composer__spinner" />
+          <Spinner size="sm" className="composer__mic composer__spinner" />
         ) : (
-          <IconButton name="mic" label="Dictate" variant="muted" onClick={startDictation} />
+          <IconButton name="mic" className="composer__mic" label="Dictate" variant="muted" onClick={startDictation} />
         )}
         {streaming ? (
           <IconButton key="stop" className="composer__primary" name="stop" label="Stop generating" variant="accent" onClick={onStop} />
@@ -482,7 +499,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
           />
         )}
       </div>
-      <p className="muted" style={{ textAlign: 'center', fontSize: 'var(--text-caption-size)', margin: 'var(--space-3) 0 0' }}>
+      <p className="muted composer__footnote" style={{ textAlign: 'center', fontSize: 'var(--text-caption-size)', margin: 'var(--space-3) 0 0' }}>
         Watai can make mistakes. Check important info.
       </p>
     </div>
