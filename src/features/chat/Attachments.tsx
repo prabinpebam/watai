@@ -4,6 +4,7 @@ import { Icon } from '../../design/icons';
 import { IconButton } from '../../design/ui';
 import { ImagePrompt, Lightbox, type GalleryImage } from './Lightbox';
 import { formatBytes } from '../../lib/format';
+import { saveFile } from '../../lib/saveFile';
 import type { Artifact, Attachment, ImageRef, PendingImage } from '../../lib/types';
 
 function isDirectUrl(s?: string): s is string {
@@ -27,12 +28,9 @@ function useAttachmentUrl(att: Attachment): string | null {
 }
 
 function download(url: string, name?: string) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name || 'download';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  // saveFile prefers the native share sheet on iOS (Save Image → Photos), where a plain
+  // <a download> would only open a Quick Look preview; elsewhere it downloads directly.
+  void saveFile(url, name || 'download');
 }
 
 function iconForMime(mime: string, name = ''): string {

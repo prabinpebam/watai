@@ -1,25 +1,15 @@
 import type { StudioImage as ImageRecord } from '../../../data/cloud/types';
+import { saveFile } from '../../../lib/saveFile';
 
-/** Force-download an image's bytes (fetch -> object URL) so a cross-origin SAS URL saves rather
- *  than navigates. Falls back to opening the URL if the fetch is blocked. */
+/** Save an image's bytes to the device. On iOS this opens the native share sheet
+ *  (Save Image → Photos) instead of the Quick Look preview a plain download would trigger;
+ *  elsewhere it downloads directly. The cross-origin SAS URL is fetched to a blob so it saves
+ *  rather than navigates. */
 export async function downloadImage(img: ImageRecord): Promise<void> {
   if (!img.url) return;
   const ext = img.outputFormat === 'jpeg' ? 'jpg' : img.outputFormat;
   const filename = `watai-${img.id}.${ext}`;
-  try {
-    const res = await fetch(img.url);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  } catch {
-    window.open(img.url, '_blank', 'noopener');
-  }
+  await saveFile(img.url, filename);
 }
 
 /** CSS aspect-ratio value (e.g. "1024 / 1536") from a size string. */
