@@ -7,6 +7,7 @@ import './design/components.css';
 import { App } from './app/App';
 import { ThemeProvider } from './app/ThemeProvider';
 import { ToastHost } from './app/ToastHost';
+import { ConnectionBanner } from './app/ConnectionBanner';
 import { ConfirmHost } from './app/ConfirmHost';
 import { DevMenu } from './mocks/DevMenu';
 import { clearStaleAuthCacheOnce, initAuth } from './auth/cloudAuth';
@@ -17,6 +18,7 @@ function mount() {
       <HashRouter>
         <ThemeProvider>
           <App />
+          <ConnectionBanner />
           <ToastHost />
           <ConfirmHost />
           {import.meta.env.DEV && <DevMenu />}

@@ -98,6 +98,31 @@ export async function initAuth(): Promise<void> {
  *  can't be minted after re-auth falls through to the sign-in screen instead of looping. */
 const REAUTH_FLAG = 'watai.reauth';
 
+/** Auth health, broadcast to the app so it can surface a "session expired" banner instead of
+ *  failing silently. `ok` means a token was just minted; `reauth-required` means the session
+ *  can't be renewed silently (expired refresh token, or a static host blocking the renewal
+ *  iframe's third-party cookie) and an automatic redirect either can't run or already failed —
+ *  so the user must sign in again by hand. */
+export type AuthState = 'ok' | 'reauth-required';
+type AuthListener = (state: AuthState) => void;
+const authListeners = new Set<AuthListener>();
+
+/** Subscribe to auth-health changes. Returns an unsubscribe fn. */
+export function onAuthState(listener: AuthListener): () => void {
+  authListeners.add(listener);
+  return () => authListeners.delete(listener);
+}
+
+function emitAuthState(state: AuthState): void {
+  for (const listener of [...authListeners]) {
+    try {
+      listener(state);
+    } catch {
+      /* a listener error must not break the notify loop */
+    }
+  }
+}
+
 /** Token provider for the API client. Silent-first; if the session can't be renewed silently
  *  (an expired refresh token, or — on static hosts like GitHub Pages — the browser blocking the
  *  third-party cookie the renewal iframe needs), recover with a top-level interactive redirect,
@@ -114,6 +139,7 @@ export async function getCloudToken(): Promise<string | null> {
     } catch {
       /* ignore */
     }
+    emitAuthState('ok');
     return res.accessToken;
   } catch (e) {
     const { InteractionRequiredAuthError } = await import('@azure/msal-browser');
@@ -139,7 +165,13 @@ export async function getCloudToken(): Promise<string | null> {
         } catch {
           /* ignore */
         }
+        // The auto-recovery redirect couldn't even start — the user must sign in by hand.
+        emitAuthState('reauth-required');
       }
+    } else if (e instanceof InteractionRequiredAuthError) {
+      // We already redirected once this session and still can't mint a token — stop looping and
+      // ask the user to sign in again so the failure is visible instead of silent.
+      emitAuthState('reauth-required');
     }
     return null;
   }

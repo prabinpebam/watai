@@ -255,7 +255,19 @@ export function App() {
 
   // Cloud-account-only: ensure sync is on for the signed-in user (migrating any stale
   // sync=false saved before cloud-only), backfill pre-existing local data once, then sync.
+  // Also retry the sync whenever the network returns, so a chat composed while offline (or a
+  // sync that failed during a transient drop) reconciles without a manual reload.
   useEffect(() => {
+    const runSync = () =>
+      syncNow()
+        .then((changed) => {
+          const ui = useUi.getState();
+          ui.bumpThreads();
+          changed?.forEach((id) => ui.bumpThread(id));
+        })
+        .catch((e) => console.warn('[sync] sync failed', e));
+
+    let onOnline: (() => void) | undefined;
     (async () => {
       if (!(await isSignedIn())) return;
       const settings = await repo.getSettings();
@@ -270,14 +282,13 @@ export function App() {
         await backfillSync().catch((e) => console.warn('[sync] backfill failed', e));
         localStorage.setItem('watai.backfilled.v2', '1');
       }
-      await syncNow()
-        .then((changed) => {
-          const ui = useUi.getState();
-          ui.bumpThreads();
-          changed?.forEach((id) => ui.bumpThread(id));
-        })
-        .catch((e) => console.warn('[sync] initial sync failed', e));
+      await runSync();
+      onOnline = () => void runSync();
+      window.addEventListener('online', onOnline);
     })();
+    return () => {
+      if (onOnline) window.removeEventListener('online', onOnline);
+    };
   }, []);
 
   return (

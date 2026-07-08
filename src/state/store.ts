@@ -42,6 +42,9 @@ interface UiState {
   stream: StreamState;
   capability: CapabilityMatrix | null;
   connectivity: 'online' | 'offline';
+  /** Overall reachability of the cloud backend. `offline`: no network; `reauth`: signed-in but the
+   *  session can't be renewed silently (user must sign in again). Drives the top ConnectionBanner. */
+  connection: 'ok' | 'offline' | 'reauth';
   toasts: Toast[];
   threadsVersion: number;
   /** Per-thread message revision; bumped when a thread's persisted messages change. */
@@ -70,6 +73,7 @@ interface UiState {
   setStream: (s: StreamState) => void;
   setCapability: (c: CapabilityMatrix | null) => void;
   setConnectivity: (c: 'online' | 'offline') => void;
+  setConnection: (c: 'ok' | 'offline' | 'reauth') => void;
   pushToast: (message: string, kind?: Toast['kind'], opts?: { persistent?: boolean; key?: string }) => void;
   dismissToast: (id: string) => void;
   bumpThreads: () => void;
@@ -105,6 +109,7 @@ export const useUi = create<UiState>()(
       stream: { status: 'idle' },
       capability: null,
       connectivity: 'online',
+      connection: 'ok',
       toasts: [],
       threadsVersion: 0,
       threadRev: {},
@@ -129,6 +134,7 @@ export const useUi = create<UiState>()(
       setStream: (stream) => set({ stream }),
       setCapability: (capability) => set({ capability }),
       setConnectivity: (connectivity) => set({ connectivity }),
+      setConnection: (connection) => set({ connection }),
       pushToast: (message, kind, opts) =>
         set((s) => ({
           toasts: [
