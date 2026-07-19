@@ -20,6 +20,7 @@ import type {
   CredentialsInput,
   ListMemoryQuery,
   ListMemoryResponse,
+  LibraryItemDTO,
   MemoryProfileView,
   MemoryRecord,
   PatchMemoryBody,
@@ -193,6 +194,7 @@ class FakeCloud implements CloudApi {
   threads = new Map<string, ThreadRecord>();
   messages = new Map<string, MessageRecord>();
   memories = new Map<string, MemoryRecord>();
+  libraryItems = new Map<string, LibraryItemDTO>();
   serverSettings: Settings | null = null;
   calls: string[] = [];
   private clock = 0;
@@ -399,7 +401,7 @@ class FakeCloud implements CloudApi {
   async requestSas(body: SasRequestBody): Promise<SasResult> {
     this.calls.push(`requestSas:${body.op}:${body.threadId}:${body.assetId}`);
     return {
-      blobPath: `u/${body.threadId}/${body.assetId}.png`,
+      blobPath: body.op === 'write' ? `u/library/${body.assetId}.png` : `u/${body.threadId}/${body.assetId}.png`,
       url: `https://blob.test/${body.threadId}/${body.assetId}?${body.op}`,
       expiresAt: this.now(),
     };
@@ -519,8 +521,10 @@ class FakeCloud implements CloudApi {
   async listLibrary() {
     return { items: [] };
   }
-  getLibraryItem(): Promise<never> {
-    return Promise.reject(new Error('not implemented'));
+  async getLibraryItem(id: string): Promise<LibraryItemDTO> {
+    const item = this.libraryItems.get(id);
+    if (!item) throw new CloudError('not_found', 'missing', 404);
+    return item;
   }
   async getLibraryStorage() {
     return {
@@ -1040,11 +1044,11 @@ describe('SyncRepository — image cloud storage', () => {
     // The synced message carries the image WITH a cloud blobPath.
     expect(cloud.messages.get('m1')?.images?.[0]).toMatchObject({
       id: 'img1',
-      blobPath: 'u/t1/img1.png',
+      blobPath: 'u/library/img1.png',
     });
     // blobPath is persisted locally so a later push won't re-upload.
     const localMsg = (await local.listMessages('t1')).find((m) => m.id === 'm1');
-    expect(localMsg?.images?.[0].blobPath).toBe('u/t1/img1.png');
+    expect(localMsg?.images?.[0].blobPath).toBe('u/library/img1.png');
   });
 
   it('uploads a message’s local attachments to Blob Storage on push and syncs their blobPath', async () => {
@@ -1067,9 +1071,9 @@ describe('SyncRepository — image cloud storage', () => {
 
     expect(uploaded.size).toBe(1);
     expect(cloud.calls).toContain('requestSas:write:t1:att1');
-    expect(cloud.messages.get('m1')?.attachments?.[0]).toMatchObject({ id: 'att1', blobPath: 'u/t1/att1.png' });
+    expect(cloud.messages.get('m1')?.attachments?.[0]).toMatchObject({ id: 'att1', blobPath: 'u/library/att1.png' });
     const localMsg = (await local.listMessages('t1')).find((m) => m.id === 'm1');
-    expect(localMsg?.attachments?.[0].blobPath).toBe('u/t1/att1.png');
+    expect(localMsg?.attachments?.[0].blobPath).toBe('u/library/att1.png');
   });
 
   it('does not re-upload an image that already has a blobPath', async () => {
@@ -1129,5 +1133,15 @@ describe('SyncRepository — image cloud storage', () => {
 
     expect(url).toBe('blob:fake/imgkey');
     expect(cloud.calls).not.toContain('requestSas:read:t1:img1');
+  });
+
+  it('resolveAssetUrl uses the safe Library DTO URL for a Library-backed attachment', async () => {
+    const { cloud, repo } = setup(true);
+    cloud.libraryItems.set('lib-1', {
+      id: 'lib-1', state: 'active', kind: 'pdf', origin: 'chat_upload', name: 'brief.pdf', mime: 'application/pdf', bytes: 3,
+      createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', source: { surface: 'chat', threadId: 't1', createdAt: '2026-01-01T00:00:00Z' },
+      url: 'https://blob.test/library-read',
+    });
+    await expect(repo.resolveAssetUrl({ id: 'att1', libraryItemId: 'lib-1', blobPath: 'u/library/lib-1.pdf' })).resolves.toBe('https://blob.test/library-read');
   });
 });

@@ -2,6 +2,7 @@ import { AppError } from '../domain/errors';
 import { extForContentType, type SasRequestInput } from '../domain/asset';
 import type { SasMinter } from '../ports/sasMinter';
 import type { ThreadStore } from '../ports/threadStore';
+import { libraryItemIdFor, type LibrarySourceKind } from '../domain/library';
 
 export interface SasResult {
   blobPath: string;
@@ -27,13 +28,30 @@ export class AssetService {
       throw new AppError('not_found', 'Thread not found.');
     }
     const ext = extForContentType(input.contentType);
-    const blobPath = `${userId}/${input.threadId}/${input.assetId}.${ext}`;
+    const libraryId = libraryItemIdFor(userId, 'chat_attachment', input.assetId);
+    const blobPath = input.op === 'write' && !thread.temporary
+      ? `${userId}/library/${libraryId}.${ext}`
+      : `${userId}/${input.threadId}/${input.assetId}.${ext}`;
     const grant = await this.minter.mint({
       blobPath,
       op: input.op,
       contentType: input.contentType,
       ttlSeconds: this.ttlSeconds,
     });
+    return { blobPath, url: grant.url, expiresAt: grant.expiresAt };
+  }
+
+  async requestLibrarySas(
+    userId: string,
+    sourceKind: LibrarySourceKind,
+    sourceId: string,
+    op: 'read' | 'write',
+    contentType: SasRequestInput['contentType'],
+  ): Promise<SasResult> {
+    const id = libraryItemIdFor(userId, sourceKind, sourceId);
+    const ext = extForContentType(contentType);
+    const blobPath = `${userId}/library/${id}.${ext}`;
+    const grant = await this.minter.mint({ blobPath, op, contentType, ttlSeconds: this.ttlSeconds });
     return { blobPath, url: grant.url, expiresAt: grant.expiresAt };
   }
 }

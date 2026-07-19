@@ -151,6 +151,22 @@ describe('MessageService.append', () => {
     })).rejects.toMatchObject({ code: 'conflict' });
   });
 
+  it('indexes a new non-temporary chat upload on its existing Library blob path', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const itemId = libraryItemIdFor('userA', 'chat_attachment', 'att-new');
+    const records = new Map<string, ReturnType<typeof libraryFixture>>();
+    const libraryStore = {
+      get: async (_userId: string, id: string) => records.get(id) ?? null,
+      put: async (item: ReturnType<typeof libraryFixture>) => { records.set(item.id, item); return item; },
+    } as unknown as LibraryStore;
+    const service = new MessageService(ctx.threadStore, ctx.messageStore, { newId: () => 'm', now: () => '2026-01-01T00:00:00Z' }, undefined, libraryStore);
+    await service.append('userA', thread.id, {
+      role: 'user', content: 'See attached',
+      attachments: [{ id: 'att-new', kind: 'image', blobPath: `userA/library/${itemId}.png`, mime: 'image/png', bytes: 25, name: 'photo.png' }],
+    });
+    expect(records.get(itemId)).toMatchObject({ state: 'active', origin: 'chat_upload', blobPath: `userA/library/${itemId}.png`, source: { threadId: thread.id } });
+  });
+
   it('persists memoryRefs for assistant messages', async () => {
     const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
     const msg = await ctx.messages.append('userA', thread.id, {

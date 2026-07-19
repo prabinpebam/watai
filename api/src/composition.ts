@@ -30,6 +30,7 @@ import { MessageService } from './application/messageService';
 import { SettingsService } from './application/settingsService';
 import { AssetService } from './application/assetService';
 import type { AllowedContentType } from './domain/asset';
+import { libraryIngestionKey, libraryKindForMime, type LibrarySourceKind } from './domain/library';
 import { AccessService } from './application/accessService';
 import { CredentialService } from './application/credentialService';
 import { RunService } from './application/runService';
@@ -184,7 +185,7 @@ export function container(): ApiContainer {
   const messageService = new MessageService(threadStore, messageStore, clock, memoryExtractionService, libraryStore);
   const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
   const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock, {
-    uploadOriginal: makeUploadImage(assetService),
+    uploadOriginal: makeUploadImage(assetService, 'thread_document'),
     resolveLibraryItem: async (userId, itemId) => {
       const item = await libraryStore.get(userId, itemId);
       if (!item || item.state !== 'active' || !item.blobPath || ['image', 'audio', 'archive'].includes(item.kind)) return null;
@@ -192,6 +193,24 @@ export function container(): ApiContainer {
       const response = await fetch(url);
       if (!response.ok) return null;
       return { name: item.userMetadata?.title ?? item.name, mime: item.mime, bytes: new Uint8Array(await response.arrayBuffer()) };
+    },
+    recordLibraryItem: async ({ userId, thread, file }) => {
+      if (!file.libraryItemId || !file.blobPath || !file.mime || await libraryStore.get(userId, file.libraryItemId)) return;
+      await libraryStore.put({
+        id: file.libraryItemId,
+        userId,
+        ingestionKey: libraryIngestionKey('thread_document', file.fileId),
+        state: 'active',
+        kind: libraryKindForMime(file.mime),
+        origin: 'thread_document',
+        name: file.name,
+        mime: file.mime,
+        bytes: file.bytes,
+        blobPath: file.blobPath,
+        createdAt: file.createdAt,
+        updatedAt: file.createdAt,
+        source: { surface: 'chat', threadId: thread.id, threadTitleSnapshot: thread.title, createdAt: file.createdAt },
+      });
     },
   });
   const aiProxyService = new AiProxyService(credentialService);
@@ -242,8 +261,9 @@ export function container(): ApiContainer {
       memoryContext: memoryContextService,
       memoryExtraction: memoryExtractionService,
       routeTurn,
-      uploadImage: makeUploadImage(assetService),
-      uploadArtifact: makeUploadImage(assetService),
+      uploadImage: makeUploadImage(assetService, 'chat_generated_image'),
+      uploadArtifact: makeUploadImage(assetService, 'code_artifact'),
+      libraryStore,
       resolveImageUrl: makeResolveImageUrl(minter),
       skillProvisioner,
       resolveSkills: (uid) => skillCatalog.effective(uid),
@@ -252,6 +272,7 @@ export function container(): ApiContainer {
     },
     imageWorker: {
       imageStore,
+      libraryStore,
       credentials: credentialService,
       minter,
       signalr: signalr ?? undefined,
@@ -264,20 +285,15 @@ export function container(): ApiContainer {
 
 /** Upload generated image bytes via a short-lived write SAS (reuses the asset path scheme), so the
  *  worker needs no extra blob role beyond the SAS minter's. Returns the stored blob path. */
-function makeUploadImage(assets: AssetService) {
+function makeUploadImage(assets: AssetService, sourceKind: LibrarySourceKind) {
   return async (
     userId: string,
-    threadId: string,
+    _threadId: string,
     imageId: string,
     bytes: Uint8Array,
     contentType: string,
   ): Promise<string> => {
-    const sas = await assets.requestSas(userId, {
-      threadId,
-      assetId: imageId,
-      op: 'write',
-      contentType: contentType as AllowedContentType,
-    });
+    const sas = await assets.requestLibrarySas(userId, sourceKind, imageId, 'write', contentType as AllowedContentType);
     const res = await fetch(sas.url, {
       method: 'PUT',
       headers: { 'x-ms-blob-type': 'BlockBlob', 'Content-Type': contentType },

@@ -3,7 +3,7 @@ import type { AppendMessageInput } from '../domain/message';
 import type { MessageListOptions, MessageRecord, MessageStore } from '../ports/messageStore';
 import type { ThreadRecord, ThreadStore } from '../ports/threadStore';
 import type { ServiceClock } from './threadService';
-import { libraryItemIdFor } from '../domain/library';
+import { libraryIngestionKey, libraryItemIdFor, libraryKindForMime, type LibraryItemRecord } from '../domain/library';
 import type { LibraryStore } from '../ports/libraryStore';
 
 export interface MemoryExtractionScheduler {
@@ -73,13 +73,13 @@ export class MessageService {
       ...(input.images && input.images.length
         ? { images: input.images.map((image) => ({
             ...image,
-            libraryItemId: image.libraryItemId ?? libraryItemIdFor(userId, 'chat_generated_image', image.id),
+            ...(image.libraryItemId || !thread.temporary ? { libraryItemId: image.libraryItemId ?? libraryItemIdFor(userId, 'chat_generated_image', image.id) } : {}),
           })) }
         : {}),
       ...(attachments && attachments.length
         ? { attachments: attachments.map((attachment) => ({
             ...attachment,
-            libraryItemId: attachment.libraryItemId ?? libraryItemIdFor(userId, 'chat_attachment', attachment.id),
+            ...(attachment.libraryItemId || !thread.temporary ? { libraryItemId: attachment.libraryItemId ?? libraryItemIdFor(userId, 'chat_attachment', attachment.id) } : {}),
           })) }
         : {}),
       ...(input.toolCalls && input.toolCalls.length ? { toolCalls: input.toolCalls } : {}),
@@ -93,6 +93,31 @@ export class MessageService {
       orderAt: input.orderAt ?? ts,
       deletedAt: null,
     };
+    if (this.libraryStore && !thread.temporary) {
+      const candidates: LibraryItemRecord[] = [];
+      for (const attachment of record.attachments ?? []) {
+        if (!attachment.libraryItemId || !attachment.blobPath?.includes('/library/')) continue;
+        candidates.push({
+          id: attachment.libraryItemId,
+          userId,
+          ingestionKey: libraryIngestionKey('chat_attachment', attachment.id),
+          state: 'active',
+          kind: libraryKindForMime(attachment.mime),
+          origin: 'chat_upload',
+          name: attachment.name ?? `Attachment ${attachment.id}`,
+          mime: attachment.mime,
+          bytes: attachment.bytes,
+          blobPath: attachment.blobPath,
+          createdAt: record.orderAt ?? ts,
+          updatedAt: ts,
+          source: { surface: 'chat', threadId, messageId: id, threadTitleSnapshot: thread.title, createdAt: record.orderAt ?? ts },
+          ...(attachment.kind === 'image' ? { image: { ...(attachment.width ? { width: attachment.width } : {}), ...(attachment.height ? { height: attachment.height } : {}), provenanceComplete: true } } : {}),
+        });
+      }
+      for (const item of candidates) {
+        if (!(await this.libraryStore.get(userId, item.id))) await this.libraryStore.put(item);
+      }
+    }
     await this.messageStore.append(record);
     if (this.memoryExtraction) void this.memoryExtraction.enqueueAfterMessage(record, thread).catch(() => {});
     await this.threadStore.put({

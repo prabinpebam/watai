@@ -14,6 +14,8 @@ import type { SignalRSender } from '../adapters/azure/signalr';
 import type { DecryptedCredentials } from './credentialService';
 import type { ServiceClock } from './threadService';
 import { toImageDto } from './imageDto';
+import { libraryIngestionKey, libraryItemIdFor } from '../domain/library';
+import type { LibraryStore } from '../ports/libraryStore';
 
 export interface CredentialReader {
   getDecrypted(userId: string): Promise<DecryptedCredentials>;
@@ -21,6 +23,7 @@ export interface CredentialReader {
 
 export interface ImageWorkerDeps {
   imageStore: ImageStore;
+  libraryStore?: LibraryStore;
   credentials: CredentialReader;
   /** Mints read SAS (source download) + write SAS (output upload). */
   minter: SasMinter;
@@ -174,8 +177,36 @@ export async function processImageJob(
 
     const first = results[0];
     const bytes = b64ToBytes(first.b64);
-    const blobPath = `${userId}/images/${rec.id}.${extFor(rec.outputFormat)}`;
+    const libraryItemId = rec.libraryItemId ?? libraryItemIdFor(userId, 'studio_generated_image', rec.id);
+    const blobPath = `${userId}/library/${libraryItemId}.${extFor(rec.outputFormat)}`;
     await uploadBlob(minter, blobPath, bytes, contentTypeFor(rec.outputFormat), fetchImpl);
+    if (deps.libraryStore && !(await deps.libraryStore.get(userId, libraryItemId))) {
+      await deps.libraryStore.put({
+        id: libraryItemId,
+        userId,
+        ingestionKey: libraryIngestionKey('studio_generated_image', rec.id),
+        state: 'active',
+        kind: 'image',
+        origin: 'studio_generated_image',
+        name: `Studio image ${rec.id}`,
+        mime: contentTypeFor(rec.outputFormat),
+        bytes: bytes.byteLength,
+        blobPath,
+        createdAt: rec.createdAt,
+        updatedAt: clock.now(),
+        source: { surface: 'image_studio', createdAt: rec.createdAt },
+        image: {
+          size: rec.size,
+          format: rec.outputFormat,
+          prompt: rec.prompt,
+          ...(first.revisedPrompt ? { revisedPrompt: first.revisedPrompt } : {}),
+          model: rec.model,
+          ...(rec.quality ? { quality: rec.quality } : {}),
+          ...(rec.referenceItemIds ? { referenceItemIds: rec.referenceItemIds } : {}),
+          provenanceComplete: rec.provenanceComplete ?? true,
+        },
+      });
+    }
 
     // Re-read so a delete that landed mid-generation is not resurrected.
     const current = await imageStore.get(userId, imageId);
@@ -183,6 +214,7 @@ export async function processImageJob(
     const ready: ImageGenRecord = {
       ...current,
       status: 'ready',
+      libraryItemId,
       blobPath,
       ...(first.revisedPrompt ? { revisedPrompt: first.revisedPrompt } : {}),
       error: null,

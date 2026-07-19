@@ -4,6 +4,7 @@ import { AssetService } from '../application/assetService';
 import { ThreadService } from '../application/threadService';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import { FakeSasMinter } from '../adapters/memory/sasMinter';
+import { libraryItemIdFor } from '../domain/library';
 
 function setup() {
   const threadStore = new InMemoryThreadStore();
@@ -28,7 +29,7 @@ describe('assetsController', () => {
     });
     expect(res.status).toBe(200);
     const body = res.body as { blobPath: string; url: string };
-    expect(body.blobPath).toBe(`userA/${thread.id}/a1.png`);
+    expect(body.blobPath).toBe(`userA/library/${libraryItemIdFor('userA', 'chat_attachment', 'a1')}.png`);
     expect(body.url).toContain('op=write');
   });
 

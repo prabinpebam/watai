@@ -4,6 +4,7 @@ import { AssetService } from './assetService';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import { FakeSasMinter } from '../adapters/memory/sasMinter';
 import { AppError } from '../domain/errors';
+import { libraryItemIdFor } from '../domain/library';
 
 function makeCtx() {
   const threadStore = new InMemoryThreadStore();
@@ -28,7 +29,7 @@ describe('AssetService.requestSas', () => {
   let ctx: ReturnType<typeof makeCtx>;
   beforeEach(() => (ctx = makeCtx()));
 
-  it('mints a write SAS scoped to the user/thread/asset path', async () => {
+  it('mints a write SAS scoped to the user Library item path', async () => {
     const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
     const r = await ctx.assets.requestSas('userA', {
       threadId: thread.id,
@@ -36,10 +37,20 @@ describe('AssetService.requestSas', () => {
       op: 'write',
       contentType: 'image/png',
     });
-    expect(r.blobPath).toBe(`userA/${thread.id}/asset1.png`);
+    expect(r.blobPath).toBe(`userA/library/${libraryItemIdFor('userA', 'chat_attachment', 'asset1')}.png`);
     expect(r.url).toContain(r.blobPath);
     expect(r.url).toContain('op=write');
     expect(r.expiresAt).toBeTruthy();
+  });
+
+  it('keeps temporary-chat writes thread scoped and outside Library', async () => {
+    const thread = await ctx.threadStore.put({
+      id: 'temporary-thread', userId: 'userA', title: 'Temporary', pinned: false, archived: false,
+      temporary: true, messageCount: 0, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', deletedAt: null,
+    });
+    const r = await ctx.assets.requestSas('userA', { threadId: thread.id, assetId: 'asset1', op: 'write', contentType: 'image/png' });
+    expect(r.blobPath).toBe(`userA/${thread.id}/asset1.png`);
+    expect(r.blobPath).not.toContain('/library/');
   });
 
   it('mints a read SAS for the same path', async () => {

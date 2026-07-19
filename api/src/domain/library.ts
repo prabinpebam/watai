@@ -386,6 +386,16 @@ export function libraryUploadType(mime: string): { kind: LibraryKind; extension:
   return type;
 }
 
+export function libraryKindForMime(mime: string): LibraryKind {
+  const normalized = mime.toLowerCase();
+  const direct = LIBRARY_UPLOAD_TYPES[normalized];
+  if (direct) return direct.kind;
+  if (normalized.startsWith('image/')) return 'image';
+  if (normalized.startsWith('audio/')) return 'audio';
+  if (normalized.startsWith('text/')) return 'text';
+  return 'other';
+}
+
 export function parseLibraryUpload(input: unknown): LibraryUploadInput {
   const parsed = parseOrThrow(libraryUploadSchema, input, 'Invalid Library upload.');
   libraryUploadType(parsed.mime);

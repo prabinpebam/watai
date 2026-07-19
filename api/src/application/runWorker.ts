@@ -36,7 +36,8 @@ import {
 } from '../ai/semanticRouter';
 import { renderMemoryContext, type MemoryContextService } from './memoryContextService';
 import type { MemoryExtractionService } from './memoryExtractionService';
-import { libraryItemIdFor } from '../domain/library';
+import { libraryIngestionKey, libraryItemIdFor } from '../domain/library';
+import type { LibraryStore } from '../ports/libraryStore';
 
 export interface CredentialReader {
   getDecrypted(userId: string): Promise<DecryptedCredentials>;
@@ -50,6 +51,7 @@ export interface RunWorkerDeps {
   runStore: RunStore;
   messageStore: MessageStore;
   threadStore: ThreadStore;
+  libraryStore?: LibraryStore;
   credentials: CredentialReader;
   /** Per-user settings (personalization) for the system prompt. Optional. */
   settings?: SettingsReader;
@@ -820,9 +822,29 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         }
         const artifactId = `art${artifacts.length + 1}-${run.assistantMessageId}`.slice(0, 64);
         const blobPath = await deps.uploadArtifact(run.userId, threadId, artifactId, bytes, mime);
+        const libraryItemId = libraryItemIdFor(run.userId, 'code_artifact', artifactId);
+        if (deps.libraryStore && !(await deps.libraryStore.get(run.userId, libraryItemId))) {
+          await deps.libraryStore.put({
+            id: libraryItemId,
+            userId: run.userId,
+            ingestionKey: libraryIngestionKey('code_artifact', artifactId),
+            state: 'active',
+            kind,
+            origin: 'code_artifact',
+            name,
+            mime,
+            bytes: bytes.byteLength,
+            blobPath,
+            createdAt: clock.now(),
+            updatedAt: clock.now(),
+            source: { surface: 'chat', threadId, messageId: run.assistantMessageId, runId: run.id, toolCallId, threadTitleSnapshot: thread?.title, createdAt: clock.now() },
+            ...(kind === 'image' ? { image: { provenanceComplete: false } } : {}),
+            artifact: { sourceItemIds: artifactSourceItemIds, version: 1, provenanceComplete: true },
+          });
+        }
         artifacts.push({
           id: artifactId,
-          libraryItemId: libraryItemIdFor(run.userId, 'code_artifact', artifactId),
+          libraryItemId,
           name,
           mime,
           kind,
@@ -1137,9 +1159,28 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
           );
           const selectedSourceIds = imageReferenceIdsByCall.get(ev.callId ?? '') ?? semanticRoute?.referenceImageIds ?? [];
           const referenceItemIds = imageLibraryItemIds(history, run.userId, selectedSourceIds);
+          const libraryItemId = libraryItemIdFor(run.userId, 'chat_generated_image', imageId);
+          if (deps.libraryStore && !(await deps.libraryStore.get(run.userId, libraryItemId))) {
+            await deps.libraryStore.put({
+              id: libraryItemId,
+              userId: run.userId,
+              ingestionKey: libraryIngestionKey('chat_generated_image', imageId),
+              state: 'active',
+              kind: 'image',
+              origin: 'chat_generated_image',
+              name: `Generated image ${imageId}`,
+              mime: 'image/png',
+              bytes: bytes.byteLength,
+              blobPath,
+              createdAt: clock.now(),
+              updatedAt: clock.now(),
+              source: { surface: 'chat', threadId, messageId: run.assistantMessageId, runId: run.id, ...(ev.callId ? { toolCallId: ev.callId } : {}), threadTitleSnapshot: thread?.title, createdAt: clock.now() },
+              image: { size: ev.size ?? '1024x1024', format: 'png', prompt: ev.prompt ?? '', referenceItemIds, provenanceComplete: referenceItemIds.length === selectedSourceIds.length },
+            });
+          }
           images.push({
             id: imageId,
-            libraryItemId: libraryItemIdFor(run.userId, 'chat_generated_image', imageId),
+            libraryItemId,
             blobPath,
             prompt: ev.prompt ?? '',
             size: ev.size ?? '1024x1024',

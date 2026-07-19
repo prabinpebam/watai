@@ -126,13 +126,17 @@ export class SyncRepository implements Repository {
   /** Resolve an asset URL (generated image OR uploaded attachment): prefer the local cache;
    *  otherwise download from Blob Storage via a read SAS and cache it locally so other devices
    *  and reloads work offline after. */
-  async resolveAssetUrl(asset: { id: string; localBlobKey?: string; blobPath?: string }): Promise<string> {
+  async resolveAssetUrl(asset: { id: string; libraryItemId?: string; localBlobKey?: string; blobPath?: string }): Promise<string> {
     // The cache key is the explicit local key, else a stable per-asset cloud key. Always check
     // it FIRST so a once-downloaded cloud asset is never re-fetched (faster + no repeat SAS/egress).
     const cacheKey = asset.localBlobKey ?? `cloud-${asset.id}`;
     const cached = await this.local.getBlobUrl(cacheKey);
     if (cached) return cached;
     if (asset.blobPath && /^(data:|blob:|https?:)/.test(asset.blobPath)) return asset.blobPath;
+    if (asset.libraryItemId && (await this.syncEnabled())) {
+      const item = await this.cloud.getLibraryItem(asset.libraryItemId).catch(() => null);
+      if (item?.url) return item.url;
+    }
     if (asset.blobPath && (await this.syncEnabled())) {
       const parsed = parseBlobPath(asset.blobPath);
       if (!parsed) return '';

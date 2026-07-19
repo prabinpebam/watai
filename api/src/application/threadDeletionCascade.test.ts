@@ -44,6 +44,7 @@ describe('thread deletion cascade', () => {
     await ctx.messageStore.append(msg(id, 'm2', { role: 'assistant', content: 'hello' }));
     ctx.assets.put(`userA/${id}/att1.png`);
     ctx.assets.put(`userA/${id}/art1.pdf`);
+    ctx.assets.put('userA/library/lib-shared.png');
     // Decoys that must survive: a different thread, and a different user with the same thread-id text.
     ctx.assets.put('userA/other-thread/keep.png');
     ctx.assets.put(`userB/${id}/keep.png`);
@@ -53,7 +54,7 @@ describe('thread deletion cascade', () => {
 
     expect(await ctx.messageStore.list(id)).toEqual([]);
     expect([...ctx.assets.blobs.keys()].sort()).toEqual(
-      [`userB/${id}/keep.png`, 'userA/other-thread/keep.png'].sort(),
+      [`userB/${id}/keep.png`, 'userA/other-thread/keep.png', 'userA/library/lib-shared.png'].sort(),
     );
   });
 

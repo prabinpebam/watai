@@ -138,6 +138,20 @@ describe('ThreadFilesService', () => {
     expect(ctx.files.calls).toContain('upload:Library.pdf');
   });
 
+  it('records a newly persisted thread original in Library exactly once', async () => {
+    await seedThread(ctx.store);
+    const recorded: Array<{ userId: string; file: { libraryItemId?: string; blobPath?: string } }> = [];
+    const svc = new ThreadFilesService(ctx.store, ctx.credentials, ctx.files.impl, ctx.clock, {
+      sleep: async () => {},
+      uploadOriginal: async (_userId, _threadId, assetId) => `u/library/${libraryItemIdFor('u', 'thread_document', assetId)}.pdf`,
+      recordLibraryItem: async ({ userId, file }) => { recorded.push({ userId, file }); },
+    });
+    const meta = await svc.upload('u', 't1', { name: 'doc.pdf', mime: 'application/pdf', dataBase64: b64('hello') });
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({ userId: 'u', file: { libraryItemId: meta.libraryItemId, blobPath: meta.blobPath } });
+    expect(meta.blobPath).toContain('/library/');
+  });
+
   it('polls indexing status until the file is ready', async () => {
     await seedThread(ctx.store);
     ctx.files.setAddStatus('indexing');

@@ -15,6 +15,8 @@ import { DEFAULT_SETTINGS } from '../domain/settings';
 import { DEFAULT_SKILLS } from '../skills';
 import { AppError } from '../domain/errors';
 import { libraryItemIdFor } from '../domain/library';
+import type { LibraryItemRecord } from '../domain/library';
+import type { LibraryStore } from '../ports/libraryStore';
 
 type RunAgentFn = NonNullable<RunWorkerDeps['runAgent']>;
 
@@ -442,15 +444,20 @@ describe('processRun', () => {
       ],
     });
     const uploaded: Array<{ id: string; mime: string; bytes: number }> = [];
+    const library = new Map<string, LibraryItemRecord>();
+    const libraryStore = {
+      get: async (_userId: string, id: string) => library.get(id) ?? null,
+      put: async (item: LibraryItemRecord) => { library.set(item.id, item); return item; },
+    } as unknown as LibraryStore;
     const uploadArtifact = async (
       userId: string,
-      threadId: string,
+      _threadId: string,
       artifactId: string,
       bytes: Uint8Array,
       mime: string,
     ): Promise<string> => {
       uploaded.push({ id: artifactId, mime, bytes: bytes.byteLength });
-      return `${userId}/${threadId}/${artifactId}.pdf`;
+      return `${userId}/library/${libraryItemIdFor(userId, 'code_artifact', artifactId)}.pdf`;
     };
 
     await processRun(
@@ -464,6 +471,7 @@ describe('processRun', () => {
           ]),
         ),
         uploadArtifact,
+        libraryStore,
         fetchImpl: artifactFetch(),
       },
       't1',
@@ -489,6 +497,7 @@ describe('processRun', () => {
     const artifactFile = thread?.files?.find((f) => f.kind === 'artifact');
     expect(artifactFile).toMatchObject({ name: 'report.pdf', mime: 'application/pdf', status: 'ready' });
     expect(uploaded).toEqual([{ id: msg?.artifacts?.[0].id, mime: 'application/pdf', bytes: 5 }]);
+    expect(library.get(msg!.artifacts![0].libraryItemId!)).toMatchObject({ state: 'active', origin: 'code_artifact', blobPath: msg!.artifacts![0].blobPath });
   });
 
   it('retries code-interpreter capture when the generated PDF appears after the done event', async () => {

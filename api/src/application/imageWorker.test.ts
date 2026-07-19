@@ -6,6 +6,9 @@ import type { SasMinter } from '../ports/sasMinter';
 import type { SignalRSender } from '../adapters/azure/signalr';
 import type { ImageResult } from '../ai/image';
 import { aiError } from '../ai/errors';
+import { libraryItemIdFor } from '../domain/library';
+import type { LibraryItemRecord } from '../domain/library';
+import type { LibraryStore } from '../ports/libraryStore';
 
 const minter: SasMinter = {
   mint: async ({ blobPath, op }) => ({ url: `https://blob/${blobPath}?${op}`, expiresAt: '2026' }),
@@ -68,13 +71,21 @@ describe('processImageJob', () => {
     const generateImage = vi.fn(
       async (): Promise<ImageResult[]> => [{ b64: Buffer.from('png').toString('base64'), revisedPrompt: 'a vivid red fox' }],
     );
-    const deps: ImageWorkerDeps = { imageStore: store, credentials: creds('gpt-image-1'), minter, clock: makeClock(), signalr, generateImage, fetchImpl: okFetch() };
+    const library = new Map<string, LibraryItemRecord>();
+    const libraryStore = {
+      get: async (_userId: string, id: string) => library.get(id) ?? null,
+      put: async (item: LibraryItemRecord) => { library.set(item.id, item); return item; },
+    } as unknown as LibraryStore;
+    const deps: ImageWorkerDeps = { imageStore: store, libraryStore, credentials: creds('gpt-image-1'), minter, clock: makeClock(), signalr, generateImage, fetchImpl: okFetch() };
 
     await processImageJob(deps, 'userA', 'img1');
 
     const rec = await store.get('userA', 'img1');
     expect(rec?.status).toBe('ready');
-    expect(rec?.blobPath).toBe('userA/images/img1.png');
+    const libraryId = libraryItemIdFor('userA', 'studio_generated_image', 'img1');
+    expect(rec?.blobPath).toBe(`userA/library/${libraryId}.png`);
+    expect(rec?.libraryItemId).toBe(libraryId);
+    expect(library.get(libraryId)).toMatchObject({ state: 'active', origin: 'studio_generated_image', blobPath: rec?.blobPath, bytes: 3 });
     expect(rec?.revisedPrompt).toBe('a vivid red fox');
     expect(generateImage).toHaveBeenCalledOnce();
     expect(sends.map((s) => (s.payload as { image: ImageGenRecord }).image.status)).toEqual(['generating', 'ready']);

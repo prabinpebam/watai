@@ -29,6 +29,7 @@ export interface ThreadFilesOptions {
     contentType: AllowedContentType,
   ) => Promise<string>;
   resolveLibraryItem?: (userId: string, itemId: string) => Promise<{ name: string; mime: string; bytes: Uint8Array } | null>;
+  recordLibraryItem?: (input: { userId: string; thread: ThreadRecord; file: ThreadFileMeta }) => Promise<void>;
   /** Indexing poll cadence + bound (defaults ~18s total). */
   pollMs?: number;
   maxPolls?: number;
@@ -132,6 +133,9 @@ export class ThreadFilesService {
       ...(blobPath ? { blobPath } : {}),
       ...(contentType ? { mime: contentType } : {}),
     };
+    if (persistOriginal && blobPath && meta.libraryItemId && this.opts.recordLibraryItem) {
+      await this.opts.recordLibraryItem({ userId, thread, file: meta });
+    }
     await this.threads.put({
       ...thread,
       vectorStoreId,
