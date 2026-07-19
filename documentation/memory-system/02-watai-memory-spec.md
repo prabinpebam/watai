@@ -114,7 +114,7 @@ Memory is not only for simple facts like names, locations, or resource groups. W
 
 - **Preferences:** concise plans, visual verification before claims, no automatic Electron launch, preferred deployment workflow.
 - **Styles:** direct engineering prose, low-fluff explanations, design-system strictness, dense operational UI instead of marketing layouts.
-- **Work habits:** commit/push/deploy after validated changes, benchmark architecture before optimizing hot paths, verify with Storybook/Playwright when UI is involved.
+- **Work habits:** commit/push/deploy after validated changes, benchmark architecture before optimizing hot paths, and verify UI behavior with browser-driven tests.
 - **Project posture:** Watai is server-authoritative, memory must run server-side, GitHub Pages deploys from `docs/`, Azure Functions runs backend workers.
 - **Avoidances:** do not mention suppressed topics, do not use deleted memories, do not suggest workflows the user has rejected.
 

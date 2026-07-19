@@ -87,7 +87,7 @@ Files:
 - `src/data/sync/syncRepository.ts`
 - `src/features/settings/Settings.tsx` or extracted settings subcomponents
 - `src/design/components.css`
-- Storybook stories for Memory screens
+- Browser-driven coverage for Memory screens
 
 Work:
 
@@ -101,7 +101,7 @@ Acceptance:
 - User can add/edit/delete/suppress/top-of-mind memory.
 - Empty/loading/error/paused states render.
 - Mobile action flows use menus/sheets, not hover-only controls.
-- Storybook coverage for list, detail, empty, paused, memory-used panel shell.
+- Browser-driven coverage for list, detail, empty, paused, and memory-used panel shell.
 
 ## Slice 4 — Memory Context Retrieval In Runs
 

@@ -92,7 +92,7 @@ MVP implementation:
 - Lowercase.
 - Strip punctuation except path-like tokens and code identifiers.
 - Remove stopwords.
-- Keep product/project tokens such as `watai`, `azure`, `storybook`, `pdf`, `deploy`.
+- Keep product/project tokens such as `watai`, `azure`, `pdf`, `deploy`.
 - Extract entities from capitalized/project-like tokens and known memory entities.
 - Detect personalization intent through phrases such as `my preference`, `how do I usually`, `what did we decide`, `remember`, `last time`, `previously`.
 - Detect project/work-context intent through project names, repository terms, deployment terms, and explicit prior-work questions.
@@ -225,7 +225,7 @@ Project context:
 - [mem_3] Watai runs generation server-side in Azure Functions.
 
 Relevant prior work:
-- [thr_1] Storybook harness was added to make UI stories app-like.
+- [thr_1] A browser harness was added to make UI checks app-like.
 ```
 
 Rules:

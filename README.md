@@ -80,12 +80,6 @@ Frontend:
 npm run dev
 ```
 
-Storybook:
-
-```powershell
-npm run storybook
-```
-
 Backend local Functions execution is not the default workflow on this machine because Functions runtime support depends on the local Node version. Prefer backend unit tests and deploy-to-cloud smoke checks unless you have a compatible Node/Functions setup.
 
 ## Validate
@@ -95,7 +89,6 @@ Frontend:
 ```powershell
 npm test
 npm run build
-npm run build-storybook
 ```
 
 Backend:

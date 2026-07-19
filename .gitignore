@@ -3,7 +3,6 @@ node_modules/
 
 # Build caches (the production build in /docs IS committed for GitHub Pages)
 dist/
-storybook-static/
 *.tsbuildinfo
 .vite/
 

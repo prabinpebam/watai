@@ -259,7 +259,7 @@ function classifyPreference(memory: MemoryRecord): keyof MemoryProfileView['prof
   const text = memory.text.toLowerCase();
   if (/respond|answer|concise|verbose|tone|format|explain|communication/.test(text)) return 'communication';
   if (/code|typescript|test|build|deploy|architecture|implementation/.test(text)) return 'engineering';
-  if (/ui|design|visual|storybook|screenshot|layout/.test(text)) return 'design';
+  if (/ui|design|visual|screenshot|layout/.test(text)) return 'design';
   if (/tool|electron|terminal|browser|vscode|github|azure/.test(text)) return 'tools';
   return 'other';
 }
