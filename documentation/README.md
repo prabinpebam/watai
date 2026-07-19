@@ -36,6 +36,7 @@ exhaustive, buildable plan.
 | [ui-design/](ui-design/README.md) | **Implementation-ready UI design spec** (frontend-first): tokens, components, every screen/state, interaction/motion/a11y, copy/assets, and frontend architecture. |
 | [azure-api-detail/azure-api-detail.md](azure-api-detail/azure-api-detail.md) | Source-of-truth Azure `/openai/v1` request examples the API spec is aligned to. |
 | [agentic/](agentic/README.md) | **Agentic capabilities spec** (post-v1 epic): Foundry Agent Service + Responses API integration for tool calling, web search, Deep Research, and intent-aware image generation. |
+| [library-proposal-spec.md](library-proposal-spec.md) | **Draft unified Library proposal**: user needs, product benchmark, artifact catalog, provenance/reuse, storage management, deletion semantics, architecture, and migration gates. |
 | [voice-implementation-plan.md](voice-implementation-plan.md) | **Voice execution plan**: phased, PR-sized slices to build dictation + voice mode (ChatGPT-parity UX) on top of the agentic run pipeline, with EDD gates and a risk register. |
 
 > Read the docs in order on first pass. After that, each doc is self-contained and
