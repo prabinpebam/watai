@@ -70,6 +70,11 @@ from browser to server. The canonical examples remain in
   output_compression }` → `{ data: [{ b64_json }] }`. The run activity decodes the base64,
   uploads the PNG to Blob, and records the `blobPath` on the message — so a locked phone
   never loses the image.
+- **Mobile image normalization:** before chat attachments are persisted, the client passes PNG/WebP
+  through and decodes/re-encodes other browser-readable image formats as a bounded standard JPEG.
+  This strips Apple MPF/HDR gain-map, ICC, and Exif auxiliary streams that Safari can display but
+  `/images/edits` rejects as an invalid request; it also converts Safari-readable HEIC/HEIF files.
+  Image recognition uses MIME **or extension**, because iOS file inputs can provide an empty MIME.
 - **Transcription / TTS:** multipart upload / audio response, as before.
 
 ---

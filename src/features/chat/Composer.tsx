@@ -4,6 +4,7 @@ import { Icon } from '../../design/icons';
 import { startRecording, type Recorder } from '../../lib/audio';
 import { repo, cloudApi, skillsApi } from '../../data';
 import { fileToBase64 } from '../../lib/files';
+import { isImageUpload, normalizeImageUpload } from '../../lib/imageUpload';
 import { insertAtCaret } from '../../lib/caret';
 import { WaveformVisualizer } from '../voice/WaveformVisualizer';
 import { newId } from '../../lib/ids';
@@ -233,16 +234,32 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   }, [recording]);
   useEffect(() => () => recRef.current?.cancel(), []);
 
-  const addFiles = (list: FileList | File[]) => {
+  const addFiles = async (list: FileList | File[]) => {
     const all = Array.from(list);
     if (all.length === 0) return;
+    const normalized = await Promise.all(
+      all.map(async (file) => {
+        if (!isImageUpload(file)) return file;
+        try {
+          return await normalizeImageUpload(file);
+        } catch {
+          pushToast(
+            `${file.name} could not be prepared. Export it as a JPEG or PNG and try again.`,
+            'error',
+          );
+          return null;
+        }
+      }),
+    );
+    const ready = normalized.filter((file): file is File => file !== null);
+    if (!ready.length) return;
     setPending((prev) => [
       ...prev,
-      ...all.map((file) => ({
+      ...ready.map((file) => ({
         id: newId(),
         file,
         // Images get an object URL for a thumbnail; documents render as a file chip.
-        url: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
+        url: isImageUpload(file) ? URL.createObjectURL(file) : '',
       })),
     ]);
   };
@@ -258,7 +275,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   // Consume files staged from elsewhere (e.g. a web image's "Use" action) into the pending list.
   useEffect(() => {
     if (!stagedFiles.length) return;
-    addFiles(stagedFiles);
+    void addFiles(stagedFiles);
     clearStagedFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stagedFiles]);
@@ -407,14 +424,14 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
+    if (e.dataTransfer.files?.length) void addFiles(e.dataTransfer.files);
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
-    const imgs = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'));
+    const imgs = Array.from(e.clipboardData.files).filter(isImageUpload);
     if (imgs.length) {
       e.preventDefault();
-      addFiles(imgs);
+      void addFiles(imgs);
     }
   };
 
@@ -485,7 +502,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
           multiple
           hidden
           onChange={(e) => {
-            if (e.target.files) addFiles(e.target.files);
+            if (e.target.files) void addFiles(e.target.files);
             e.target.value = '';
           }}
         />
