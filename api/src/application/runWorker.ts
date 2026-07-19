@@ -28,6 +28,12 @@ import type { SkillProvisioner } from './skillProvisioner';
 import type { MountedSkill, SkillPackage } from '../domain/skill';
 import { DEFAULT_SKILLS } from '../skills';
 import { completeChat } from '../ai/chat';
+import {
+  semanticRouterSystemPrompt,
+  type SemanticAction,
+  type SemanticRoute,
+  type RouteTurnParams,
+} from '../ai/semanticRouter';
 import { renderMemoryContext, type MemoryContextService } from './memoryContextService';
 import type { MemoryExtractionService } from './memoryExtractionService';
 
@@ -54,6 +60,9 @@ export interface RunWorkerDeps {
   memoryExtraction?: MemoryExtractionService;
   /** The agentic loop (Responses API). Injectable for tests. */
   runAgent?: (p: RunAgentParams) => AsyncGenerator<AgentEvent>;
+  /** Full-conversation semantic manager. Production wires the forced structured router; tests can
+   *  inject a route or omit it to exercise automatic tool selection. */
+  routeTurn?: (params: RouteTurnParams) => Promise<SemanticRoute | null>;
   /** Max agent attempts when the Responses stream stalls (default 3: full → drop code_interpreter → no tools). */
   maxAgentAttempts?: number;
   /** First-token watchdog: abort + retry a stalled attempt after this many ms (default 45000). */
@@ -150,6 +159,7 @@ function shouldExposeArtifact(file: ContainerFile, name: string, kind: ArtifactK
 }
 
 interface ImageReference {
+  id: string;
   bytes: Uint8Array;
   contentType: string;
 }
@@ -158,50 +168,65 @@ function shouldUseImageReference(args: Record<string, unknown>): boolean {
   return args.edit_reference === true;
 }
 
-async function latestUserImageReference(
-  history: MessageRecord[],
-  resolveImageUrl?: (blobPath: string) => Promise<string | null>,
-  fetchImpl?: typeof fetch,
-): Promise<ImageReference | undefined> {
-  if (!resolveImageUrl) return undefined;
-  for (let i = history.length - 1; i >= 0; i--) {
-    const message = history[i];
-    if (message.role !== 'user') continue;
-    const images = (message.attachments ?? []).filter((att) => att.kind === 'image' && att.blobPath).reverse();
-    for (const image of images) {
-      const url = await resolveImageUrl(image.blobPath).catch(() => null);
-      if (!url) continue;
-      try {
-        const res = await (fetchImpl ?? fetch)(url);
-        if (!res.ok) continue;
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        if (bytes.byteLength) return { bytes, contentType: image.mime || res.headers.get('content-type') || 'image/png' };
-      } catch {
-        /* try an earlier image */
-      }
+function imageIdsInHistory(history: MessageRecord[]): string[] {
+  const ids: string[] = [];
+  for (const message of history) {
+    if (message.deletedAt) continue;
+    for (const attachment of message.attachments ?? []) {
+      if (attachment.kind === 'image' && attachment.blobPath) ids.push(attachment.id);
+    }
+    for (const image of message.images ?? []) {
+      if (image.blobPath) ids.push(image.id);
     }
   }
-  return undefined;
+  return ids;
 }
 
-/** True when the prompt is unambiguously a request to CREATE or EDIT a picture / artwork, so the image
- *  model (generate_image) should handle it rather than the code interpreter. Requires an image verb AND
- *  an image noun/style, and bails when the ask is a data / plot / document deliverable (code-interpreter
- *  territory). Used to drop code_interpreter for the run so its "use the python tool" directive can't
- *  hijack an image task. */
-export function isImageGenerationRequest(text: string): boolean {
-  const t = (text ?? '').toLowerCase();
-  if (!t.trim()) return false;
-  // Deliverables that belong to the code interpreter even when the word "image" appears.
-  if (
-    /\b(chart|plot|graph|histogram|scatter|dataframe|matplotlib|csv|spreadsheet|excel|xlsx?|pdf|docx?|document|report|slides?|deck|presentation|powerpoint|pptx?)\b/.test(t)
-  )
-    return false;
-  const verb =
-    /\b(generate|create|make|draw|paint|render|design|illustrate|redraw|re-?draw|restyle|re-?style|recreate|edit|retouch|convert|transform|stylize|stylise|cartoonize|cartoonise|sketch|colou?rize|colou?rise|enhance|improve|remove)\b/;
-  const noun =
-    /\b(image|picture|photo|portrait|artwork|art|illustration|drawing|painting|poster|logo|sticker|avatar|wallpaper|watercolou?r|oil\s+painting|anime|manga|kawaii|caricature)\b/;
-  return verb.test(t) && noun.test(t);
+async function resolveImageReferences(
+  history: MessageRecord[],
+  requestedIds: string[],
+  resolveImageUrl?: (blobPath: string) => Promise<string | null>,
+  fetchImpl?: typeof fetch,
+): Promise<ImageReference[]> {
+  if (!resolveImageUrl) return [];
+  const sources = new Map<string, { blobPath: string; contentType: string }>();
+  for (const message of history) {
+    if (message.deletedAt) continue;
+    for (const attachment of message.attachments ?? []) {
+      if (attachment.kind === 'image' && attachment.blobPath) {
+        sources.set(attachment.id, { blobPath: attachment.blobPath, contentType: attachment.mime || 'image/png' });
+      }
+    }
+    for (const image of message.images ?? []) {
+      if (!image.blobPath) continue;
+      const contentType = image.outputFormat === 'jpeg' ? 'image/jpeg' : `image/${image.outputFormat}`;
+      sources.set(image.id, { blobPath: image.blobPath, contentType });
+    }
+  }
+  const ids = requestedIds.length
+    ? requestedIds
+    : [...history]
+        .reverse()
+        .flatMap((message) => [...(message.attachments ?? [])].reverse())
+        .filter((attachment) => attachment.kind === 'image' && attachment.blobPath)
+        .slice(0, 1)
+        .map((attachment) => attachment.id);
+  const references: ImageReference[] = [];
+  for (const id of [...new Set(ids)]) {
+    const source = sources.get(id);
+    if (!source) continue;
+    const url = await resolveImageUrl(source.blobPath).catch(() => null);
+    if (!url) continue;
+    try {
+      const res = await (fetchImpl ?? fetch)(url);
+      if (!res.ok) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.byteLength) references.push({ id, bytes, contentType: source.contentType });
+    } catch {
+      /* continue with any other selected references */
+    }
+  }
+  return references;
 }
 
 /** Build the system prompt from the user's personalization (about-you / response-style) plus a
@@ -212,6 +237,7 @@ function systemPrompt(
   skillsSection?: string,
   memorySection?: string,
   imageAttached = false,
+  executionSection?: string,
 ): string {
   const lines = ['You are Watai, a helpful AI assistant. Be accurate and concise.'];
   const p = settings?.personalization;
@@ -234,9 +260,27 @@ function systemPrompt(
         'use the code interpreter to edit the image.',
     );
   }
+  if (executionSection) lines.push(executionSection);
   if (memorySection) lines.push(memorySection);
   if (skillsSection) lines.push(skillsSection);
   return lines.join('\n\n');
+}
+
+function semanticExecutionSection(route: SemanticRoute | null): string {
+  if (!route) return '';
+  if (route.action === 'respond') {
+    return 'The routing manager selected a direct response for this turn. Do not claim that an image, file, search, or other external action was completed.';
+  }
+  const references = route.referenceImageIds.length
+    ? ` The selected image references are: ${route.referenceImageIds.join(', ')}.`
+    : '';
+  return (
+    `The routing manager selected ${route.action} as the required action for this turn. ` +
+    `You MUST call that tool before giving the final response; never claim the result is done or ready before the tool succeeds.` +
+    (route.action === 'generate_image'
+      ? ` The image action is ${route.imageAction}.${references}`
+      : '')
+  );
 }
 
 /** Responses turns: system + the user/assistant history (excluding soft-deleted rows and the
@@ -252,7 +296,22 @@ async function buildTurns(
   for (const m of messages) {
     if (m.deletedAt || m.id === assistantMessageId) continue;
     if (m.role !== 'user' && m.role !== 'assistant') continue;
-    const turn: Turn = { role: m.role, text: m.content };
+    const imageMetadata: string[] = [];
+    for (const attachment of m.attachments ?? []) {
+      if (attachment.kind !== 'image' || !attachment.blobPath) continue;
+      imageMetadata.push(
+        `[Uploaded image id=${JSON.stringify(attachment.id)}${attachment.name ? ` name=${JSON.stringify(attachment.name)}` : ''}]`,
+      );
+    }
+    for (const image of m.images ?? []) {
+      imageMetadata.push(
+        `[Generated image id=${JSON.stringify(image.id)} size=${JSON.stringify(image.size)} prompt=${JSON.stringify(image.prompt)}]`,
+      );
+    }
+    const turn: Turn = {
+      role: m.role,
+      text: [m.content, ...imageMetadata].filter(Boolean).join('\n\n'),
+    };
     // User-uploaded image attachments -> input_image (vision). Only user turns; assistant output
     // images can't be replayed as input_image. Skip silently when a url can't be minted.
     if (m.role === 'user' && resolveImageUrl && m.attachments?.length) {
@@ -338,6 +397,11 @@ function assembleTools(
           prompt: { type: 'string', description: 'A detailed description of the image (or the requested edit).' },
           size: { type: 'string', description: 'Optional size, e.g. 1024x1024, 1024x1536, or 1536x1024.' },
           edit_reference: { type: 'boolean', description: 'Set true to edit, restyle, clean up, improve, or transform the latest image the user uploaded (used as the image-model reference; preserves its style).' },
+          reference_image_ids: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Stable image IDs from the conversation metadata to use as edit/reference inputs. Include every image the user refers to, in priority order.',
+          },
         },
         required: ['prompt'],
         additionalProperties: false,
@@ -347,11 +411,24 @@ function assembleTools(
   return tools;
 }
 
+function semanticActionForTool(tool: ResponsesTool): Exclude<SemanticAction, 'respond'> | null {
+  const name = tool.type === 'function' ? tool.name : tool.type;
+  if (
+    name === 'generate_image' ||
+    name === 'code_interpreter' ||
+    name === 'file_search' ||
+    name === 'web_search'
+  )
+    return name;
+  return null;
+}
+
 /** The tool executor: runs function tools server-side and returns output + grounding citations. */
 function makeExecute(
   creds: DecryptedCredentials,
   fetchImpl?: typeof fetch,
-  getImageReference?: () => Promise<ImageReference | undefined>,
+  getImageReferences?: (ids: string[]) => Promise<ImageReference[]>,
+  route?: SemanticRoute | null,
 ): ToolExecute {
   return async (name, args) => {
     if (name === 'web_search') {
@@ -388,9 +465,19 @@ function makeExecute(
       if (!prompt) return { output: 'No image prompt was provided.' };
       const sizeArg = (args as { size?: unknown }).size;
       const size = typeof sizeArg === 'string' && sizeArg ? sizeArg : undefined;
-      const useReference = shouldUseImageReference(args);
-      const imageReference = useReference ? await getImageReference?.() : undefined;
-      if (useReference && !imageReference) return { output: 'No uploaded image is available to use as a reference.' };
+      const requestedIds = Array.isArray(args.reference_image_ids)
+        ? args.reference_image_ids.filter((id): id is string => typeof id === 'string')
+        : [];
+      const referenceIds = route?.action === 'generate_image' && route.referenceImageIds.length
+        ? route.referenceImageIds
+        : requestedIds;
+      const useReference = route?.action === 'generate_image'
+        ? route.imageAction === 'edit'
+        : shouldUseImageReference(args) || referenceIds.length > 0;
+      const imageReferences = useReference ? await getImageReferences?.(referenceIds) : undefined;
+      if (useReference && !imageReferences?.length) {
+        throw new Error('The selected image reference is no longer available.');
+      }
       const imgs = await withImageToolErrorMessage(async () =>
         useReference
           ? editImage({
@@ -398,8 +485,12 @@ function makeExecute(
               key: creds.key,
               model: imageModel,
               prompt,
-              image: imageReference!.bytes,
-              imageContentType: imageReference!.contentType,
+              image: imageReferences![0].bytes,
+              imageContentType: imageReferences![0].contentType,
+              images: imageReferences!.map((reference) => ({
+                bytes: reference.bytes,
+                contentType: reference.contentType,
+              })),
               ...(size ? { size } : {}),
               fetchImpl,
             })
@@ -412,7 +503,7 @@ function makeExecute(
               fetchImpl,
             }),
       );
-      if (!imgs.length) return { output: 'No image was generated.' };
+      if (!imgs.length) throw new Error('No image was generated.');
       return {
         output: 'Generated the requested image.',
         image: { b64: imgs[0].b64, prompt, ...(size ? { size } : {}) },
@@ -779,9 +870,15 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       settingsPromise,
       messageStore.list(threadId),
     ]);
-    let imageReferencePromise: Promise<ImageReference | undefined> | undefined;
-    const getImageReference = (): Promise<ImageReference | undefined> =>
-      imageReferencePromise ??= latestUserImageReference(history, deps.resolveImageUrl, deps.fetchImpl);
+    const imageReferencePromises = new Map<string, Promise<ImageReference[]>>();
+    const getImageReferences = (ids: string[]): Promise<ImageReference[]> => {
+      const key = ids.join('\u0000');
+      const existing = imageReferencePromises.get(key);
+      if (existing) return existing;
+      const pending = resolveImageReferences(history, ids, deps.resolveImageUrl, deps.fetchImpl);
+      imageReferencePromises.set(key, pending);
+      return pending;
+    };
     firstUser = history.find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
     const latestUserText = submittedText ?? [...history].reverse().find((m) => !m.deletedAt && m.role === 'user')?.content ?? '';
     // Does the most recent user turn carry an uploaded image? Steers image-edit requests to
@@ -801,14 +898,50 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     const promptForSkills = run.prompt?.text ?? firstUser;
     const explicitSkillNames = slashSkillTags(promptForSkills);
     const selectedSkills = selectSkills(promptForSkills);
-    // A clear image-create/edit request must go to generate_image, not the code interpreter. When the
-    // image model is available and the prompt is unambiguously about making/editing a picture (and no
-    // skill was explicitly tagged), drop code_interpreter for this run so its "use the python tool"
-    // directive can't hijack the image task. Prompt guidance alone did not reliably steer this.
-    const suppressCodeForImage =
-      !!c.models.image && explicitSkillNames.length === 0 && isImageGenerationRequest(latestUserText);
-    const offeredToolNames = suppressCodeForImage
-      ? run.tools.filter((t) => t !== 'code_interpreter')
+    // The manager sees the complete annotated thread and chooses one capability semantically. No
+    // user-text regex participates in routing. If routing is unavailable, degrade to the model's
+    // ordinary automatic selection over the configured tools instead of failing the run.
+    const candidateTools = assembleTools(c, run, thread);
+    const availableActions: SemanticAction[] = ['respond'];
+    for (const tool of candidateTools) {
+      const action = semanticActionForTool(tool);
+      if (action && !availableActions.includes(action)) availableActions.push(action);
+    }
+    let semanticRoute: SemanticRoute | null = null;
+    let conversationTurns: Turn[] | undefined;
+    if (deps.routeTurn) {
+      const routeStartedAt = Date.now();
+      conversationTurns = await buildTurns(
+        semanticRouterSystemPrompt(availableActions),
+        history,
+        run.assistantMessageId,
+        deps.resolveImageUrl,
+      );
+      semanticRoute = await withTimeout(
+        deps.routeTurn({
+          baseUrl: c.baseUrl,
+          key: c.key,
+          model,
+          turns: conversationTurns,
+          availableActions,
+          imageIds: imageIdsInHistory(history),
+          fetchImpl: deps.fetchImpl,
+        }).catch(() => null),
+        15_000,
+        null,
+      );
+      console.log('[routing] semantic manager completed', {
+        runId,
+        action: semanticRoute?.action ?? 'fallback-auto',
+        imageAction: semanticRoute?.imageAction ?? 'none',
+        referenceCount: semanticRoute?.referenceImageIds.length ?? 0,
+        latencyMs: Date.now() - routeStartedAt,
+      });
+    }
+    const offeredToolNames = semanticRoute
+      ? semanticRoute.action === 'respond'
+        ? []
+        : [semanticRoute.action]
       : run.tools;
     const codeOn = offeredToolNames.includes('code_interpreter');
 
@@ -819,7 +952,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
     // slow to provision (~30s to first byte) and, combined with the function tools, deterministically
     // deadlocks the Responses stream. Mount only when the prompt matches a skill (keyword or /tag) so
     // ordinary chat keeps the fast code_interpreter path; skills still load when actually needed.
-    const needsSkills = selectedSkills.length > 0 || explicitSkillNames.length > 0;
+    const needsSkills = codeOn && (selectedSkills.length > 0 || explicitSkillNames.length > 0);
     let skillFileIds: string[] = [];
     let skillMounts: MountedSkill[] = [];
     if (codeOn && deps.skillProvisioner && needsSkills) {
@@ -857,27 +990,47 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         };
       });
     }
-    const turns = await buildTurns(
-      systemPrompt(c, settings, ciSection, memoryBlock ? renderMemoryContext(memoryBlock) : '', hasUserImage),
-      history,
-      run.assistantMessageId,
-      deps.resolveImageUrl,
+    const mainSystem = systemPrompt(
+      c,
+      settings,
+      ciSection,
+      memoryBlock ? renderMemoryContext(memoryBlock) : '',
+      hasUserImage,
+      semanticExecutionSection(semanticRoute),
     );
-    const fullTools = assembleTools(c, { ...run, tools: offeredToolNames }, thread, skillFileIds);
-    const execute = makeExecute(c, deps.fetchImpl, getImageReference);
+    const turns = conversationTurns
+      ? [{ role: 'system' as const, text: mainSystem }, ...conversationTurns.slice(1)]
+      : await buildTurns(mainSystem, history, run.assistantMessageId, deps.resolveImageUrl);
+    const fullTools = semanticRoute?.action === 'respond'
+      ? []
+      : assembleTools(c, { ...run, tools: offeredToolNames }, thread, skillFileIds);
+    const execute = makeExecute(c, deps.fetchImpl, getImageReferences, semanticRoute);
 
     // Graceful tool degradation across attempts. The Responses API deadlocks (zero output) when the
     // code_interpreter container (slow to provision, esp. with mounted skill files) is offered
     // alongside function tools. On a stall we retry with code_interpreter dropped, then — if still
     // stalling — with no tools, which always yields a text answer. The happy path is unchanged.
     const toolsForAttempt = (attempt: number): ResponsesTool[] => {
+      if (semanticRoute) return fullTools;
       if (attempt <= 1) return fullTools;
       if (attempt === 2) return fullTools.filter((t) => t.type !== 'code_interpreter');
       return [];
     };
     const agentStream = streamAgentWithRetry(
       runAgent,
-      { baseUrl: c.baseUrl, key: c.key, model, turns, execute },
+      {
+        baseUrl: c.baseUrl,
+        key: c.key,
+        model,
+        turns,
+        execute,
+        ...(semanticRoute
+          ? {
+              toolChoice: semanticRoute.action === 'respond' ? 'none' as const : 'required' as const,
+              ...(semanticRoute.action !== 'respond' ? { requiredToolName: semanticRoute.action } : {}),
+            }
+          : {}),
+      },
       toolsForAttempt,
       {
         maxAttempts: deps.maxAgentAttempts ?? 3,

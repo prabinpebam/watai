@@ -40,6 +40,7 @@ import { MemoryExtractionService } from './application/memoryExtractionService';
 import { MemoryModelService } from './application/memoryModelService';
 import { extractMemories } from './ai/memoryExtractor';
 import { azureEmbedder } from './ai/azureEmbedder';
+import { routeTurn } from './ai/semanticRouter';
 import { InProcessRetriever } from './adapters/memory/inProcessRetriever';
 import type { ImageWorkerDeps } from './application/imageWorker';
 import { SkillCatalogService } from './application/skillCatalogService';
@@ -225,6 +226,7 @@ export function container(): ApiContainer {
       settings: settingsService,
       memoryContext: memoryContextService,
       memoryExtraction: memoryExtractionService,
+      routeTurn,
       uploadImage: makeUploadImage(assetService),
       uploadArtifact: makeUploadImage(assetService),
       resolveImageUrl: makeResolveImageUrl(minter),

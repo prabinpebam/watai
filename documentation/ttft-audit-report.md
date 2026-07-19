@@ -90,12 +90,22 @@ Ordered from send to first token, against the current worker
 | Credentials decrypt (Key Vault unwrap) | [runWorker.ts](../api/src/application/runWorker.ts#L704) | yes | 50–200ms |
 | Memory embed/retrieval (kicked early, overlapped) | [runWorker.ts](../api/src/application/runWorker.ts#L710-L718) | bounded 3s; usually no | ~0.8s warm, overlapped |
 | settings + history (parallel) | [runWorker.ts](../api/src/application/runWorker.ts#L720-L723) | yes | ~50–200ms |
+| Semantic manager (`select_action`, full thread, minimal reasoning, ≤500 output tokens) | [semanticRouter.ts](../api/src/ai/semanticRouter.ts) | **yes, but overlaps memory retrieval** | expected ~0.9–1.2s for normal threads; ~2–3s for long threads; log field `[routing] … latencyMs` provides live measurement |
 | Skill provisioning (gated to skill prompts) | [runWorker.ts](../api/src/application/runWorker.ts#L746-L766) | only if a skill is matched | **~30–35s cold**, else 0 |
 | buildTurns (mint image read-SAS) | [runWorker.ts](../api/src/application/runWorker.ts#L783) | yes if history has images | 0.1–1s |
 | assembleTools (drops fn tools when skills mounted) | [runWorker.ts](../api/src/application/runWorker.ts#L789) | no | <5ms |
 | **Model first token** (watchdog 15s / 50s w-skills, 3 attempts) | [runWorker.ts](../api/src/application/runWorker.ts#L800-L813) | **YES** | **~0.9–3s typical** |
 | Stream flush → SignalR push (250ms) → UI | [runWorker.ts](../api/src/application/runWorker.ts#L715), [serverRun.ts](../src/features/chat/serverRun.ts#L55) | post-first-token | 250ms cadence; 450ms poll fallback |
 | Memory **extraction** | enqueued after the reply | **no — off hot path** | 0 |
+
+**Visible impact of semantic routing (2026-07-19 architecture):** the optimistic assistant bubble
+and typing dots still render synchronously, so immediate UI acknowledgement is unchanged. The first
+real token or `Generating image…` placeholder waits for the manager. With memory enabled, its call
+overlaps the existing ~0.8s retrieval, so the estimated warm incremental TTFT is roughly **+0.1 to
++0.5s typical**. With memory disabled, expect roughly **+0.9 to +1.2s**. Long full threads can add
+**~2–3s median** and retain normal model-tail variance. These are estimates derived from the live
+Responses baseline above; query `[routing] semantic manager completed` / `latencyMs` in Application
+Insights for actual production values after deployment.
 
 ---
 

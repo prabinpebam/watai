@@ -37,6 +37,8 @@ export interface ResponsesParams {
   input: ResponsesInputItem[];
   tools?: ResponsesTool[];
   toolChoice?: 'auto' | 'required' | 'none';
+  reasoning?: { effort: 'minimal' | 'low' | 'medium' | 'high' };
+  maxOutputTokens?: number;
   previousResponseId?: string;
   headers?: Record<string, string>;
   signal?: AbortSignal;
@@ -246,6 +248,8 @@ export async function* streamResponses(p: ResponsesParams): AsyncGenerator<Respo
   const body: Record<string, unknown> = { model: p.model, input: p.input, stream: true };
   if (p.tools?.length) body.tools = p.tools;
   if (p.toolChoice) body.tool_choice = p.toolChoice;
+  if (p.reasoning) body.reasoning = p.reasoning;
+  if (p.maxOutputTokens) body.max_output_tokens = p.maxOutputTokens;
   if (p.previousResponseId) body.previous_response_id = p.previousResponseId;
 
   const res = await aiFetch({

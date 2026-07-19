@@ -94,6 +94,26 @@ store), `code_interpreter` (Responses server tool), plus app tools (`search_hist
 [06](06-server-runs-and-migration.md) §4 (disabled in autonomous runs unless explicitly
 pre-authorized), because there is no interactive confirmation server-side.
 
+### 5.1 Semantic manager and execution postconditions
+
+Tool routing is model-driven, not a keyword/regex classifier. Before the executor runs,
+`api/src/ai/semanticRouter.ts` sends the **complete thread** to the configured chat model and
+forces one strict `select_action` function call (`tool_choice: required`). The manager chooses one
+available capability (`respond`, `generate_image`, `code_interpreter`, `file_search`, or
+`web_search`) from detailed capability contracts. The worker then exposes only that specialist and
+requires it, matching the manager/specialist pattern documented by OpenAI Agents and Anthropic tool
+use.
+
+Every uploaded and generated image is embedded in its original turn as stable metadata
+(`Uploaded image id=…` / `Generated image id=…`). The manager therefore resolves “this image,” “the
+previous image,” or “use both” against the entire conversation, even many turns later. Selected IDs
+are validated against persisted message assets and can be sent together to `/images/edits`.
+
+The orchestrator buffers prose while a required action is pending. A completion is rejected if the
+selected tool never completes, so the assistant cannot say “Done” or “the image is ready” without a
+real tool result. If the semantic-manager request fails, the worker degrades to normal model-driven
+`tool_choice:auto` rather than failing the chat.
+
 ---
 
 ## 6. Errors

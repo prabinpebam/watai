@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { processRun, isImageGenerationRequest, type RunWorkerDeps } from './runWorker';
+import { processRun, type RunWorkerDeps } from './runWorker';
 import { InMemoryRunStore } from '../adapters/memory/runStore';
 import { InMemoryMessageStore } from '../adapters/memory/messageStore';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
@@ -131,32 +131,6 @@ function artifactFetch(): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-describe('isImageGenerationRequest', () => {
-  it('matches clear image create/edit requests', () => {
-    for (const t of [
-      'Generate Watercolor image of a Manipuri woman, use image as reference',
-      'Generate a clean image, keep the watercolor style, improve the explosions',
-      'make it kawaii with marker doodles all around it',
-      'draw a picture of a cat',
-      'restyle this photo as an oil painting',
-      'remove the text from the poster image',
-    ])
-      expect(isImageGenerationRequest(t), t).toBe(true);
-  });
-
-  it('does not match data / document / vision-query requests', () => {
-    for (const t of [
-      'create a bar chart of the sales data',
-      'make me a PDF report from this',
-      'what is in this image?',
-      'extract the text from this image',
-      'write python to count objects',
-      '',
-    ])
-      expect(isImageGenerationRequest(t), t).toBe(false);
-  });
-});
-
 describe('processRun', () => {
   let ctx: ReturnType<typeof setup>;
   beforeEach(() => (ctx = setup()));
@@ -256,7 +230,7 @@ describe('processRun', () => {
     expect(msg?.status).toBe('complete');
   });
 
-  it('drops code_interpreter and offers generate_image for a clear image-generation request', async () => {
+  it('offers only generate_image when the semantic manager selects the image specialist', async () => {
     const ctx2 = setup({ image: true });
     await seed(
       ctx2,
@@ -264,18 +238,25 @@ describe('processRun', () => {
       ['code_interpreter', 'generate_image'],
       'Generate a watercolor image of a woman; use the uploaded photo as reference',
     );
-    let tools: Array<{ type: string; name?: string }> = [];
-    const capture: RunAgentFn = async function* (params): AsyncGenerator<AgentEvent> {
-      tools = params.tools as Array<{ type: string; name?: string }>;
+    let params: RunAgentParams | undefined;
+    const capture: RunAgentFn = async function* (next): AsyncGenerator<AgentEvent> {
+      params = next;
       yield { type: 'text', delta: 'ok' };
       yield { type: 'done' };
     };
-    await processRun(ctx2.deps(capture), 't1', 'r1');
-    expect(tools.some((t) => t.type === 'code_interpreter')).toBe(false);
-    expect(tools.some((t) => t.name === 'generate_image')).toBe(true);
+    const routeTurn: NonNullable<RunWorkerDeps['routeTurn']> = async () => ({
+      action: 'generate_image',
+      imageAction: 'generate',
+      referenceImageIds: [],
+      rationale: 'The user requested a visual output.',
+    });
+    await processRun({ ...ctx2.deps(capture), routeTurn }, 't1', 'r1');
+    expect(params!.tools.some((t) => t.type === 'code_interpreter')).toBe(false);
+    expect(params!.tools.some((t) => t.name === 'generate_image')).toBe(true);
+    expect(params).toMatchObject({ toolChoice: 'required', requiredToolName: 'generate_image' });
   });
 
-  it('keeps code_interpreter for a data/chart request even when it mentions an image', async () => {
+  it('offers only code_interpreter when the semantic manager selects programmatic output', async () => {
     const ctx2 = setup({ image: true });
     await seed(ctx2, 'queued', ['code_interpreter', 'generate_image'], 'create a bar chart image from this CSV of sales');
     let tools: Array<{ type: string; name?: string }> = [];
@@ -284,8 +265,106 @@ describe('processRun', () => {
       yield { type: 'text', delta: 'ok' };
       yield { type: 'done' };
     };
-    await processRun(ctx2.deps(capture), 't1', 'r1');
+    const routeTurn: NonNullable<RunWorkerDeps['routeTurn']> = async () => ({
+      action: 'code_interpreter',
+      imageAction: 'none',
+      referenceImageIds: [],
+      rationale: 'The user requested a data-driven chart.',
+    });
+    await processRun({ ...ctx2.deps(capture), routeTurn }, 't1', 'r1');
     expect(tools.some((t) => t.type === 'code_interpreter')).toBe(true);
+    expect(tools.some((t) => t.name === 'generate_image')).toBe(false);
+  });
+
+  it('exposes no tools when the semantic manager selects a direct response', async () => {
+    const ctx2 = setup({ image: true, tavily: true });
+    await seed(ctx2, 'queued', ['web_search', 'code_interpreter', 'generate_image'], 'What do you think?');
+    let params: RunAgentParams | undefined;
+    const capture: RunAgentFn = async function* (next): AsyncGenerator<AgentEvent> {
+      params = next;
+      yield { type: 'text', delta: 'A direct answer.' };
+      yield { type: 'done' };
+    };
+    const routeTurn: NonNullable<RunWorkerDeps['routeTurn']> = async () => ({
+      action: 'respond',
+      imageAction: 'none',
+      referenceImageIds: [],
+      rationale: 'No external action is required.',
+    });
+
+    await processRun({ ...ctx2.deps(capture), routeTurn }, 't1', 'r1');
+
+    expect(params!.tools).toEqual([]);
+    expect(params).toMatchObject({ toolChoice: 'none' });
+    expect(params!.requiredToolName).toBeUndefined();
+  });
+
+  it('routes with the complete thread and preserves old uploaded/generated image ids', async () => {
+    const ctx2 = setup({ image: true });
+    await seed(ctx2, 'queued', ['code_interpreter', 'generate_image'], 'Make another one with eight groups in two columns.');
+    const latest = await ctx2.messageStore.get('t1', 'um1');
+    await ctx2.messageStore.append({ ...latest!, createdAt: '2026-06-01T00:00:05Z', orderAt: '2026-06-01T00:00:05Z' });
+    await ctx2.messageStore.append({
+      id: 'u-old',
+      threadId: 't1',
+      userId: 'userA',
+      role: 'user',
+      content: 'Use this exact sprite template and character reference.',
+      status: 'complete',
+      attachments: [
+        { id: 'template-img', kind: 'image', blobPath: 'userA/t1/template.png', mime: 'image/png', bytes: 10, name: 'template.png' },
+        { id: 'character-img', kind: 'image', blobPath: 'userA/t1/character.png', mime: 'image/png', bytes: 10, name: 'character.png' },
+      ],
+      createdAt: '2026-06-01T00:00:01Z',
+      orderAt: '2026-06-01T00:00:01Z',
+      deletedAt: null,
+    });
+    await ctx2.messageStore.append({
+      id: 'a-old',
+      threadId: 't1',
+      userId: 'userA',
+      role: 'assistant',
+      content: 'Generated the first version.',
+      status: 'complete',
+      images: [{
+        id: 'generated-v1',
+        blobPath: 'userA/t1/generated-v1.png',
+        prompt: 'First worksheet image with uniform spacing.',
+        size: '1024x1536',
+        outputFormat: 'png',
+        createdAt: '2026-06-01T00:00:02Z',
+      }],
+      createdAt: '2026-06-01T00:00:02Z',
+      orderAt: '2026-06-01T00:00:02Z',
+      deletedAt: null,
+    });
+    let routeParams: Parameters<NonNullable<RunWorkerDeps['routeTurn']>>[0] | undefined;
+    const routeTurn: NonNullable<RunWorkerDeps['routeTurn']> = async (params) => {
+      routeParams = params;
+      return {
+        action: 'generate_image',
+        imageAction: 'edit',
+        referenceImageIds: ['generated-v1', 'template-img', 'character-img'],
+        rationale: 'The latest request continues the prior image workflow.',
+      };
+    };
+    let agentParams: RunAgentParams | undefined;
+    const capture: RunAgentFn = async function* (params): AsyncGenerator<AgentEvent> {
+      agentParams = params;
+      yield { type: 'done' };
+    };
+
+    await processRun({ ...ctx2.deps(capture), routeTurn }, 't1', 'r1');
+
+    expect(routeParams!.imageIds).toEqual(['template-img', 'character-img', 'generated-v1']);
+    const routedTranscript = routeParams!.turns.map((turn) => turn.text).join('\n');
+    expect(routedTranscript).toContain('[Uploaded image id="template-img" name="template.png"]');
+    expect(routedTranscript).toContain('[Uploaded image id="character-img" name="character.png"]');
+    expect(routedTranscript).toContain('[Generated image id="generated-v1"');
+    expect(routedTranscript).toContain('Make another one with eight groups in two columns.');
+    expect(agentParams).toMatchObject({ toolChoice: 'required', requiredToolName: 'generate_image' });
+    expect(agentParams!.tools.map((tool) => tool.type === 'function' ? tool.name : tool.type)).toEqual(['generate_image']);
+    expect(agentParams!.turns[0].text).toContain('generated-v1, template-img, character-img');
   });
 
   it('skips skill mounting for an ordinary prompt (keeps the fast code_interpreter path)', async () => {
@@ -592,8 +671,9 @@ describe('processRun', () => {
     };
     const resolveImageUrl = async (blobPath: string) => `https://blob/${blobPath}?read`;
     await processRun({ ...ctx.deps(runAgent), resolveImageUrl }, 't1', 'r1');
-    const turn = seen[0].turns.find((t) => t.text === 'what is this?');
+    const turn = seen[0].turns.find((t) => t.text.startsWith('what is this?'));
     expect(turn?.images).toEqual(['https://blob/userA/t1/a1.png?read']); // only the image, not the pdf
+    expect(turn?.text).toContain('[Uploaded image id="a1"]');
   });
 
   it('omits images when no resolver is wired (history stays text-only)', async () => {
@@ -992,6 +1072,90 @@ describe('processRun', () => {
 
     expect(editCalled).toBe(true);
     expect(generationCalled).toBe(false);
+    expect((await ctx.messageStore.get('t1', 'am1'))?.images).toHaveLength(1);
+  });
+
+  it('passes semantic-manager references from uploaded and generated images to one edit call', async () => {
+    ctx = setup({ image: true });
+    await seed(ctx, 'queued', ['code_interpreter', 'generate_image'], 'Use the prior template and generated character together.');
+    const user = await ctx.messageStore.get('t1', 'um1');
+    await ctx.messageStore.append({
+      ...user!,
+      attachments: [
+        { id: 'template-img', kind: 'image', blobPath: 'userA/t1/template.png', mime: 'image/png', bytes: 3 },
+      ],
+    });
+    await ctx.messageStore.append({
+      id: 'a-old',
+      threadId: 't1',
+      userId: 'userA',
+      role: 'assistant',
+      content: 'First generated character.',
+      status: 'complete',
+      images: [{
+        id: 'generated-character',
+        blobPath: 'userA/t1/generated.png',
+        prompt: 'Chibi character',
+        size: '1024x1024',
+        outputFormat: 'png',
+        createdAt: '2026-06-01T00:00:01.500Z',
+      }],
+      createdAt: '2026-06-01T00:00:01.500Z',
+      orderAt: '2026-06-01T00:00:01.500Z',
+      deletedAt: null,
+    });
+    const bytesByUrl: Record<string, Uint8Array> = {
+      'https://assets.example/generated.png': new Uint8Array([4, 5, 6]),
+      'https://assets.example/template.png': new Uint8Array([1, 2, 3]),
+    };
+    let editInputs: number[][] = [];
+    const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
+      const url = String(input);
+      if (bytesByUrl[url]) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'image/png' }),
+          arrayBuffer: async () => bytesByUrl[url].buffer,
+        } as unknown as Response;
+      }
+      if (url.includes('/images/edits')) {
+        const blobs = (init?.body as FormData).getAll('image[]') as Blob[];
+        editInputs = await Promise.all(blobs.map(async (blob) => [...new Uint8Array(await blob.arrayBuffer())]));
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ b64_json: Buffer.from('EDITED').toString('base64') }] }),
+          headers: new Headers(),
+        } as unknown as Response;
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const routeTurn: NonNullable<RunWorkerDeps['routeTurn']> = async () => ({
+      action: 'generate_image',
+      imageAction: 'edit',
+      referenceImageIds: ['generated-character', 'template-img'],
+      rationale: 'The user referenced both earlier images.',
+    });
+    const runAgent: RunAgentFn = async function* (params) {
+      const result = await params.execute('generate_image', { prompt: 'Combine both references.' });
+      if (result.image) yield { type: 'image', b64: result.image.b64, partial: false };
+      yield { type: 'done' };
+    };
+    const resolveImageUrl = async (blobPath: string): Promise<string> =>
+      blobPath.endsWith('generated.png')
+        ? 'https://assets.example/generated.png'
+        : 'https://assets.example/template.png';
+
+    await processRun({
+      ...ctx.deps(runAgent),
+      routeTurn,
+      resolveImageUrl,
+      fetchImpl,
+      uploadImage: async () => 'userA/t1/combined.png',
+    }, 't1', 'r1');
+
+    expect(editInputs).toEqual([[4, 5, 6], [1, 2, 3]]);
     expect((await ctx.messageStore.get('t1', 'am1'))?.images).toHaveLength(1);
   });
 

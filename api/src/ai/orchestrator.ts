@@ -77,6 +77,10 @@ export interface RunAgentParams {
   signal?: AbortSignal;
   /** Max model<->tool round-trips before stopping (cost guard). */
   maxIterations?: number;
+  /** Initial Responses tool-choice policy. A semantic manager can require the selected specialist. */
+  toolChoice?: 'auto' | 'required' | 'none';
+  /** Tool that must complete before a user-facing completion is accepted. */
+  requiredToolName?: string;
   /** Ask the user to approve a destructive tool before it runs. */
   confirm?: (req: { name: string; args: Record<string, unknown> }) => Promise<boolean>;
   /** Predicate marking a tool as destructive (gated behind `confirm`). */
@@ -92,10 +96,19 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
 
   let input: ResponsesInputItem[] = toInputMessages(params.turns);
   let previousResponseId: string | undefined;
+  let requiredAttempted = false;
+  let requiredSucceeded = false;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     let responseId: string | undefined;
     const pending: Array<{ callId: string; name: string; arguments: string }> = [];
+    const bufferedText: string[] = [];
+    const enforcingRequiredTool = !!params.requiredToolName && !requiredAttempted;
+    const toolChoice = enforcingRequiredTool
+      ? (params.toolChoice ?? 'required')
+      : requiredAttempted
+        ? 'none'
+        : (params.toolChoice ?? 'auto');
 
     for await (const ev of stream({
       baseUrl: params.baseUrl,
@@ -103,7 +116,7 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
       model: params.model,
       input,
       tools: params.tools,
-      toolChoice: 'auto',
+      toolChoice,
       previousResponseId,
       headers: params.headers,
       signal: params.signal,
@@ -114,12 +127,17 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
           responseId = ev.responseId;
           break;
         case 'text':
-          yield { type: 'text', delta: ev.delta };
+          // A model can occasionally emit confident prose before honoring a required action.
+          // Hold it until the tool call is observed so "Done" can never escape without execution.
+          if (enforcingRequiredTool) bufferedText.push(ev.delta);
+          else yield { type: 'text', delta: ev.delta };
           break;
         case 'image':
           yield { type: 'image', b64: ev.b64, partial: ev.partial };
           break;
         case 'serverTool':
+          if (ev.kind === params.requiredToolName && ev.status === 'running') requiredAttempted = true;
+          if (ev.kind === params.requiredToolName && ev.status === 'done') requiredSucceeded = true;
           yield {
             type: 'tool',
             name: ev.kind,
@@ -156,6 +174,14 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
     }
 
     if (pending.length === 0) {
+      if (params.requiredToolName && !requiredSucceeded) {
+        yield {
+          type: 'error',
+          message: `The required ${params.requiredToolName} action did not complete.`,
+        };
+        return;
+      }
+      for (const delta of bufferedText) yield { type: 'text', delta };
       yield { type: 'done' };
       return;
     }
@@ -184,6 +210,7 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
       }
 
       try {
+        if (call.name === params.requiredToolName) requiredAttempted = true;
         const result = await params.execute(call.name, args);
         if (result.image) {
           yield {
@@ -197,6 +224,7 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
             ...(result.image.model !== undefined ? { model: result.image.model } : {}),
           };
         }
+        if (call.name === params.requiredToolName) requiredSucceeded = true;
         outputs.push({ type: 'function_call_output', call_id: call.callId, output: result.output });
         if (result.citations) {
           for (const c of result.citations) yield { type: 'citation', citation: c };
@@ -211,6 +239,15 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
         yield { type: 'tool', name: call.name, status: 'error', detail, callId: call.callId };
       }
     }
+
+    if (params.requiredToolName && requiredAttempted && !requiredSucceeded) {
+      yield {
+        type: 'error',
+        message: `The required ${params.requiredToolName} action failed.`,
+      };
+      return;
+    }
+    for (const delta of bufferedText) yield { type: 'text', delta };
 
     input = outputs;
     previousResponseId = responseId;

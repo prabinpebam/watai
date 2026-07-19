@@ -151,6 +151,75 @@ describe('runAgent', () => {
     expect(toolNames).toEqual(['code_interpreter', 'code_interpreter']);
   });
 
+  it('rejects a text-only completion when the semantic manager required image generation', async () => {
+    const requests: ResponsesParams[] = [];
+    const events = await collect(
+      runAgent({
+        ...base,
+        turns: [{ role: 'user', text: 'Make another worksheet like the previous image.' }],
+        tools: [{ type: 'function', name: 'generate_image', parameters: {} }],
+        toolChoice: 'required',
+        requiredToolName: 'generate_image',
+        execute: async () => ({ output: '' }),
+        streamFn: (params) => {
+          requests.push(params);
+          return streamOf([
+            { type: 'created', responseId: 'r1' },
+            { type: 'text', delta: 'Done — the image is ready.' },
+            { type: 'completed' },
+          ])(params);
+        },
+      }),
+    );
+
+    expect(requests[0].toolChoice).toBe('required');
+    expect(events.some((event) => event.type === 'text')).toBe(false);
+    expect(events.at(-1)).toEqual({
+      type: 'error',
+      message: 'The required generate_image action did not complete.',
+    });
+  });
+
+  it('accepts the final response only after the required image tool succeeds', async () => {
+    const requests: ResponsesParams[] = [];
+    const execute = vi.fn(async () => ({
+      output: 'Generated the requested image.',
+      image: { b64: 'aW1hZ2U=', prompt: 'worksheet' },
+    }));
+    const streamFn = streamOf(
+      [
+        { type: 'created', responseId: 'r1' },
+        { type: 'functionCall', callId: 'g1', name: 'generate_image', arguments: '{"prompt":"worksheet"}' },
+        { type: 'completed' },
+      ],
+      [
+        { type: 'created', responseId: 'r2' },
+        { type: 'text', delta: 'The worksheet image is ready.' },
+        { type: 'completed' },
+      ],
+    );
+    const events = await collect(
+      runAgent({
+        ...base,
+        turns: [{ role: 'user', text: 'Make another worksheet.' }],
+        tools: [{ type: 'function', name: 'generate_image', parameters: {} }],
+        toolChoice: 'required',
+        requiredToolName: 'generate_image',
+        execute,
+        streamFn: (params) => {
+          requests.push(params);
+          return streamFn(params);
+        },
+      }),
+    );
+
+    expect(requests.map((request) => request.toolChoice)).toEqual(['required', 'none']);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(events.some((event) => event.type === 'image')).toBe(true);
+    expect(events.some((event) => event.type === 'text' && event.delta === 'The worksheet image is ready.')).toBe(true);
+    expect(events.at(-1)).toEqual({ type: 'done' });
+  });
+
   it('stops with a budget error when tools never resolve', async () => {
     const events = await collect(
       runAgent({
