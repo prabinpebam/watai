@@ -178,11 +178,6 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
           </div>
         )}
 
-        {showJump && (
-          <button className="jump-pill" onClick={() => jumpToBottom('smooth')}>
-            <Icon name="chevron-down" size={16} /> Jump to latest
-          </button>
-        )}
       </div>
 
       {isEmpty && (
@@ -194,6 +189,14 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
             <span className="empty__greeting-line-1">{greeting()}!</span>
             <span className="empty__greeting-line-2">What’s on the agenda today?</span>
           </div>
+        </div>
+      )}
+
+      {showJump && (
+        <div className="jump-dock">
+          <button className="jump-pill" onClick={() => jumpToBottom('smooth')}>
+            <Icon name="chevron-down" size={16} /> Jump to latest
+          </button>
         </div>
       )}
 

@@ -834,12 +834,18 @@ a:hover {
 }
 
 /* Jump-to-latest pill */
+.jump-dock {
+  position: relative;
+  height: 0;
+  z-index: var(--z-jump-pill);
+  pointer-events: none;
+}
 .jump-pill {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(var(--composer-h, 88px) + var(--space-3));
-  z-index: var(--z-jump-pill);
+  bottom: var(--space-5);
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
