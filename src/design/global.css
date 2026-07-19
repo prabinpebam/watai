@@ -403,8 +403,15 @@ a:hover {
   align-items: stretch;
 }
 
-.bubble-user {
+.bubble-user-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   max-width: 86%;
+  min-width: 0;
+}
+.bubble-user {
+  max-width: 100%;
   background: var(--color-user-bubble);
   color: var(--color-text-primary);
   padding: var(--space-4) var(--space-5);
@@ -428,6 +435,8 @@ a:hover {
 .user__actions {
   display: flex;
   gap: var(--space-1);
+  align-self: flex-start;
+  margin-top: var(--space-1);
   opacity: 0;
   transition: opacity var(--motion-fast) var(--ease-standard);
 }
@@ -1412,7 +1421,7 @@ a:hover {
   .chat__column {
     padding: var(--space-4) var(--space-3) 0;
   }
-  .bubble-user,
+  .bubble-user-wrap,
   .msg-group__attachments {
     max-width: 94%;
   }

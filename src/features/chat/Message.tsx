@@ -337,9 +337,11 @@ export function UserMessage({ message }: { message: Message }) {
           <AttachmentList attachments={message.attachments} />
         </div>
       )}
-      {message.content && <div className="bubble-user"><SkillTaggedText text={message.content} /></div>}
-      <div className="user__actions">
-        <IconButton name={copied ? 'check' : 'copy'} label="Copy" size={16} onClick={copy} />
+      <div className="bubble-user-wrap">
+        {message.content && <div className="bubble-user"><SkillTaggedText text={message.content} /></div>}
+        <div className="user__actions">
+          <IconButton name={copied ? 'check' : 'copy'} label="Copy" size={16} onClick={copy} />
+        </div>
       </div>
     </div>
   );
