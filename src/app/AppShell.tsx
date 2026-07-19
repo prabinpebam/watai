@@ -17,10 +17,12 @@ function SidebarContent({
   collapsed,
   onNavigate,
   hideBrand,
+  libraryPath = '/library',
 }: {
   collapsed?: boolean;
   onNavigate?: () => void;
   hideBrand?: boolean;
+  libraryPath?: string;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -62,15 +64,18 @@ function SidebarContent({
         </Button>
         <Button
           variant="ghost"
-          icon="image"
+          icon="library"
           full
+          aria-label={collapsed ? 'Library' : undefined}
+          title={collapsed ? 'Library' : undefined}
+          aria-current={location.pathname.startsWith(libraryPath) ? 'page' : undefined}
           onClick={() => {
-            navigate('/images');
+            navigate(libraryPath);
             onNavigate?.();
           }}
           className="btn--align-start"
         >
-          {!collapsed && <span className="btn--full-label">Images</span>}
+          {!collapsed && <span className="btn--full-label">Library</span>}
         </Button>
       </div>
 
@@ -94,7 +99,7 @@ function SidebarContent({
   );
 }
 
-export function AppShell() {
+export function AppShell({ libraryPath = '/library' }: { libraryPath?: string }) {
   const expanded = useIsExpanded();
   const drawerOpen = useUi((s) => s.drawerOpen);
   const toggleDrawer = useUi((s) => s.toggleDrawer);
@@ -109,7 +114,7 @@ export function AppShell() {
     <div className="app">
       {expanded && (
         <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''}`}>
-          <SidebarContent collapsed={collapsed} />
+          <SidebarContent collapsed={collapsed} libraryPath={libraryPath} />
         </aside>
       )}
 
@@ -128,7 +133,7 @@ export function AppShell() {
               </div>
               <IconButton name="close" label="Close menu" onClick={() => toggleDrawer(false)} />
             </div>
-            <SidebarContent hideBrand onNavigate={() => toggleDrawer(false)} />
+            <SidebarContent hideBrand libraryPath={libraryPath} onNavigate={() => toggleDrawer(false)} />
           </aside>
         </>
       )}

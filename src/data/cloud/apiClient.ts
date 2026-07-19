@@ -13,6 +13,10 @@ import type {
   CreateMemoryBody,
   ListImagesQuery,
   ListImagesResult,
+  LibraryItemDTO,
+  LibraryListQuery,
+  LibraryListResult,
+  LibraryStorageSummary,
   ListMemoryQuery,
   ListMemoryResponse,
   MemoryModelConfig,
@@ -377,6 +381,34 @@ export class WataiApiClient implements CloudApi {
     return this.request('DELETE', `/images/${encodeURIComponent(id)}`);
   }
 
+  // --- Library (account-level durable content catalog) ---
+  listLibrary(query: LibraryListQuery = {}): Promise<LibraryListResult> {
+    const qs = new URLSearchParams();
+    if (query.q) qs.set('q', query.q);
+    if (query.kind?.length) qs.set('kind', query.kind.join(','));
+    if (query.origin) qs.set('origin', query.origin);
+    if (query.state) qs.set('state', query.state);
+    if (query.threadId) qs.set('threadId', query.threadId);
+    if (query.starred !== undefined) qs.set('starred', String(query.starred));
+    if (query.minBytes !== undefined) qs.set('minBytes', String(query.minBytes));
+    if (query.maxBytes !== undefined) qs.set('maxBytes', String(query.maxBytes));
+    if (query.createdAfter) qs.set('createdAfter', query.createdAfter);
+    if (query.createdBefore) qs.set('createdBefore', query.createdBefore);
+    if (query.sort) qs.set('sort', query.sort);
+    if (query.cursor) qs.set('cursor', query.cursor);
+    if (query.limit) qs.set('limit', String(query.limit));
+    const suffix = qs.toString();
+    return this.request('GET', `/library${suffix ? `?${suffix}` : ''}`);
+  }
+
+  getLibraryItem(id: string): Promise<LibraryItemDTO> {
+    return this.request('GET', `/library/${encodeURIComponent(id)}`);
+  }
+
+  getLibraryStorage(): Promise<LibraryStorageSummary> {
+    return this.request('GET', '/library/storage');
+  }
+
   // --- access / invites ---
   getMe(): Promise<MeInfo> {
     return this.request('GET', '/me');
@@ -479,6 +511,9 @@ export interface CloudApi {
   listImages(query?: ListImagesQuery): Promise<ListImagesResult>;
   getImage(id: string): Promise<StudioImage>;
   deleteImage(id: string): Promise<void>;
+  listLibrary(query?: LibraryListQuery): Promise<LibraryListResult>;
+  getLibraryItem(id: string): Promise<LibraryItemDTO>;
+  getLibraryStorage(): Promise<LibraryStorageSummary>;
   getMe(): Promise<MeInfo>;
   listInvites(): Promise<InviteRecord[]>;
   createInvite(email: string): Promise<InviteRecord>;

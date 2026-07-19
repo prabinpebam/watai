@@ -1,0 +1,16 @@
+export const LIBRARY_COPY = {
+  title: 'Library',
+  searchPlaceholder: 'Search files, prompts, and chats…',
+  emptyTitle: 'Your Library is empty',
+  emptyBody: 'Files you upload and content Watai creates will appear here.',
+  filteredTitle: 'No items match these filters',
+  filteredBody: 'Clear filters or try a different search.',
+  unavailableTitle: 'We couldn’t load your Library',
+  retry: 'Retry',
+  clearFilters: 'Clear filters',
+  download: 'Download',
+  showInChat: 'Show in chat',
+  originalPrompt: 'Original prompt',
+  referenceUnavailable: 'Reference history is unavailable for this older image.',
+  noPreview: 'Preview isn’t available for this file type.',
+} as const;

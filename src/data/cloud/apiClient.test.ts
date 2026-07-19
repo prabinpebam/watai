@@ -78,6 +78,25 @@ describe('WataiApiClient', () => {
     expect(calls[0].url).toBe('https://api.test/api/threads?includeArchived=true&includeDeleted=true');
   });
 
+  it('encodes Library filters and reads detail and storage routes', async () => {
+    const { fetchImpl, calls } = stubFetch([
+      { status: 200, body: { items: [], cursor: 'next' } },
+      { status: 200, body: { id: 'item/1', state: 'active' } },
+      { status: 200, body: { activeBytes: 0, trashedBytes: 0 } },
+    ]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    await client.listLibrary({ q: 'quarterly plan', kind: ['pdf', 'document'], origin: 'uploaded', starred: true, sort: 'largest', limit: 25 });
+    await client.getLibraryItem('item/1');
+    await client.getLibraryStorage();
+
+    expect(calls.map((call) => call.url)).toEqual([
+      'https://api.test/api/library?q=quarterly+plan&kind=pdf%2Cdocument&origin=uploaded&starred=true&sort=largest&limit=25',
+      'https://api.test/api/library/item%2F1',
+      'https://api.test/api/library/storage',
+    ]);
+  });
+
   it('throws unauthorized without ever calling fetch when there is no token', async () => {
     const { fetchImpl } = stubFetch([]);
     const client = new WataiApiClient({ baseUrl, getToken: async () => null, fetchImpl });

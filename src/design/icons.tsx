@@ -59,6 +59,8 @@ const ICONS: Record<string, string> = {
   globe: 'public',
   shield: 'shield',
   database: 'database',
+  library: 'folder_open',
+  chat: 'forum',
   palette: 'palette',
   type: 'text_fields',
   tune: 'tune',

@@ -372,6 +372,22 @@ export interface LibraryListResult {
   totalApprox?: number;
 }
 
+export interface LibraryListQuery {
+  q?: string;
+  kind?: LibraryKind[];
+  origin?: 'uploaded' | 'generated' | LibraryOrigin;
+  state?: 'active' | 'trashed';
+  threadId?: string;
+  starred?: boolean;
+  minBytes?: number;
+  maxBytes?: number;
+  createdAfter?: string;
+  createdBefore?: string;
+  sort?: 'newest' | 'oldest' | 'largest' | 'name';
+  cursor?: string;
+  limit?: number;
+}
+
 export interface LibraryStorageSummary {
   activeBytes: number;
   trashedBytes: number;

@@ -35,3 +35,5 @@ documentation/library-system/inventory-runs/
 
 # Playwright TTFT bench profile
 .bench-edge/
+test-results/
+playwright-report/

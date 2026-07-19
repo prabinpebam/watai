@@ -45,6 +45,16 @@
 .btn--ghost:hover {
   background: var(--color-surface-2);
 }
+.sidebar .btn[aria-current='page'],
+.drawer .btn[aria-current='page'] {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+@media (pointer: coarse) {
+  .drawer .btn {
+    min-height: 44px;
+  }
+}
 .btn--outline {
   background: transparent;
   border-color: var(--color-border-strong);

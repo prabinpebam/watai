@@ -7,8 +7,7 @@ import { ImagesView } from '../features/images/ImagesView';
 import { Settings } from '../features/settings/Settings';
 import { Onboarding } from '../features/onboarding/Onboarding';
 import { VoiceMode } from '../features/voice/VoiceMode';
-import { IconButton, Spinner, Button } from '../design/ui';
-import { useIsExpanded } from '../lib/hooks';
+import { Spinner, Button } from '../design/ui';
 import { useUi } from '../state/store';
 import { repo, cloudApi, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync, realtime } from '../data';
 import { restoreInterruptedRuns } from '../features/chat/runStore';
@@ -16,28 +15,16 @@ import { clearApiCredentials } from '../data/secureStore';
 import { isSignedIn, signOut } from '../auth/cloudAuth';
 import { loadMe, cachedMe } from '../auth/access';
 import { newId } from '../lib/ids';
+import { LibraryView } from '../features/library/LibraryView';
+import { LibraryDetail } from '../features/library/LibraryDetail';
+import { ScreenBar } from './ScreenBar';
 
 // Dev-only chat component gallery. The dynamic import sits in a branch that is statically
 // false in production, so the chunk is tree-shaken out of the prod bundle entirely.
 const ChatGallery = import.meta.env.DEV ? lazy(() => import('../mocks/ChatGallery')) : null;
-
-/** Top bar with a menu (compact) or sidebar toggle (expanded) for non-chat screens. */
-function ScreenBar({ title }: { title: string }) {
-  const expanded = useIsExpanded();
-  const toggleDrawer = useUi((s) => s.toggleDrawer);
-  const toggleSidebar = useUi((s) => s.toggleSidebar);
-  return (
-    <div className="appbar">
-      {expanded ? (
-        <IconButton name="sidebar" label="Toggle sidebar" onClick={() => toggleSidebar()} />
-      ) : (
-        <IconButton name="menu" label="Open menu" onClick={() => toggleDrawer(true)} />
-      )}
-      <div className="appbar__title">{title}</div>
-      <div style={{ width: 'var(--size-control-md)' }} />
-    </div>
-  );
-}
+const LibraryExperienceFixture = import.meta.env.DEV
+  ? lazy(() => import('../features/library/LibraryExperienceFixture').then((module) => ({ default: module.LibraryExperienceFixture })))
+  : null;
 
 /** Recency window: reopening within this of the last activity resumes the most recent chat;
  *  beyond it, a fresh empty chat opens instead. */
@@ -315,15 +302,10 @@ export function App() {
             </>
           }
         />
-        <Route
-          path="/images"
-          element={
-            <>
-              <ScreenBar title="Images" />
-              <ImagesView />
-            </>
-          }
-        />
+        <Route path="/library" element={<LibraryView />} />
+        <Route path="/library/:itemId" element={<LibraryDetail />} />
+        <Route path="/library/create/image" element={<><ScreenBar title="Create image" /><ImagesView /></>} />
+        <Route path="/images" element={<Navigate to="/library?kind=image" replace />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/settings/:section" element={<Settings />} />
       </Route>
@@ -343,6 +325,20 @@ export function App() {
             </Suspense>
           }
         />
+      )}
+
+      {LibraryExperienceFixture && (
+        <Route
+          path="/dev/library-eval"
+          element={
+            <Suspense fallback={<div className="center-screen"><Spinner size="xl" /></div>}>
+              <LibraryExperienceFixture />
+            </Suspense>
+          }
+        >
+          <Route index element={<LibraryView />} />
+          <Route path=":itemId" element={<LibraryDetail />} />
+        </Route>
       )}
 
       <Route path="*" element={<Navigate to="/" replace />} />
