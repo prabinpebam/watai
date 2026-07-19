@@ -1,7 +1,9 @@
 # Watai Library — Proposal Specification (Draft 1)
 
-**Status:** Proposal / not an implementation contract  
-**Date:** 2026-07-19  
+**Status:** Proposal / not an implementation contract
+
+**Date:** 2026-07-19
+
 **Scope:** A unified, account-level home for files and media uploaded to or created by Watai.
 
 ---
