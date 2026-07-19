@@ -117,6 +117,29 @@ app.http('images', {
   handler: methodDispatch({ GET: (c) => c.images.list, POST: (c) => c.images.create }, invited),
 });
 
+// Account-level Library index. LSL-02 intentionally exposes reads only; lifecycle mutations land
+// in later gated slices.
+app.http('library', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'library',
+  handler: methodDispatch({ GET: (c) => c.library.list }, invited),
+});
+
+app.http('library-storage', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'library/storage',
+  handler: methodDispatch({ GET: (c) => c.library.storage }, invited),
+});
+
+app.http('library-item', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'library/{id}',
+  handler: methodDispatch({ GET: (c) => c.library.get }, invited),
+});
+
 app.http('memory', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',

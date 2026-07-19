@@ -10,6 +10,7 @@ import { CosmosSkillStore } from './adapters/cosmos/skillStore';
 import { CosmosMemoryStore } from './adapters/cosmos/memoryStore';
 import { CosmosMemoryJobStore } from './adapters/cosmos/memoryJobStore';
 import { CosmosAppConfigStore } from './adapters/cosmos/appConfigStore';
+import { CosmosLibraryStore } from './adapters/cosmos/libraryStore';
 import { AzureSasMinter } from './adapters/azure/sasMinter';
 import { AzureThreadAssetStore } from './adapters/azure/threadAssetStore';
 import { SasSkillBlobStore } from './adapters/azure/sasSkillBlobStore';
@@ -38,6 +39,7 @@ import { MemoryService } from './application/memoryService';
 import { MemoryContextService } from './application/memoryContextService';
 import { MemoryExtractionService } from './application/memoryExtractionService';
 import { MemoryModelService } from './application/memoryModelService';
+import { LibraryService } from './application/libraryService';
 import { extractMemories } from './ai/memoryExtractor';
 import { azureEmbedder } from './ai/azureEmbedder';
 import { routeTurn } from './ai/semanticRouter';
@@ -62,6 +64,7 @@ import { createSkillsController } from './http/skillsController';
 import { createNegotiateController } from './http/negotiateController';
 import { createAiProxyController } from './http/aiProxyController';
 import { createWebController } from './http/webController';
+import { createLibraryController } from './http/libraryController';
 import { WebImageService } from './application/webImageService';
 import { AppError } from './domain/errors';
 import type { TokenVerifier } from './ports/tokenVerifier';
@@ -87,6 +90,7 @@ export interface ApiContainer {
   negotiate: ReturnType<typeof createNegotiateController>;
   aiProxy: ReturnType<typeof createAiProxyController>;
   web: ReturnType<typeof createWebController>;
+  library: ReturnType<typeof createLibraryController>;
   /** Dependencies the queue-triggered run worker needs to process a job. */
   runWorker: RunWorkerDeps;
   /** Dependencies the queue-triggered image worker needs to process a job. */
@@ -133,6 +137,7 @@ export function container(): ApiContainer {
   const memoryStore = new CosmosMemoryStore();
   const memoryJobStore = new CosmosMemoryJobStore();
   const appConfigStore = new CosmosAppConfigStore();
+  const libraryStore = new CosmosLibraryStore();
   const minter = new AzureSasMinter();
   const threadAssetStore = new AzureThreadAssetStore();
   const access = new AccessService(
@@ -185,6 +190,7 @@ export function container(): ApiContainer {
   const webImageService = new WebImageService();
   const skillCatalog = new SkillCatalogService(new CosmosSkillStore(), new SasSkillBlobStore(minter), clock);
   const skillProvisioner = createSkillProvisioner(aoaiFiles);
+  const libraryService = new LibraryService(libraryStore, minter);
 
   cached = {
     verifier: buildVerifier(),
@@ -218,6 +224,7 @@ export function container(): ApiContainer {
     negotiate: createNegotiateController(signalr),
     aiProxy: createAiProxyController(aiProxyService),
     web: createWebController(webImageService),
+    library: createLibraryController(libraryService),
     runWorker: {
       runStore,
       messageStore,

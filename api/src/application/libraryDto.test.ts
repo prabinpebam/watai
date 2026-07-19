@@ -28,6 +28,8 @@ describe('Library DTO', () => {
     const dto = await toLibraryItemDto(minter, item);
     expect(dto).not.toHaveProperty('userId');
     expect(dto).not.toHaveProperty('ingestionKey');
+    expect(dto).not.toHaveProperty('blobPath');
+    expect(dto.derivatives?.[0]).not.toHaveProperty('blobPath');
     expect(dto.url).toContain('image-1.bin?read=1');
     expect(dto.thumbnailUrl).toContain('image-1.thumb.webp?read=1');
   });
@@ -42,6 +44,7 @@ describe('Library DTO', () => {
     expect(dto).not.toHaveProperty('blobPath');
     expect(dto).not.toHaveProperty('url');
     expect(dto).not.toHaveProperty('thumbnailUrl');
+    expect(dto).not.toHaveProperty('error');
   });
 
   it('degrades to safe metadata if SAS minting fails', async () => {

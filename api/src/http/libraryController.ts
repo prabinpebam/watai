@@ -1,0 +1,27 @@
+import type { LibraryService } from '../application/libraryService';
+import { identityFromClaims } from '../auth/identity';
+import { parseLibraryListQuery } from '../domain/library';
+import { respond } from './respond';
+import type { ApiRequest, HttpResult } from './types';
+
+export function createLibraryController(library: LibraryService) {
+  return {
+    list: (req: ApiRequest): Promise<HttpResult> =>
+      respond(200, async () => {
+        const { userId } = identityFromClaims(req.claims);
+        return library.list(userId, parseLibraryListQuery(req.query ?? {}));
+      }),
+
+    get: (req: ApiRequest): Promise<HttpResult> =>
+      respond(200, async () => {
+        const { userId } = identityFromClaims(req.claims);
+        return library.get(userId, req.params!.id);
+      }),
+
+    storage: (req: ApiRequest): Promise<HttpResult> =>
+      respond(200, async () => {
+        const { userId } = identityFromClaims(req.claims);
+        return library.storage(userId);
+      }),
+  };
+}

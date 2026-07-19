@@ -325,11 +325,9 @@ export interface LibraryItemDTO {
   name: string;
   mime: string;
   bytes: number;
-  blobPath?: string;
   contentHash?: string;
   derivatives?: Array<{
     kind: 'thumbnail';
-    blobPath: string;
     mime: 'image/jpeg' | 'image/webp';
     bytes: number;
     width: number;
@@ -340,7 +338,6 @@ export interface LibraryItemDTO {
   trashedAt?: string;
   purgeAfter?: string;
   purgedAt?: string;
-  error?: { code: string; message: string } | null;
   source: {
     surface: 'chat' | 'image_studio' | 'library';
     threadId?: string;

@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
+import { AppError } from '../domain/errors';
 import type { MessageRecord } from '../ports/messageStore';
 import type { ImageGenRecord } from '../ports/imageStore';
 import type { ThreadRecord } from '../ports/threadStore';
-import type { LibraryKind, LibraryOrigin } from '../domain/library';
+import { parseLibraryItem, type LibraryItemRecord, type LibraryKind, type LibraryOrigin } from '../domain/library';
 
 export interface InventoryBlob {
   name: string;
@@ -29,6 +30,7 @@ export interface InventoryCandidate {
   declaredBytes: number;
   actualBytes?: number;
   provenanceComplete: boolean;
+  projection: LibraryItemRecord;
 }
 
 export interface LibraryInventoryReport {
@@ -121,10 +123,42 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
   const serviceOnlyDocuments: LibraryInventoryReport['serviceOnlyDocuments'] = [];
   const knownExcludedPaths = new Set<string>();
 
-  const addCandidate = (args: Omit<InventoryCandidate, 'proposedId' | 'actualBytes'> & { userId: string }) => {
+  const addCandidate = (args: Omit<InventoryCandidate, 'proposedId' | 'actualBytes' | 'projection'> & {
+    userId: string;
+    name: string;
+    mime: string;
+    createdAt: string;
+    source: LibraryItemRecord['source'];
+    image?: LibraryItemRecord['image'];
+    artifact?: LibraryItemRecord['artifact'];
+  }) => {
     const blob = blobs.get(args.blobPath);
+    const id = proposedId(args.userId, args.ingestionKey);
+    let projection: LibraryItemRecord;
+    try {
+      projection = parseLibraryItem({
+        id,
+        userId: args.userId,
+        ingestionKey: args.ingestionKey,
+        state: 'active',
+        kind: args.kind,
+        origin: args.origin,
+        name: args.name,
+        mime: args.mime,
+        bytes: blob?.bytes ?? args.declaredBytes,
+        blobPath: args.blobPath,
+        createdAt: args.createdAt,
+        updatedAt: args.createdAt,
+        source: args.source,
+        ...(args.image ? { image: args.image } : {}),
+        ...(args.artifact ? { artifact: args.artifact } : {}),
+      });
+    } catch (error) {
+      const details = error instanceof AppError ? ` ${JSON.stringify(error.details)}` : '';
+      throw new Error(`Invalid Library projection for ${args.origin}/${args.sourceId}.${details}`);
+    }
     candidates.push({
-      proposedId: proposedId(args.userId, args.ingestionKey),
+      proposedId: id,
       ingestionKey: args.ingestionKey,
       origin: args.origin,
       kind: args.kind,
@@ -134,6 +168,7 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
       declaredBytes: args.declaredBytes,
       ...(blob ? { actualBytes: blob.bytes } : {}),
       provenanceComplete: args.provenanceComplete,
+      projection,
     });
   };
 
@@ -158,6 +193,23 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
         blobPath: attachment.blobPath,
         declaredBytes: attachment.bytes,
         provenanceComplete: true,
+        name: attachment.name ?? `Attachment ${attachment.id}`,
+        mime: attachment.mime,
+        createdAt: message.orderAt ?? message.createdAt,
+        source: {
+          surface: 'chat',
+          threadId: message.threadId,
+          messageId: message.id,
+          ...(thread?.title ? { threadTitleSnapshot: thread.title } : {}),
+          createdAt: message.orderAt ?? message.createdAt,
+        },
+        ...(attachment.kind === 'image' ? {
+          image: {
+            ...(attachment.width ? { width: attachment.width } : {}),
+            ...(attachment.height ? { height: attachment.height } : {}),
+            provenanceComplete: true,
+          },
+        } : {}),
       });
     }
     for (const image of message.images ?? []) {
@@ -176,6 +228,22 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
         blobPath: image.blobPath,
         declaredBytes: blobs.get(image.blobPath)?.bytes ?? 0,
         provenanceComplete: false,
+        name: `Generated image ${image.id}`,
+        mime: `image/${image.outputFormat}`,
+        createdAt: image.createdAt,
+        source: {
+          surface: 'chat',
+          threadId: message.threadId,
+          messageId: message.id,
+          ...(thread?.title ? { threadTitleSnapshot: thread.title } : {}),
+          createdAt: image.createdAt,
+        },
+        image: {
+          size: image.size,
+          format: image.outputFormat,
+          prompt: image.prompt,
+          provenanceComplete: false,
+        },
       });
     }
     for (const artifact of message.artifacts ?? []) {
@@ -194,6 +262,19 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
         blobPath: artifact.blobPath,
         declaredBytes: artifact.bytes,
         provenanceComplete: false,
+        name: artifact.name,
+        mime: artifact.mime,
+        createdAt: artifact.createdAt,
+        source: {
+          surface: 'chat',
+          threadId: message.threadId,
+          messageId: message.id,
+          ...(artifact.sourceToolCallId ? { toolCallId: artifact.sourceToolCallId } : {}),
+          ...(thread?.title ? { threadTitleSnapshot: thread.title } : {}),
+          createdAt: artifact.createdAt,
+        },
+        ...(artifact.kind === 'image' ? { image: { provenanceComplete: false } } : {}),
+        artifact: { provenanceComplete: false },
       });
     }
   }
@@ -220,6 +301,15 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
         blobPath: file.blobPath,
         declaredBytes: file.bytes,
         provenanceComplete: true,
+        name: file.name,
+        mime: file.mime ?? 'application/octet-stream',
+        createdAt: file.createdAt,
+        source: {
+          surface: 'chat',
+          threadId: thread.id,
+          threadTitleSnapshot: thread.title,
+          createdAt: file.createdAt,
+        },
       });
     }
   }
@@ -239,6 +329,20 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
       blobPath: image.blobPath,
       declaredBytes: blobs.get(image.blobPath)?.bytes ?? 0,
       provenanceComplete: !image.useReference || !!image.sourceImageId,
+      name: `Studio image ${image.id}`,
+      mime: `image/${image.outputFormat}`,
+      createdAt: image.createdAt,
+      source: { surface: 'image_studio', createdAt: image.createdAt },
+      image: {
+        size: image.size,
+        format: image.outputFormat,
+        prompt: image.prompt,
+        ...(image.revisedPrompt ? { revisedPrompt: image.revisedPrompt } : {}),
+        model: image.model,
+        ...(image.quality ? { quality: image.quality } : {}),
+        ...(image.sourceImageId ? { referenceItemIds: [proposedId(image.userId, `studio_generated_image:${image.sourceImageId}`)] } : {}),
+        provenanceComplete: !image.useReference || !!image.sourceImageId,
+      },
     });
   }
 

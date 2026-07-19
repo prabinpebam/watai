@@ -3,18 +3,30 @@ import type { SasMinter } from '../ports/sasMinter';
 
 const READ_TTL_SECONDS = 3600;
 
-export type LibraryItemDTO = Omit<LibraryItemRecord, 'userId' | 'ingestionKey'> & {
+export type LibraryItemDTO = Omit<LibraryItemRecord, 'userId' | 'ingestionKey' | 'blobPath' | 'derivatives' | 'error'> & {
+  derivatives?: Array<Omit<NonNullable<LibraryItemRecord['derivatives']>[number], 'blobPath'>>;
   url?: string;
   thumbnailUrl?: string;
 };
 
 /** Safe client projection. Internal ownership/idempotency fields and unusable blob paths never leave the API. */
 export async function toLibraryItemDto(minter: SasMinter, record: LibraryItemRecord): Promise<LibraryItemDTO> {
-  const { userId: _userId, ingestionKey: _ingestionKey, ...safe } = record;
-  const dto: LibraryItemDTO = { ...safe };
+  const {
+    userId: _userId,
+    ingestionKey: _ingestionKey,
+    blobPath: _blobPath,
+    error: _error,
+    derivatives,
+    ...safe
+  } = record;
+  const dto: LibraryItemDTO = {
+    ...safe,
+    ...(derivatives?.length
+      ? { derivatives: derivatives.map(({ blobPath: _derivativePath, ...derivative }) => derivative) }
+      : {}),
+  };
   const readable = record.state === 'active' || record.state === 'trashed';
   if (!readable || !record.blobPath) {
-    delete dto.blobPath;
     return dto;
   }
   try {

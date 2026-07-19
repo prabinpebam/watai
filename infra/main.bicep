@@ -149,6 +149,23 @@ resource containers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containe
   }
 ]
 
+resource libraryContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: cosmosDb
+  name: 'library'
+  properties: {
+    resource: {
+      id: 'library'
+      partitionKey: { paths: [ '/userId' ], kind: 'Hash' }
+      uniqueKeyPolicy: {
+        uniqueKeys: [
+          { paths: [ '/ingestionKey' ] }
+        ]
+      }
+      indexingPolicy: { indexingMode: 'consistent', automatic: true }
+    }
+  }
+}
+
 // ---------------------------------------------------------------- Storage (media + functions runtime)
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: 'st${namePrefix}${suffix}'
