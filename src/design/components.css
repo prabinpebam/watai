@@ -2380,6 +2380,14 @@ button.source-chip:hover {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-4);
+  /* iOS 11.0–11.1 used constant(); 11.2+ uses env(). Keep both in this order so modern
+     Safari overrides the legacy declaration, while non-overlay browsers retain 12px. */
+  padding-top: calc(var(--space-4) + constant(safe-area-inset-top));
+  padding-left: calc(var(--space-4) + constant(safe-area-inset-left));
+  padding-right: calc(var(--space-4) + constant(safe-area-inset-right));
+  padding-top: calc(var(--space-4) + env(safe-area-inset-top));
+  padding-left: calc(var(--space-4) + env(safe-area-inset-left));
+  padding-right: calc(var(--space-4) + env(safe-area-inset-right));
   color: var(--color-text-on-media);
 }
 .viewer__stage {
