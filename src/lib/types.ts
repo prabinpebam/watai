@@ -69,6 +69,7 @@ export type MemoryKind =
 export interface Attachment {
   id: Id;
   libraryItemId?: Id;
+  reuseMode?: 'attach' | 'reference';
   kind: 'image' | 'audio' | 'file';
   localBlobKey?: string;
   blobPath?: string;

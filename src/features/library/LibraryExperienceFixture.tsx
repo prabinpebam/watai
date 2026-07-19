@@ -58,6 +58,8 @@ const ITEMS: LibraryItemDTO[] = [
 ];
 
 const consumedErrors = new Set<string>();
+const pendingUploads = new Map<string, LibraryItemDTO>();
+let uploadSequence = 0;
 
 function fixtureMode(): string | null {
   return new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('fixture');
@@ -74,7 +76,7 @@ function matches(item: LibraryItemDTO, query: LibraryListQuery): boolean {
   return true;
 }
 
-const fixtureApi: LibraryReadApi = {
+export const libraryFixtureApi: LibraryReadApi = {
   async listLibrary(query = {}) {
     await new Promise((resolve) => window.setTimeout(resolve, 80));
     const mode = fixtureMode();
@@ -124,11 +126,30 @@ const fixtureApi: LibraryReadApi = {
       items: ITEMS.filter((item) => item.image?.referenceItemIds?.includes(id) || item.artifact?.sourceItemIds?.includes(id)),
     };
   },
+  async reserveLibraryUpload(body) {
+    const id = `fixture-upload-${++uploadSequence}`;
+    const item: LibraryItemDTO = {
+      id, state: 'pending', kind: body.mime === 'application/pdf' ? 'pdf' : body.mime.startsWith('image/') ? 'image' : 'text',
+      origin: 'library_upload', name: body.name, mime: body.mime, bytes: body.bytes,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), source: { surface: 'library', createdAt: new Date().toISOString() },
+      ...(body.mime.startsWith('image/') ? { image: { provenanceComplete: true } } : {}),
+    };
+    pendingUploads.set(id, item);
+    return { item, upload: { url: `https://fixture.blob/${id}`, expiresAt: '2099-01-01T00:00:00Z', headers: { 'x-ms-blob-type': 'BlockBlob', 'Content-Type': body.mime, 'x-ms-meta-contenthash': body.contentHash } } };
+  },
+  async completeLibraryUpload(id) {
+    const pending = pendingUploads.get(id);
+    if (!pending) throw new Error('Missing fixture reservation');
+    const active = { ...pending, state: 'active' as const, updatedAt: new Date().toISOString(), url: 'data:application/octet-stream;base64,AA==' };
+    ITEMS.unshift(active);
+    pendingUploads.delete(id);
+    return active;
+  },
 };
 
 export function LibraryExperienceFixture() {
   return (
-    <LibraryRuntimeProvider api={fixtureApi} basePath="/dev/library-eval" createImagePath="/dev/library-eval?kind=image">
+    <LibraryRuntimeProvider api={libraryFixtureApi} basePath="/dev/library-eval" createImagePath="/dev/library-eval?kind=image" newChatPath={(threadId) => `/dev/library-new-chat-eval/${threadId}`}>
       <AppShell libraryPath="/dev/library-eval" />
       <output className="sr-only" data-testid="fixture-summary">{ITEMS.length} items · {formatBytes(ITEMS.reduce((sum, item) => sum + item.bytes, 0))}</output>
     </LibraryRuntimeProvider>

@@ -232,6 +232,13 @@ app.http('thread-files', {
   handler: methodDispatch({ GET: (c) => c.threadFiles.list, POST: (c) => c.threadFiles.upload }, invited),
 });
 
+app.http('thread-library-file', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'threads/{id}/files/library',
+  handler: methodDispatch({ POST: (c) => c.threadFiles.attachLibrary }, invited),
+});
+
 app.http('thread-file-item', {
   methods: ['DELETE'],
   authLevel: 'anonymous',

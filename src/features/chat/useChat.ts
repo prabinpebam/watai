@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { repo, cloudApi, skillsApi, syncNow } from '../../data';
 import { newId } from '../../lib/ids';
 import { getDeviceId } from '../../lib/device';
-import { useUi } from '../../state/store';
+import { useUi, type StagedLibraryItem } from '../../state/store';
 import { DEFAULT_CHAT_MODEL, useRuns } from './runStore';
 import { orderMessages } from './ordering';
 import { lockHeldByOther } from './lock';
@@ -179,10 +179,11 @@ export function useChat(threadId: string, temporary = false) {
   const messages = useMemo(() => orderMessages(persisted, run?.message), [persisted, run]);
 
   const send = useCallback(
-    async (text: string, files?: File[], skillNames?: string[]) => {
+    async (text: string, files?: File[], skillNames?: string[], librarySelections?: StagedLibraryItem[]) => {
       const trimmed = text.trim();
       const hasFiles = !!files && files.length > 0;
-      if (!trimmed && !hasFiles) return;
+      const hasLibraryItems = !!librarySelections && librarySelections.length > 0;
+      if (!trimmed && !hasFiles && !hasLibraryItems) return;
       if (busyRef.current) return;
       if (useRuns.getState().isRunning(threadId)) return;
       // Another device is mid-generation: block sending (the composer also disables it) so the
@@ -201,7 +202,19 @@ export function useChat(threadId: string, temporary = false) {
         await repo.createThread({ id: threadId, title: 'New chat', temporary });
         useUi.getState().bumpThreads();
       }
-      const attachments = hasFiles ? await persistAttachments(files!) : undefined;
+      const uploadedAttachments = hasFiles ? await persistAttachments(files!) : [];
+      const libraryAttachments: Attachment[] = (librarySelections ?? []).map(({ item, mode }) => ({
+        id: newId(),
+        libraryItemId: item.id,
+        reuseMode: mode,
+        kind: item.kind === 'image' ? 'image' : item.kind === 'audio' ? 'audio' : 'file',
+        mime: item.mime,
+        bytes: item.bytes,
+        name: item.userMetadata?.title ?? item.name,
+        ...(item.image?.width ? { width: item.image.width } : {}),
+        ...(item.image?.height ? { height: item.image.height } : {}),
+      }));
+      const attachments = [...uploadedAttachments, ...libraryAttachments];
       const userMsg: Message = {
         id: newId(),
         threadId,
@@ -209,7 +222,7 @@ export function useChat(threadId: string, temporary = false) {
         content: trimmed,
         status: 'complete',
         createdAt: new Date().toISOString(),
-        ...(attachments && attachments.length ? { attachments } : {}),
+        ...(attachments.length ? { attachments } : {}),
       };
       setPersisted((prev) => [...prev, userMsg]); // optimistic — reload dedupes by id
       await repo.appendMessage(userMsg);
@@ -221,16 +234,19 @@ export function useChat(threadId: string, temporary = false) {
         // Image attachments must reach the server message before the run reads history (the run's
         // own user-turn append is idempotent and would otherwise win with no image). Flush sync so
         // the blob is uploaded and the synced message carries its blobPath the worker can read.
-        const hasImages = (files ?? []).some((f) => f.type.startsWith('image/'));
+        const hasImages = (files ?? []).some((f) => f.type.startsWith('image/'))
+          || (librarySelections ?? []).some(({ item }) => item.kind === 'image');
         if (hasImages) await syncNow().catch(() => {});
         // Thread-scoped file search: index any non-image docs into the thread's vector store so the
         // model can answer questions about them via file_search. Blocks the submit until indexed.
         const docs = (files ?? []).filter((f) => !f.type.startsWith('image/'));
-        if (docs.length) {
+        const libraryDocs = (librarySelections ?? []).filter(({ item }) => !['image', 'audio', 'archive'].includes(item.kind));
+        const documentCount = docs.length + libraryDocs.length;
+        if (documentCount) {
           const toast = useUi.getState().pushToast;
           busyRef.current = true;
           setIndexing(true);
-          toast(`Indexing ${docs.length} file${docs.length === 1 ? '' : 's'}…`, 'info');
+          toast(`Indexing ${documentCount} file${documentCount === 1 ? '' : 's'}…`, 'info');
           try {
             // The AI key lives in the server vault, so upload the docs to the thread's vector store
             // via the API. The server creates the store on first upload and records it on the thread.
@@ -247,9 +263,17 @@ export function useChat(threadId: string, temporary = false) {
                 /* counted as failed below */
               }
             }
+            for (const { item } of libraryDocs) {
+              try {
+                await cloudApi.attachLibraryThreadFile(threadId, item.id);
+                indexed++;
+              } catch {
+                /* counted as failed below */
+              }
+            }
             await syncNow().catch(() => {});
             useUi.getState().bumpThread(threadId);
-            const failed = docs.length - indexed;
+            const failed = documentCount - indexed;
             if (failed && !indexed) toast('Could not index the file(s)', 'error');
             else if (failed) toast(`${indexed} file(s) ready, ${failed} failed`, 'info');
             else toast('File ready — you can ask about it', 'success');

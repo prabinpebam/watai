@@ -313,7 +313,7 @@ describe('processRun', () => {
       content: 'Use this exact sprite template and character reference.',
       status: 'complete',
       attachments: [
-        { id: 'template-img', kind: 'image', blobPath: 'userA/t1/template.png', mime: 'image/png', bytes: 10, name: 'template.png' },
+        { id: 'template-img', kind: 'image', blobPath: 'userA/t1/template.png', mime: 'image/png', bytes: 10, name: 'template.png', reuseMode: 'reference' },
         { id: 'character-img', kind: 'image', blobPath: 'userA/t1/character.png', mime: 'image/png', bytes: 10, name: 'character.png' },
       ],
       createdAt: '2026-06-01T00:00:01Z',
@@ -359,7 +359,7 @@ describe('processRun', () => {
 
     expect(routeParams!.imageIds).toEqual(['template-img', 'character-img', 'generated-v1']);
     const routedTranscript = routeParams!.turns.map((turn) => turn.text).join('\n');
-    expect(routedTranscript).toContain('[Uploaded image id="template-img" name="template.png"]');
+    expect(routedTranscript).toContain('[Uploaded image id="template-img" name="template.png" reuse_mode=reference]');
     expect(routedTranscript).toContain('[Uploaded image id="character-img" name="character.png"]');
     expect(routedTranscript).toContain('[Generated image id="generated-v1"');
     expect(routedTranscript).toContain('Make another one with eight groups in two columns.');

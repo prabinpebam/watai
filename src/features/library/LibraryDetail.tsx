@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { LibraryItemDTO } from '../../data/cloud/types';
-import { Button, InlineAlert, Spinner } from '../../design/ui';
+import { Button, IconButton, InlineAlert, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { saveFile } from '../../lib/saveFile';
 import { Markdown } from '../chat/Markdown';
 import { LIBRARY_COPY } from './content';
 import { formatBytes, formatDate, iconForKind, itemTitle, kindLabel, originLabel } from './format';
 import { useLibraryRuntime } from './LibraryApi';
+import { useUi } from '../../state/store';
+import { newId } from '../../lib/ids';
+import { canUseLibraryItem } from './LibraryPicker';
+import { useIsExpanded } from '../../lib/hooks';
 import './library.css';
 
 function useTextPreview(item: LibraryItemDTO | null): { text?: string; error?: boolean; loading: boolean } {
@@ -85,7 +89,8 @@ function Preview({ item }: { item: LibraryItemDTO }) {
 }
 
 export function LibraryDetail() {
-  const { api, basePath } = useLibraryRuntime();
+  const { api, basePath, newChatPath } = useLibraryRuntime();
+  const expanded = useIsExpanded();
   const { itemId = '' } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -96,6 +101,7 @@ export function LibraryDetail() {
   const [references, setReferences] = useState<LibraryItemDTO[]>([]);
   const [derived, setDerived] = useState<LibraryItemDTO[]>([]);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const stageLibraryItems = useUi((state) => state.stageLibraryItems);
   const state = location.state as { backTo?: string; focusId?: string } | null;
   const backTo = state?.backTo ?? basePath;
 
@@ -137,6 +143,12 @@ export function LibraryDetail() {
     setDownloading(true);
     try { await saveFile(item.url, item.name); } finally { setDownloading(false); }
   };
+  const useInNewChat = () => {
+    if (!canUseLibraryItem(item!)) return;
+    const threadId = newId();
+    stageLibraryItems(threadId, [{ item: item!, mode: 'attach' }]);
+    navigate(newChatPath(threadId));
+  };
 
   if (loading) return <section className="library-detail"><div className="library-loading"><Spinner size="lg" /><span>Loading item</span></div></section>;
   if (error || !item) return (
@@ -151,7 +163,14 @@ export function LibraryDetail() {
       <div className="library-detail__bar">
         <Button variant="ghost" icon="chevron-left" onClick={goBack}>Back</Button>
         <h1 id="library-detail-title" ref={headingRef} tabIndex={-1}>{itemTitle(item)}</h1>
-        <Button variant="primary" icon="download" loading={downloading} disabled={!item.url} onClick={download}>{LIBRARY_COPY.download}</Button>
+        <div className="library-detail__actions">
+          {canUseLibraryItem(item) && (expanded
+            ? <Button variant="outline" icon="chat" onClick={useInNewChat}>Use in new chat</Button>
+            : <IconButton name="chat" label="Use in new chat" onClick={useInNewChat} />)}
+          {expanded
+            ? <Button variant="primary" icon="download" loading={downloading} disabled={!item.url} onClick={download}>{LIBRARY_COPY.download}</Button>
+            : <IconButton name="download" label={downloading ? 'Downloading' : LIBRARY_COPY.download} variant="accent" disabled={!item.url || downloading} onClick={download} />}
+        </div>
       </div>
       <div className="library-detail__scroll">
         <div className="library-detail__layout">

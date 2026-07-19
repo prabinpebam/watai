@@ -278,8 +278,9 @@ export interface ImageRecord {
 export interface AttachmentRecord {
   id: string;
   libraryItemId?: string;
+  reuseMode?: 'attach' | 'reference';
   kind: 'image' | 'audio' | 'file';
-  blobPath: string;
+  blobPath?: string;
   mime: string;
   bytes: number;
   name?: string;
@@ -384,6 +385,11 @@ export interface LibraryListResult {
 export interface LibraryLineageResult {
   items: LibraryItemDTO[];
   cursor?: string;
+}
+
+export interface LibraryUploadReservation {
+  item: LibraryItemDTO;
+  upload: { url: string; expiresAt: string; headers: Record<string, string> };
 }
 
 export interface LibraryListQuery {
@@ -780,8 +786,9 @@ export function messageFromRecord(r: MessageRecord): Message {
           attachments: r.attachments.map((a) => ({
             id: a.id,
             ...(a.libraryItemId !== undefined ? { libraryItemId: a.libraryItemId } : {}),
+            ...(a.reuseMode !== undefined ? { reuseMode: a.reuseMode } : {}),
             kind: a.kind,
-            blobPath: a.blobPath,
+            ...(a.blobPath !== undefined ? { blobPath: a.blobPath } : {}),
             mime: a.mime,
             bytes: a.bytes,
             ...(a.name !== undefined ? { name: a.name } : {}),
@@ -832,12 +839,13 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
       ...(i.provenanceComplete !== undefined ? { provenanceComplete: i.provenanceComplete } : {}),
     }));
   const uploadedAtts: AttachmentRecord[] = (m.attachments ?? [])
-    .filter((a): a is typeof a & { blobPath: string } => !!a.blobPath)
+    .filter((a) => !!a.blobPath || !!a.libraryItemId)
     .map((a) => ({
       id: a.id,
       ...(a.libraryItemId !== undefined ? { libraryItemId: a.libraryItemId } : {}),
+      ...(a.reuseMode !== undefined ? { reuseMode: a.reuseMode } : {}),
       kind: a.kind,
-      blobPath: a.blobPath,
+      ...(a.blobPath !== undefined ? { blobPath: a.blobPath } : {}),
       mime: a.mime,
       bytes: a.bytes,
       ...(a.name !== undefined ? { name: a.name } : {}),

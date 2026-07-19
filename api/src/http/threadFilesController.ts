@@ -42,6 +42,18 @@ export function createThreadFilesController(svc: ThreadFilesService, signalr?: S
         return file;
       }),
 
+    attachLibrary: (req: ApiRequest): Promise<HttpResult> =>
+      respond(201, async () => {
+        const { userId } = identityFromClaims(req.claims);
+        const itemId = typeof (req.body as { itemId?: unknown } | undefined)?.itemId === 'string'
+          ? String((req.body as { itemId: string }).itemId)
+          : '';
+        if (!itemId) throw new AppError('validation', 'A Library item id is required.');
+        const file = await svc.attachLibraryItem(userId, req.params!.id, itemId);
+        await pushThreadFiles(userId, req.params!.id);
+        return file;
+      }),
+
     remove: (req: ApiRequest): Promise<HttpResult> =>
       respond(204, async () => {
         const { userId } = identityFromClaims(req.claims);

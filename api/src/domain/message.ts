@@ -146,15 +146,17 @@ export const attachmentSchema = z
   .object({
     id: z.string().min(1).max(64),
     libraryItemId: z.string().min(1).max(64).optional(),
+    reuseMode: z.enum(['attach', 'reference']).optional(),
     kind: z.enum(['image', 'audio', 'file']),
-    blobPath: z.string().min(1).max(512),
+    blobPath: z.string().min(1).max(512).optional(),
     mime: z.string().min(1).max(255),
     bytes: z.number().int().nonnegative(),
     name: z.string().max(400).optional(),
     width: z.number().int().positive().optional(),
     height: z.number().int().positive().optional(),
   })
-  .strict();
+  .strict()
+  .refine((attachment) => !!attachment.blobPath || !!attachment.libraryItemId, 'Attachment requires a blob path or Library item.');
 
 export type MessageAttachment = z.infer<typeof attachmentSchema>;
 

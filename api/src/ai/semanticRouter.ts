@@ -64,6 +64,7 @@ export function semanticRouterSystemPrompt(availableActions: SemanticAction[]): 
     'You are the routing manager for a tool-using assistant. Read the ENTIRE conversation, including stable image IDs embedded in turn metadata, and choose how the assistant must fulfill the latest user turn.',
     'Resolve references such as “this,” “the previous one,” “use both,” and “make another” from conversation chronology and prior outputs. Route by the user’s intended result and established workflow, not by isolated words. If a prior turn promised an artifact but did not actually produce one, route the action that will produce it now.',
     'Choose exactly one capability. For an image edit or variation, return every relevant image ID from the thread; for a new image, return an empty reference list. Never claim an artifact is complete through respond.',
+    'Transcript image metadata may include reuse_mode=reference or reuse_mode=attach. Treat reference as an explicit request to use that image in image generation when the latest turn requests image creation/editing; attach means vision/analysis context unless the user separately asks to transform it.',
     `Available capabilities:\n${capabilities}`,
   ].join('\n\n');
 }

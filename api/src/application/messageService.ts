@@ -4,6 +4,7 @@ import type { MessageListOptions, MessageRecord, MessageStore } from '../ports/m
 import type { ThreadRecord, ThreadStore } from '../ports/threadStore';
 import type { ServiceClock } from './threadService';
 import { libraryItemIdFor } from '../domain/library';
+import type { LibraryStore } from '../ports/libraryStore';
 
 export interface MemoryExtractionScheduler {
   enqueueAfterMessage(record: MessageRecord, thread: ThreadRecord): Promise<void>;
@@ -20,6 +21,7 @@ export class MessageService {
     private readonly messageStore: MessageStore,
     private readonly clock: ServiceClock,
     private readonly memoryExtraction?: MemoryExtractionScheduler,
+    private readonly libraryStore?: LibraryStore,
   ) {}
 
   private async requireOwnThread(userId: string, threadId: string): Promise<ThreadRecord> {
@@ -38,6 +40,28 @@ export class MessageService {
     if (existing) return existing; // idempotent append (sync retry safe)
 
     const ts = this.clock.now();
+    const attachments = input.attachments?.length
+      ? await Promise.all(input.attachments.map(async (attachment) => {
+          if (!attachment.libraryItemId) return attachment;
+          if (!this.libraryStore) throw new AppError('conflict', 'Library reuse is unavailable.');
+          const item = await this.libraryStore.get(userId, attachment.libraryItemId);
+          if (!item) throw new AppError('not_found', 'Library item not found.');
+          if (item.state !== 'active' || !item.blobPath) throw new AppError('conflict', 'Library item is not available for reuse.');
+          const kind = item.kind === 'image' ? 'image' as const : item.kind === 'audio' ? 'audio' as const : 'file' as const;
+          return {
+            id: attachment.id,
+            libraryItemId: item.id,
+            ...(attachment.reuseMode ? { reuseMode: attachment.reuseMode } : {}),
+            kind,
+            blobPath: item.blobPath,
+            mime: item.mime,
+            bytes: item.bytes,
+            name: item.userMetadata?.title ?? item.name,
+            ...(item.image?.width ? { width: item.image.width } : {}),
+            ...(item.image?.height ? { height: item.image.height } : {}),
+          };
+        }))
+      : undefined;
     const record: MessageRecord = {
       id,
       threadId,
@@ -52,8 +76,8 @@ export class MessageService {
             libraryItemId: image.libraryItemId ?? libraryItemIdFor(userId, 'chat_generated_image', image.id),
           })) }
         : {}),
-      ...(input.attachments && input.attachments.length
-        ? { attachments: input.attachments.map((attachment) => ({
+      ...(attachments && attachments.length
+        ? { attachments: attachments.map((attachment) => ({
             ...attachment,
             libraryItemId: attachment.libraryItemId ?? libraryItemIdFor(userId, 'chat_attachment', attachment.id),
           })) }

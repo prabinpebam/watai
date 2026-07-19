@@ -216,6 +216,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
       )}
       <div className="composer-slot" ref={composerSlotRef}>
         <Composer
+          threadId={threadId}
           value={draft}
           onChange={(v) => setDraft(threadId, v)}
           onSend={send}

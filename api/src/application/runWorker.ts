@@ -317,7 +317,7 @@ async function buildTurns(
     for (const attachment of m.attachments ?? []) {
       if (attachment.kind !== 'image' || !attachment.blobPath) continue;
       imageMetadata.push(
-        `[Uploaded image id=${JSON.stringify(attachment.id)}${attachment.name ? ` name=${JSON.stringify(attachment.name)}` : ''}]`,
+        `[Uploaded image id=${JSON.stringify(attachment.id)}${attachment.name ? ` name=${JSON.stringify(attachment.name)}` : ''}${attachment.reuseMode ? ` reuse_mode=${attachment.reuseMode}` : ''}]`,
       );
     }
     for (const image of m.images ?? []) {

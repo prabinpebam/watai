@@ -181,10 +181,18 @@ export function container(): ApiContainer {
     signalr: signalr ?? undefined,
     clock,
   });
-  const messageService = new MessageService(threadStore, messageStore, clock, memoryExtractionService);
+  const messageService = new MessageService(threadStore, messageStore, clock, memoryExtractionService, libraryStore);
   const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
   const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock, {
     uploadOriginal: makeUploadImage(assetService),
+    resolveLibraryItem: async (userId, itemId) => {
+      const item = await libraryStore.get(userId, itemId);
+      if (!item || item.state !== 'active' || !item.blobPath || ['image', 'audio', 'archive'].includes(item.kind)) return null;
+      const { url } = await minter.mint({ blobPath: item.blobPath, op: 'read', contentType: item.mime, ttlSeconds: 300 });
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      return { name: item.userMetadata?.title ?? item.name, mime: item.mime, bytes: new Uint8Array(await response.arrayBuffer()) };
+    },
   });
   const aiProxyService = new AiProxyService(credentialService);
   const webImageService = new WebImageService();

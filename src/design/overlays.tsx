@@ -28,11 +28,36 @@ export function Modal({ title, onClose, children, footer, adaptive = true }: Mod
   const expanded = useIsExpanded();
   useEscape(onClose);
   const asSheet = adaptive && !expanded;
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const selector = 'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex="-1"])';
+    const focusable = () => [...dialog.querySelectorAll<HTMLElement>(selector)].filter((element) => element.getClientRects().length > 0);
+    if (!dialog.contains(document.activeElement)) focusable()[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    dialog.addEventListener('keydown', onKeyDown);
+    return () => dialog.removeEventListener('keydown', onKeyDown);
+  }, [asSheet]);
 
   const body = asSheet ? (
     <>
       <div className="drawer-scrim" onClick={onClose} />
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
+      <div ref={dialogRef} className="sheet" role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet__grip" />
         {title && (
           <div className="modal__header">
@@ -48,7 +73,7 @@ export function Modal({ title, onClose, children, footer, adaptive = true }: Mod
     <>
       <div className="scrim" onClick={onClose} />
       <div className="modal">
-        <div className="modal__card" role="dialog" aria-modal="true" aria-label={title}>
+        <div ref={dialogRef} className="modal__card" role="dialog" aria-modal="true" aria-label={title}>
           {title && (
             <div className="modal__header">
               <div className="modal__title">{title}</div>

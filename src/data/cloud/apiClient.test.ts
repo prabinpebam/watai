@@ -84,6 +84,9 @@ describe('WataiApiClient', () => {
       { status: 200, body: { id: 'item/1', state: 'active' } },
       { status: 200, body: { activeBytes: 0, trashedBytes: 0 } },
       { status: 200, body: { items: [] } },
+      { status: 201, body: { fileId: 'f1', libraryItemId: 'item/1' } },
+      { status: 201, body: { item: { id: 'upload-1' }, upload: { url: 'https://blob.test', headers: {} } } },
+      { status: 200, body: { item: { id: 'upload-1', state: 'active' } } },
     ]);
     const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
 
@@ -91,12 +94,18 @@ describe('WataiApiClient', () => {
     await client.getLibraryItem('item/1');
     await client.getLibraryStorage();
     await client.getLibraryLineage('item/1', 'references', 'next');
+    await client.attachLibraryThreadFile('thread/1', 'item/1');
+    await client.reserveLibraryUpload({ name: 'a.pdf', mime: 'application/pdf', bytes: 1, contentHash: `sha256:${'a'.repeat(64)}` });
+    await client.completeLibraryUpload('upload-1', { bytes: 1, contentHash: `sha256:${'a'.repeat(64)}` });
 
     expect(calls.map((call) => call.url)).toEqual([
       'https://api.test/api/library?q=quarterly+plan&kind=pdf%2Cdocument&origin=uploaded&starred=true&sort=largest&limit=25',
       'https://api.test/api/library/item%2F1',
       'https://api.test/api/library/storage',
       'https://api.test/api/library/item%2F1/lineage?direction=references&cursor=next',
+      'https://api.test/api/threads/thread%2F1/files/library',
+      'https://api.test/api/library/uploads',
+      'https://api.test/api/library/upload-1/uploads/complete',
     ]);
   });
 

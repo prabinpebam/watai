@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 import type { LibraryItemDTO } from '../../data/cloud/types';
 import { LibraryDetail } from './LibraryDetail';
+import { useUi } from '../../state/store';
 
 const mocks = vi.hoisted(() => ({
   getLibraryItem: vi.fn(),
@@ -12,6 +13,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../data', () => ({ cloudApi: { getLibraryItem: mocks.getLibraryItem, getLibraryLineage: mocks.getLibraryLineage } }));
 vi.mock('../../lib/saveFile', () => ({ saveFile: mocks.saveFile }));
+vi.mock('../../lib/hooks', async () => {
+  const actual = await vi.importActual<typeof import('../../lib/hooks')>('../../lib/hooks');
+  return { ...actual, useIsExpanded: () => true };
+});
 
 const image: LibraryItemDTO = {
   id: 'image-1',
@@ -49,6 +54,7 @@ beforeEach(() => {
   mocks.saveFile.mockReset().mockResolvedValue(undefined);
   mocks.getLibraryItem.mockResolvedValue(image);
   mocks.getLibraryLineage.mockReset().mockResolvedValue({ items: [] });
+  useUi.setState({ stagedLibraryByThread: {} });
   Object.assign(navigator, { clipboard: { writeText: vi.fn(async () => undefined) } });
 });
 
@@ -98,5 +104,15 @@ describe('LibraryDetail', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/library/reference');
     await waitFor(() => expect(mocks.getLibraryItem).toHaveBeenLastCalledWith('reference'));
     await screen.findByRole('heading', { name: 'A launch poster' });
+  });
+
+  it('stages a compatible item in a lazy new chat without sending it', async () => {
+    renderDetail();
+    await screen.findByRole('heading', { name: 'A launch poster' });
+    fireEvent.click(screen.getByRole('button', { name: 'Use in new chat' }));
+    const location = screen.getByTestId('location').textContent ?? '';
+    expect(location).toMatch(/^\/c\//);
+    const threadId = location.slice('/c/'.length);
+    expect(useUi.getState().stagedLibraryByThread[threadId]).toEqual([{ item: image, mode: 'attach' }]);
   });
 });

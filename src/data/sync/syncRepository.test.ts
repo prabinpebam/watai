@@ -487,6 +487,9 @@ class FakeCloud implements CloudApi {
   async uploadThreadFile(_threadId: string, body: { name: string; mime: string; dataBase64: string }) {
     return { fileId: 'f1', name: body.name, bytes: 1, status: 'ready' as const, createdAt: this.now() };
   }
+  async attachLibraryThreadFile(_threadId: string, itemId: string) {
+    return { fileId: `library-${itemId}`, libraryItemId: itemId, name: 'Library file', bytes: 1, status: 'ready' as const, createdAt: this.now() };
+  }
   async deleteThreadFile() {}
   async transcribeAudio() {
     return { text: '' };
@@ -533,6 +536,12 @@ class FakeCloud implements CloudApi {
   }
   async getLibraryLineage() {
     return { items: [] };
+  }
+  reserveLibraryUpload(): Promise<never> {
+    return Promise.reject(new Error('not implemented'));
+  }
+  completeLibraryUpload(): Promise<never> {
+    return Promise.reject(new Error('not implemented'));
   }
 }
 

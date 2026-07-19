@@ -5,6 +5,8 @@ import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import { InMemoryMessageStore } from '../adapters/memory/messageStore';
 import { AppError } from '../domain/errors';
 import { libraryItemIdFor } from '../domain/library';
+import { libraryFixture } from '../test/libraryFixtures';
+import type { LibraryStore } from '../ports/libraryStore';
 
 function makeCtx() {
   const threadStore = new InMemoryThreadStore();
@@ -123,6 +125,30 @@ describe('MessageService.append', () => {
       attachments: [{ id: 'att-1', kind: 'file', blobPath: 'userA/t/att-1.pdf', mime: 'application/pdf', bytes: 12 }],
     });
     expect(msg.attachments?.[0].libraryItemId).toBe(libraryItemIdFor('userA', 'chat_attachment', 'att-1'));
+  });
+
+  it('resolves an active Library attachment server-side without copying its blob', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const item = libraryFixture({ id: 'lib-1', kind: 'pdf', origin: 'library_upload', state: 'active', blobPath: 'userA/library/lib-1.pdf', name: 'Source.pdf', mime: 'application/pdf', bytes: 44 });
+    const libraryStore = { get: async (userId: string, id: string) => userId === 'userA' && id === item.id ? item : null } as unknown as LibraryStore;
+    const service = new MessageService(ctx.threadStore, ctx.messageStore, { newId: () => 'm', now: () => '2026-01-01T00:00:00Z' }, undefined, libraryStore);
+    const message = await service.append('userA', thread.id, {
+      role: 'user', content: 'Read this',
+      attachments: [{ id: 'selection-1', libraryItemId: item.id, kind: 'file', mime: item.mime, bytes: item.bytes, reuseMode: 'attach' }],
+    });
+    expect(message.attachments?.[0]).toMatchObject({ libraryItemId: item.id, blobPath: item.blobPath, name: 'Source.pdf', reuseMode: 'attach' });
+    expect(libraryStore.get).toBeDefined();
+  });
+
+  it('rejects reuse of a trashed Library item', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const item = libraryFixture({ id: 'lib-trash', kind: 'pdf', origin: 'library_upload', state: 'trashed' });
+    const libraryStore = { get: async () => item } as unknown as LibraryStore;
+    const service = new MessageService(ctx.threadStore, ctx.messageStore, { newId: () => 'm', now: () => '2026-01-01T00:00:00Z' }, undefined, libraryStore);
+    await expect(service.append('userA', thread.id, {
+      role: 'user', content: 'Read this',
+      attachments: [{ id: 'selection-1', libraryItemId: item.id, kind: 'file', mime: item.mime, bytes: item.bytes }],
+    })).rejects.toMatchObject({ code: 'conflict' });
   });
 
   it('persists memoryRefs for assistant messages', async () => {

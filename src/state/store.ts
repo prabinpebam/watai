@@ -2,6 +2,12 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { CapabilityMatrix, Citation, Density, TextScale, Theme, ThreadLock, Toast } from '../lib/types';
 import { newId } from '../lib/ids';
+import type { LibraryItemDTO } from '../data/cloud/types';
+
+export interface StagedLibraryItem {
+  item: LibraryItemDTO;
+  mode: 'attach' | 'reference';
+}
 
 interface StreamState {
   status: 'idle' | 'pending' | 'streaming' | 'stopped' | 'error';
@@ -60,6 +66,7 @@ interface UiState {
   filesPane: string | null;
   /** Files staged into the composer (e.g. a web image's bytes via "Use") — transient. */
   stagedFiles: File[];
+  stagedLibraryByThread: Record<string, StagedLibraryItem[]>;
 
   setTheme: (t: Theme) => void;
   setTextScale: (s: TextScale) => void;
@@ -90,6 +97,9 @@ interface UiState {
   closeFilesPane: () => void;
   stageFiles: (files: File[]) => void;
   clearStagedFiles: () => void;
+  stageLibraryItems: (threadId: string, items: StagedLibraryItem[]) => void;
+  removeStagedLibraryItem: (threadId: string, itemId: string) => void;
+  clearStagedLibraryItems: (threadId: string) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -119,6 +129,7 @@ export const useUi = create<UiState>()(
       sourcePane: null,
       filesPane: null,
       stagedFiles: [],
+      stagedLibraryByThread: {},
 
       setTheme: (theme) => set({ theme }),
       setTextScale: (textScale) => set({ textScale }),
@@ -177,6 +188,26 @@ export const useUi = create<UiState>()(
       closeFilesPane: () => set({ filesPane: null }),
       stageFiles: (files) => set((s) => ({ stagedFiles: [...s.stagedFiles, ...files] })),
       clearStagedFiles: () => set({ stagedFiles: [] }),
+      stageLibraryItems: (threadId, items) =>
+        set((s) => {
+          const current = s.stagedLibraryByThread[threadId] ?? [];
+          const byId = new Map(current.map((selection) => [selection.item.id, selection]));
+          for (const selection of items) byId.set(selection.item.id, selection);
+          return { stagedLibraryByThread: { ...s.stagedLibraryByThread, [threadId]: [...byId.values()] } };
+        }),
+      removeStagedLibraryItem: (threadId, itemId) =>
+        set((s) => ({
+          stagedLibraryByThread: {
+            ...s.stagedLibraryByThread,
+            [threadId]: (s.stagedLibraryByThread[threadId] ?? []).filter((selection) => selection.item.id !== itemId),
+          },
+        })),
+      clearStagedLibraryItems: (threadId) =>
+        set((s) => {
+          const next = { ...s.stagedLibraryByThread };
+          delete next[threadId];
+          return { stagedLibraryByThread: next };
+        }),
     }),
     {
       name: 'watai.ui',

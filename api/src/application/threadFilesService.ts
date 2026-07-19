@@ -28,6 +28,7 @@ export interface ThreadFilesOptions {
     bytes: Uint8Array,
     contentType: AllowedContentType,
   ) => Promise<string>;
+  resolveLibraryItem?: (userId: string, itemId: string) => Promise<{ name: string; mime: string; bytes: Uint8Array } | null>;
   /** Indexing poll cadence + bound (defaults ~18s total). */
   pollMs?: number;
   maxPolls?: number;
@@ -80,6 +81,26 @@ export class ThreadFilesService {
     if (!bytes.byteLength) throw new AppError('validation', 'The file is empty.');
     if (bytes.byteLength > MAX_BYTES) throw new AppError('validation', 'The file exceeds the 25 MB limit.');
 
+    return this.indexBytes(userId, threadId, name, input.mime || 'application/octet-stream', bytes, true);
+  }
+
+  async attachLibraryItem(userId: string, threadId: string, itemId: string): Promise<ThreadFileMeta> {
+    if (!this.opts.resolveLibraryItem) throw new AppError('conflict', 'Library document reuse is unavailable.');
+    const resolved = await this.opts.resolveLibraryItem(userId, itemId);
+    if (!resolved) throw new AppError('not_found', 'Library item not found.');
+    if (!resolved.bytes.byteLength || resolved.bytes.byteLength > MAX_BYTES) throw new AppError('validation', 'Library item cannot be indexed.');
+    return this.indexBytes(userId, threadId, resolved.name, resolved.mime, resolved.bytes, false, itemId);
+  }
+
+  private async indexBytes(
+    userId: string,
+    threadId: string,
+    name: string,
+    mime: string,
+    bytes: Uint8Array,
+    persistOriginal: boolean,
+    libraryItemId?: string,
+  ): Promise<ThreadFileMeta> {
     const thread = await this.load(userId, threadId);
     const creds = this.toCreds(await this.credentials.getDecrypted(userId));
 
@@ -87,19 +108,23 @@ export class ThreadFilesService {
     const up = await this.files.uploadFile(creds, {
       bytes,
       filename: name,
-      mime: input.mime || 'application/octet-stream',
+      mime,
     });
     const vectorStoreId = thread.vectorStoreId ?? (await this.files.createVectorStore(creds, `thread:${threadId}`));
     const attached = await this.files.addFile(creds, vectorStoreId, up.id);
     const status = await this.waitForReady(creds, vectorStoreId, up.id, attached);
-    const contentType = allowedContentType(input.mime || '');
-    const blobPath = contentType && this.opts.uploadOriginal
+    const contentType = allowedContentType(mime);
+    const blobPath = persistOriginal && contentType && this.opts.uploadOriginal
       ? await this.opts.uploadOriginal(userId, threadId, up.id, bytes, contentType).catch(() => undefined)
       : undefined;
 
     const meta: ThreadFileMeta = {
       fileId: up.id,
-      ...(blobPath ? { libraryItemId: libraryItemIdFor(userId, 'thread_document', up.id) } : {}),
+      ...(libraryItemId
+        ? { libraryItemId }
+        : blobPath
+          ? { libraryItemId: libraryItemIdFor(userId, 'thread_document', up.id) }
+          : {}),
       name,
       bytes: up.bytes,
       status,

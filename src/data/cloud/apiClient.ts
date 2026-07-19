@@ -18,6 +18,7 @@ import type {
   LibraryListResult,
   LibraryLineageResult,
   LibraryStorageSummary,
+  LibraryUploadReservation,
   ListMemoryQuery,
   ListMemoryResponse,
   MemoryModelConfig,
@@ -322,6 +323,10 @@ export class WataiApiClient implements CloudApi {
     return this.request('POST', `/threads/${encodeURIComponent(threadId)}/files`, body);
   }
 
+  attachLibraryThreadFile(threadId: string, itemId: string): Promise<ThreadFileRecord> {
+    return this.request('POST', `/threads/${encodeURIComponent(threadId)}/files/library`, { itemId });
+  }
+
   deleteThreadFile(threadId: string, fileId: string): Promise<void> {
     return this.request(
       'DELETE',
@@ -416,6 +421,15 @@ export class WataiApiClient implements CloudApi {
     return this.request('GET', `/library/${encodeURIComponent(id)}/lineage?${query}`);
   }
 
+  reserveLibraryUpload(body: { name: string; mime: string; bytes: number; contentHash: string }): Promise<LibraryUploadReservation> {
+    return this.request('POST', '/library/uploads', body);
+  }
+
+  async completeLibraryUpload(id: string, body: { bytes: number; contentHash: string }): Promise<LibraryItemDTO> {
+    const result = await this.request<{ item: LibraryItemDTO }>('POST', `/library/${encodeURIComponent(id)}/uploads/complete`, body);
+    return result.item;
+  }
+
   // --- access / invites ---
   getMe(): Promise<MeInfo> {
     return this.request('GET', '/me');
@@ -503,6 +517,7 @@ export interface CloudApi {
     threadId: string,
     body: { name: string; mime: string; dataBase64: string },
   ): Promise<ThreadFileRecord>;
+  attachLibraryThreadFile(threadId: string, itemId: string): Promise<ThreadFileRecord>;
   deleteThreadFile(threadId: string, fileId: string): Promise<void>;
   transcribeAudio(body: {
     audioBase64: string;
@@ -522,6 +537,8 @@ export interface CloudApi {
   getLibraryItem(id: string): Promise<LibraryItemDTO>;
   getLibraryStorage(): Promise<LibraryStorageSummary>;
   getLibraryLineage(id: string, direction: 'references' | 'derived', cursor?: string): Promise<LibraryLineageResult>;
+  reserveLibraryUpload(body: { name: string; mime: string; bytes: number; contentHash: string }): Promise<LibraryUploadReservation>;
+  completeLibraryUpload(id: string, body: { bytes: number; contentHash: string }): Promise<LibraryItemDTO>;
   getMe(): Promise<MeInfo>;
   listInvites(): Promise<InviteRecord[]>;
   createInvite(email: string): Promise<InviteRecord>;

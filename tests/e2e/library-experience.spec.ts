@@ -1,9 +1,10 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 
 const ROOT = '/#/dev/library-eval';
+const PICKER_ROOT = '/#/dev/library-picker-eval';
 
-async function attachState(page: Page, testInfo: TestInfo, name: string) {
-  const state = await page.locator('.library, .library-detail').evaluate((root) => ({
+async function attachState(page: Page, testInfo: TestInfo, name: string, rootSelector = '.library, .library-detail') {
+  const state = await page.locator(rootSelector).evaluate((root) => ({
     route: location.hash,
     viewport: { width: innerWidth, height: innerHeight },
     title: root.querySelector('h1')?.textContent?.trim() ?? '',
@@ -140,5 +141,77 @@ test.describe('Library read-only experience', () => {
     const viewportWidth = await page.evaluate(() => innerWidth);
     expect(barBoxes.every((box) => box.left >= 0 && box.right <= viewportWidth)).toBe(true);
     await attachState(page, testInfo, 'mobile-layout');
+  });
+
+  test('composer picker stages compatible items, exposes unavailable reasons, toggles image mode, and sends refs', async ({ page }, testInfo) => {
+    await page.goto(PICKER_ROOT);
+    await page.getByRole('button', { name: 'Add attachment' }).click();
+    await page.getByRole('menuitem', { name: 'Add from Library' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add from Library' });
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Search Library' })).toBeFocused();
+
+    await expect(dialog.getByText('Assets.zip')).toHaveCount(0);
+    await dialog.getByRole('checkbox', { name: 'Show unavailable' }).check();
+    const unavailable = dialog.getByRole('button', { name: /assets\.zip/i });
+    await expect(unavailable).toBeDisabled();
+    await expect(unavailable).toHaveAttribute('title', /download-only/);
+
+    await dialog.getByRole('button', { name: /reference.png/ }).click();
+    await dialog.getByRole('button', { name: /launch-brief.pdf/ }).click();
+    const dialogBox = await dialog.boundingBox();
+    if (testInfo.project.name === 'mobile' && dialogBox) {
+      const viewportHeight = await page.evaluate(() => innerHeight);
+      expect(dialogBox.y + dialogBox.height).toBeLessThanOrEqual(viewportHeight + 1);
+      expect(dialogBox.height).toBeLessThanOrEqual(viewportHeight * 0.9);
+    }
+    const done = dialog.getByRole('button', { name: 'Done (2)' });
+    await done.focus();
+    await page.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused();
+    await done.click();
+
+    await expect(page.getByText('reference.png')).toBeVisible();
+    await expect(page.getByText('launch-brief.pdf')).toBeVisible();
+    const mode = page.getByRole('button', { name: /Attach for analysis: reference.png/ });
+    await mode.click();
+    await expect(page.getByRole('button', { name: /Use as generation reference: reference.png/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Send' }).click();
+    await expect(page.getByTestId('submitted-items')).toContainText('uploaded-image:reference');
+    await expect(page.getByTestId('submitted-items')).toContainText('brief-pdf:attach');
+
+    await attachState(page, testInfo, `${testInfo.project.name}-picker`, '.library-picker-eval');
+  });
+
+  test('direct upload shows progress, uses one reservation PUT, finalizes, and appears in Library', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'One browser project is sufficient for the upload transaction');
+    let putCount = 0;
+    await page.route('https://fixture.blob/**', async (route) => {
+      putCount++;
+      expect(route.request().method()).toBe('PUT');
+      expect(route.request().headers()['x-ms-blob-type']).toBe('BlockBlob');
+      await route.fulfill({ status: 201, body: '' });
+    });
+    await page.goto(ROOT);
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Upload' }).click();
+    await (await chooser).setFiles({ name: 'experience.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF experience') });
+    const uploadRow = page.getByLabel('Uploads').getByText('experience.pdf').locator('..');
+    await expect(uploadRow).toContainText('100%');
+    await expect(page.getByRole('button', { name: /experience.pdf/ })).toBeVisible();
+    expect(putCount).toBe(1);
+    await attachState(page, testInfo, 'desktop-upload');
+  });
+
+  test('Use in new chat stages the item in a minted lazy thread and does not auto-send', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'One project is sufficient for navigation semantics');
+    await page.goto(`${ROOT}/generated-image`);
+    await page.getByRole('button', { name: 'Use in new chat' }).click();
+    await expect(page).toHaveURL(/#\/dev\/library-new-chat-eval\/.+/);
+    await expect(page.getByText('launch-poster.png')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+    await expect(page.getByTestId('submitted-items')).toHaveText('');
+    await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+    await attachState(page, testInfo, 'desktop-use-new-chat', '.library-picker-eval');
   });
 });

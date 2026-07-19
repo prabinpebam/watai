@@ -10,11 +10,14 @@ import { WaveformVisualizer } from '../voice/WaveformVisualizer';
 import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
 import type { SkillSummary } from '../../lib/types';
+import type { StagedLibraryItem } from '../../state/store';
+import { LibraryPicker } from '../library/LibraryPicker';
 
 interface ComposerProps {
+  threadId: string;
   value: string;
   onChange: (v: string) => void;
-  onSend: (text: string, files?: File[], skillNames?: string[]) => void;
+  onSend: (text: string, files?: File[], skillNames?: string[], librarySelections?: StagedLibraryItem[]) => void;
   streaming: boolean;
   onStop: () => void;
   placeholder?: string;
@@ -91,7 +94,7 @@ function HighlightedValue({ value, skills }: { value: string; skills: SkillSumma
   );
 }
 
-export function Composer({ value, onChange, onSend, streaming, onStop, placeholder, locked, autoFocus }: ComposerProps) {
+export function Composer({ threadId, value, onChange, onSend, streaming, onStop, placeholder, locked, autoFocus }: ComposerProps) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -103,6 +106,8 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillQuery, setSkillQuery] = useState<SkillQuery | null>(null);
   const [skillIndex, setSkillIndex] = useState(0);
@@ -113,6 +118,10 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   const pushToast = useUi((s) => s.pushToast);
   const stagedFiles = useUi((s) => s.stagedFiles);
   const clearStagedFiles = useUi((s) => s.clearStagedFiles);
+  const stagedLibrary = useUi((s) => s.stagedLibraryByThread[threadId] ?? []);
+  const stageLibraryItems = useUi((s) => s.stageLibraryItems);
+  const removeStagedLibraryItem = useUi((s) => s.removeStagedLibraryItem);
+  const clearStagedLibraryItems = useUi((s) => s.clearStagedLibraryItems);
 
   // Auto-grow the textarea and decide between the compact single-line layout and the
   // two-row multiline layout. The moment the text wraps past a single line the composer
@@ -283,17 +292,19 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
   const submit = () => {
     if (streaming || locked) return;
     const text = value.trim();
-    if (!text && pending.length === 0) return;
+    if (!text && pending.length === 0 && stagedLibrary.length === 0) return;
     const taggedSkills = skillNamesInText(text, skills);
     onSend(
       text,
       pending.map((p) => p.file),
       taggedSkills,
+      stagedLibrary,
     );
     onChange('');
     setSkillQuery(null);
     pending.forEach((p) => p.url && URL.revokeObjectURL(p.url));
     setPending([]);
+    clearStagedLibraryItems(threadId);
   };
 
   const suggestions = useMemo(() => {
@@ -435,13 +446,41 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
     }
   };
 
-  const canSend = value.trim().length > 0 || pending.length > 0;
+  const canSend = value.trim().length > 0 || pending.length > 0 || stagedLibrary.length > 0;
   const hasHighlight = value.length > 0;
 
   return (
     <div className="composer-wrap">
-      {pending.length > 0 && (
+      {(pending.length > 0 || stagedLibrary.length > 0) && (
         <div className="composer__attachments">
+          {stagedLibrary.map((selection) => (
+            <div key={selection.item.id} className="composer-file composer-library-item" title={selection.item.userMetadata?.title ?? selection.item.name}>
+              {selection.item.kind === 'image' && (selection.item.thumbnailUrl ?? selection.item.url) ? (
+                <img className="composer-library-item__thumb" src={selection.item.thumbnailUrl ?? selection.item.url} alt="" />
+              ) : (
+                <Icon name={selection.item.kind === 'image' ? 'file-image' : 'file-text'} size={16} />
+              )}
+              <span className="composer-file__name">{selection.item.userMetadata?.title ?? selection.item.name}</span>
+              {selection.item.kind === 'image' && (
+                <button
+                  type="button"
+                  className="composer-library-item__mode"
+                  onClick={() => stageLibraryItems(threadId, [{ ...selection, mode: selection.mode === 'attach' ? 'reference' : 'attach' }])}
+                  aria-label={`${selection.mode === 'attach' ? 'Attach for analysis' : 'Use as generation reference'}: ${selection.item.name}`}
+                >
+                  {selection.mode === 'attach' ? 'Analyze' : 'Reference'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="composer-file__remove"
+                aria-label={`Remove ${selection.item.name}`}
+                onClick={() => removeStagedLibraryItem(threadId, selection.item.id)}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+          ))}
           {pending.map((p) =>
             p.url ? (
               <div key={p.id} className="composer-thumb">
@@ -494,7 +533,15 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
             )}
           </div>
         )}
-        <IconButton name="plus" className="composer__plus" label="Attach image or file" onClick={() => fileRef.current?.click()} />
+        <div className="composer__plus-wrap">
+          <IconButton name="plus" className="composer__plus" label="Add attachment" aria-expanded={addMenuOpen} onClick={() => setAddMenuOpen((open) => !open)} />
+          {addMenuOpen && (
+            <div className="composer-add-menu" role="menu">
+              <button type="button" role="menuitem" onClick={() => { setAddMenuOpen(false); fileRef.current?.click(); }}><Icon name="upload" size={18} /> Upload from device</button>
+              <button type="button" role="menuitem" onClick={() => { setAddMenuOpen(false); setPickerOpen(true); }}><Icon name="library" size={18} /> Add from Library</button>
+            </div>
+          )}
+        </div>
         <input
           ref={fileRef}
           type="file"
@@ -579,6 +626,7 @@ export function Composer({ value, onChange, onSend, streaming, onStop, placehold
           />
         )}
       </div>
+      {pickerOpen && <LibraryPicker threadId={threadId} onClose={() => setPickerOpen(false)} returnFocus={() => taRef.current?.focus()} />}
       <p className="muted composer__footnote" style={{ textAlign: 'center', fontSize: 'var(--text-caption-size)', margin: 'var(--space-3) 0 0' }}>
         Watai can make mistakes. Check important info.
       </p>

@@ -25,6 +25,9 @@ const ChatGallery = import.meta.env.DEV ? lazy(() => import('../mocks/ChatGaller
 const LibraryExperienceFixture = import.meta.env.DEV
   ? lazy(() => import('../features/library/LibraryExperienceFixture').then((module) => ({ default: module.LibraryExperienceFixture })))
   : null;
+const LibraryPickerExperienceFixture = import.meta.env.DEV
+  ? lazy(() => import('../features/library/LibraryPickerExperienceFixture').then((module) => ({ default: module.LibraryPickerExperienceFixture })))
+  : null;
 
 /** Recency window: reopening within this of the last activity resumes the most recent chat;
  *  beyond it, a fresh empty chat opens instead. */
@@ -339,6 +342,13 @@ export function App() {
           <Route index element={<LibraryView />} />
           <Route path=":itemId" element={<LibraryDetail />} />
         </Route>
+      )}
+
+      {LibraryPickerExperienceFixture && (
+        <>
+          <Route path="/dev/library-picker-eval" element={<Suspense fallback={<div className="center-screen"><Spinner size="xl" /></div>}><LibraryPickerExperienceFixture /></Suspense>} />
+          <Route path="/dev/library-new-chat-eval/:threadId" element={<Suspense fallback={<div className="center-screen"><Spinner size="xl" /></div>}><LibraryPickerExperienceFixture /></Suspense>} />
+        </>
       )}
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -67,7 +67,7 @@ function setup() {
     maxPolls: 3,
     uploadOriginal: async (_userId, threadId, assetId, _bytes, contentType) => `${threadId}/${assetId}.${contentType}`,
   });
-  return { store, svc, files, clock };
+  return { store, svc, files, clock, credentials };
 }
 
 async function seedThread(store: InMemoryThreadStore, patch: Partial<ThreadRecord> = {}): Promise<void> {
@@ -119,6 +119,23 @@ describe('ThreadFilesService', () => {
     expect(ctx.files.calls.filter((c) => c.startsWith('createVs')).length).toBe(0);
     expect(ctx.files.calls).toContain('add:vs-existing:file-1');
     expect((await ctx.store.get('u', 't1'))?.files?.length).toBe(1);
+  });
+
+  it('indexes an existing Library item without writing another original blob', async () => {
+    await seedThread(ctx.store);
+    let originalWrites = 0;
+    const svc = new ThreadFilesService(ctx.store, ctx.credentials, ctx.files.impl, ctx.clock, {
+      uploadOriginal: async () => { originalWrites++; return 'unexpected'; },
+      resolveLibraryItem: async (_userId, itemId) => itemId === 'lib-doc'
+        ? { name: 'Library.pdf', mime: 'application/pdf', bytes: new Uint8Array([1, 2, 3]) }
+        : null,
+      sleep: async () => {},
+    });
+    const meta = await svc.attachLibraryItem('u', 't1', 'lib-doc');
+    expect(meta).toMatchObject({ libraryItemId: 'lib-doc', name: 'Library.pdf', mime: 'application/pdf' });
+    expect(meta.blobPath).toBeUndefined();
+    expect(originalWrites).toBe(0);
+    expect(ctx.files.calls).toContain('upload:Library.pdf');
   });
 
   it('polls indexing status until the file is ready', async () => {

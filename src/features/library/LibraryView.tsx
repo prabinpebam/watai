@@ -7,6 +7,7 @@ import { ScreenBar } from '../../app/ScreenBar';
 import { LIBRARY_COPY } from './content';
 import { formatBytes, formatDate, iconForKind, itemTitle, kindLabel, originLabel } from './format';
 import { useLibraryRuntime } from './LibraryApi';
+import { uploadToLibrary } from './upload';
 import './library.css';
 
 const KIND_FILTERS: Array<{ value: string; label: string; kinds?: LibraryKind[] }> = [
@@ -91,6 +92,8 @@ export function LibraryView() {
   const [requestVersion, setRequestVersion] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const uploadRef = useRef<HTMLInputElement>(null);
+  const [uploads, setUploads] = useState<Array<{ id: string; name: string; progress: number; error?: string }>>([]);
   const kind = params.get('kind') ?? 'all';
   const origin = params.get('origin') ?? 'all';
   const sort = params.get('sort') ?? 'newest';
@@ -179,10 +182,29 @@ export function LibraryView() {
     }
   };
 
+  const uploadFiles = async (list: FileList) => {
+    const files = [...list].slice(0, 20);
+    if (files.reduce((sum, file) => sum + file.size, 0) > 100 * 1024 * 1024) {
+      setUploads([{ id: 'batch-error', name: 'Upload selection', progress: 0, error: 'Select 100 MB or less at a time.' }]);
+      return;
+    }
+    const queued = files.map((file, index) => ({ id: `${Date.now()}-${index}`, name: file.name, progress: 0 }));
+    setUploads(queued);
+    for (let index = 0; index < files.length; index++) {
+      const row = queued[index];
+      try {
+        await uploadToLibrary(files[index], (progress) => setUploads((current) => current.map((entry) => entry.id === row.id ? { ...entry, progress } : entry)), api);
+      } catch (error) {
+        setUploads((current) => current.map((entry) => entry.id === row.id ? { ...entry, error: error instanceof Error ? error.message : 'Upload failed.' } : entry));
+      }
+    }
+    setRequestVersion((version) => version + 1);
+  };
+
   const filtered = ['q', 'kind', 'origin', 'sort'].some((name) => params.has(name));
   return (
     <section className="library" aria-labelledby="library-heading">
-      <ScreenBar title={LIBRARY_COPY.title} trailing={imageMode ? <Button size="sm" icon="images" onClick={() => navigate(createImagePath)}>Create image</Button> : undefined} />
+      <ScreenBar title={LIBRARY_COPY.title} trailing={<><Button size="sm" icon="upload" onClick={() => uploadRef.current?.click()}>Upload</Button>{imageMode && <Button size="sm" icon="images" onClick={() => navigate(createImagePath)}>Create image</Button>}<input ref={uploadRef} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,.md,.docx,.pptx,text/csv,application/json,.xlsx,audio/webm,audio/mpeg,.mp3,application/zip" onChange={(event) => { if (event.target.files) void uploadFiles(event.target.files); event.target.value = ''; }} /></>} />
       <h1 id="library-heading" ref={headingRef} tabIndex={-1} className="sr-only">{LIBRARY_COPY.title}</h1>
       <div className="library__toolbar">
         <label className="library-search">
@@ -215,6 +237,11 @@ export function LibraryView() {
       </div>
 
       <div className="library__results" aria-busy={loading}>
+        {uploads.length > 0 && (
+          <div className="library-uploads" aria-label="Uploads">
+            {uploads.map((upload) => <div key={upload.id} className="library-upload-row"><Icon name={upload.error ? 'error' : upload.progress === 100 ? 'check-circle' : 'upload'} size={18} /><span>{upload.name}</span><progress max={100} value={upload.progress} /><span>{upload.error ?? `${upload.progress}%`}</span></div>)}
+          </div>
+        )}
         <div className="sr-only" aria-live="polite">{total !== undefined ? `${total} Library items` : ''}</div>
         {error && !items.length ? (
           <div className="library-state">
