@@ -294,6 +294,108 @@ export interface ArtifactRecord {
   createdAt: string;
 }
 
+export type LibraryKind =
+  | 'image'
+  | 'pdf'
+  | 'document'
+  | 'spreadsheet'
+  | 'presentation'
+  | 'data'
+  | 'audio'
+  | 'archive'
+  | 'code'
+  | 'text'
+  | 'other';
+
+export type LibraryOrigin =
+  | 'chat_upload'
+  | 'library_upload'
+  | 'chat_generated_image'
+  | 'studio_generated_image'
+  | 'code_artifact'
+  | 'thread_document';
+
+export type LibraryState = 'pending' | 'active' | 'trashed' | 'purging' | 'purged' | 'missing' | 'failed';
+
+export interface LibraryItemDTO {
+  id: string;
+  state: LibraryState;
+  kind: LibraryKind;
+  origin: LibraryOrigin;
+  name: string;
+  mime: string;
+  bytes: number;
+  blobPath?: string;
+  contentHash?: string;
+  derivatives?: Array<{
+    kind: 'thumbnail';
+    blobPath: string;
+    mime: 'image/jpeg' | 'image/webp';
+    bytes: number;
+    width: number;
+    height: number;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+  trashedAt?: string;
+  purgeAfter?: string;
+  purgedAt?: string;
+  error?: { code: string; message: string } | null;
+  source: {
+    surface: 'chat' | 'image_studio' | 'library';
+    threadId?: string;
+    messageId?: string;
+    runId?: string;
+    toolCallId?: string;
+    threadTitleSnapshot?: string;
+    createdAt: string;
+  };
+  image?: {
+    width?: number;
+    height?: number;
+    size?: string;
+    format?: 'png' | 'jpeg' | 'webp';
+    prompt?: string;
+    revisedPrompt?: string;
+    promptSnapshot?: string;
+    model?: string;
+    quality?: 'low' | 'medium' | 'high';
+    referenceItemIds?: string[];
+    provenanceComplete: boolean;
+  };
+  artifact?: { sourceItemIds?: string[]; version?: number; provenanceComplete: boolean };
+  userMetadata?: { title?: string; starred?: boolean };
+  url?: string;
+  thumbnailUrl?: string;
+}
+
+export interface LibraryListResult {
+  items: LibraryItemDTO[];
+  cursor?: string;
+  totalApprox?: number;
+}
+
+export interface LibraryStorageSummary {
+  activeBytes: number;
+  trashedBytes: number;
+  activeCount: number;
+  trashedCount: number;
+  byKind: Array<{ kind: LibraryKind; bytes: number; count: number }>;
+  byOrigin: Array<{ origin: LibraryOrigin; bytes: number; count: number }>;
+  largestSourceThreads: Array<{ threadId: string; title: string; bytes: number; count: number }>;
+  duplicateGroups: number;
+  estimate?: {
+    monthlyCapacityCost: number;
+    currency: string;
+    ratePerGbMonth: number;
+    region: string;
+    sku: string;
+    rateAsOf: string;
+    exclusions: string[];
+  };
+  reconciledAt?: string;
+}
+
 export interface MessageRecord {
   id: string;
   threadId: string;
