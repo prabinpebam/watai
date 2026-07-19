@@ -18,6 +18,7 @@ import { buildLibraryInventory, type InventoryBlob, type LibraryInventoryReport 
 import type { MessageRecord } from '../src/ports/messageStore';
 import type { ThreadRecord } from '../src/ports/threadStore';
 import type { ImageGenRecord } from '../src/ports/imageStore';
+import type { LibraryItemRecord } from '../src/domain/library';
 
 interface Args {
   output?: string;
@@ -92,6 +93,7 @@ This report is read-only. No Cosmos documents or Blob objects were changed.
 | Messages | ${number(s.messages)} |
 | Threads | ${number(s.threads)} |
 | Image Studio records | ${number(s.studioImages)} |
+| Library index records | ${number(s.libraryItems)} |
 | Blobs | ${number(s.blobs)} |
 | Blob bytes | ${bytes(s.blobBytes)} |
 | Eligible items | ${number(s.eligibleItems)} |
@@ -143,14 +145,15 @@ export async function runLibraryInventory(options: Args = {}): Promise<{ report:
   const credential = new DefaultAzureCredential();
   const cosmos = new CosmosClient({ endpoint, aadCredentials: credential });
   const blobService = new BlobServiceClient(`https://${storageAccount}.blob.core.windows.net`, credential);
-  const [messages, threads, studioImages, blobs] = await Promise.all([
+  const [messages, threads, studioImages, libraryItems, blobs] = await Promise.all([
     queryAll<MessageRecord>(cosmos, databaseId, 'messages'),
     queryAll<ThreadRecord>(cosmos, databaseId, 'threads'),
     queryAll<ImageGenRecord>(cosmos, databaseId, 'images'),
+    queryAll<LibraryItemRecord>(cosmos, databaseId, 'library'),
     listBlobs(blobService, mediaContainer),
   ]);
   const generatedAt = new Date().toISOString();
-  const report = buildLibraryInventory({ messages, threads, studioImages, blobs, generatedAt });
+  const report = buildLibraryInventory({ messages, threads, studioImages, libraryItems, blobs, generatedAt });
   const defaultRoot = fileURLToPath(new URL('../../documentation/library-system/inventory-runs/', import.meta.url));
   const outputRoot = resolve(options.output ?? defaultRoot);
   await mkdir(outputRoot, { recursive: true });

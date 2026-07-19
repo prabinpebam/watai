@@ -15,6 +15,7 @@ export interface LibraryInventoryInput {
   threads: ThreadRecord[];
   studioImages: ImageGenRecord[];
   blobs: InventoryBlob[];
+  libraryItems?: LibraryItemRecord[];
   generatedAt: string;
 }
 
@@ -40,6 +41,7 @@ export interface LibraryInventoryReport {
     messages: number;
     threads: number;
     studioImages: number;
+    libraryItems: number;
     blobs: number;
     blobBytes: number;
     eligibleItems: number;
@@ -362,7 +364,11 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
     .filter(([, ids]) => ids.length > 1)
     .map(([blobPath, proposedIds]) => ({ blobPath, proposedIds }));
   const missingBlobItems = candidates.filter((candidate) => candidate.actualBytes === undefined);
-  const referencedPaths = new Set([...candidates.map((candidate) => candidate.blobPath), ...knownExcludedPaths]);
+  const referencedPaths = new Set([
+    ...candidates.map((candidate) => candidate.blobPath),
+    ...knownExcludedPaths,
+    ...(input.libraryItems ?? []).flatMap((item) => [item.blobPath, ...(item.derivatives ?? []).map((derivative) => derivative.blobPath)]).filter((path): path is string => !!path),
+  ]);
   const orphanBlobs = input.blobs.filter((blob) => !referencedPaths.has(blob.name) && pathFamily(blob.name) !== 'skills');
   const partialProvenance = candidates
     .filter((candidate) => !candidate.provenanceComplete)
@@ -401,6 +407,7 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
       messages: input.messages.length,
       threads: input.threads.length,
       studioImages: input.studioImages.length,
+      libraryItems: input.libraryItems?.length ?? 0,
       blobs: input.blobs.length,
       blobBytes: input.blobs.reduce((sum, blob) => sum + blob.bytes, 0),
       eligibleItems: candidates.length,
