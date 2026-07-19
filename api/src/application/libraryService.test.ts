@@ -11,7 +11,7 @@ function dependencies(records = [libraryFixture({ id: 'one', kind: 'image', orig
   const store: LibraryStore = {
     get: vi.fn(async (_userId, id) => records.find((record) => record.id === id) ?? null),
     getByIngestionKey: vi.fn(),
-    put: vi.fn(),
+    put: vi.fn(async (record) => record),
     list: vi.fn(async () => ({ items: records, totalApprox: records.length })),
     aggregate: vi.fn(async () => ({ records, reconciledAt: '2026-07-19T12:00:00.000Z' })),
     getMany: vi.fn(async (_userId, ids) => records.filter((record) => ids.includes(record.id))),
@@ -87,6 +87,39 @@ describe('LibraryService', () => {
     const reverse = await service.lineage('user-1', 'source', { direction: 'derived', limit: 50 });
     expect(forward.items.map((item) => item.id)).toEqual(['ref-2', 'ref-1']);
     expect(reverse.items.map((item) => item.id)).toEqual(['derived']);
+  });
+
+  it('reserves an account-level write SAS and activates only after matching blob properties', async () => {
+    const { store, minter } = dependencies([]);
+    const hash = `sha256:${'a'.repeat(64)}`;
+    const fetchImpl = vi.fn(async () => new Response(null, {
+      status: 200,
+      headers: { 'content-length': '12', 'content-type': 'application/pdf', 'x-ms-meta-contenthash': hash },
+    })) as unknown as typeof fetch;
+    const service = new LibraryService(store, minter, () => Date.parse('2026-07-19T12:00:00.000Z'), fetchImpl, () => 'upload-1');
+    const reservation = await service.reserveUpload('user-1', { name: 'brief.pdf', mime: 'application/pdf', bytes: 12, contentHash: hash });
+    expect(reservation.item).toMatchObject({ state: 'pending', name: 'brief.pdf' });
+    expect(reservation.item).not.toHaveProperty('blobPath');
+    expect(reservation.upload.headers).toMatchObject({ 'x-ms-blob-type': 'BlockBlob', 'x-ms-meta-contenthash': hash });
+    const pending = (store.put as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(pending.blobPath).toMatch(/^user-1\/library\/lib-[a-f0-9]{32}\.pdf$/);
+    (store.get as ReturnType<typeof vi.fn>).mockResolvedValue(pending);
+    const active = await service.completeUpload('user-1', pending.id, { bytes: 12, contentHash: hash });
+    expect(active).toMatchObject({ id: pending.id, state: 'active', url: expect.stringContaining('?sig=secret') });
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(pending.blobPath), { method: 'HEAD' });
+  });
+
+  it('keeps a reservation pending when observed blob properties differ', async () => {
+    const hash = `sha256:${'b'.repeat(64)}`;
+    const pending = libraryFixture({
+      id: 'pending-upload', kind: 'pdf', origin: 'library_upload', state: 'pending',
+      blobPath: 'user-1/library/pending-upload.pdf', bytes: 12, contentHash: hash,
+    });
+    const { store, minter } = dependencies([pending]);
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 200, headers: { 'content-length': '11', 'content-type': 'application/pdf', 'x-ms-meta-contenthash': hash } })) as unknown as typeof fetch;
+    const service = new LibraryService(store, minter, Date.now, fetchImpl);
+    await expect(service.completeUpload('user-1', pending.id, { bytes: 12, contentHash: hash })).rejects.toMatchObject({ code: 'conflict' });
+    expect(store.put).not.toHaveBeenCalled();
   });
 });
 

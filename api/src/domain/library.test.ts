@@ -119,6 +119,7 @@ describe('Library domain', () => {
     expect(parseLibraryUpload({ name: 'photo.jpg', mime: 'image/jpeg', bytes: 1024, contentHash: hash })).toMatchObject({ name: 'photo.jpg' });
     expect(parseLibraryUploadComplete({ bytes: 1024, contentHash: hash })).toEqual({ bytes: 1024, contentHash: hash });
     expect(errorCode(() => parseLibraryUpload({ name: 'huge.jpg', mime: 'image/jpeg', bytes: 21 * 1024 * 1024, contentHash: hash }))).toBe('validation');
+    expect(errorCode(() => parseLibraryUpload({ name: 'unsafe.svg', mime: 'image/svg+xml', bytes: 100, contentHash: hash }))).toBe('validation');
   });
 
   it('includes derivative bytes in storage accounting', () => {

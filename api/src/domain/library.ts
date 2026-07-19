@@ -361,8 +361,34 @@ const libraryUploadSchema = z
   })
   .strict();
 export type LibraryUploadInput = z.infer<typeof libraryUploadSchema>;
+
+const LIBRARY_UPLOAD_TYPES: Record<string, { kind: LibraryKind; extension: string }> = {
+  'image/png': { kind: 'image', extension: 'png' },
+  'image/jpeg': { kind: 'image', extension: 'jpg' },
+  'image/webp': { kind: 'image', extension: 'webp' },
+  'image/gif': { kind: 'image', extension: 'gif' },
+  'application/pdf': { kind: 'pdf', extension: 'pdf' },
+  'text/plain': { kind: 'text', extension: 'txt' },
+  'text/markdown': { kind: 'text', extension: 'md' },
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { kind: 'document', extension: 'docx' },
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': { kind: 'presentation', extension: 'pptx' },
+  'text/csv': { kind: 'data', extension: 'csv' },
+  'application/json': { kind: 'data', extension: 'json' },
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { kind: 'spreadsheet', extension: 'xlsx' },
+  'audio/webm': { kind: 'audio', extension: 'webm' },
+  'audio/mpeg': { kind: 'audio', extension: 'mp3' },
+  'application/zip': { kind: 'archive', extension: 'zip' },
+};
+
+export function libraryUploadType(mime: string): { kind: LibraryKind; extension: string } {
+  const type = LIBRARY_UPLOAD_TYPES[mime.toLowerCase()];
+  if (!type) throw new AppError('validation', 'This file type is not supported by Library upload.');
+  return type;
+}
+
 export function parseLibraryUpload(input: unknown): LibraryUploadInput {
   const parsed = parseOrThrow(libraryUploadSchema, input, 'Invalid Library upload.');
+  libraryUploadType(parsed.mime);
   if (parsed.mime.startsWith('image/') && parsed.bytes > LIBRARY_UPLOAD_MAX_IMAGE_BYTES) {
     throw new AppError('validation', 'Library images must be 20 MiB or smaller.');
   }

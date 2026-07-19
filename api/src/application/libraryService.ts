@@ -1,11 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { AppError } from '../domain/errors';
-import { libraryStorageBytes, type LibraryItemRecord, type LibraryLineageQuery, type LibraryListQuery } from '../domain/library';
+import { assertLibraryTransition, libraryItemId, libraryStorageBytes, libraryUploadType, type LibraryItemRecord, type LibraryLineageQuery, type LibraryListQuery, type LibraryUploadCompleteInput, type LibraryUploadInput } from '../domain/library';
 import type { LibraryStore } from '../ports/libraryStore';
 import type { SasMinter } from '../ports/sasMinter';
 import { toLibraryItemDto, type LibraryItemDTO, type LibraryStorageSummaryDTO } from './libraryDto';
 
 const STORAGE_CACHE_MS = 5 * 60_000;
 const CAPACITY_RATE_PER_GB_MONTH = 0.0184;
+const UPLOAD_TTL_SECONDS = 15 * 60;
 
 interface CachedSummary {
   expiresAt: number;
@@ -19,6 +21,8 @@ export class LibraryService {
     private readonly store: LibraryStore,
     private readonly minter: SasMinter,
     private readonly nowMs: () => number = Date.now,
+    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly newId: () => string = randomUUID,
   ) {}
 
   async list(userId: string, query: LibraryListQuery): Promise<{ items: LibraryItemDTO[]; cursor?: string; totalApprox?: number }> {
@@ -67,6 +71,65 @@ export class LibraryService {
       items: await Promise.all(ordered.map((item) => toLibraryItemDto(this.minter, item))),
       ...(nextOffset < referenceIds.length ? { cursor: encodeLineageOffset(nextOffset) } : {}),
     };
+  }
+
+  async reserveUpload(userId: string, input: LibraryUploadInput): Promise<{ item: LibraryItemDTO; upload: { url: string; expiresAt: string; headers: Record<string, string> } }> {
+    const type = libraryUploadType(input.mime);
+    const ingestionKey = `library_upload:${this.newId()}`;
+    const id = libraryItemId(userId, ingestionKey);
+    const now = new Date(this.nowMs()).toISOString();
+    const blobPath = `${userId}/library/${id}.${type.extension}`;
+    const item: LibraryItemRecord = {
+      id,
+      userId,
+      ingestionKey,
+      state: 'pending',
+      kind: type.kind,
+      origin: 'library_upload',
+      name: input.name,
+      mime: input.mime,
+      bytes: input.bytes,
+      blobPath,
+      contentHash: input.contentHash,
+      createdAt: now,
+      updatedAt: now,
+      source: { surface: 'library', createdAt: now },
+      ...(type.kind === 'image' ? { image: { provenanceComplete: true } } : {}),
+    };
+    const saved = await this.store.put(item);
+    const grant = await this.minter.mint({ blobPath, op: 'write', contentType: input.mime, ttlSeconds: UPLOAD_TTL_SECONDS });
+    return {
+      item: await toLibraryItemDto(this.minter, saved),
+      upload: {
+        url: grant.url,
+        expiresAt: grant.expiresAt,
+        headers: {
+          'x-ms-blob-type': 'BlockBlob',
+          'Content-Type': input.mime,
+          'x-ms-meta-contenthash': input.contentHash,
+        },
+      },
+    };
+  }
+
+  async completeUpload(userId: string, id: string, input: LibraryUploadCompleteInput): Promise<LibraryItemDTO> {
+    const item = await this.store.get(userId, id);
+    if (!item) throw new AppError('not_found', 'Library item not found.');
+    if (item.state === 'active') return toLibraryItemDto(this.minter, item);
+    if (item.state !== 'pending' || !item.blobPath) throw new AppError('conflict', 'Library upload cannot be completed in its current state.');
+    if (item.bytes !== input.bytes || item.contentHash !== input.contentHash) throw new AppError('validation', 'Library upload completion does not match its reservation.');
+    const { url } = await this.minter.mint({ blobPath: item.blobPath, op: 'read', contentType: item.mime, ttlSeconds: 120 });
+    const response = await this.fetchImpl(url, { method: 'HEAD' });
+    const observedBytes = Number(response.headers.get('content-length'));
+    const observedMime = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
+    const observedHash = response.headers.get('x-ms-meta-contenthash');
+    if (!response.ok || observedBytes !== item.bytes || observedMime !== item.mime.toLowerCase() || observedHash !== item.contentHash) {
+      throw new AppError('conflict', 'Uploaded file properties do not match the Library reservation.');
+    }
+    assertLibraryTransition(item.state, 'active');
+    const active = await this.store.put({ ...item, state: 'active', updatedAt: new Date(this.nowMs()).toISOString() });
+    this.storageCache.delete(userId);
+    return toLibraryItemDto(this.minter, active);
   }
 }
 

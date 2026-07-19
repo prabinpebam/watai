@@ -147,6 +147,20 @@ app.http('library-lineage', {
   handler: methodDispatch({ GET: (c) => c.library.lineage }, invited),
 });
 
+app.http('library-uploads', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'library/uploads',
+  handler: methodDispatch({ POST: (c) => c.library.reserveUpload }, invited),
+});
+
+app.http('library-upload-complete', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'library/{id}/uploads/complete',
+  handler: methodDispatch({ POST: (c) => c.library.completeUpload }, invited),
+});
+
 app.http('memory', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',
