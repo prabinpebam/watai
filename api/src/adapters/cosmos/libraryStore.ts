@@ -162,4 +162,40 @@ export class CosmosLibraryStore implements LibraryStore {
     ).fetchAll();
     return { records: resources.map(parseRecord) };
   }
+
+  async getMany(userId: string, ids: string[]): Promise<LibraryItemRecord[]> {
+    if (!ids.length) return [];
+    const { resources } = await this.container.items.query(
+      {
+        query: 'SELECT * FROM c WHERE c.userId = @userId AND ARRAY_CONTAINS(@ids, c.id)',
+        parameters: [
+          { name: '@userId', value: userId },
+          { name: '@ids', value: ids },
+        ],
+      },
+      { partitionKey: userId },
+    ).fetchAll();
+    return resources.map(parseRecord);
+  }
+
+  async findDerived(userId: string, itemId: string, cursor: string | undefined, limit: number): Promise<LibraryListResult> {
+    const iterator = this.container.items.query(
+      {
+        query: `SELECT * FROM c WHERE c.userId = @userId AND (
+          (IS_DEFINED(c.image.referenceItemIds) AND ARRAY_CONTAINS(c.image.referenceItemIds, @itemId)) OR
+          (IS_DEFINED(c.artifact.sourceItemIds) AND ARRAY_CONTAINS(c.artifact.sourceItemIds, @itemId))
+        ) ORDER BY c.createdAt DESC`,
+        parameters: [
+          { name: '@userId', value: userId },
+          { name: '@itemId', value: itemId },
+        ],
+      },
+      { partitionKey: userId, maxItemCount: limit, continuationToken: cursor },
+    );
+    const page = await iterator.fetchNext();
+    return {
+      items: page.resources.map(parseRecord),
+      ...(page.continuationToken ? { cursor: page.continuationToken } : {}),
+    };
+  }
 }

@@ -140,6 +140,13 @@ app.http('library-item', {
   handler: methodDispatch({ GET: (c) => c.library.get }, invited),
 });
 
+app.http('library-lineage', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'library/{id}/lineage',
+  handler: methodDispatch({ GET: (c) => c.library.lineage }, invited),
+});
+
 app.http('memory', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',

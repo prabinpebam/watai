@@ -14,6 +14,10 @@ function dependencies(records = [libraryFixture({ id: 'one', kind: 'image', orig
     put: vi.fn(),
     list: vi.fn(async () => ({ items: records, totalApprox: records.length })),
     aggregate: vi.fn(async () => ({ records, reconciledAt: '2026-07-19T12:00:00.000Z' })),
+    getMany: vi.fn(async (_userId, ids) => records.filter((record) => ids.includes(record.id))),
+    findDerived: vi.fn(async (_userId, itemId) => ({
+      items: records.filter((record) => record.image?.referenceItemIds?.includes(itemId) || record.artifact?.sourceItemIds?.includes(itemId)),
+    })),
   };
   const minter: SasMinter = {
     mint: vi.fn(async ({ blobPath }) => ({ url: `https://blob.test/${blobPath}?sig=secret`, expiresAt: '2026-07-19T13:00:00.000Z' })),
@@ -64,6 +68,25 @@ describe('LibraryService', () => {
     now += 5 * 60_000 + 1;
     await service.storage('user-1');
     expect(store.aggregate).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns forward references in captured order and reverse-derived items', async () => {
+    const refOne = libraryFixture({ id: 'ref-1', kind: 'image', origin: 'chat_upload', state: 'active' });
+    const refTwo = libraryFixture({ id: 'ref-2', kind: 'image', origin: 'chat_upload', state: 'active' });
+    const source = libraryFixture({
+      id: 'source', kind: 'image', origin: 'chat_generated_image', state: 'active',
+      image: { referenceItemIds: ['ref-2', 'ref-1'], provenanceComplete: true },
+    });
+    const derived = libraryFixture({
+      id: 'derived', kind: 'pdf', origin: 'code_artifact', state: 'active',
+      artifact: { sourceItemIds: ['source'], provenanceComplete: true },
+    });
+    const { store, minter } = dependencies([source, refOne, refTwo, derived]);
+    const service = new LibraryService(store, minter);
+    const forward = await service.lineage('user-1', 'source', { direction: 'references', limit: 50 });
+    const reverse = await service.lineage('user-1', 'source', { direction: 'derived', limit: 50 });
+    expect(forward.items.map((item) => item.id)).toEqual(['ref-2', 'ref-1']);
+    expect(reverse.items.map((item) => item.id)).toEqual(['derived']);
   });
 });
 

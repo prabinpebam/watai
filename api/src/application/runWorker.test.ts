@@ -14,6 +14,7 @@ import type { AgentEvent, RunAgentParams } from '../ai/orchestrator';
 import { DEFAULT_SETTINGS } from '../domain/settings';
 import { DEFAULT_SKILLS } from '../skills';
 import { AppError } from '../domain/errors';
+import { libraryItemIdFor } from '../domain/library';
 
 type RunAgentFn = NonNullable<RunWorkerDeps['runAgent']>;
 
@@ -432,6 +433,14 @@ describe('processRun', () => {
 
   it('captures a code-interpreter artifact onto the message, thread files, and tool call', async () => {
     await seed(ctx);
+    const seededThread = await ctx.threadStore.get('userA', 't1');
+    await ctx.threadStore.put({
+      ...seededThread!,
+      files: [
+        { fileId: 'input-a', name: 'a.pdf', bytes: 10, status: 'ready', createdAt: '2026-06-01T00:00:00Z', blobPath: 'userA/t1/a.pdf', mime: 'application/pdf' },
+        { fileId: 'input-b', name: 'b.csv', bytes: 20, status: 'ready', createdAt: '2026-06-01T00:00:01Z', blobPath: 'userA/t1/b.csv', mime: 'text/csv' },
+      ],
+    });
     const uploaded: Array<{ id: string; mime: string; bytes: number }> = [];
     const uploadArtifact = async (
       userId: string,
@@ -464,6 +473,15 @@ describe('processRun', () => {
     const msg = await ctx.messageStore.get('t1', 'am1');
     expect(msg?.artifacts).toHaveLength(1); // only the assistant-sourced file, not the user input
     expect(msg?.artifacts?.[0]).toMatchObject({ name: 'report.pdf', mime: 'application/pdf', kind: 'pdf', bytes: 5 });
+    expect(msg?.artifacts?.[0]).toMatchObject({
+      libraryItemId: libraryItemIdFor('userA', 'code_artifact', msg!.artifacts![0].id),
+      sourceItemIds: [
+        libraryItemIdFor('userA', 'thread_document', 'input-a'),
+        libraryItemIdFor('userA', 'thread_document', 'input-b'),
+      ],
+      version: 1,
+      provenanceComplete: true,
+    });
     const ci = msg?.toolCalls?.find((t) => t.id === 'ci1');
     expect(ci?.artifactIds).toEqual([msg?.artifacts?.[0].id]);
 
@@ -1156,7 +1174,15 @@ describe('processRun', () => {
     }, 't1', 'r1');
 
     expect(editInputs).toEqual([[4, 5, 6], [1, 2, 3]]);
-    expect((await ctx.messageStore.get('t1', 'am1'))?.images).toHaveLength(1);
+    const generated = (await ctx.messageStore.get('t1', 'am1'))?.images?.[0];
+    expect(generated).toMatchObject({
+      libraryItemId: libraryItemIdFor('userA', 'chat_generated_image', generated!.id),
+      referenceItemIds: [
+        libraryItemIdFor('userA', 'chat_generated_image', 'generated-character'),
+        libraryItemIdFor('userA', 'chat_attachment', 'template-img'),
+      ],
+      provenanceComplete: true,
+    });
   });
 
   it('does not pass an attached image to the image model unless edit_reference is requested', async () => {

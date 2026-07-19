@@ -531,6 +531,9 @@ class FakeCloud implements CloudApi {
       duplicateGroups: 0,
     };
   }
+  async getLibraryLineage() {
+    return { items: [] };
+  }
 }
 
 function setup(sync = true) {

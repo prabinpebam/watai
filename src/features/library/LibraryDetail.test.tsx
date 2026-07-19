@@ -6,10 +6,11 @@ import { LibraryDetail } from './LibraryDetail';
 
 const mocks = vi.hoisted(() => ({
   getLibraryItem: vi.fn(),
+  getLibraryLineage: vi.fn(),
   saveFile: vi.fn(),
 }));
 
-vi.mock('../../data', () => ({ cloudApi: { getLibraryItem: mocks.getLibraryItem } }));
+vi.mock('../../data', () => ({ cloudApi: { getLibraryItem: mocks.getLibraryItem, getLibraryLineage: mocks.getLibraryLineage } }));
 vi.mock('../../lib/saveFile', () => ({ saveFile: mocks.saveFile }));
 
 const image: LibraryItemDTO = {
@@ -36,7 +37,7 @@ function renderDetail(itemId = 'image-1') {
   return render(
     <MemoryRouter initialEntries={[{ pathname: `/library/${itemId}`, state: { backTo: '/library?kind=image', focusId: itemId } }]}>
       <Routes>
-        <Route path="/library/:itemId" element={<LibraryDetail />} />
+        <Route path="/library/:itemId" element={<><LibraryDetail /><LocationView /></>} />
         <Route path="*" element={<LocationView />} />
       </Routes>
     </MemoryRouter>,
@@ -47,6 +48,7 @@ beforeEach(() => {
   mocks.getLibraryItem.mockReset();
   mocks.saveFile.mockReset().mockResolvedValue(undefined);
   mocks.getLibraryItem.mockResolvedValue(image);
+  mocks.getLibraryLineage.mockReset().mockResolvedValue({ items: [] });
   Object.assign(navigator, { clipboard: { writeText: vi.fn(async () => undefined) } });
 });
 
@@ -83,5 +85,18 @@ describe('LibraryDetail', () => {
     renderDetail();
     expect(await screen.findByText('Permanently deleted')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download' })).toBeDisabled();
+  });
+
+  it('renders and navigates ordered reference and derived lineage results', async () => {
+    const reference = { ...image, id: 'reference', image: { ...image.image!, prompt: 'Reference image' } };
+    const derived = { ...image, id: 'derived', image: { ...image.image!, prompt: 'Derived image' } };
+    mocks.getLibraryLineage.mockImplementation(async (_id: string, direction: string) => ({ items: direction === 'references' ? [reference] : [derived] }));
+    renderDetail();
+    expect(await screen.findByRole('heading', { name: 'References' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Derived outputs' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Reference image/ }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/library/reference');
+    await waitFor(() => expect(mocks.getLibraryItem).toHaveBeenLastCalledWith('reference'));
+    await screen.findByRole('heading', { name: 'A launch poster' });
   });
 });

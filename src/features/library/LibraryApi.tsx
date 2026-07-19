@@ -1,11 +1,12 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { cloudApi } from '../../data';
-import type { LibraryItemDTO, LibraryListQuery, LibraryListResult, LibraryStorageSummary } from '../../data/cloud/types';
+import type { LibraryItemDTO, LibraryLineageResult, LibraryListQuery, LibraryListResult, LibraryStorageSummary } from '../../data/cloud/types';
 
 export interface LibraryReadApi {
   listLibrary(query?: LibraryListQuery): Promise<LibraryListResult>;
   getLibraryItem(id: string): Promise<LibraryItemDTO>;
   getLibraryStorage(): Promise<LibraryStorageSummary>;
+  getLibraryLineage(id: string, direction: 'references' | 'derived', cursor?: string): Promise<LibraryLineageResult>;
 }
 
 interface LibraryRuntime {

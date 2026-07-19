@@ -4,6 +4,7 @@ import type { ThreadRecord, ThreadStore, ThreadFileMeta } from '../ports/threadS
 import type { AoaiCreds, AoaiFiles, VectorFileStatus } from '../ai/files';
 import type { DecryptedCredentials } from './credentialService';
 import type { ServiceClock } from './threadService';
+import { libraryItemIdFor } from '../domain/library';
 
 /** Just the decrypt capability this service needs from the credential vault. */
 export interface CredentialDecryptor {
@@ -98,6 +99,7 @@ export class ThreadFilesService {
 
     const meta: ThreadFileMeta = {
       fileId: up.id,
+      ...(blobPath ? { libraryItemId: libraryItemIdFor(userId, 'thread_document', up.id) } : {}),
       name,
       bytes: up.bytes,
       status,

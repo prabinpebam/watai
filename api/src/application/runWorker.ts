@@ -36,6 +36,7 @@ import {
 } from '../ai/semanticRouter';
 import { renderMemoryContext, type MemoryContextService } from './memoryContextService';
 import type { MemoryExtractionService } from './memoryExtractionService';
+import { libraryItemIdFor } from '../domain/library';
 
 export interface CredentialReader {
   getDecrypted(userId: string): Promise<DecryptedCredentials>;
@@ -180,6 +181,22 @@ function imageIdsInHistory(history: MessageRecord[]): string[] {
     }
   }
   return ids;
+}
+
+function imageLibraryItemIds(history: MessageRecord[], userId: string, imageIds: string[]): string[] {
+  const ids = new Map<string, string>();
+  for (const message of history) {
+    if (message.deletedAt) continue;
+    for (const attachment of message.attachments ?? []) {
+      if (attachment.kind === 'image') {
+        ids.set(attachment.id, attachment.libraryItemId ?? libraryItemIdFor(userId, 'chat_attachment', attachment.id));
+      }
+    }
+    for (const image of message.images ?? []) {
+      ids.set(image.id, image.libraryItemId ?? libraryItemIdFor(userId, 'chat_generated_image', image.id));
+    }
+  }
+  return [...new Set(imageIds.map((id) => ids.get(id)).filter((id): id is string => !!id))];
 }
 
 async function resolveImageReferences(
@@ -695,6 +712,10 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   const ciContainers = new Map<string, string>();
   /** Artifacts generated this run (images + code-interpreter files) for the thread file list. */
   const generatedFiles: ThreadFileMeta[] = [];
+  const imageReferenceIdsByCall = new Map<string, string[]>();
+  const artifactSourceItemIds = [...new Set((thread?.files ?? [])
+    .filter((file) => (file.kind ?? 'document') === 'document' && file.status === 'ready' && !!file.blobPath)
+    .map((file) => file.libraryItemId ?? libraryItemIdFor(run.userId, 'thread_document', file.fileId)))];
   let memoryBlock: MemoryContextBlock | undefined;
   let memoryRefs: MessageMemoryRef[] = [];
   let acc = '';
@@ -801,18 +822,23 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         const blobPath = await deps.uploadArtifact(run.userId, threadId, artifactId, bytes, mime);
         artifacts.push({
           id: artifactId,
+          libraryItemId: libraryItemIdFor(run.userId, 'code_artifact', artifactId),
           name,
           mime,
           kind,
           bytes: bytes.byteLength,
           blobPath,
           sourceToolCallId: toolCallId,
+          sourceItemIds: artifactSourceItemIds,
+          version: 1,
+          provenanceComplete: true,
           createdAt: clock.now(),
         });
         seenArtifactFiles.add(f.id);
         persisted++;
         generatedFiles.push({
           fileId: artifactId,
+          libraryItemId: libraryItemIdFor(run.userId, 'code_artifact', artifactId),
           name: name.slice(0, 80),
           bytes: bytes.byteLength,
           status: 'ready',
@@ -1061,6 +1087,15 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
             ? { imageSize: ev.args.size.slice(0, 32) }
             : {}),
         });
+        if (kind === 'image' && ev.status === 'running') {
+          const argIds = Array.isArray(ev.args?.reference_image_ids)
+            ? ev.args.reference_image_ids.filter((value): value is string => typeof value === 'string')
+            : [];
+          imageReferenceIdsByCall.set(
+            id,
+            semanticRoute?.referenceImageIds.length ? semanticRoute.referenceImageIds : argIds,
+          );
+        }
         await flush(true);
         // Track the code-interpreter container; capture its files when the call completes.
         if (ev.name === 'code_interpreter' && ev.containerId) {
@@ -1100,17 +1135,23 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
             bytes,
             'image/png',
           );
+          const selectedSourceIds = imageReferenceIdsByCall.get(ev.callId ?? '') ?? semanticRoute?.referenceImageIds ?? [];
+          const referenceItemIds = imageLibraryItemIds(history, run.userId, selectedSourceIds);
           images.push({
             id: imageId,
+            libraryItemId: libraryItemIdFor(run.userId, 'chat_generated_image', imageId),
             blobPath,
             prompt: ev.prompt ?? '',
             size: ev.size ?? '1024x1024',
             outputFormat: 'png',
+            referenceItemIds,
+            provenanceComplete: referenceItemIds.length === selectedSourceIds.length,
             createdAt: clock.now(),
           });
           // Surface the generated image in the thread's file list (synced across devices).
           generatedFiles.push({
             fileId: imageId,
+            libraryItemId: libraryItemIdFor(run.userId, 'chat_generated_image', imageId),
             name: (ev.prompt?.trim() || 'Generated image').slice(0, 80),
             bytes: bytes.byteLength,
             status: 'ready',

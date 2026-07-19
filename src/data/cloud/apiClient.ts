@@ -16,6 +16,7 @@ import type {
   LibraryItemDTO,
   LibraryListQuery,
   LibraryListResult,
+  LibraryLineageResult,
   LibraryStorageSummary,
   ListMemoryQuery,
   ListMemoryResponse,
@@ -409,6 +410,12 @@ export class WataiApiClient implements CloudApi {
     return this.request('GET', '/library/storage');
   }
 
+  getLibraryLineage(id: string, direction: 'references' | 'derived', cursor?: string): Promise<LibraryLineageResult> {
+    const query = new URLSearchParams({ direction });
+    if (cursor) query.set('cursor', cursor);
+    return this.request('GET', `/library/${encodeURIComponent(id)}/lineage?${query}`);
+  }
+
   // --- access / invites ---
   getMe(): Promise<MeInfo> {
     return this.request('GET', '/me');
@@ -514,6 +521,7 @@ export interface CloudApi {
   listLibrary(query?: LibraryListQuery): Promise<LibraryListResult>;
   getLibraryItem(id: string): Promise<LibraryItemDTO>;
   getLibraryStorage(): Promise<LibraryStorageSummary>;
+  getLibraryLineage(id: string, direction: 'references' | 'derived', cursor?: string): Promise<LibraryLineageResult>;
   getMe(): Promise<MeInfo>;
   listInvites(): Promise<InviteRecord[]>;
   createInvite(email: string): Promise<InviteRecord>;

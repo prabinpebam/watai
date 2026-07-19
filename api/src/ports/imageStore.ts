@@ -3,6 +3,7 @@ import type { ImageStatus, ImageError, ImageQuality } from '../domain/imageGen';
 /** Server-side image record (Cosmos `images`, partition key /userId). One row per image. */
 export interface ImageGenRecord {
   id: string;
+  libraryItemId?: string;
   userId: string;
   /** Groups images created together in one request. */
   batchId: string;
@@ -18,6 +19,8 @@ export interface ImageGenRecord {
   blobPath?: string;
   /** Remix lineage — the image this one was generated from. */
   sourceImageId?: string;
+  referenceItemIds?: string[];
+  provenanceComplete?: boolean;
   /** Whether the remix used the source image as an edit reference. */
   useReference?: boolean;
   error?: ImageError | null;

@@ -5,6 +5,7 @@ import type { ImageJob, ImageJobStarter } from '../ports/imageJobStarter';
 import type { SasMinter } from '../ports/sasMinter';
 import type { ImageGenRecord } from '../ports/imageStore';
 import { AppError } from '../domain/errors';
+import { libraryItemIdFor } from '../domain/library';
 
 function makeClock() {
   let n = 0;
@@ -64,7 +65,13 @@ describe('ImageService.create', () => {
     const svc = new ImageService(store, creds('gpt-image-1'), starter(), minter, makeClock());
 
     const out = await svc.create('userA', { prompt: 'remix', sourceImageId: 'src', useReference: true });
-    expect(out[0]).toMatchObject({ sourceImageId: 'src', useReference: true });
+    expect(out[0]).toMatchObject({
+      sourceImageId: 'src',
+      useReference: true,
+      libraryItemId: libraryItemIdFor('userA', 'studio_generated_image', out[0].id),
+      referenceItemIds: [libraryItemIdFor('userA', 'studio_generated_image', 'src')],
+      provenanceComplete: true,
+    });
   });
 
   it('rejects when no image model is configured', async () => {

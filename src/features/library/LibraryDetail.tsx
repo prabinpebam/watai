@@ -93,6 +93,8 @@ export function LibraryDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [references, setReferences] = useState<LibraryItemDTO[]>([]);
+  const [derived, setDerived] = useState<LibraryItemDTO[]>([]);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const state = location.state as { backTo?: string; focusId?: string } | null;
   const backTo = state?.backTo ?? basePath;
@@ -110,6 +112,20 @@ export function LibraryDetail() {
     });
     return () => { live = false; };
   }, [api, itemId]);
+
+  useEffect(() => {
+    let live = true;
+    if (!item) return () => { live = false; };
+    Promise.all([
+      api.getLibraryLineage(item.id, 'references').catch(() => ({ items: [] })),
+      api.getLibraryLineage(item.id, 'derived').catch(() => ({ items: [] })),
+    ]).then(([forward, reverse]) => {
+      if (!live) return;
+      setReferences(forward.items);
+      setDerived(reverse.items);
+    });
+    return () => { live = false; };
+  }, [api, item]);
 
   useEffect(() => {
     if (item) headingRef.current?.focus();
@@ -165,6 +181,23 @@ export function LibraryDetail() {
               {item.source.threadTitleSnapshot && <p>{item.source.threadTitleSnapshot}</p>}
               {item.source.threadId && <Button variant="outline" icon="chat" onClick={() => navigate(`/c/${encodeURIComponent(item.source.threadId!)}`)}>{LIBRARY_COPY.showInChat}</Button>}
             </section>
+            {(references.length > 0 || derived.length > 0) && (
+              <section className="library-lineage">
+                <h2>Lineage</h2>
+                {references.length > 0 && <h3>References</h3>}
+                {references.map((reference) => (
+                  <button key={reference.id} type="button" onClick={() => navigate(`${basePath}/${encodeURIComponent(reference.id)}`, { state: { backTo: location.pathname } })}>
+                    <Icon name={iconForKind(reference.kind)} size={18} /><span>{itemTitle(reference)}</span><Icon name="chevron-right" size={16} />
+                  </button>
+                ))}
+                {derived.length > 0 && <h3>Derived outputs</h3>}
+                {derived.map((output) => (
+                  <button key={output.id} type="button" onClick={() => navigate(`${basePath}/${encodeURIComponent(output.id)}`, { state: { backTo: location.pathname } })}>
+                    <Icon name={iconForKind(output.kind)} size={18} /><span>{itemTitle(output)}</span><Icon name="chevron-right" size={16} />
+                  </button>
+                ))}
+              </section>
+            )}
           </aside>
         </div>
       </div>

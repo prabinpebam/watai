@@ -5,6 +5,7 @@ export interface ThreadFileMeta {
   /** Azure OpenAI file id (also the vector-store file id) — the delete key. For generated
    *  artifacts (kind 'image') this is a synthetic id. */
   fileId: string;
+  libraryItemId?: string;
   name: string;
   bytes: number;
   status: 'indexing' | 'ready' | 'error';

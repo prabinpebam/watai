@@ -1,9 +1,8 @@
-import { createHash } from 'node:crypto';
 import { AppError } from '../domain/errors';
 import type { MessageRecord } from '../ports/messageStore';
 import type { ImageGenRecord } from '../ports/imageStore';
 import type { ThreadRecord } from '../ports/threadStore';
-import { parseLibraryItem, type LibraryItemRecord, type LibraryKind, type LibraryOrigin } from '../domain/library';
+import { libraryIngestionKey, libraryItemId, libraryItemIdFor, parseLibraryItem, type LibraryItemRecord, type LibraryKind, type LibraryOrigin } from '../domain/library';
 
 export interface InventoryBlob {
   name: string;
@@ -80,10 +79,6 @@ function key(userId: string, threadId: string): string {
   return `${userId}\u0000${threadId}`;
 }
 
-function proposedId(userId: string, ingestionKey: string): string {
-  return `lib-${createHash('sha256').update(`${userId}\u0000${ingestionKey}`).digest('hex').slice(0, 32)}`;
-}
-
 function kindFor(mime: string, name = ''): LibraryKind {
   const lowerMime = mime.toLowerCase();
   const lowerName = name.toLowerCase();
@@ -133,7 +128,7 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
     artifact?: LibraryItemRecord['artifact'];
   }) => {
     const blob = blobs.get(args.blobPath);
-    const id = proposedId(args.userId, args.ingestionKey);
+    const id = libraryItemId(args.userId, args.ingestionKey);
     let projection: LibraryItemRecord;
     try {
       projection = parseLibraryItem({
@@ -185,7 +180,7 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
       }
       addCandidate({
         userId: message.userId,
-        ingestionKey: `chat_attachment:${attachment.id}`,
+        ingestionKey: libraryIngestionKey('chat_attachment', attachment.id),
         origin: 'chat_upload',
         kind: kindFor(attachment.mime, attachment.name),
         sourceId: attachment.id,
@@ -220,14 +215,14 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
       }
       addCandidate({
         userId: message.userId,
-        ingestionKey: `chat_generated_image:${image.id}`,
+        ingestionKey: libraryIngestionKey('chat_generated_image', image.id),
         origin: 'chat_generated_image',
         kind: 'image',
         sourceId: image.id,
         sourceThreadId: message.threadId,
         blobPath: image.blobPath,
         declaredBytes: blobs.get(image.blobPath)?.bytes ?? 0,
-        provenanceComplete: false,
+        provenanceComplete: image.provenanceComplete ?? false,
         name: `Generated image ${image.id}`,
         mime: `image/${image.outputFormat}`,
         createdAt: image.createdAt,
@@ -242,7 +237,8 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
           size: image.size,
           format: image.outputFormat,
           prompt: image.prompt,
-          provenanceComplete: false,
+          ...(image.referenceItemIds ? { referenceItemIds: image.referenceItemIds } : {}),
+          provenanceComplete: image.provenanceComplete ?? false,
         },
       });
     }
@@ -254,14 +250,14 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
       }
       addCandidate({
         userId: message.userId,
-        ingestionKey: `code_artifact:${artifact.id}`,
+        ingestionKey: libraryIngestionKey('code_artifact', artifact.id),
         origin: 'code_artifact',
         kind: artifact.kind,
         sourceId: artifact.id,
         sourceThreadId: message.threadId,
         blobPath: artifact.blobPath,
         declaredBytes: artifact.bytes,
-        provenanceComplete: false,
+        provenanceComplete: artifact.provenanceComplete ?? false,
         name: artifact.name,
         mime: artifact.mime,
         createdAt: artifact.createdAt,
@@ -274,7 +270,11 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
           createdAt: artifact.createdAt,
         },
         ...(artifact.kind === 'image' ? { image: { provenanceComplete: false } } : {}),
-        artifact: { provenanceComplete: false },
+        artifact: {
+          ...(artifact.sourceItemIds ? { sourceItemIds: artifact.sourceItemIds } : {}),
+          ...(artifact.version ? { version: artifact.version } : {}),
+          provenanceComplete: artifact.provenanceComplete ?? false,
+        },
       });
     }
   }
@@ -293,7 +293,7 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
       }
       addCandidate({
         userId: thread.userId,
-        ingestionKey: `thread_document:${file.fileId}`,
+        ingestionKey: libraryIngestionKey('thread_document', file.fileId),
         origin: 'thread_document',
         kind: kindFor(file.mime ?? '', file.name),
         sourceId: file.fileId,
@@ -322,13 +322,13 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
     }
     addCandidate({
       userId: image.userId,
-      ingestionKey: `studio_generated_image:${image.id}`,
+      ingestionKey: libraryIngestionKey('studio_generated_image', image.id),
       origin: 'studio_generated_image',
       kind: 'image',
       sourceId: image.id,
       blobPath: image.blobPath,
       declaredBytes: blobs.get(image.blobPath)?.bytes ?? 0,
-      provenanceComplete: !image.useReference || !!image.sourceImageId,
+      provenanceComplete: image.provenanceComplete ?? (!image.useReference || !!image.sourceImageId),
       name: `Studio image ${image.id}`,
       mime: `image/${image.outputFormat}`,
       createdAt: image.createdAt,
@@ -340,8 +340,12 @@ export function buildLibraryInventory(input: LibraryInventoryInput): LibraryInve
         ...(image.revisedPrompt ? { revisedPrompt: image.revisedPrompt } : {}),
         model: image.model,
         ...(image.quality ? { quality: image.quality } : {}),
-        ...(image.sourceImageId ? { referenceItemIds: [proposedId(image.userId, `studio_generated_image:${image.sourceImageId}`)] } : {}),
-        provenanceComplete: !image.useReference || !!image.sourceImageId,
+        ...(image.referenceItemIds
+          ? { referenceItemIds: image.referenceItemIds }
+          : image.sourceImageId
+            ? { referenceItemIds: [libraryItemIdFor(image.userId, 'studio_generated_image', image.sourceImageId)] }
+            : {}),
+        provenanceComplete: image.provenanceComplete ?? (!image.useReference || !!image.sourceImageId),
       },
     });
   }

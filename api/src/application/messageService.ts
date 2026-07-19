@@ -3,6 +3,7 @@ import type { AppendMessageInput } from '../domain/message';
 import type { MessageListOptions, MessageRecord, MessageStore } from '../ports/messageStore';
 import type { ThreadRecord, ThreadStore } from '../ports/threadStore';
 import type { ServiceClock } from './threadService';
+import { libraryItemIdFor } from '../domain/library';
 
 export interface MemoryExtractionScheduler {
   enqueueAfterMessage(record: MessageRecord, thread: ThreadRecord): Promise<void>;
@@ -45,8 +46,18 @@ export class MessageService {
       content: input.content,
       ...(input.model ? { model: input.model } : {}),
       ...(input.parentId ? { parentId: input.parentId } : {}),
-      ...(input.images && input.images.length ? { images: input.images } : {}),
-      ...(input.attachments && input.attachments.length ? { attachments: input.attachments } : {}),
+      ...(input.images && input.images.length
+        ? { images: input.images.map((image) => ({
+            ...image,
+            libraryItemId: image.libraryItemId ?? libraryItemIdFor(userId, 'chat_generated_image', image.id),
+          })) }
+        : {}),
+      ...(input.attachments && input.attachments.length
+        ? { attachments: input.attachments.map((attachment) => ({
+            ...attachment,
+            libraryItemId: attachment.libraryItemId ?? libraryItemIdFor(userId, 'chat_attachment', attachment.id),
+          })) }
+        : {}),
       ...(input.toolCalls && input.toolCalls.length ? { toolCalls: input.toolCalls } : {}),
       ...(input.citations && input.citations.length ? { citations: input.citations } : {}),
       ...(input.memoryRefs && input.memoryRefs.length ? { memoryRefs: input.memoryRefs } : {}),

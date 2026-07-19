@@ -3,6 +3,7 @@ import { ThreadFilesService } from './threadFilesService';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import type { AoaiFiles, VectorFileStatus } from '../ai/files';
 import type { ThreadRecord } from '../ports/threadStore';
+import { libraryItemIdFor } from '../domain/library';
 
 function b64(s: string): string {
   return Buffer.from(s).toString('base64');
@@ -100,6 +101,7 @@ describe('ThreadFilesService', () => {
     expect(meta.fileId).toBe('file-1');
     expect(meta.name).toBe('doc.pdf');
     expect(meta.blobPath).toBe('t1/file-1.application/pdf');
+    expect(meta.libraryItemId).toBe(libraryItemIdFor('u', 'thread_document', 'file-1'));
     expect(meta.mime).toBe('application/pdf');
     expect(meta.status).toBe('ready');
     expect(ctx.files.calls).toContain('createVs:thread:t1');

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import { AppError } from './errors';
 import { parseOrThrow } from './validate';
 
@@ -49,6 +50,20 @@ export const LIBRARY_UPLOAD_MAX_BATCH_BYTES = 100 * 1024 * 1024;
 export const LIBRARY_UPLOAD_MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 export const LIBRARY_UPLOAD_MAX_OTHER_BYTES = 25 * 1024 * 1024;
 export const LIBRARY_TRASH_RETENTION_DAYS = 7;
+
+export type LibrarySourceKind = 'chat_attachment' | 'chat_generated_image' | 'code_artifact' | 'thread_document' | 'studio_generated_image';
+
+export function libraryIngestionKey(kind: LibrarySourceKind, sourceId: string): string {
+  return `${kind}:${sourceId}`;
+}
+
+export function libraryItemId(userId: string, ingestionKey: string): string {
+  return `lib-${createHash('sha256').update(`${userId}\u0000${ingestionKey}`).digest('hex').slice(0, 32)}`;
+}
+
+export function libraryItemIdFor(userId: string, kind: LibrarySourceKind, sourceId: string): string {
+  return libraryItemId(userId, libraryIngestionKey(kind, sourceId));
+}
 
 const boundedId = z.string().trim().min(1).max(64);
 const iso = z.string().datetime({ offset: true });
@@ -290,6 +305,24 @@ export function parseLibraryListQuery(input: Record<string, unknown>): LibraryLi
     ...(cursor ? { cursor } : {}),
     limit: limitRaw,
   };
+}
+
+export interface LibraryLineageQuery {
+  direction: 'references' | 'derived';
+  cursor?: string;
+  limit: number;
+}
+
+export function parseLibraryLineageQuery(input: Record<string, unknown>): LibraryLineageQuery {
+  const direction = String(input.direction ?? '');
+  if (direction !== 'references' && direction !== 'derived') {
+    throw new AppError('validation', 'Library lineage direction must be references or derived.');
+  }
+  const cursor = input.cursor === undefined || input.cursor === '' ? undefined : String(input.cursor);
+  if (cursor && cursor.length > 2_048) throw new AppError('validation', 'Invalid Library lineage cursor.');
+  const limit = optionalNumber(input.limit) ?? 50;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AppError('validation', 'Library lineage limit must be between 1 and 100.');
+  return { direction, ...(cursor ? { cursor } : {}), limit };
 }
 
 const libraryPatchSchema = z

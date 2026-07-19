@@ -1,5 +1,5 @@
 import { AppError } from '../domain/errors';
-import { libraryStorageBytes, type LibraryItemRecord, type LibraryListQuery } from '../domain/library';
+import { libraryStorageBytes, type LibraryItemRecord, type LibraryLineageQuery, type LibraryListQuery } from '../domain/library';
 import type { LibraryStore } from '../ports/libraryStore';
 import type { SasMinter } from '../ports/sasMinter';
 import { toLibraryItemDto, type LibraryItemDTO, type LibraryStorageSummaryDTO } from './libraryDto';
@@ -44,6 +44,44 @@ export class LibraryService {
     const value = storageSummary(records, reconciledAt);
     this.storageCache.set(userId, { value, expiresAt: this.nowMs() + STORAGE_CACHE_MS });
     return value;
+  }
+
+  async lineage(userId: string, id: string, query: LibraryLineageQuery): Promise<{ items: LibraryItemDTO[]; cursor?: string }> {
+    const source = await this.store.get(userId, id);
+    if (!source) throw new AppError('not_found', 'Library item not found.');
+    if (query.direction === 'derived') {
+      const page = await this.store.findDerived(userId, id, query.cursor, query.limit);
+      return {
+        items: await Promise.all(page.items.map((item) => toLibraryItemDto(this.minter, item))),
+        ...(page.cursor ? { cursor: page.cursor } : {}),
+      };
+    }
+    const referenceIds = source.image?.referenceItemIds ?? source.artifact?.sourceItemIds ?? [];
+    const offset = decodeLineageOffset(query.cursor);
+    const selectedIds = referenceIds.slice(offset, offset + query.limit);
+    const records = await this.store.getMany(userId, selectedIds);
+    const byId = new Map(records.map((record) => [record.id, record]));
+    const ordered = selectedIds.map((itemId) => byId.get(itemId)).filter((item): item is LibraryItemRecord => !!item);
+    const nextOffset = offset + selectedIds.length;
+    return {
+      items: await Promise.all(ordered.map((item) => toLibraryItemDto(this.minter, item))),
+      ...(nextOffset < referenceIds.length ? { cursor: encodeLineageOffset(nextOffset) } : {}),
+    };
+  }
+}
+
+function encodeLineageOffset(offset: number): string {
+  return Buffer.from(JSON.stringify({ offset }), 'utf8').toString('base64url');
+}
+
+function decodeLineageOffset(cursor?: string): number {
+  if (!cursor) return 0;
+  try {
+    const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as { offset?: unknown };
+    if (!Number.isInteger(value.offset) || Number(value.offset) < 0) throw new Error('shape');
+    return Number(value.offset);
+  } catch {
+    throw new AppError('validation', 'Invalid Library lineage cursor.');
   }
 }
 

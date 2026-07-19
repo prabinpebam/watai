@@ -83,17 +83,20 @@ describe('WataiApiClient', () => {
       { status: 200, body: { items: [], cursor: 'next' } },
       { status: 200, body: { id: 'item/1', state: 'active' } },
       { status: 200, body: { activeBytes: 0, trashedBytes: 0 } },
+      { status: 200, body: { items: [] } },
     ]);
     const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
 
     await client.listLibrary({ q: 'quarterly plan', kind: ['pdf', 'document'], origin: 'uploaded', starred: true, sort: 'largest', limit: 25 });
     await client.getLibraryItem('item/1');
     await client.getLibraryStorage();
+    await client.getLibraryLineage('item/1', 'references', 'next');
 
     expect(calls.map((call) => call.url)).toEqual([
       'https://api.test/api/library?q=quarterly+plan&kind=pdf%2Cdocument&origin=uploaded&starred=true&sort=largest&limit=25',
       'https://api.test/api/library/item%2F1',
       'https://api.test/api/library/storage',
+      'https://api.test/api/library/item%2F1/lineage?direction=references&cursor=next',
     ]);
   });
 

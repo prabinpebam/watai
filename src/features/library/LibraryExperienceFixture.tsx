@@ -43,7 +43,7 @@ const ITEMS: LibraryItemDTO[] = [
   {
     id: 'metrics-csv', state: 'active', kind: 'data', origin: 'code_artifact',
     name: 'metrics.csv', mime: 'text/csv', bytes: 480, createdAt: '2026-07-14T09:00:00.000Z', updatedAt: CREATED,
-    source, artifact: { provenanceComplete: false }, url: 'data:text/csv;charset=utf-8,Metric%2CValue%0AItems%2C388%0AStorage%2C565.9%20MiB',
+    source, artifact: { sourceItemIds: ['brief-pdf'], version: 1, provenanceComplete: true }, url: 'data:text/csv;charset=utf-8,Metric%2CValue%0AItems%2C388%0AStorage%2C565.9%20MiB',
   },
   {
     id: 'deck-pptx', state: 'active', kind: 'presentation', origin: 'code_artifact',
@@ -111,6 +111,17 @@ const fixtureApi: LibraryReadApi = {
       largestSourceThreads: [{ threadId: 'eval-thread', title: 'Launch planning', bytes: activeBytes, count: ITEMS.length }],
       duplicateGroups: 0,
       estimate: { monthlyCapacityCost: 0.0002, currency: 'USD', ratePerGbMonth: 0.0184, region: 'East US 2', sku: 'Standard LRS Hot', rateAsOf: '2026-07-19', exclusions: ['Transactions'] },
+    };
+  },
+  async getLibraryLineage(id, direction) {
+    const sourceItem = ITEMS.find((item) => item.id === id);
+    if (!sourceItem) return { items: [] };
+    if (direction === 'references') {
+      const ids = sourceItem.image?.referenceItemIds ?? sourceItem.artifact?.sourceItemIds ?? [];
+      return { items: ids.map((itemId) => ITEMS.find((item) => item.id === itemId)).filter((item): item is LibraryItemDTO => !!item) };
+    }
+    return {
+      items: ITEMS.filter((item) => item.image?.referenceItemIds?.includes(id) || item.artifact?.sourceItemIds?.includes(id)),
     };
   },
 };

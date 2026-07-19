@@ -6,6 +6,7 @@ import type { SasMinter } from '../ports/sasMinter';
 import type { ServiceClock } from './threadService';
 import type { CredentialReader } from './imageWorker';
 import { toImageDto, type ImageDTO } from './imageDto';
+import { libraryItemIdFor } from '../domain/library';
 
 /**
  * Creates and tracks server-side image generations. `create` persists queued records and enqueues
@@ -30,8 +31,9 @@ export class ImageService {
     if (!model) throw new AppError('validation', 'No image model is configured.');
 
     // Remix lineage must reference one of the caller's own images.
+    let source: ImageGenRecord | null = null;
     if (parsed.sourceImageId) {
-      const source = await this.imageStore.get(userId, parsed.sourceImageId);
+      source = await this.imageStore.get(userId, parsed.sourceImageId);
       if (!source) throw new AppError('not_found', 'Source image not found.');
     }
 
@@ -52,12 +54,17 @@ export class ImageService {
         ...(parsed.quality ? { quality: parsed.quality } : {}),
         outputFormat: 'png',
         model,
+        provenanceComplete: true,
         ...(parsed.sourceImageId ? { sourceImageId: parsed.sourceImageId } : {}),
         ...(parsed.useReference ? { useReference: true } : {}),
         error: null,
         createdAt: ts,
         updatedAt: ts,
       };
+      queued.libraryItemId = libraryItemIdFor(userId, 'studio_generated_image', queued.id);
+      queued.referenceItemIds = source
+        ? [source.libraryItemId ?? libraryItemIdFor(userId, 'studio_generated_image', source.id)]
+        : [];
       const saved = await this.imageStore.put(queued);
       try {
         await this.starter.start({ imageId: saved.id, userId });

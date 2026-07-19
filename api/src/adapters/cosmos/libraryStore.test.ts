@@ -18,7 +18,10 @@ function fakeContainer(records: unknown[], reads: Record<string, unknown> = {}) 
     items: {
       query: (_query: unknown, options: { partitionKey?: string }) => {
         partitions.push(options.partitionKey);
-        return { fetchAll: async () => ({ resources: records }) };
+        return {
+          fetchAll: async () => ({ resources: records }),
+          fetchNext: async () => ({ resources: records }),
+        };
       },
       upsert: async (record: unknown) => ({ resource: record }),
     },
@@ -96,5 +99,14 @@ describe('CosmosLibraryStore', () => {
     const page = await new CosmosLibraryStore(withSecond.container).list('user-1', { ...query, limit: 1 });
     await expect(store.list('user-1', { ...query, sort: 'name', cursor: page.cursor })).rejects.toMatchObject({ code: 'validation' });
     expect(first.cursor).toBeUndefined();
+  });
+
+  it('keeps batch-reference and reverse-lineage reads inside the owner partition', async () => {
+    const item = libraryFixture({ id: 'one', kind: 'image', origin: 'library_upload', state: 'active' });
+    const { container, partitions } = fakeContainer([item]);
+    const store = new CosmosLibraryStore(container);
+    await expect(store.getMany('user-1', ['one'])).resolves.toEqual([item]);
+    await expect(store.findDerived('user-1', 'one', undefined, 50)).resolves.toMatchObject({ items: [item] });
+    expect(partitions).toEqual(['user-1', 'user-1']);
   });
 });

@@ -25,6 +25,7 @@ export interface ThreadRecord {
 /** A document in a thread's knowledge base (vector store), as returned by the API. */
 export interface ThreadFileRecord {
   fileId: string;
+  libraryItemId?: string;
   name: string;
   bytes: number;
   status: 'indexing' | 'ready' | 'error';
@@ -263,16 +264,20 @@ export interface MemoryRebuildResponse {
 /** Cloud image metadata (bytes live in Blob Storage at `blobPath`). */
 export interface ImageRecord {
   id: string;
+  libraryItemId?: string;
   blobPath: string;
   prompt: string;
   size: string;
   outputFormat: 'png' | 'jpeg' | 'webp';
   createdAt: string;
+  referenceItemIds?: string[];
+  provenanceComplete?: boolean;
 }
 
 /** Cloud attachment metadata (user-uploaded; bytes live in Blob Storage at `blobPath`). */
 export interface AttachmentRecord {
   id: string;
+  libraryItemId?: string;
   kind: 'image' | 'audio' | 'file';
   blobPath: string;
   mime: string;
@@ -285,12 +290,16 @@ export interface AttachmentRecord {
 /** Generated-artifact record synced with a message (bytes in Blob Storage at `blobPath`). */
 export interface ArtifactRecord {
   id: string;
+  libraryItemId?: string;
   name: string;
   mime: string;
   kind: 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'image' | 'data' | 'archive' | 'code' | 'text';
   bytes: number;
   blobPath: string;
   sourceToolCallId?: string;
+  sourceItemIds?: string[];
+  version?: number;
+  provenanceComplete?: boolean;
   createdAt: string;
 }
 
@@ -370,6 +379,11 @@ export interface LibraryListResult {
   items: LibraryItemDTO[];
   cursor?: string;
   totalApprox?: number;
+}
+
+export interface LibraryLineageResult {
+  items: LibraryItemDTO[];
+  cursor?: string;
 }
 
 export interface LibraryListQuery {
@@ -659,6 +673,7 @@ export type ImageGenStatus = 'queued' | 'generating' | 'ready' | 'error';
 /** Server image record (GET /images, GET /images/{id}). One row per image. */
 export interface StudioImage {
   id: string;
+  libraryItemId?: string;
   userId: string;
   batchId: string;
   status: ImageGenStatus;
@@ -670,6 +685,8 @@ export interface StudioImage {
   model: string;
   blobPath?: string;
   sourceImageId?: string;
+  referenceItemIds?: string[];
+  provenanceComplete?: boolean;
   useReference?: boolean;
   error?: { code: string; message: string } | null;
   createdAt: string;
@@ -747,11 +764,14 @@ export function messageFromRecord(r: MessageRecord): Message {
       ? {
           images: r.images.map((i) => ({
             id: i.id,
+            ...(i.libraryItemId !== undefined ? { libraryItemId: i.libraryItemId } : {}),
             blobPath: i.blobPath,
             prompt: i.prompt,
             size: i.size,
             outputFormat: i.outputFormat,
             createdAt: i.createdAt,
+            ...(i.referenceItemIds !== undefined ? { referenceItemIds: [...i.referenceItemIds] } : {}),
+            ...(i.provenanceComplete !== undefined ? { provenanceComplete: i.provenanceComplete } : {}),
           })),
         }
       : {}),
@@ -759,6 +779,7 @@ export function messageFromRecord(r: MessageRecord): Message {
       ? {
           attachments: r.attachments.map((a) => ({
             id: a.id,
+            ...(a.libraryItemId !== undefined ? { libraryItemId: a.libraryItemId } : {}),
             kind: a.kind,
             blobPath: a.blobPath,
             mime: a.mime,
@@ -777,12 +798,16 @@ export function messageFromRecord(r: MessageRecord): Message {
       ? {
           artifacts: r.artifacts.map((a) => ({
             id: a.id,
+            ...(a.libraryItemId !== undefined ? { libraryItemId: a.libraryItemId } : {}),
             name: a.name,
             mime: a.mime,
             kind: a.kind,
             bytes: a.bytes,
             blobPath: a.blobPath,
             ...(a.sourceToolCallId !== undefined ? { sourceToolCallId: a.sourceToolCallId } : {}),
+            ...(a.sourceItemIds !== undefined ? { sourceItemIds: [...a.sourceItemIds] } : {}),
+            ...(a.version !== undefined ? { version: a.version } : {}),
+            ...(a.provenanceComplete !== undefined ? { provenanceComplete: a.provenanceComplete } : {}),
             createdAt: a.createdAt,
           })),
         }
@@ -797,16 +822,20 @@ export function appendBodyFromMessage(m: Message): AppendMessageBody {
     .filter((i): i is typeof i & { blobPath: string } => !!i.blobPath)
     .map((i) => ({
       id: i.id,
+      ...(i.libraryItemId !== undefined ? { libraryItemId: i.libraryItemId } : {}),
       blobPath: i.blobPath,
       prompt: i.prompt,
       size: i.size,
       outputFormat: i.outputFormat,
       createdAt: i.createdAt,
+      ...(i.referenceItemIds !== undefined ? { referenceItemIds: [...i.referenceItemIds] } : {}),
+      ...(i.provenanceComplete !== undefined ? { provenanceComplete: i.provenanceComplete } : {}),
     }));
   const uploadedAtts: AttachmentRecord[] = (m.attachments ?? [])
     .filter((a): a is typeof a & { blobPath: string } => !!a.blobPath)
     .map((a) => ({
       id: a.id,
+      ...(a.libraryItemId !== undefined ? { libraryItemId: a.libraryItemId } : {}),
       kind: a.kind,
       blobPath: a.blobPath,
       mime: a.mime,

@@ -30,6 +30,7 @@ export interface Thread {
 export interface ThreadFile {
   /** Azure OpenAI file id (also the vector-store file id) — the delete key. */
   fileId: string;
+  libraryItemId?: string;
   name: string;
   bytes: number;
   status: 'indexing' | 'ready' | 'error';
@@ -67,6 +68,7 @@ export type MemoryKind =
 
 export interface Attachment {
   id: Id;
+  libraryItemId?: Id;
   kind: 'image' | 'audio' | 'file';
   localBlobKey?: string;
   blobPath?: string;
@@ -79,6 +81,7 @@ export interface Attachment {
 
 export interface ImageRef {
   id: Id;
+  libraryItemId?: Id;
   localBlobKey?: string;
   blobPath?: string;
   prompt: string;
@@ -90,6 +93,8 @@ export interface ImageRef {
   model?: string;
   sourceMessageIds?: Id[];
   editOf?: Id | null;
+  referenceItemIds?: Id[];
+  provenanceComplete?: boolean;
 }
 
 /** Transient placeholder for an image being generated. Render-only — never persisted or synced. */
@@ -118,6 +123,7 @@ export type ArtifactKind =
  *  at `blobPath`; resolved to a downloadable URL via the read-SAS flow. */
 export interface Artifact {
   id: Id;
+  libraryItemId?: Id;
   name: string;
   mime: string;
   kind: ArtifactKind;
@@ -125,6 +131,9 @@ export interface Artifact {
   blobPath?: string;
   localBlobKey?: string;
   sourceToolCallId?: Id;
+  sourceItemIds?: Id[];
+  version?: number;
+  provenanceComplete?: boolean;
   createdAt: string;
 }
 

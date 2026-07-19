@@ -17,4 +17,6 @@ export interface LibraryStore {
   put(record: LibraryItemRecord, etag?: string): Promise<LibraryItemRecord>;
   list(userId: string, query: LibraryListQuery): Promise<LibraryListResult>;
   aggregate(userId: string): Promise<LibraryStorageAggregate>;
+  getMany(userId: string, ids: string[]): Promise<LibraryItemRecord[]>;
+  findDerived(userId: string, itemId: string, cursor: string | undefined, limit: number): Promise<LibraryListResult>;
 }

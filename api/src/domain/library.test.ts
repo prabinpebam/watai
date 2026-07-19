@@ -6,6 +6,10 @@ import {
   assertLibraryTransition,
   canTransitionLibrary,
   libraryStorageBytes,
+  libraryIngestionKey,
+  libraryItemId,
+  libraryItemIdFor,
+  parseLibraryLineageQuery,
   parseLibraryBatch,
   parseLibraryImpact,
   parseLibraryItem,
@@ -31,6 +35,13 @@ function errorCode(work: () => unknown): string | undefined {
 }
 
 describe('Library domain', () => {
+  it('derives stable item ids from the owner and source ingestion key', () => {
+    const key = libraryIngestionKey('chat_generated_image', 'img-1');
+    expect(key).toBe('chat_generated_image:img-1');
+    expect(libraryItemIdFor('user-1', 'chat_generated_image', 'img-1')).toBe(libraryItemId('user-1', key));
+    expect(libraryItemId('user-1', key)).toBe('lib-a43fb5ad5d1e33172617758a2563732b');
+    expect(libraryItemId('user-2', key)).not.toBe(libraryItemId('user-1', key));
+  });
   it('covers every kind, origin, and lifecycle state with valid fixtures', () => {
     expect(LIBRARY_KIND_FIXTURES.map((item) => parseLibraryItem(item).kind)).toEqual(LIBRARY_KINDS);
     expect(LIBRARY_ORIGIN_FIXTURES.map((item) => parseLibraryItem(item).origin)).toEqual(LIBRARY_ORIGINS);
@@ -86,6 +97,13 @@ describe('Library domain', () => {
     expect(errorCode(() => parseLibraryListQuery({ kind: 'executable' }))).toBe('validation');
     expect(errorCode(() => parseLibraryListQuery({ minBytes: 20, maxBytes: 10 }))).toBe('validation');
     expect(errorCode(() => parseLibraryListQuery({ limit: 101 }))).toBe('validation');
+  });
+
+  it('parses bounded forward and reverse lineage queries', () => {
+    expect(parseLibraryLineageQuery({ direction: 'references' })).toEqual({ direction: 'references', limit: 50 });
+    expect(parseLibraryLineageQuery({ direction: 'derived', limit: '10', cursor: 'next' })).toEqual({ direction: 'derived', limit: 10, cursor: 'next' });
+    expect(() => parseLibraryLineageQuery({ direction: 'sideways' })).toThrow();
+    expect(() => parseLibraryLineageQuery({ direction: 'derived', limit: '101' })).toThrow();
   });
 
   it('parses metadata, impact, and batch mutations strictly', () => {

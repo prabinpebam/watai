@@ -9,11 +9,14 @@ export type MessageStatus = 'streaming' | 'complete' | 'interrupted' | 'error';
 const imageSchema = z
   .object({
     id: z.string().min(1).max(64),
+    libraryItemId: z.string().min(1).max(64).optional(),
     blobPath: z.string().min(1).max(512),
     prompt: z.string().max(8000).default(''),
     size: z.string().min(1).max(32),
     outputFormat: z.enum(['png', 'jpeg', 'webp']),
     createdAt: z.string().min(1).max(40),
+    referenceItemIds: z.array(z.string().min(1).max(64)).max(32).refine((ids) => new Set(ids).size === ids.length).optional(),
+    provenanceComplete: z.boolean().optional(),
   })
   .strict();
 
@@ -38,6 +41,7 @@ export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 const artifactSchema = z
   .object({
     id: z.string().min(1).max(64),
+    libraryItemId: z.string().min(1).max(64).optional(),
     name: z.string().min(1).max(400),
     mime: z.string().min(1).max(255),
     kind: z.enum(ARTIFACT_KINDS),
@@ -45,6 +49,9 @@ const artifactSchema = z
     blobPath: z.string().min(1).max(512),
     /** The code-interpreter tool call this artifact came from (lineage). */
     sourceToolCallId: z.string().max(64).optional(),
+    sourceItemIds: z.array(z.string().min(1).max(64)).max(32).refine((ids) => new Set(ids).size === ids.length).optional(),
+    version: z.number().int().positive().max(10_000).optional(),
+    provenanceComplete: z.boolean().optional(),
     createdAt: z.string().min(1).max(40),
   })
   .strict();
@@ -138,6 +145,7 @@ export type MessageMemoryRef = z.infer<typeof memoryRefSchema>;
 export const attachmentSchema = z
   .object({
     id: z.string().min(1).max(64),
+    libraryItemId: z.string().min(1).max(64).optional(),
     kind: z.enum(['image', 'audio', 'file']),
     blobPath: z.string().min(1).max(512),
     mime: z.string().min(1).max(255),

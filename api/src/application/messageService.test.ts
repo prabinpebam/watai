@@ -4,6 +4,7 @@ import { MessageService } from './messageService';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import { InMemoryMessageStore } from '../adapters/memory/messageStore';
 import { AppError } from '../domain/errors';
+import { libraryItemIdFor } from '../domain/library';
 
 function makeCtx() {
   const threadStore = new InMemoryThreadStore();
@@ -107,11 +108,21 @@ describe('MessageService.append', () => {
       createdAt: '2026-01-01T00:00:00Z',
     };
     const msg = await ctx.messages.append('userA', thread.id, { role: 'assistant', content: '', images: [img] });
-    expect(msg.images).toEqual([img]);
+    expect(msg.images).toEqual([{ ...img, libraryItemId: libraryItemIdFor('userA', 'chat_generated_image', 'img_1') }]);
 
     const stored = await ctx.messageStore.get(thread.id, msg.id);
-    expect(stored?.images).toEqual([img]);
+    expect(stored?.images).toEqual([{ ...img, libraryItemId: libraryItemIdFor('userA', 'chat_generated_image', 'img_1') }]);
     expect((await ctx.threads.get('userA', thread.id)).lastMessagePreview).toBe('Image');
+  });
+
+  it('assigns deterministic Library ids to durable attachments', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const msg = await ctx.messages.append('userA', thread.id, {
+      role: 'user',
+      content: '',
+      attachments: [{ id: 'att-1', kind: 'file', blobPath: 'userA/t/att-1.pdf', mime: 'application/pdf', bytes: 12 }],
+    });
+    expect(msg.attachments?.[0].libraryItemId).toBe(libraryItemIdFor('userA', 'chat_attachment', 'att-1'));
   });
 
   it('persists memoryRefs for assistant messages', async () => {

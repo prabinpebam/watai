@@ -76,6 +76,10 @@ test.describe('Library read-only experience', () => {
     const pdf = page.locator('iframe.library-pdf');
     await expect(pdf).toBeVisible();
     expect((await pdf.boundingBox())?.height).toBeGreaterThan(500);
+    await expect(page.getByRole('heading', { name: 'Derived outputs' })).toBeVisible();
+    await page.getByRole('button', { name: /metrics.csv/ }).click();
+    await expect(page).toHaveURL(/metrics-csv$/);
+    await expect(page.getByRole('cell', { name: '388' })).toBeVisible();
 
     await page.goto(`${ROOT}/notes-md`);
     await expect(page.getByRole('heading', { name: 'Release notes' })).toBeVisible();

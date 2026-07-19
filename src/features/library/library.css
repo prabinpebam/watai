@@ -529,6 +529,37 @@
   overflow-wrap: anywhere;
 }
 
+.library-lineage h3 {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption-size);
+}
+
+.library-lineage > button {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.library-lineage > button:hover {
+  background: var(--color-surface-1);
+}
+
+.library-lineage > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 1023px) {
   .appbar__actions .btn {
     min-width: var(--size-control-md);
