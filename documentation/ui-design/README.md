@@ -85,6 +85,7 @@ adapter for the Azure adapter later touches no UI code.
 | [07-content-and-assets.md](07-content-and-assets.md) | All UI strings/microcopy and the full icon/logo/illustration asset inventory. |
 | [08-frontend-architecture.md](08-frontend-architecture.md) | Folder structure, routing, state shape, TypeScript types, AI client contracts, mock/local data layer, env/config. |
 | [09-responsive-and-platform.md](09-responsive-and-platform.md) | **Mobile + desktop web behavior:** breakpoints, input-capability adaptation (hover vs touch), on-screen keyboard, dynamic viewport, drag-and-drop, resizable sidebar, layout-transformation matrix, test matrix. |
+| [../library-implementation-spec.md](../library-implementation-spec.md) | **Library design/implementation extension:** exhaustive needs, scenarios, capabilities, flows, LV/LP surfaces/components, responsive behavior, copy, accessibility, and acceptance criteria. |
 
 Read in order on first pass.
 
@@ -205,6 +206,11 @@ pinned in landscape. Composer and app bar identical to compact.
 | V-25 | Settings — Appearance | [03](03-screens-onboarding-settings.md) |
 | V-26 | Settings — About | [03](03-screens-onboarding-settings.md) |
 | V-27 | Global states (offline, error, loading, skeletons, toasts) | [04](04-screens-chat.md) §states + [02](02-components.md) |
+| LV-001–002 | Library browser: mixed list and image gallery | [Library spec](../library-implementation-spec.md) §10 |
+| LV-003–009 | Library item detail and type-specific previews/provenance | [Library spec](../library-implementation-spec.md) §10 |
+| LV-010–011 | Add from Library picker and image create/remix | [Library spec](../library-implementation-spec.md) §10 |
+| LV-012–015 | Storage, Recently deleted, cleanup, delete impact | [Library spec](../library-implementation-spec.md) §10 |
+| LV-016 | Chat Library tombstones | [Library spec](../library-implementation-spec.md) §10 |
 
 ---
 

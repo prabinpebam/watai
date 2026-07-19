@@ -7,7 +7,12 @@ definition of done.
 
 Cross-references: [README.md](README.md) · [01-product-spec.md](01-product-spec.md) ·
 [02-architecture.md](02-architecture.md) · [03-api-integration.md](03-api-integration.md) ·
-[04-data-model.md](04-data-model.md).
+[04-data-model.md](04-data-model.md) ·
+[Library implementation slices](library-implementation-spec.md) §23.
+
+> The unified Library is an additive post-v1 workstream. Its `LSL-00`–`LSL-12` slices, migration
+> gates, and destructive-lifecycle sequencing are authoritative for that workstream. In particular,
+> legacy blob migration and first-time deletion enablement must never ship in the same slice.
 
 ---
 

@@ -1,6 +1,7 @@
 # Watai Library — Proposal Specification (Draft 1)
 
-**Status:** Proposal / not an implementation contract
+**Status:** Approved direction; implementation contract is
+[library-implementation-spec.md](library-implementation-spec.md)
 
 **Date:** 2026-07-19
 
@@ -506,9 +507,9 @@ type LibraryItemState =
 
 ### 9.2 Recommended trash retention
 
-Draft recommendation: **7 days**, not 30, because Watai is a personal cost-conscious deployment and immediate capacity recovery matters more than long enterprise retention.
-
-Open decision: 7 vs 30 days. The UI should show the exact purge date.
+Locked for this implementation cycle: **7 days**, because Watai is a personal cost-conscious
+deployment and immediate capacity recovery matters more than long enterprise retention. The UI shows
+the exact purge date.
 
 ### 9.3 Chat rendering after deletion
 
@@ -1009,18 +1010,22 @@ Only after every rendering path handles `trashed/purged/missing` safely.
 
 ---
 
-## 18. Open product decisions
+## 18. Decisions resolved by the implementation contract
 
-1. Trash retention: 7 days or 30 days?
-2. Should all persisted chat uploads be automatically visible, or should low-value items be hidden by default while still indexed?
-3. Should deleting a thread preserve Library items by default? **Recommendation: yes.**
-4. Should Image Studio become `/library/images` or remain a separate creation route backed by the same Library index? **Recommendation: converge the gallery; keep creation as a subview/action.**
-5. Is direct rename/star/tag needed in Phase 1 or Phase 5?
-6. Which preview types are worth dependencies in v1: PDF only, or PDF + CSV?
-7. Should normal delete retain bytes for 7/30 days (cost continues) or use Azure Blob soft delete? **Recommendation: application-level trash first for predictable item metadata and restore UX.**
-8. Should Library impose a product quota? Current infrastructure does not need one; avoid artificial scarcity until usage data supports it.
-9. Should “Copy recipe” use human-readable text, JSON, or both? **Recommendation: human-readable default plus optional JSON.**
-10. Should generated descendants retain source thumbnails after source purge? **Recommendation: no hidden copies; show tombstone metadata.**
+The detailed build contract locks these choices for this cycle:
+
+1. Recently deleted retention is 7 days.
+2. All eligible durable chat uploads/outputs are indexed automatically; temporary-thread content is excluded unless explicitly saved.
+3. Thread deletion preserves Library items by default.
+4. `/library` is canonical; `/images` redirects to the image-filtered Library and creation remains a subview/action.
+5. Rename and star ship before tags/folders.
+6. Phase 1 previews images, PDFs, text/Markdown/code/JSON, and CSV; XLSX/DOCX/PPTX/archive are download-first.
+7. Application-level trash is product state; Blob soft delete is not the UX state machine.
+8. No artificial product quota ships in this cycle.
+9. Copy recipe defaults to human-readable text with optional JSON.
+10. Source purge keeps no hidden source copy; descendants show a source tombstone.
+
+See [library-implementation-spec.md](library-implementation-spec.md) §1 for the authoritative table.
 
 ---
 

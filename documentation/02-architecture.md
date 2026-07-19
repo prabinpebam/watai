@@ -10,7 +10,8 @@
 
 Cross-references: [README.md](README.md) · [01-product-spec.md](01-product-spec.md) ·
 [03-api-integration.md](03-api-integration.md) · [04-data-model.md](04-data-model.md) ·
-[06-server-runs-and-migration.md](06-server-runs-and-migration.md).
+[06-server-runs-and-migration.md](06-server-runs-and-migration.md) ·
+[Library implementation extension](library-implementation-spec.md).
 
 ---
 
@@ -138,6 +139,18 @@ Detail + threat model in [06](06-server-runs-and-migration.md) §2.
   worker now, read by the client via short-lived read SAS).
 - **Key Vault:** the master key-encryption-key (KEK) + app secrets. Never exposes the KEK
   to the client.
+
+### 3.6 Planned account-level Library extension
+
+The Library adds an account-owned content catalog without changing the server-authoritative trust
+model. A new Cosmos `library` container (partition `/userId`) indexes durable uploads and generated
+outputs; bytes remain private in the existing `media` Blob container under account-owned Library
+paths. Chats store stable references plus bounded historical snapshots. Queue workers finalize
+ingestion/purge idempotently, SignalR projects lifecycle changes to open clients, and short-lived SAS
+grants continue to mediate byte access. Thread deletion no longer owns the lifetime of migrated
+Library bytes. The complete contracts and migration gates are in
+[library-implementation-spec.md](library-implementation-spec.md); this subsection does not mark the
+feature as implemented.
 
 ---
 

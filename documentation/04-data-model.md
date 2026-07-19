@@ -1,5 +1,11 @@
 # 04 — Data Model & Storage
 
+> **Planned additive extension:** the unified account-level Library introduces a `/userId`-partitioned
+> catalog, stable message/file references, lineage fields, and trash/purge states. The implementation
+> contract and safe migration sequence are in
+> [library-implementation-spec.md](library-implementation-spec.md). Existing schemas below remain the
+> deployed baseline until the corresponding Library slices ship.
+
 This document defines Watai's data: the entities, the Cosmos DB document schema, the
 Blob Storage layout, the client-side cache, the sync strategy between device and cloud,
 and the full data lifecycle (export, retention, deletion). It implements the persistence

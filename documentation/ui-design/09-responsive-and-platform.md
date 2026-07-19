@@ -245,6 +245,11 @@ How each surface renders across ranges. "Sheet" = BottomSheet/ActionSheet;
 | Voice mode (V-15) | Full-screen, orb 220 (150 landscape) | Full-screen | Full-window overlay, larger orb |
 | Composer | Bottom, keyboard-aware | Bottom | Bottom; drag-drop + paste |
 | Onboarding (V-02–05) | Full-screen | Centered ≤480 column | Centered card/dialog |
+| Library browser (LV-001–002) | Full-height list/gallery; filter sheet; always-visible selection affordance | Fluid list/gallery; filter sheet | Persistent sidebar + dense list/gallery; anchored filters |
+| Library detail (LV-003–009) | Full-screen push; metadata below preview | Full-screen push; single/two column by width | Main-pane detail; preview + 320px metadata rail when useful |
+| Library picker (LV-010) | Bottom sheet, max 85dvh | Bottom sheet/dialog by capability | Centered 720px dialog |
+| Storage/cleanup (LV-012–014) | Single-column operational rows; bottom selection bar | Wider rows/groups | Dense main-pane list; no decorative dashboard cards |
+| Library delete impact (LV-015) | Full-screen/slide-up confirm sheet | Sheet/dialog | Centered dialog |
 
 ---
 

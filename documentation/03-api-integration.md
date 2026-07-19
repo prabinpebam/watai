@@ -119,6 +119,12 @@ selected tool never completes, so the assistant cannot say “Done” or “the 
 real tool result. If the semantic-manager request fails, the worker degrades to normal model-driven
 `tool_choice:auto` rather than failing the chat.
 
+The planned account-level file/media APIs, SAS behavior, ingestion/lifecycle events, and batch
+contracts are additive and specified in
+[library-implementation-spec.md](library-implementation-spec.md). Existing chat/image endpoints
+remain source workflows until their outputs are indexed/migrated; the Library does not introduce a
+new AI inference path.
+
 ---
 
 ## 6. Errors

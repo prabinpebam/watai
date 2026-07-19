@@ -7,7 +7,15 @@ ChatGPT iOS app; we re-implement its *patterns* with original assets and our own
 tokens. We never copy proprietary logos, icons, illustrations, or copy strings.
 
 Cross-references: [README.md](README.md) · [02-architecture.md](02-architecture.md) ·
-[03-api-integration.md](03-api-integration.md) · [04-data-model.md](04-data-model.md).
+[03-api-integration.md](03-api-integration.md) · [04-data-model.md](04-data-model.md) ·
+[Library implementation extension](library-implementation-spec.md).
+
+> **Planned additive product extension:** the unified Library adds account-level discovery, reuse,
+> provenance, type-specific viewing, and safe storage lifecycle for durable uploads and generated
+> outputs. Its exhaustive needs, scenarios, user capabilities, task flows, IA/UI, copy, and
+> acceptance criteria are defined in
+> [library-implementation-spec.md](library-implementation-spec.md). Existing surfaces below remain
+> the deployed baseline until the corresponding Library slices ship.
 
 ---
 
