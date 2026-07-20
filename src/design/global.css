@@ -87,7 +87,8 @@ a:hover {
   background-clip: padding-box;
 }
 
-.visually-hidden {
+.visually-hidden,
+.sr-only {
   position: absolute;
   width: 1px;
   height: 1px;

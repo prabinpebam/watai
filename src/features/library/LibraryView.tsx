@@ -1,13 +1,14 @@
-import { startTransition, useDeferredValue, useEffect, useRef, useState } from 'react';
+import { startTransition, useDeferredValue, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import type { LibraryItemDTO, LibraryKind, LibraryListQuery } from '../../data/cloud/types';
-import { Button, InlineAlert, SelectMenu, Spinner } from '../../design/ui';
+import { Button, IconButton, InlineAlert, SelectMenu, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { ScreenBar } from '../../app/ScreenBar';
 import { LIBRARY_COPY } from './content';
 import { formatBytes, formatDate, iconForKind, itemTitle, kindLabel, originLabel } from './format';
 import { useLibraryRuntime } from './LibraryApi';
 import { uploadToLibrary } from './upload';
+import { useIsExpanded } from '../../lib/hooks';
 import './library.css';
 
 const KIND_FILTERS: Array<{ value: string; label: string; kinds?: LibraryKind[] }> = [
@@ -60,8 +61,9 @@ function LibraryRow({ item, onOpen }: { item: LibraryItemDTO; onOpen: () => void
 
 function ImageTile({ item, onOpen }: { item: LibraryItemDTO; onOpen: () => void }) {
   const src = item.thumbnailUrl ?? item.url;
+  const ratio = item.image?.width && item.image?.height ? item.image.width / item.image.height : 1;
   return (
-    <button className="library-tile" type="button" onClick={onOpen} data-library-item-id={item.id}>
+    <button className="library-tile" style={{ '--library-tile-ratio': ratio } as CSSProperties} type="button" onClick={onOpen} data-library-item-id={item.id}>
       {src ? (
         <img src={src} alt={itemTitle(item)} loading="lazy" />
       ) : (
@@ -77,6 +79,7 @@ function ImageTile({ item, onOpen }: { item: LibraryItemDTO; onOpen: () => void 
 
 export function LibraryView() {
   const { api, basePath, createImagePath } = useLibraryRuntime();
+  const expanded = useIsExpanded();
   const navigate = useNavigate();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
@@ -204,7 +207,7 @@ export function LibraryView() {
   const filtered = ['q', 'kind', 'origin', 'sort'].some((name) => params.has(name));
   return (
     <section className="library" aria-labelledby="library-heading">
-      <ScreenBar title={LIBRARY_COPY.title} trailing={<><Button size="sm" icon="upload" onClick={() => uploadRef.current?.click()}>Upload</Button>{imageMode && <Button size="sm" icon="images" onClick={() => navigate(createImagePath)}>Create image</Button>}<input ref={uploadRef} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,.md,.docx,.pptx,text/csv,application/json,.xlsx,audio/webm,audio/mpeg,.mp3,application/zip" onChange={(event) => { if (event.target.files) void uploadFiles(event.target.files); event.target.value = ''; }} /></>} />
+      <ScreenBar title={LIBRARY_COPY.title} trailing={<>{expanded ? <Button size="sm" icon="upload" onClick={() => uploadRef.current?.click()}>Upload</Button> : <IconButton name="upload" label="Upload" onClick={() => uploadRef.current?.click()} />}{imageMode && (expanded ? <Button size="sm" icon="images" onClick={() => navigate(createImagePath)}>Create image</Button> : <IconButton name="images" label="Create image" onClick={() => navigate(createImagePath)} />)}<input ref={uploadRef} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,.md,.docx,.pptx,text/csv,application/json,.xlsx,audio/webm,audio/mpeg,.mp3,application/zip" onChange={(event) => { if (event.target.files) void uploadFiles(event.target.files); event.target.value = ''; }} /></>} />
       <h1 id="library-heading" ref={headingRef} tabIndex={-1} className="sr-only">{LIBRARY_COPY.title}</h1>
       <div className="library__toolbar">
         <label className="library-search">
@@ -233,6 +236,7 @@ export function LibraryView() {
             { value: 'name', label: 'Name' },
           ]} />
           {filtered && (loading || items.length > 0) && <Button variant="ghost" size="sm" onClick={clearFilters}>{LIBRARY_COPY.clearFilters}</Button>}
+          <span className="library-results-count" aria-hidden="true">{loading ? 'Loading…' : `${total ?? items.length} item${(total ?? items.length) === 1 ? '' : 's'}`}</span>
         </div>
       </div>
 

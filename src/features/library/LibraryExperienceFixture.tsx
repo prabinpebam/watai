@@ -4,6 +4,10 @@ import { LibraryRuntimeProvider, type LibraryReadApi } from './LibraryApi';
 import { formatBytes, itemTitle } from './format';
 
 const CREATED = '2026-07-19T12:00:00.000Z';
+const fixtureImage = (title: string, subtitle: string, background: string, accent: string) =>
+  `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="${background}"/><circle cx="960" cy="180" r="210" fill="${accent}" opacity=".9"/><path d="M0 650 310 360l180 175 175-220 350 335z" fill="#fff" opacity=".16"/><text x="72" y="610" fill="#fff" font-family="Georgia,serif" font-size="82" font-weight="700">${title}</text><text x="76" y="680" fill="#fff" font-family="sans-serif" font-size="30">${subtitle}</text></svg>`)}`;
+const POSTER_IMAGE = fixtureImage('Watai Library', 'A launch system for durable creative work', '#16324f', '#f3b61f');
+const REFERENCE_IMAGE = fixtureImage('Reference', 'Visual direction · composition · color', '#713e5a', '#63d2a7');
 const source = {
   surface: 'chat' as const,
   threadId: 'eval-thread',
@@ -16,14 +20,14 @@ const ITEMS: LibraryItemDTO[] = [
   {
     id: 'generated-image', state: 'active', kind: 'image', origin: 'chat_generated_image',
     name: 'launch-poster.png', mime: 'image/png', bytes: 284_320, createdAt: CREATED, updatedAt: CREATED,
-    source, image: { width: 512, height: 512, size: '512x512', format: 'png', prompt: 'A precise Watai launch poster with crisp cobalt typography', model: 'gpt-image-1', quality: 'high', provenanceComplete: false },
-    url: '/apple-touch-icon.png', thumbnailUrl: '/apple-touch-icon.png',
+    source, image: { width: 1200, height: 800, size: '1200x800', format: 'png', prompt: 'A precise Watai launch poster with crisp cobalt typography', model: 'gpt-image-1', quality: 'high', provenanceComplete: false },
+    url: POSTER_IMAGE, thumbnailUrl: POSTER_IMAGE,
   },
   {
     id: 'uploaded-image', state: 'active', kind: 'image', origin: 'chat_upload',
     name: 'reference.png', mime: 'image/png', bytes: 32_100, createdAt: '2026-07-18T10:00:00.000Z', updatedAt: CREATED,
-    source, image: { width: 192, height: 192, format: 'png', provenanceComplete: true },
-    url: '/icon-192.png', thumbnailUrl: '/icon-192.png',
+    source, image: { width: 1200, height: 800, format: 'png', provenanceComplete: true },
+    url: REFERENCE_IMAGE, thumbnailUrl: REFERENCE_IMAGE,
   },
   {
     id: 'brief-pdf', state: 'active', kind: 'pdf', origin: 'thread_document',

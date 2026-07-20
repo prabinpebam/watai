@@ -37,6 +37,8 @@ test.describe('Library read-only experience', () => {
     test.skip(testInfo.project.name !== 'desktop', 'Desktop-specific shell and density checks');
     await page.goto(ROOT);
     await expect(page.getByText('A precise Watai launch poster with crisp cobalt typography')).toBeVisible();
+    const hiddenGeometry = await page.locator('.sr-only').evaluateAll((elements) => elements.map((element) => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height, position: getComputedStyle(element).position, overflow: getComputedStyle(element).overflow })));
+    expect(hiddenGeometry.every(({ width, height, position, overflow }) => width <= 1 && height <= 1 && position === 'absolute' && overflow === 'hidden')).toBe(true);
     await expect(page.getByRole('button', { name: 'Library' })).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('.library-row')).toHaveCount(8);
     const rowHeights = await page.locator('.library-row').evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
