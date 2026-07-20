@@ -517,7 +517,7 @@
 
 .library-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 280px));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
   gap: var(--space-4);
   align-items: start;
 }
@@ -1063,7 +1063,6 @@
   }
 
   .library-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
   }
 

@@ -42,6 +42,38 @@ test.describe('Library read-only experience', () => {
     await expect(page.locator('.library-row')).toHaveCount(8);
   });
 
+  test('image columns justify the full width and reduce only at the minimum tile size', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'One project drives the responsive width matrix');
+    await page.goto(`${ROOT}?kind=image`);
+    await expect(page.locator('.library-tile')).toHaveCount(2);
+    const widths = [390, 560, 760, 1024, 1440];
+    const measurements: Array<{ viewport: number; gridWidth: number; tracks: number[]; gap: number; overflow: number }> = [];
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect.poll(() => page.locator('.library').evaluate((root) => root.scrollWidth - root.clientWidth)).toBeLessThanOrEqual(1);
+      measurements.push(await page.locator('.library-grid').evaluate((grid, viewport) => {
+        const style = getComputedStyle(grid);
+        return {
+          viewport,
+          gridWidth: grid.getBoundingClientRect().width,
+          tracks: style.gridTemplateColumns.split(' ').map(Number.parseFloat),
+          gap: Number.parseFloat(style.columnGap),
+          overflow: document.querySelector<HTMLElement>('.library')!.scrollWidth - document.querySelector<HTMLElement>('.library')!.clientWidth,
+        };
+      }, width));
+    }
+    for (const measurement of measurements) {
+      expect(Math.max(...measurement.tracks) - Math.min(...measurement.tracks)).toBeLessThanOrEqual(1);
+      expect(Math.min(...measurement.tracks)).toBeGreaterThanOrEqual(179);
+      const occupied = measurement.tracks.reduce((sum, track) => sum + track, 0) + (measurement.tracks.length - 1) * measurement.gap;
+      expect(Math.abs(occupied - measurement.gridWidth)).toBeLessThanOrEqual(1);
+      expect(measurement.overflow).toBeLessThanOrEqual(1);
+    }
+    expect(measurements.find((measurement) => measurement.viewport === 390)?.tracks).toHaveLength(2);
+    expect(measurements.find((measurement) => measurement.viewport === 760)?.tracks).toHaveLength(4);
+    expect(measurements.find((measurement) => measurement.viewport === 1440)?.tracks).toHaveLength(5);
+  });
+
   test('desktop browse, URL filters, keyboard search, image paint, detail, and focus return', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'Desktop-specific shell and density checks');
     await page.goto(ROOT);
