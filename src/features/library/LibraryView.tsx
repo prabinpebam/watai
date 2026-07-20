@@ -69,9 +69,9 @@ function ImageTile({ item, onOpen }: { item: LibraryItemDTO; onOpen: () => void 
       ) : (
         <span className="library-tile__missing"><Icon name="file-image" size={32} /> Preview unavailable</span>
       )}
+      <span className="library-tile__badge">{item.origin.includes('generated') ? 'Generated' : 'Uploaded'}</span>
       <span className="library-tile__scrim">
         <span>{item.userMetadata?.title ?? item.image?.prompt ?? item.name}</span>
-        <span className="library-tile__badge">{item.origin.includes('generated') ? 'Generated' : 'Uploaded'}</span>
       </span>
     </button>
   );

@@ -4,10 +4,10 @@ import { LibraryRuntimeProvider, type LibraryReadApi } from './LibraryApi';
 import { formatBytes, itemTitle } from './format';
 
 const CREATED = '2026-07-19T12:00:00.000Z';
-const fixtureImage = (title: string, subtitle: string, background: string, accent: string) =>
-  `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="${background}"/><circle cx="960" cy="180" r="210" fill="${accent}" opacity=".9"/><path d="M0 650 310 360l180 175 175-220 350 335z" fill="#fff" opacity=".16"/><text x="72" y="610" fill="#fff" font-family="Georgia,serif" font-size="82" font-weight="700">${title}</text><text x="76" y="680" fill="#fff" font-family="sans-serif" font-size="30">${subtitle}</text></svg>`)}`;
-const POSTER_IMAGE = fixtureImage('Watai Library', 'A launch system for durable creative work', '#16324f', '#f3b61f');
-const REFERENCE_IMAGE = fixtureImage('Reference', 'Visual direction · composition · color', '#713e5a', '#63d2a7');
+const fixtureImage = (background: string, accent: string) =>
+  `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="${background}"/><circle cx="960" cy="180" r="210" fill="${accent}" opacity=".9"/><path d="M0 650 310 360l180 175 175-220 350 335z" fill="#fff" opacity=".16"/><path d="M86 150h390v28H86zm0 62h250v18H86zm0 44h320v18H86z" fill="#fff" opacity=".72"/></svg>`)}`;
+const POSTER_IMAGE = fixtureImage('#16324f', '#f3b61f');
+const REFERENCE_IMAGE = fixtureImage('#713e5a', '#63d2a7');
 const source = {
   surface: 'chat' as const,
   threadId: 'eval-thread',
