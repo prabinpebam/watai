@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { LibraryItemDTO } from '../../data/cloud/types';
-import { Button, IconButton, InlineAlert, Spinner } from '../../design/ui';
+import { Button, IconButton, InlineAlert } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { saveFile } from '../../lib/saveFile';
 import { Markdown } from '../chat/Markdown';
@@ -13,6 +13,7 @@ import { newId } from '../../lib/ids';
 import { canUseLibraryItem } from './LibraryPicker';
 import { useIsExpanded } from '../../lib/hooks';
 import './library.css';
+import { LibraryImage } from './LibraryImage';
 
 function useTextPreview(item: LibraryItemDTO | null): { text?: string; error?: boolean; loading: boolean } {
   const [state, setState] = useState<{ text?: string; error?: boolean; loading: boolean }>({ loading: false });
@@ -52,7 +53,7 @@ function CsvPreview({ text }: { text: string }) {
 function TextPreview({ item }: { item: LibraryItemDTO }) {
   const preview = useTextPreview(item);
   const [wrap, setWrap] = useState(true);
-  if (preview.loading) return <div className="library-preview__loading"><Spinner /><span>Loading preview</span></div>;
+  if (preview.loading) return <div className="library-preview__loading" role="status" aria-label="Loading preview"><span className="library-preview-skeleton skeleton" /></div>;
   if (preview.error || preview.text === undefined) return <InlineAlert tone="warning">Preview couldn’t be loaded. The original file is still available to download.</InlineAlert>;
   if (item.mime === 'text/csv') return <CsvPreview text={preview.text} />;
   if (/markdown/.test(item.mime) || /\.(md|markdown)$/i.test(item.name)) return <div className="library-markdown"><Markdown content={preview.text} /></div>;
@@ -75,7 +76,7 @@ function Preview({ item }: { item: LibraryItemDTO }) {
   if (item.state === 'purged' || item.state === 'missing') {
     return <div className="library-preview__unsupported"><Icon name="error" size={42} /><h2>{item.state === 'purged' ? 'Permanently deleted' : 'File missing'}</h2></div>;
   }
-  if (item.kind === 'image' && item.url) return <div className="library-image-stage"><img src={item.url} alt={itemTitle(item)} /></div>;
+  if (item.kind === 'image' && item.url) return <div className="library-image-stage"><LibraryImage src={item.url} previewSrc={item.thumbnailUrl} alt={itemTitle(item)} loading="eager" /></div>;
   if (item.kind === 'pdf' && item.url) return <iframe className="library-pdf" src={`${item.url}#toolbar=1&navpanes=0`} title={`Preview ${itemTitle(item)}`} sandbox="allow-same-origin" />;
   if (item.kind === 'audio' && item.url) return <div className="library-audio"><Icon name="file-audio" size={48} /><audio src={item.url} controls /></div>;
   if (['text', 'code', 'data'].includes(item.kind)) return <TextPreview item={item} />;
@@ -150,7 +151,7 @@ export function LibraryDetail() {
     navigate(newChatPath(threadId));
   };
 
-  if (loading) return <section className="library-detail"><div className="library-loading"><Spinner size="lg" /><span>Loading item</span></div></section>;
+  if (loading) return <section className="library-detail"><div className="library-detail-skeleton" role="status" aria-label="Loading item"><div className="library-detail-skeleton__bar skeleton" /><div className="library-detail-skeleton__layout"><div className="library-detail-skeleton__preview skeleton" /><div className="library-detail-skeleton__meta">{Array.from({ length: 5 }, (_, index) => <span key={index} className="skeleton" />)}</div></div></div></section>;
   if (error || !item) return (
     <section className="library-detail">
       <div className="library-detail__bar"><Button variant="ghost" icon="chevron-left" onClick={goBack}>Back</Button></div>

@@ -52,6 +52,14 @@ beforeEach(() => {
 });
 
 describe('LibraryView', () => {
+  it('shows layout-preserving shimmer rows instead of a circular loader', () => {
+    mocks.listLibrary.mockReturnValue(new Promise(() => {}));
+    renderLibrary();
+    expect(screen.getByRole('status', { name: 'Loading Library' })).toBeInTheDocument();
+    expect(document.querySelectorAll('.library-skeleton-row')).toHaveLength(8);
+    expect(document.querySelector('.spinner')).toBeNull();
+  });
+
   it('renders returned items and opens detail while preserving source metadata', async () => {
     renderLibrary();
     expect(await screen.findByText('A launch poster')).toBeInTheDocument();

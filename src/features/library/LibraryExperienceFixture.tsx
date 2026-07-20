@@ -82,8 +82,8 @@ function matches(item: LibraryItemDTO, query: LibraryListQuery): boolean {
 
 export const libraryFixtureApi: LibraryReadApi = {
   async listLibrary(query = {}) {
-    await new Promise((resolve) => window.setTimeout(resolve, 80));
     const mode = fixtureMode();
+    await new Promise((resolve) => window.setTimeout(resolve, mode === 'slow' ? 1_200 : 80));
     if (mode === 'error') throw new Error('Fixture unavailable');
     if (mode?.startsWith('error-once') && !consumedErrors.has(mode)) {
       consumedErrors.add(mode);

@@ -33,6 +33,15 @@ async function expectCenterHit(page: Page, selector: string) {
 }
 
 test.describe('Library read-only experience', () => {
+  test('catalog loading uses structural shimmer and no circular spinner', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'One project is sufficient for loading-state paint');
+    await page.goto(`${ROOT}?fixture=slow`);
+    await expect(page.getByRole('status', { name: 'Loading Library' })).toBeVisible();
+    await expect(page.locator('.library-skeleton-row')).toHaveCount(8);
+    await expect(page.locator('.library__results .spinner')).toHaveCount(0);
+    await expect(page.locator('.library-row')).toHaveCount(8);
+  });
+
   test('desktop browse, URL filters, keyboard search, image paint, detail, and focus return', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'Desktop-specific shell and density checks');
     await page.goto(ROOT);

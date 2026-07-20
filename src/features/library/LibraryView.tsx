@@ -1,7 +1,7 @@
 import { startTransition, useDeferredValue, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import type { LibraryItemDTO, LibraryKind, LibraryListQuery } from '../../data/cloud/types';
-import { Button, IconButton, InlineAlert, SelectMenu, Spinner } from '../../design/ui';
+import { Button, IconButton, InlineAlert, SelectMenu } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { ScreenBar } from '../../app/ScreenBar';
 import { LIBRARY_COPY } from './content';
@@ -9,6 +9,7 @@ import { formatBytes, formatDate, iconForKind, itemTitle, kindLabel, originLabel
 import { useLibraryRuntime } from './LibraryApi';
 import { uploadToLibrary } from './upload';
 import { useIsExpanded } from '../../lib/hooks';
+import { LibraryImage } from './LibraryImage';
 import './library.css';
 
 const KIND_FILTERS: Array<{ value: string; label: string; kinds?: LibraryKind[] }> = [
@@ -40,7 +41,7 @@ function LibraryRow({ item, onOpen }: { item: LibraryItemDTO; onOpen: () => void
     <button className="library-row" type="button" onClick={onOpen} data-library-item-id={item.id}>
       <span className="library-row__visual">
         {item.kind === 'image' && (item.thumbnailUrl || item.url) ? (
-          <img src={item.thumbnailUrl ?? item.url} alt="" loading="lazy" />
+          <LibraryImage src={item.url ?? item.thumbnailUrl!} previewSrc={item.thumbnailUrl} alt="" />
         ) : (
           <Icon name={iconForKind(item.kind)} size={22} />
         )}
@@ -65,7 +66,7 @@ function ImageTile({ item, onOpen }: { item: LibraryItemDTO; onOpen: () => void 
   return (
     <button className="library-tile" style={{ '--library-tile-ratio': ratio } as CSSProperties} type="button" onClick={onOpen} data-library-item-id={item.id}>
       {src ? (
-        <img src={src} alt={itemTitle(item)} loading="lazy" />
+        <LibraryImage src={item.url ?? src} previewSrc={item.thumbnailUrl} alt={itemTitle(item)} />
       ) : (
         <span className="library-tile__missing"><Icon name="file-image" size={32} /> Preview unavailable</span>
       )}
@@ -74,6 +75,28 @@ function ImageTile({ item, onOpen }: { item: LibraryItemDTO; onOpen: () => void 
         <span>{item.userMetadata?.title ?? item.image?.prompt ?? item.name}</span>
       </span>
     </button>
+  );
+}
+
+function LibrarySkeleton({ imageMode }: { imageMode: boolean }) {
+  if (imageMode) {
+    return (
+      <div className="library-grid library-skeleton-grid" role="status" aria-label="Loading Library">
+        {Array.from({ length: 6 }, (_, index) => <span key={index} className="library-skeleton-tile skeleton" />)}
+      </div>
+    );
+  }
+  return (
+    <div className="library-list library-skeleton-list" role="status" aria-label="Loading Library">
+      {Array.from({ length: 8 }, (_, index) => (
+        <span key={index} className="library-skeleton-row">
+          <span className="library-skeleton-row__visual skeleton" />
+          <span className="library-skeleton-row__body"><span className="skeleton" /><span className="skeleton" /></span>
+          <span className="library-skeleton-row__date skeleton" />
+          <span className="library-skeleton-row__size skeleton" />
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -254,7 +277,7 @@ export function LibraryView() {
             <Button onClick={() => setRequestVersion((version) => version + 1)}>{LIBRARY_COPY.retry}</Button>
           </div>
         ) : loading ? (
-          <div className="library-loading" role="status"><Spinner size="lg" /><span>Loading Library</span></div>
+          <LibrarySkeleton imageMode={imageMode} />
         ) : !items.length ? (
           <div className="library-state">
             <Icon name={filtered ? 'search' : 'library'} size={30} />

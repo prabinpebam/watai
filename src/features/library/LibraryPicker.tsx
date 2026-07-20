@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { LibraryItemDTO, LibraryKind } from '../../data/cloud/types';
-import { Button, Field, Spinner } from '../../design/ui';
+import { Button, Field } from '../../design/ui';
 import { Modal } from '../../design/overlays';
 import { Icon } from '../../design/icons';
 import { useUi, type StagedLibraryItem } from '../../state/store';
@@ -72,7 +72,7 @@ export function LibraryPicker({ threadId, onClose, returnFocus }: { threadId: st
         </div>
         <label className="library-picker__unavailable"><input type="checkbox" checked={showUnavailable} onChange={(event) => setShowUnavailable(event.target.checked)} /> Show unavailable</label>
         <div className="library-picker__results" aria-busy={loading}>
-          {loading ? <div className="library-picker__state"><Spinner /><span>Loading Library</span></div> : error ? <div className="library-picker__state"><Icon name="alert" /><span>Library couldn’t be loaded.</span></div> : !visible.length ? <div className="library-picker__state"><Icon name="search" /><span>No compatible items found.</span></div> : visible.map((item) => {
+          {loading ? <div className="library-picker-skeleton" role="status" aria-label="Loading Library">{Array.from({ length: 5 }, (_, index) => <span key={index} className="library-picker-skeleton__row"><span className="skeleton" /><span><i className="skeleton" /><i className="skeleton" /></span></span>)}</div> : error ? <div className="library-picker__state"><Icon name="alert" /><span>Library couldn’t be loaded.</span></div> : !visible.length ? <div className="library-picker__state"><Icon name="search" /><span>No compatible items found.</span></div> : visible.map((item) => {
             const usable = canUseLibraryItem(item);
             const active = selected.has(item.id);
             return (
