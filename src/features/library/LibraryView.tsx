@@ -189,7 +189,11 @@ export function LibraryView() {
   };
 
   const open = (item: LibraryItemDTO) => navigate(`${basePath}/${encodeURIComponent(item.id)}`, {
-    state: { backTo: `${location.pathname}${location.search}`, focusId: item.id },
+    state: {
+      backTo: `${location.pathname}${location.search}`,
+      focusId: item.id,
+      ...(item.kind === 'image' ? { imageQuery: { ...queryFromParams(params), kind: ['image'] as LibraryKind[], cursor: undefined, limit: 100 } } : {}),
+    },
   });
 
   const loadMore = async () => {

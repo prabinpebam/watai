@@ -104,7 +104,16 @@ test.describe('Library read-only experience', () => {
     const tile = page.locator('[data-library-item-id="generated-image"]');
     await tile.click();
     await expect(page).toHaveURL(/generated-image$/);
+    await expect(page.getByRole('heading', { name: 'Image' })).toBeVisible();
     await expect(page.getByRole('img', { name: /launch poster/i })).toBeVisible();
+    const filmstrip = page.getByRole('navigation', { name: 'Image navigation' });
+    await expect(filmstrip).toBeVisible();
+    await expect(filmstrip.getByRole('button', { name: 'A precise Watai launch poster with crisp cobalt typography' })).toHaveAttribute('aria-current', 'true');
+    await filmstrip.getByRole('button', { name: 'Next image' }).click();
+    await expect(page).toHaveURL(/uploaded-image$/);
+    await expect(filmstrip.getByRole('button', { name: 'reference.png' })).toHaveAttribute('aria-current', 'true');
+    await page.keyboard.press('ArrowLeft');
+    await expect(page).toHaveURL(/generated-image$/);
     await expect(page.getByText('Reference history is unavailable for this older image.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Show in chat' })).toBeVisible();
     await page.getByRole('button', { name: 'Back' }).click();
@@ -161,6 +170,7 @@ test.describe('Library read-only experience', () => {
     await expect(page.locator('.library-tile')).toHaveCount(2);
     const columns = await page.locator('.library-grid').evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length);
     expect(columns).toBe(2);
+    await expect.poll(() => page.locator('.library').evaluate((root) => root.scrollWidth - root.clientWidth)).toBeLessThanOrEqual(1);
     const overflow = await page.locator('.library').evaluate((root) => root.scrollWidth - root.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);
 
@@ -176,6 +186,10 @@ test.describe('Library read-only experience', () => {
 
     await page.locator('[data-library-item-id="generated-image"]').click();
     await expect(page.getByRole('img', { name: /launch poster/i })).toBeVisible();
+    const filmstripBox = await page.getByRole('navigation', { name: 'Image navigation' }).boundingBox();
+    const viewportHeight = await page.evaluate(() => innerHeight);
+    expect(filmstripBox?.y).toBeGreaterThan(0);
+    expect((filmstripBox?.y ?? 0) + (filmstripBox?.height ?? 0)).toBeLessThanOrEqual(viewportHeight + 1);
     const barBoxes = await page.locator('.library-detail__bar > *').evaluateAll((elements) => elements.map((element) => {
       const rect = element.getBoundingClientRect();
       return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };

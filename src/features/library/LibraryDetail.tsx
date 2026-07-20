@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import type { LibraryItemDTO } from '../../data/cloud/types';
+import type { LibraryItemDTO, LibraryListQuery } from '../../data/cloud/types';
 import { Button, IconButton, InlineAlert } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { saveFile } from '../../lib/saveFile';
@@ -101,9 +101,10 @@ export function LibraryDetail() {
   const [downloading, setDownloading] = useState(false);
   const [references, setReferences] = useState<LibraryItemDTO[]>([]);
   const [derived, setDerived] = useState<LibraryItemDTO[]>([]);
+  const [imageItems, setImageItems] = useState<LibraryItemDTO[]>([]);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const stageLibraryItems = useUi((state) => state.stageLibraryItems);
-  const state = location.state as { backTo?: string; focusId?: string } | null;
+  const state = location.state as { backTo?: string; focusId?: string; imageQuery?: LibraryListQuery } | null;
   const backTo = state?.backTo ?? basePath;
 
   useEffect(() => {
@@ -135,6 +136,23 @@ export function LibraryDetail() {
   }, [api, item]);
 
   useEffect(() => {
+    let live = true;
+    if (item?.kind !== 'image') {
+      setImageItems([]);
+      return () => { live = false; };
+    }
+    api.listLibrary(state?.imageQuery ?? { kind: ['image'], state: 'active', sort: 'newest', limit: 100 })
+      .then((result) => {
+        if (!live) return;
+        const unique = new Map(result.items.filter((candidate) => candidate.kind === 'image').map((candidate) => [candidate.id, candidate]));
+        unique.set(item.id, item);
+        setImageItems([...unique.values()]);
+      })
+      .catch(() => { if (live) setImageItems([item]); });
+    return () => { live = false; };
+  }, [api, item, state?.imageQuery]);
+
+  useEffect(() => {
     if (item) headingRef.current?.focus();
   }, [item]);
 
@@ -150,6 +168,29 @@ export function LibraryDetail() {
     stageLibraryItems(threadId, [{ item: item!, mode: 'attach' }]);
     navigate(newChatPath(threadId));
   };
+  const imageIndex = item?.kind === 'image' ? imageItems.findIndex((candidate) => candidate.id === item.id) : -1;
+  const openImage = (target: LibraryItemDTO) => navigate(`${basePath}/${encodeURIComponent(target.id)}`, {
+    replace: true,
+    state: { ...state, backTo, focusId: target.id },
+  });
+  const previousImage = imageIndex > 0 ? imageItems[imageIndex - 1] : undefined;
+  const nextImage = imageIndex >= 0 && imageIndex < imageItems.length - 1 ? imageItems[imageIndex + 1] : undefined;
+
+  useEffect(() => {
+    if (item?.kind !== 'image') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key === 'ArrowLeft' && previousImage) {
+        event.preventDefault();
+        openImage(previousImage);
+      } else if (event.key === 'ArrowRight' && nextImage) {
+        event.preventDefault();
+        openImage(nextImage);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
 
   if (loading) return <section className="library-detail"><div className="library-detail-skeleton" role="status" aria-label="Loading item"><div className="library-detail-skeleton__bar skeleton" /><div className="library-detail-skeleton__layout"><div className="library-detail-skeleton__preview skeleton" /><div className="library-detail-skeleton__meta">{Array.from({ length: 5 }, (_, index) => <span key={index} className="skeleton" />)}</div></div></div></section>;
   if (error || !item) return (
@@ -163,7 +204,7 @@ export function LibraryDetail() {
     <section className="library-detail" aria-labelledby="library-detail-title">
       <div className="library-detail__bar">
         <Button variant="ghost" icon="chevron-left" onClick={goBack}>Back</Button>
-        <h1 id="library-detail-title" ref={headingRef} tabIndex={-1}>{itemTitle(item)}</h1>
+        <h1 id="library-detail-title" ref={headingRef} tabIndex={-1}>{kindLabel(item.kind)}</h1>
         <div className="library-detail__actions">
           {canUseLibraryItem(item) && (expanded
             ? <Button variant="outline" icon="chat" onClick={useInNewChat}>Use in new chat</Button>
@@ -175,12 +216,36 @@ export function LibraryDetail() {
       </div>
       <div className="library-detail__scroll">
         <div className="library-detail__layout">
-          <main className="library-detail__preview"><Preview item={item} /></main>
+          <main className="library-detail__preview">
+            <Preview item={item} />
+            {item.kind === 'image' && imageItems.length > 0 && (
+              <nav className="library-filmstrip" aria-label="Image navigation">
+                <IconButton name="chevron-left" label="Previous image" disabled={!previousImage} onClick={() => previousImage && openImage(previousImage)} />
+                <div className="library-filmstrip__track" role="list" aria-label="Images in current filter">
+                  {imageItems.map((image) => (
+                    <span key={image.id} role="listitem">
+                      <button
+                        type="button"
+                        className={`library-filmstrip__item ${image.id === item.id ? 'is-active' : ''}`}
+                        aria-label={itemTitle(image)}
+                        aria-current={image.id === item.id ? 'true' : undefined}
+                        onClick={() => openImage(image)}
+                      >
+                        {image.thumbnailUrl || image.url ? <LibraryImage src={image.url ?? image.thumbnailUrl!} previewSrc={image.thumbnailUrl} alt="" /> : <Icon name="file-image" size={20} />}
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <IconButton name="chevron-right" label="Next image" disabled={!nextImage} onClick={() => nextImage && openImage(nextImage)} />
+              </nav>
+            )}
+          </main>
           <aside className="library-detail__meta" aria-label="Item details">
             <section>
               <h2>Details</h2>
               <dl>
                 <div><dt>Type</dt><dd>{kindLabel(item.kind)}</dd></div>
+                <div><dt>Name</dt><dd>{itemTitle(item)}</dd></div>
                 <div><dt>Size</dt><dd>{formatBytes(item.bytes)}</dd></div>
                 <div><dt>Format</dt><dd>{item.mime}</dd></div>
                 <div><dt>Created</dt><dd>{formatDate(item.createdAt)}</dd></div>

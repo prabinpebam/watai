@@ -8,10 +8,11 @@ import { useUi } from '../../state/store';
 const mocks = vi.hoisted(() => ({
   getLibraryItem: vi.fn(),
   getLibraryLineage: vi.fn(),
+  listLibrary: vi.fn(),
   saveFile: vi.fn(),
 }));
 
-vi.mock('../../data', () => ({ cloudApi: { getLibraryItem: mocks.getLibraryItem, getLibraryLineage: mocks.getLibraryLineage } }));
+vi.mock('../../data', () => ({ cloudApi: { getLibraryItem: mocks.getLibraryItem, getLibraryLineage: mocks.getLibraryLineage, listLibrary: mocks.listLibrary } }));
 vi.mock('../../lib/saveFile', () => ({ saveFile: mocks.saveFile }));
 vi.mock('../../lib/hooks', async () => {
   const actual = await vi.importActual<typeof import('../../lib/hooks')>('../../lib/hooks');
@@ -54,6 +55,7 @@ beforeEach(() => {
   mocks.saveFile.mockReset().mockResolvedValue(undefined);
   mocks.getLibraryItem.mockResolvedValue(image);
   mocks.getLibraryLineage.mockReset().mockResolvedValue({ items: [] });
+  mocks.listLibrary.mockReset().mockResolvedValue({ items: [image], totalApprox: 1 });
   useUi.setState({ stagedLibraryByThread: {} });
   Object.assign(navigator, { clipboard: { writeText: vi.fn(async () => undefined) } });
 });
@@ -74,7 +76,7 @@ describe('LibraryDetail', () => {
 
   it('returns to the preserved filtered list URL', async () => {
     renderDetail();
-    await screen.findByRole('heading', { name: 'A launch poster' });
+    await screen.findByRole('heading', { name: 'Image' });
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByTestId('location')).toHaveTextContent('/library?kind=image');
   });
@@ -103,16 +105,35 @@ describe('LibraryDetail', () => {
     fireEvent.click(screen.getByRole('button', { name: /Reference image/ }));
     expect(screen.getByTestId('location')).toHaveTextContent('/library/reference');
     await waitFor(() => expect(mocks.getLibraryItem).toHaveBeenLastCalledWith('reference'));
-    await screen.findByRole('heading', { name: 'A launch poster' });
+    await screen.findByRole('heading', { name: 'Image' });
   });
 
   it('stages a compatible item in a lazy new chat without sending it', async () => {
     renderDetail();
-    await screen.findByRole('heading', { name: 'A launch poster' });
+    await screen.findByRole('heading', { name: 'Image' });
     fireEvent.click(screen.getByRole('button', { name: 'Use in new chat' }));
     const location = screen.getByTestId('location').textContent ?? '';
     expect(location).toMatch(/^\/c\//);
     const threadId = location.slice('/c/'.length);
     expect(useUi.getState().stagedLibraryByThread[threadId]).toEqual([{ item: image, mode: 'attach' }]);
+  });
+
+  it('shows a filmstrip and navigates filtered images with buttons and arrow keys', async () => {
+    const second = { ...image, id: 'image-2', name: 'image-2.png', image: { ...image.image!, prompt: 'Second image' }, url: 'https://blob.test/image-2.png' };
+    mocks.listLibrary.mockResolvedValue({ items: [image, second], totalApprox: 2 });
+    mocks.getLibraryItem.mockImplementation(async (id: string) => id === second.id ? second : image);
+    renderDetail();
+
+    expect(await screen.findByRole('navigation', { name: 'Image navigation' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous image' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next image' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'A launch poster' })).toHaveAttribute('aria-current', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next image' }));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/library/image-2'));
+    await waitFor(() => expect(mocks.getLibraryItem).toHaveBeenLastCalledWith('image-2'));
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/library/image-1'));
   });
 });
