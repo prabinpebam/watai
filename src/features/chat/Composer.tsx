@@ -31,6 +31,7 @@ interface Pending {
   id: string;
   file: File;
   url: string;
+  preparing: boolean;
 }
 
 interface SkillQuery {
@@ -277,42 +278,59 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
 
   // Revoke preview object URLs on unmount.
   const pendingRef = useRef(pending);
+  const removedPendingIdsRef = useRef(new Set<string>());
   pendingRef.current = pending;
   useEffect(() => () => pendingRef.current.forEach((p) => p.url && URL.revokeObjectURL(p.url)), []);
 
   const addFiles = async (list: FileList | File[]) => {
     const all = Array.from(list);
     if (all.length === 0) return;
-    const normalized = await Promise.all(
-      all.map(async (file) => {
-        if (!isImageUpload(file)) return file;
-        try {
-          return await normalizeImageUpload(file);
-        } catch {
-          pushToast(
-            `${file.name} could not be prepared. Export it as a JPEG or PNG and try again.`,
-            'error',
-          );
-          return null;
-        }
-      }),
-    );
-    const ready = normalized.filter((file): file is File => file !== null);
-    if (!ready.length) return;
-    setPending((prev) => [
-      ...prev,
-      ...ready.map((file) => ({
+    const optimistic = all.map((file) => {
+      const image = isImageUpload(file);
+      return {
         id: newId(),
         file,
-        // Images get an object URL for a thumbnail; documents render as a file chip.
-        url: isImageUpload(file) ? URL.createObjectURL(file) : '',
-      })),
-    ]);
+        url: image ? URL.createObjectURL(file) : '',
+        preparing: image,
+      };
+    });
+    setPending((prev) => [...prev, ...optimistic]);
+
+    await Promise.all(optimistic.map(async (item) => {
+      if (!item.preparing) return;
+      try {
+        const file = await normalizeImageUpload(item.file);
+        const url = file === item.file ? item.url : URL.createObjectURL(file);
+        setPending((prev) => {
+          const current = prev.find((pending) => pending.id === item.id);
+          if (!current) {
+            removedPendingIdsRef.current.delete(item.id);
+            if (url !== item.url) URL.revokeObjectURL(url);
+            return prev;
+          }
+          removedPendingIdsRef.current.delete(item.id);
+          if (current.url && current.url !== url) URL.revokeObjectURL(current.url);
+          return prev.map((pending) => pending.id === item.id ? { ...pending, file, url, preparing: false } : pending);
+        });
+      } catch {
+        if (removedPendingIdsRef.current.delete(item.id)) return;
+        setPending((prev) => {
+          const pending = prev.find((candidate) => candidate.id === item.id);
+          if (pending?.url) URL.revokeObjectURL(pending.url);
+          return prev.filter((candidate) => candidate.id !== item.id);
+        });
+        pushToast(
+          `${item.file.name} could not be prepared. Export it as a JPEG or PNG and try again.`,
+          'error',
+        );
+      }
+    }));
   };
 
   const removePending = (id: string) => {
     setPending((prev) => {
       const hit = prev.find((p) => p.id === id);
+      if (hit?.preparing) removedPendingIdsRef.current.add(id);
       if (hit?.url) URL.revokeObjectURL(hit.url);
       return prev.filter((p) => p.id !== id);
     });
@@ -327,7 +345,7 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
   }, [stagedFiles]);
 
   const submit = () => {
-    if (streaming || locked) return;
+    if (streaming || locked || pending.some((item) => item.preparing)) return;
     const text = value.trim();
     if (!text && pending.length === 0 && stagedLibrary.length === 0) return;
     const taggedSkills = skillNamesInText(text, skills);
@@ -614,6 +632,7 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
   };
 
   const canSend = value.trim().length > 0 || pending.length > 0 || stagedLibrary.length > 0;
+  const preparingAttachments = pending.some((item) => item.preparing);
   const hasHighlight = value.length > 0;
   const recording = dictationState === 'recording';
   const transcribing = dictationState === 'transcribing';
@@ -656,8 +675,9 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
           ))}
           {pending.map((p) =>
             p.url ? (
-              <div key={p.id} className="composer-thumb">
+              <div key={p.id} className={`composer-thumb${p.preparing ? ' composer-thumb--preparing' : ''}`} aria-busy={p.preparing || undefined}>
                 <img src={p.url} alt={p.file.name} />
+                {p.preparing && <span className="composer-thumb__preparing" role="status" aria-label={`Preparing ${p.file.name}`}><span className="spinner spinner--sm" aria-hidden="true" /></span>}
                 <button
                   type="button"
                   className="composer-thumb__remove"
@@ -808,7 +828,7 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
             name="arrow-up"
             label={locked ? 'Waiting for the other device' : 'Send'}
             variant="accent"
-            disabled={!canSend || locked || dictationActive}
+            disabled={!canSend || locked || dictationActive || preparingAttachments}
             onClick={submit}
           />
         )}

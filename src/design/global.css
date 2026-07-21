@@ -1233,6 +1233,20 @@ a:hover {
   object-fit: cover;
   display: block;
 }
+.composer-thumb--preparing img {
+  opacity: 0.58;
+}
+.composer-thumb__preparing {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--color-surface-2) 38%, transparent);
+  pointer-events: none;
+}
+.composer-thumb__preparing .spinner {
+  background: color-mix(in srgb, var(--color-surface-1) 70%, transparent);
+}
 .composer-thumb__remove {
   position: absolute;
   top: 3px;

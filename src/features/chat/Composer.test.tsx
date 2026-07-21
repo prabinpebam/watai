@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   createVad: vi.fn(),
   listSkills: vi.fn(),
   getCredentialStatus: vi.fn(),
+  normalizeImageUpload: vi.fn(),
 }));
 
 vi.mock('../../lib/audio', () => ({
@@ -20,6 +21,11 @@ vi.mock('../../lib/audio', () => ({
 }));
 
 vi.mock('../../lib/vad', () => ({ createVad: mocks.createVad }));
+
+vi.mock('../../lib/imageUpload', () => ({
+  isImageUpload: (file: File) => file.type.startsWith('image/'),
+  normalizeImageUpload: mocks.normalizeImageUpload,
+}));
 
 vi.mock('../../data', () => ({
   repo: { getSettings: mocks.getSettings },
@@ -62,8 +68,11 @@ beforeEach(() => {
   mocks.createVad.mockReturnValue({ push: vi.fn(() => null), reset: vi.fn() });
   mocks.listSkills.mockResolvedValue([]);
   mocks.getCredentialStatus.mockResolvedValue({ capabilities: { transcribe: true } });
+  mocks.normalizeImageUpload.mockImplementation(async (file: File) => file);
   vi.stubGlobal('MediaRecorder', class {});
   Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn() } });
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => `blob:${crypto.randomUUID()}`) });
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
 });
 
 afterEach(() => {
@@ -219,5 +228,53 @@ describe('Composer dictation', () => {
     expect(mic).toBeDisabled();
     fireEvent.click(mic);
     expect(mocks.startRecording).not.toHaveBeenCalled();
+  });
+
+  it('shows an image immediately while preparing it and sends only the normalized file', async () => {
+    const onSend = vi.fn();
+    let resolveImage!: (file: File) => void;
+    mocks.normalizeImageUpload.mockReturnValue(new Promise((resolve) => { resolveImage = resolve; }));
+    const { container } = render(<Harness initial="" onSend={onSend} />);
+    const source = new File(['source'], 'photo.jpg', { type: 'image/jpeg' });
+    const normalized = new File(['normalized'], 'photo.jpg', { type: 'image/jpeg' });
+
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [source] } });
+
+    expect(screen.getByRole('status', { name: 'Preparing photo.jpg' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove photo.jpg' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+
+    await act(async () => resolveImage(normalized));
+
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing photo.jpg' })).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(onSend).toHaveBeenCalledWith('', [normalized], [], []);
+  });
+
+  it('does not restore an image removed while preparation is pending', async () => {
+    let resolveImage!: (file: File) => void;
+    mocks.normalizeImageUpload.mockReturnValue(new Promise((resolve) => { resolveImage = resolve; }));
+    const { container } = render(<Harness initial="" />);
+    const source = new File(['source'], 'remove-me.jpg', { type: 'image/jpeg' });
+
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [source] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove remove-me.jpg' }));
+    await act(async () => resolveImage(new File(['ready'], 'remove-me.jpg', { type: 'image/jpeg' })));
+
+    expect(screen.queryByRole('button', { name: 'Remove remove-me.jpg' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('removes the optimistic placeholder when image preparation fails immediately', async () => {
+    mocks.normalizeImageUpload.mockRejectedValue(new Error('decode failed'));
+    const { container } = render(<Harness initial="" />);
+    const source = new File(['bad'], 'broken.jpg', { type: 'image/jpeg' });
+
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [source] } });
+
+    expect(screen.getByRole('status', { name: 'Preparing broken.jpg' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove broken.jpg' })).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
 });
