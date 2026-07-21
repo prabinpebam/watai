@@ -11,6 +11,13 @@ export type ControllerHandler = (req: ApiRequest) => Promise<HttpResult>;
 export type Authorizer = (claims: Claims) => Promise<void>;
 
 async function readBody(request: HttpRequest): Promise<unknown> {
+  if (request.headers.get('content-type')?.toLowerCase().includes('multipart/form-data')) {
+    try {
+      return await request.formData();
+    } catch {
+      throw new AppError('validation', 'Request body must be valid multipart form data.');
+    }
+  }
   const text = await request.text();
   if (!text) return undefined;
   try {

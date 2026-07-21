@@ -189,8 +189,20 @@ export class LocalRepository implements SyncLocalStore {
   }
 
   async getSettings(): Promise<Settings> {
-    const s = await kvGet<Settings>(SETTINGS_KEY);
-    return s ?? DEFAULT_SETTINGS;
+    const s = await kvGet<Settings & { voice?: Settings['voice'] & { autoSend?: boolean } }>(SETTINGS_KEY);
+    if (!s) return DEFAULT_SETTINGS;
+    return {
+      ...DEFAULT_SETTINGS,
+      ...s,
+      personalization: { ...DEFAULT_SETTINGS.personalization, ...s.personalization },
+      appearance: { ...DEFAULT_SETTINGS.appearance, ...s.appearance },
+      voice: {
+        ...DEFAULT_SETTINGS.voice,
+        ...s.voice,
+        autoStopDictation: s.voice?.autoStopDictation ?? s.voice?.autoSend ?? false,
+      },
+      data: { ...DEFAULT_SETTINGS.data, ...s.data },
+    };
   }
 
   async saveSettings(s: Settings): Promise<void> {

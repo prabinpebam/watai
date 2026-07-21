@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { IconButton, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
-import { startRecording, type Recorder } from '../../lib/audio';
+import { readLevel, startRecording, type Recorder } from '../../lib/audio';
 import { repo, cloudApi, skillsApi } from '../../data';
-import { fileToBase64 } from '../../lib/files';
 import { isImageUpload, normalizeImageUpload } from '../../lib/imageUpload';
 import { insertAtCaret } from '../../lib/caret';
 import { WaveformVisualizer } from '../voice/WaveformVisualizer';
+import { createVad } from '../../lib/vad';
 import { newId } from '../../lib/ids';
 import { useUi } from '../../state/store';
 import type { SkillSummary } from '../../lib/types';
@@ -39,11 +39,35 @@ interface SkillQuery {
   query: string;
 }
 
+type DictationState = 'idle' | 'requesting' | 'recording' | 'transcribing' | 'error';
+
+const MAX_DICTATION_MS = 2 * 60_000;
+const MAX_DICTATION_BYTES = 20 * 1024 * 1024;
+const TRANSCRIPTION_TIMEOUT_MS = 125_000;
+
+function dictationStartError(error: unknown): string {
+  const name = error instanceof DOMException ? error.name : '';
+  if (name === 'NotAllowedError' || name === 'SecurityError') return 'Microphone access was blocked. Allow it in browser settings and try again.';
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No available microphone was found.';
+  if (name === 'NotReadableError' || name === 'AbortError') return 'The microphone is busy or unavailable.';
+  if (name === 'NotSupportedError') return 'Audio recording is not supported by this browser.';
+  return error instanceof Error ? error.message : 'Could not start dictation.';
+}
+
 function formatElapsed(ms: number): string {
   const total = Math.floor(ms / 1000);
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function DictationTimer({ startedAt }: { startedAt: number }) {
+  const [elapsed, setElapsed] = useState(() => Date.now() - startedAt);
+  useEffect(() => {
+    const timer = window.setInterval(() => setElapsed(Date.now() - startedAt), 250);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+  return <>{formatElapsed(elapsed)}</>;
 }
 
 function skillQueryAt(value: string, caret: number): SkillQuery | null {
@@ -98,23 +122,31 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
   const taRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
+  const recOverlayRef = useRef<HTMLDivElement>(null);
   const pendingFlipRef = useRef<{ rects: Map<string, DOMRect>; height: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [multiline, setMultiline] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
+  const [dictationState, setDictationState] = useState<DictationState>('idle');
   const [pending, setPending] = useState<Pending[]>([]);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [transcriptionConfigured, setTranscriptionConfigured] = useState<boolean | null>(null);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillQuery, setSkillQuery] = useState<SkillQuery | null>(null);
   const [skillIndex, setSkillIndex] = useState(0);
   const recRef = useRef<Recorder | null>(null);
+  const dictationBusyRef = useRef(false);
+  const dictationFinishingRef = useRef(false);
+  const dictationOpRef = useRef(0);
+  const transcriptionAbortRef = useRef<AbortController | null>(null);
+  const retainedAudioRef = useRef<Blob | null>(null);
+  const finishDictationRef = useRef<() => void>(() => undefined);
+  const cancelDictationRef = useRef<() => void>(() => undefined);
+  const autoStopRef = useRef({ enabled: false, sensitivity: 0.5 });
   const recCaretRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const recStartRef = useRef(0);
-  const [recElapsed, setRecElapsed] = useState(0);
   const pushToast = useUi((s) => s.pushToast);
   const stagedFiles = useUi((s) => s.stagedFiles);
   const clearStagedFiles = useUi((s) => s.clearStagedFiles);
@@ -230,18 +262,23 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
     };
   }, []);
 
+  useEffect(() => {
+    let live = true;
+    cloudApi
+      .getCredentialStatus()
+      .then((status) => {
+        if (live) setTranscriptionConfigured(!!status.capabilities?.transcribe);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+
   // Revoke preview object URLs on unmount.
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
   useEffect(() => () => pendingRef.current.forEach((p) => p.url && URL.revokeObjectURL(p.url)), []);
-
-  // Dictation recording timer; also stop the recorder if the composer unmounts mid-capture.
-  useEffect(() => {
-    if (!recording) return;
-    const id = window.setInterval(() => setRecElapsed(Date.now() - recStartRef.current), 250);
-    return () => window.clearInterval(id);
-  }, [recording]);
-  useEffect(() => () => recRef.current?.cancel(), []);
 
   const addFiles = async (list: FileList | File[]) => {
     const all = Array.from(list);
@@ -378,6 +415,10 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
   };
 
   const startDictation = async () => {
+    if (dictationBusyRef.current) return;
+    dictationBusyRef.current = true;
+    const operation = ++dictationOpRef.current;
+    setDictationState('requesting');
     const ta = taRef.current;
     recCaretRef.current = {
       start: ta?.selectionStart ?? value.length,
@@ -385,27 +426,55 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
     };
     try {
       const settings = await repo.getSettings().catch(() => null);
-      recRef.current = await startRecording(settings?.voice.inputDeviceId);
+      const recorder = await startRecording(settings?.voice.inputDeviceId);
+      if (operation !== dictationOpRef.current) {
+        recorder.cancel();
+        return;
+      }
+      recRef.current = recorder;
+      recorder.onInterruption(() => {
+        if (operation !== dictationOpRef.current) return;
+        cancelDictationRef.current();
+        pushToast('Microphone capture was interrupted.', 'error');
+      });
+      autoStopRef.current = {
+        enabled: settings?.voice.autoStopDictation ?? false,
+        sensitivity: settings?.voice.vad ?? 0.5,
+      };
       recStartRef.current = Date.now();
-      setRecElapsed(0);
-      setRecording(true);
-    } catch {
-      pushToast('Microphone permission is needed for dictation', 'error');
+      setDictationState('recording');
+    } catch (error) {
+      if (operation !== dictationOpRef.current) return;
+      dictationBusyRef.current = false;
+      setDictationState('idle');
+      pushToast(dictationStartError(error), 'error');
     }
   };
 
-  const acceptDictation = async () => {
-    const rec = recRef.current;
-    recRef.current = null;
-    setRecording(false);
-    if (!rec) return;
-    setTranscribing(true);
+  const transcribeDictation = async (blob: Blob, operation: number) => {
+    setDictationState('transcribing');
+    let failed = false;
     try {
-      const blob = await rec.stop();
-      const { text } = await cloudApi.transcribeAudio({
-        audioBase64: await fileToBase64(blob),
-        mime: blob.type || 'audio/webm',
-      });
+      const controller = new AbortController();
+      transcriptionAbortRef.current = controller;
+      let timedOut = false;
+      const timeout = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, TRANSCRIPTION_TIMEOUT_MS);
+      let text: string;
+      try {
+        ({ text } = await cloudApi.transcribeAudio({
+          audio: blob,
+          mime: blob.type,
+        }, controller.signal));
+      } catch (error) {
+        if (timedOut) throw new Error('Transcription timed out. Check your connection and try again.');
+        throw error;
+      } finally {
+        window.clearTimeout(timeout);
+      }
+      if (operation !== dictationOpRef.current) return;
       const trimmed = text.trim();
       if (trimmed) {
         const { start, end } = recCaretRef.current;
@@ -420,17 +489,115 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
         });
       }
     } catch (e) {
+      if (operation !== dictationOpRef.current || (e instanceof DOMException && e.name === 'AbortError')) return;
+      failed = true;
+      retainedAudioRef.current = blob;
+      setDictationState('error');
       pushToast(e instanceof Error ? e.message : 'Transcription failed', 'error');
     } finally {
-      setTranscribing(false);
+      if (operation === dictationOpRef.current) {
+        transcriptionAbortRef.current = null;
+        dictationFinishingRef.current = false;
+        if (!failed) {
+          retainedAudioRef.current = null;
+          dictationBusyRef.current = false;
+          setDictationState('idle');
+        }
+      }
     }
   };
 
+  const acceptDictation = async () => {
+    if (!dictationBusyRef.current || dictationFinishingRef.current) return;
+    dictationFinishingRef.current = true;
+    const operation = dictationOpRef.current;
+    const rec = recRef.current;
+    recRef.current = null;
+    if (!rec) {
+      dictationFinishingRef.current = false;
+      dictationBusyRef.current = false;
+      setDictationState('idle');
+      return;
+    }
+    setDictationState('transcribing');
+    try {
+      const blob = await rec.stop();
+      if (operation !== dictationOpRef.current) return;
+      if (!blob.size) throw new Error('No audio was captured.');
+      if (blob.size > MAX_DICTATION_BYTES) throw new Error('Dictation is too large. Record two minutes or less.');
+      await transcribeDictation(blob, operation);
+    } catch (error) {
+      if (operation !== dictationOpRef.current) return;
+      dictationFinishingRef.current = false;
+      dictationBusyRef.current = false;
+      setDictationState('idle');
+      pushToast(error instanceof Error ? error.message : 'Could not finish dictation.', 'error');
+    }
+  };
+
+  const retryDictation = () => {
+    const blob = retainedAudioRef.current;
+    if (!blob || dictationFinishingRef.current || transcriptionAbortRef.current) return;
+    dictationFinishingRef.current = true;
+    void transcribeDictation(blob, dictationOpRef.current);
+  };
+
   const cancelDictation = () => {
+    dictationOpRef.current += 1;
+    transcriptionAbortRef.current?.abort();
+    transcriptionAbortRef.current = null;
+    retainedAudioRef.current = null;
+    dictationFinishingRef.current = false;
     recRef.current?.cancel();
     recRef.current = null;
-    setRecording(false);
+    dictationBusyRef.current = false;
+    setDictationState('idle');
   };
+
+  finishDictationRef.current = () => void acceptDictation();
+  cancelDictationRef.current = cancelDictation;
+
+  useEffect(() => {
+    if (dictationState !== 'recording') return;
+    const remaining = Math.max(0, MAX_DICTATION_MS - (Date.now() - recStartRef.current));
+    const timer = window.setTimeout(() => finishDictationRef.current(), remaining);
+    return () => window.clearTimeout(timer);
+  }, [dictationState]);
+
+  useEffect(() => {
+    if (dictationState !== 'requesting') return;
+    const frame = requestAnimationFrame(() => recOverlayRef.current?.querySelector<HTMLButtonElement>('button')?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [dictationState]);
+
+  useEffect(() => {
+    if (dictationState !== 'recording' || !autoStopRef.current.enabled) return;
+    const vad = createVad({ sensitivity: autoStopRef.current.sensitivity, silenceMs: 900 });
+    let frame = 0;
+    const sample = (now: number) => {
+      const analyser = recRef.current?.analyser;
+      if (analyser && vad.push(readLevel(analyser), now) === 'speechend') {
+        finishDictationRef.current();
+        return;
+      }
+      frame = requestAnimationFrame(sample);
+    };
+    frame = requestAnimationFrame(sample);
+    return () => cancelAnimationFrame(frame);
+  }, [dictationState]);
+
+  useEffect(() => {
+    const stopForInterruption = () => {
+      if (document.hidden) cancelDictationRef.current();
+    };
+    document.addEventListener('visibilitychange', stopForInterruption);
+    window.addEventListener('pagehide', cancelDictationRef.current);
+    return () => {
+      document.removeEventListener('visibilitychange', stopForInterruption);
+      window.removeEventListener('pagehide', cancelDictationRef.current);
+      cancelDictationRef.current();
+    };
+  }, []);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -448,6 +615,12 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
 
   const canSend = value.trim().length > 0 || pending.length > 0 || stagedLibrary.length > 0;
   const hasHighlight = value.length > 0;
+  const recording = dictationState === 'recording';
+  const transcribing = dictationState === 'transcribing';
+  const dictationActive = dictationState !== 'idle';
+  const dictationStatus = dictationState === 'requesting' ? 'Requesting microphone access' : recording ? 'Listening' : transcribing ? 'Transcribing dictation' : dictationState === 'error' ? 'Transcription failed' : '';
+  const dictationSupported = !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
+  const dictationUnavailable = !dictationSupported || transcriptionConfigured === false;
 
   return (
     <div className="composer-wrap">
@@ -521,20 +694,25 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
       >
-        {(recording || transcribing) && (
-          <div className="composer__rec">
-            <IconButton name="close" label="Cancel dictation" onClick={cancelDictation} disabled={transcribing} />
+        {dictationActive && (
+          <div ref={recOverlayRef} className="composer__rec" aria-label={dictationStatus}>
+            <span className="sr-only" role="status" aria-live="polite">{dictationStatus}</span>
+            <IconButton name="close" label="Cancel dictation" onClick={cancelDictation} big />
             <WaveformVisualizer analyser={recRef.current?.analyser ?? null} className="composer__rec-wave" />
-            <span className="composer__rec-timer">{formatElapsed(recElapsed)}</span>
+            <span className="composer__rec-timer">{recording ? <DictationTimer startedAt={recStartRef.current} /> : dictationState === 'requesting' ? 'Ready' : dictationState === 'error' ? 'Try again' : 'Working'}</span>
             {transcribing ? (
               <Spinner size="sm" />
+            ) : recording ? (
+              <IconButton name="check" label="Insert transcript" variant="accent" onClick={acceptDictation} big />
+            ) : dictationState === 'error' ? (
+              <IconButton name="refresh" label="Retry transcription" variant="accent" onClick={retryDictation} big />
             ) : (
-              <IconButton name="check" label="Insert transcript" variant="accent" onClick={acceptDictation} />
+              <Spinner size="sm" />
             )}
           </div>
         )}
         <div className="composer__plus-wrap">
-          <IconButton name="plus" className="composer__plus" label="Add attachment" aria-expanded={addMenuOpen} onClick={() => setAddMenuOpen((open) => !open)} />
+          <IconButton name="plus" className="composer__plus" label="Add attachment" aria-expanded={addMenuOpen} disabled={dictationActive} onClick={() => setAddMenuOpen((open) => !open)} />
           {addMenuOpen && (
             <div className="composer-add-menu" role="menu">
               <button type="button" role="menuitem" onClick={() => { setAddMenuOpen(false); fileRef.current?.click(); }}><Icon name="upload" size={18} /> Upload from device</button>
@@ -548,6 +726,7 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
           accept="image/*,application/pdf,text/plain,text/markdown,text/csv,application/json,.md,.markdown,.docx,.pptx,.xlsx"
           multiple
           hidden
+          disabled={dictationActive}
           onChange={(e) => {
             if (e.target.files) void addFiles(e.target.files);
             e.target.value = '';
@@ -584,6 +763,7 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
             className={`composer__textarea ${hasHighlight ? 'composer__textarea--highlighted' : ''}`}
             rows={1}
             value={value}
+            disabled={dictationActive}
             placeholder={recording ? 'Listening…' : locked ? 'Waiting for the other device to finish…' : placeholder ?? 'Message Watai'}
             onChange={(e) => {
               onChange(e.target.value);
@@ -607,10 +787,17 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
             aria-label="Message"
           />
         </div>
-        {transcribing ? (
+        {dictationActive ? (
           <Spinner size="sm" className="composer__mic composer__spinner" />
         ) : (
-          <IconButton name="mic" className="composer__mic" label="Dictate" variant="muted" onClick={startDictation} />
+          <IconButton
+            name="mic"
+            className="composer__mic"
+            label={!dictationSupported ? 'Dictation is not supported by this browser' : transcriptionConfigured === false ? 'Configure a transcription model to use dictation' : 'Dictate'}
+            variant="muted"
+            disabled={dictationUnavailable}
+            onClick={startDictation}
+          />
         )}
         {streaming ? (
           <IconButton key="stop" className="composer__primary" name="stop" label="Stop generating" variant="accent" onClick={onStop} />
@@ -621,7 +808,7 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
             name="arrow-up"
             label={locked ? 'Waiting for the other device' : 'Send'}
             variant="accent"
-            disabled={!canSend || locked}
+            disabled={!canSend || locked || dictationActive}
             onClick={submit}
           />
         )}

@@ -11,7 +11,7 @@ describe('AiProxyService', () => {
   it('transcribes audio via the vault credentials', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ text: 'hello world' }) });
     const svc = new AiProxyService(creds({ transcribe: 'whisper' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
-    const out = await svc.transcribe('u', { audioBase64: Buffer.from('AUDIO').toString('base64'), mime: 'audio/webm' });
+    const out = await svc.transcribe('u', { audio: new TextEncoder().encode('AUDIO'), mime: 'audio/webm' });
     expect(out.text).toBe('hello world');
     const [url, init] = fetchImpl.mock.calls[0];
     expect(String(url)).toContain('/audio/transcriptions');
@@ -20,7 +20,7 @@ describe('AiProxyService', () => {
 
   it('rejects transcription when no model is configured', async () => {
     const svc = new AiProxyService(creds({}));
-    await expect(svc.transcribe('u', { audioBase64: 'AAA' })).rejects.toThrow();
+    await expect(svc.transcribe('u', { audio: new Uint8Array([1]) })).rejects.toThrow();
   });
 
   it('surfaces an upstream transcription failure with its real cause (not a generic 500)', async () => {
@@ -31,7 +31,7 @@ describe('AiProxyService', () => {
       text: async () => JSON.stringify({ error: { message: 'Audio file could not be decoded.' } }),
     });
     const svc = new AiProxyService(creds({ transcribe: 'whisper' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
-    const err = await svc.transcribe('u', { audioBase64: Buffer.from('A').toString('base64') }).catch((e) => e);
+    const err = await svc.transcribe('u', { audio: new Uint8Array([1]) }).catch((e) => e);
     expect(err).toMatchObject({ name: 'AppError', code: 'validation' });
     expect(String(err.message)).toContain('Audio file could not be decoded.');
   });
@@ -44,14 +44,14 @@ describe('AiProxyService', () => {
       text: async () => JSON.stringify({ error: { message: 'The API deployment for this resource does not exist.' } }),
     });
     const svc = new AiProxyService(creds({ transcribe: 'whisper' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
-    const err = await svc.transcribe('u', { audioBase64: Buffer.from('A').toString('base64') }).catch((e) => e);
+    const err = await svc.transcribe('u', { audio: new Uint8Array([1]) }).catch((e) => e);
     expect(err).toMatchObject({ name: 'AppError', code: 'not_found' });
   });
 
   it('routes Azure transcription via the classic deployment path (the v1 surface 404s for transcribe models)', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ text: 'hi' }) });
     const svc = new AiProxyService(creds({ transcribe: 'gpt-4o-transcribe' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
-    await svc.transcribe('u', { audioBase64: Buffer.from('A').toString('base64') });
+    await svc.transcribe('u', { audio: new Uint8Array([1]) });
     const url = String(fetchImpl.mock.calls[0][0]);
     expect(url).toContain('.cognitiveservices.azure.com/openai/deployments/gpt-4o-transcribe/audio/transcriptions');
     expect(url).toContain('api-version=');
@@ -63,10 +63,33 @@ describe('AiProxyService', () => {
       getDecrypted: async () => ({ baseUrl: 'https://api.openai.com/v1', key: 'k', models: { chat: 'g', transcribe: 'whisper-1' } }),
     };
     const svc = new AiProxyService(openai, { fetchImpl: fetchImpl as unknown as typeof fetch });
-    await svc.transcribe('u', { audioBase64: Buffer.from('A').toString('base64') });
+    await svc.transcribe('u', { audio: new Uint8Array([1]) });
     const url = String(fetchImpl.mock.calls[0][0]);
     expect(url).not.toContain('/openai/deployments/');
     expect(url).toContain('/audio/transcriptions');
+  });
+
+  it('preserves MP4 audio MIME and uses an M4A filename', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ text: 'hi' }) });
+    const svc = new AiProxyService(creds({ transcribe: 'whisper' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    await svc.transcribe('u', { audio: new Uint8Array([1, 2]), mime: 'audio/mp4;codecs=mp4a.40.2' });
+
+    const form = fetchImpl.mock.calls[0][1].body as FormData;
+    const file = form.get('file') as File;
+    expect(file.type).toBe('audio/mp4');
+    expect(file.name).toBe('audio.m4a');
+  });
+
+  it('rejects audio larger than the server safety limit before calling upstream', async () => {
+    const fetchImpl = vi.fn();
+    const svc = new AiProxyService(creds({ transcribe: 'whisper' }), { fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    await expect(svc.transcribe('u', {
+      audio: new Uint8Array(20 * 1024 * 1024 + 1),
+      mime: 'audio/webm',
+    })).rejects.toThrow('20 MB');
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('synthesizes speech and returns base64 audio', async () => {

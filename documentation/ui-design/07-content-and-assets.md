@@ -302,7 +302,7 @@ Voice/tone: plain, calm, second person, no exclamation overuse, no emoji in chro
 | `voiceSettings.voice` | Voice |
 | `voiceSettings.rate` | Speech rate |
 | `voiceSettings.vad` | Mic sensitivity |
-| `voiceSettings.autoSend` | Auto-send on silence |
+| `voiceSettings.autoStopDictation` | Auto-stop dictation on silence |
 | `voiceSettings.showCaptions` | Show captions |
 | `data.sync` | Sync history |
 | `data.temporaryDefault` | Start new chats as temporary |

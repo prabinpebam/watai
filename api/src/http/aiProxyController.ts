@@ -22,9 +22,24 @@ export function createAiProxyController(svc: AiProxyService) {
     transcribe: (req: ApiRequest): Promise<HttpResult> =>
       respond(200, async () => {
         const { userId } = identityFromClaims(req.claims);
+        if (req.body instanceof FormData) {
+          const file = req.body.get('file');
+          if (!(file instanceof Blob)) throw new AppError('validation', 'Audio file is required.');
+          return svc.transcribe(userId, {
+            audio: new Uint8Array(await file.arrayBuffer()),
+            mime: String(req.body.get('mime') || file.type || ''),
+            language: String(req.body.get('language') || '') || undefined,
+            prompt: String(req.body.get('prompt') || '') || undefined,
+          });
+        }
         const b = (req.body ?? {}) as { audioBase64?: string; mime?: string; language?: string; prompt?: string };
         if (!b.audioBase64) throw new AppError('validation', 'audioBase64 is required.');
-        return svc.transcribe(userId, b as { audioBase64: string });
+        return svc.transcribe(userId, {
+          audio: new Uint8Array(Buffer.from(b.audioBase64.replace(/^data:[^;]*;base64,/, ''), 'base64')),
+          mime: b.mime,
+          language: b.language,
+          prompt: b.prompt,
+        });
       }),
 
     speak: (req: ApiRequest): Promise<HttpResult> =>

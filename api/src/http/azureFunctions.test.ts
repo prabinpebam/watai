@@ -8,14 +8,17 @@ import type { ApiRequest, HttpResult } from './types';
 function fakeRequest(opts: {
   auth?: string;
   body?: string;
+  contentType?: string;
+  form?: FormData;
   params?: Record<string, string>;
   query?: Record<string, string>;
 }): HttpRequest {
   return {
-    headers: { get: (k: string) => (k.toLowerCase() === 'authorization' ? opts.auth ?? null : null) },
+    headers: { get: (k: string) => k.toLowerCase() === 'authorization' ? opts.auth ?? null : k.toLowerCase() === 'content-type' ? opts.contentType ?? null : null },
     params: opts.params ?? {},
     query: new URLSearchParams(opts.query ?? {}),
     text: async () => opts.body ?? '',
+    formData: async () => opts.form ?? new FormData(),
   } as unknown as HttpRequest;
 }
 
@@ -59,6 +62,24 @@ describe('runRoute', () => {
     );
     expect(res.status).toBe(400);
     expect((res as { jsonBody: { error: { code: string } } }).jsonBody.error.code).toBe('validation');
+  });
+
+  it('projects multipart form data without attempting JSON parsing', async () => {
+    const form = new FormData();
+    form.append('file', new Blob(['audio'], { type: 'audio/mp4' }), 'audio.m4a');
+    let captured: ApiRequest | undefined;
+
+    const res = await runRoute(
+      okVerifier,
+      async (req) => {
+        captured = req;
+        return { status: 200, body: {} };
+      },
+      fakeRequest({ auth: 'Bearer good', contentType: 'multipart/form-data; boundary=test', form }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(captured?.body).toBe(form);
   });
 
   it('omits jsonBody for empty (204) results', async () => {

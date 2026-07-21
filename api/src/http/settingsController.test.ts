@@ -26,9 +26,10 @@ describe('settingsController', () => {
 
   it('persists across get after patch → 200', async () => {
     const ctrl = setup();
-    await ctrl.patch({ claims: { sub: 'userA' }, body: { voice: { autoSend: false } } });
+    await ctrl.patch({ claims: { sub: 'userA' }, body: { voice: { autoSend: true } } });
     const res = await ctrl.get({ claims: { sub: 'userA' } });
-    expect((res.body as { voice: { autoSend: boolean } }).voice.autoSend).toBe(false);
+    expect((res.body as { voice: { autoStopDictation: boolean; autoSend?: boolean } }).voice.autoStopDictation).toBe(true);
+    expect((res.body as { voice: { autoSend?: boolean } }).voice.autoSend).toBeUndefined();
   });
 
   it('unauthenticated → 401', async () => {

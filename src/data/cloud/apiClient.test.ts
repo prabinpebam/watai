@@ -15,6 +15,7 @@ interface Call {
   method: string;
   headers: Record<string, string>;
   body?: unknown;
+  signal?: AbortSignal | null;
 }
 
 /**
@@ -30,7 +31,8 @@ function stubFetch(responses: Array<{ status: number; body?: unknown }>) {
       url,
       method: init.method ?? 'GET',
       headers: (init.headers as Record<string, string>) ?? {},
-      body: init.body ? JSON.parse(init.body as string) : undefined,
+      body: init.body instanceof FormData ? init.body : init.body ? JSON.parse(init.body as string) : undefined,
+      signal: init.signal,
     });
     const r = responses[i++] ?? { status: 200, body: {} };
     return {
@@ -130,6 +132,23 @@ describe('WataiApiClient', () => {
     expect(calls[0].method).toBe('POST');
     expect(calls[0].headers['Content-Type']).toBe('application/json');
     expect(calls[0].body).toEqual({ title: 'Hi' });
+  });
+
+  it('uploads transcription audio as multipart with the real format and abort signal', async () => {
+    const { fetchImpl, calls } = stubFetch([{ status: 200, body: { text: 'hello' } }]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+    const controller = new AbortController();
+    const audio = new Blob(['audio'], { type: 'audio/mp4' });
+
+    await client.transcribeAudio({ audio }, controller.signal);
+
+    expect(calls[0].headers['Content-Type']).toBeUndefined();
+    expect(calls[0].signal).toBe(controller.signal);
+    const form = calls[0].body as FormData;
+    const file = form.get('file') as File;
+    expect(file.type).toBe('audio/mp4');
+    expect(file.name).toBe('audio.m4a');
+    expect(form.get('mime')).toBe('audio/mp4');
   });
 
   it('returns undefined for 204 responses (delete)', async () => {

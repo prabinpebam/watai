@@ -35,7 +35,8 @@ const voiceBase = z.object({
   inputDeviceId: z.string().max(200).optional(),
   rate: z.number().min(0.5).max(2),
   vad: z.number().min(0).max(1),
-  autoSend: z.boolean(),
+  autoStopDictation: z.boolean(),
+  autoSend: z.boolean().optional(),
   captions: z.boolean(),
 });
 const dataBase = z.object({
@@ -77,7 +78,7 @@ export const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
 export const DEFAULT_SETTINGS: Settings = {
   personalization: { memoryEnabled: true, memory: DEFAULT_MEMORY_SETTINGS },
   appearance: { theme: 'system', textScale: 1.0, density: 'comfortable', reduceMotion: 'system', language: 'en' },
-  voice: { engine: 'tts', rate: 1, vad: 0.5, autoSend: true, captions: true },
+  voice: { engine: 'tts', rate: 1, vad: 0.5, autoStopDictation: false, captions: true },
   data: { sync: false, temporaryDefault: false, retention: 'forever' },
 };
 
@@ -85,14 +86,27 @@ export function parseSettingsPatch(input: unknown): SettingsPatch {
   return parseOrThrow(patchSchema, input, 'Invalid settings.');
 }
 
+export function normalizeSettings(settings: Settings): Settings {
+  const legacyVoice = settings.voice as Settings['voice'] & { autoSend?: boolean };
+  const voice = {
+    ...DEFAULT_SETTINGS.voice,
+    ...legacyVoice,
+    autoStopDictation: legacyVoice.autoStopDictation ?? legacyVoice.autoSend ?? false,
+  };
+  delete voice.autoSend;
+  return { ...DEFAULT_SETTINGS, ...settings, voice };
+}
+
 /** Shallow-merge each section of a patch over the current settings. */
 export function mergeSettings(current: Settings, patch: SettingsPatch): Settings {
-  return {
+  const voicePatch = patch.voice as SettingsPatch['voice'] & { autoSend?: boolean };
+  const autoStopDictation = voicePatch?.autoStopDictation ?? voicePatch?.autoSend ?? current.voice.autoStopDictation;
+  return normalizeSettings({
     personalization: { ...current.personalization, ...patch.personalization },
     appearance: { ...current.appearance, ...patch.appearance },
-    voice: { ...current.voice, ...patch.voice },
+    voice: { ...current.voice, ...patch.voice, autoStopDictation },
     data: { ...current.data, ...patch.data },
-  };
+  });
 }
 
 export function effectiveMemorySettings(settings: Settings): MemorySettings {

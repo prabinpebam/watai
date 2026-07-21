@@ -96,7 +96,7 @@ function summaryFor(id: string, ctx: SettingsCtx): string {
     case 'personalization':
       return effectiveMemorySettings(s).enabled ? 'Memory on' : 'Memory off';
     case 'voice':
-      return `${s.voice.autoSend ? 'Auto-send on' : 'Auto-send off'} · ${s.voice.rate.toFixed(1)}×`;
+      return `${s.voice.autoStopDictation ? 'Auto-stop on' : 'Auto-stop off'} · ${s.voice.rate.toFixed(1)}×`;
     case 'tools': {
       const tl = s.tools;
       if (!tl?.agenticMode) return 'Off';
@@ -1485,7 +1485,7 @@ function VoiceBody({ ctx }: { ctx: SettingsCtx }) {
           <div className="setting-row__title">Auto-stop on silence (dictation)</div>
           <div className="setting-row__sub">End dictation automatically when you stop speaking.</div>
         </div>
-        <Switch checked={v.autoSend} onChange={(x) => set({ autoSend: x })} label="Auto-stop on silence" />
+        <Switch checked={v.autoStopDictation} onChange={(x) => set({ autoStopDictation: x })} label="Auto-stop on silence" />
       </div>
       <div className="setting-row">
         <div className="setting-row__body">

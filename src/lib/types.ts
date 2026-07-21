@@ -261,7 +261,7 @@ export interface Settings {
     inputDeviceId?: string;
     rate: number;
     vad: number;
-    autoSend: boolean;
+    autoStopDictation: boolean;
     captions: boolean;
   };
   data: { sync: boolean; temporaryDefault: boolean; retention: 'forever' | '30d' | '90d' };
@@ -343,7 +343,7 @@ export const DEFAULT_SETTINGS: Settings = {
     reduceMotion: 'system',
     language: 'en',
   },
-  voice: { engine: 'tts', rate: 1, vad: 0.5, autoSend: true, captions: true },
+  voice: { engine: 'tts', rate: 1, vad: 0.5, autoStopDictation: false, captions: true },
   data: { sync: true, temporaryDefault: false, retention: 'forever' },
   tools: {
     agenticMode: true,

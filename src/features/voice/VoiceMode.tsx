@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { IconButton, Spinner } from '../../design/ui';
 import { startRecording, type Recorder } from '../../lib/audio';
 import { cloudApi, repo } from '../../data';
-import { fileToBase64, base64ToBlob } from '../../lib/files';
+import { base64ToBlob } from '../../lib/files';
 import { newId } from '../../lib/ids';
 import { useRuns } from '../chat/runStore';
 import { useChat } from '../chat/useChat';
@@ -144,8 +144,8 @@ export function VoiceMode() {
     try {
       const blob = await rec.stop();
       const res = await cloudApi.transcribeAudio({
-        audioBase64: await fileToBase64(blob),
-        mime: blob.type || 'audio/webm',
+        audio: blob,
+        mime: blob.type,
       });
       text = res.text.trim();
     } catch (e) {

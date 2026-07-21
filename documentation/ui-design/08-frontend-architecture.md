@@ -214,7 +214,7 @@ interface Settings {
                 density: UiStore['density']; reduceMotion: UiStore['reduceMotion'];
                 language: string };
   voice: { engine: 'tts'|'realtime'; voiceId?: string; rate: number;
-           vad: number; autoSend: boolean; captions: boolean };
+           vad: number; autoStopDictation: boolean; captions: boolean };
   data: { sync: boolean; temporaryDefault: boolean;
           retention: 'forever'|'30d'|'90d' };
 }

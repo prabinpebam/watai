@@ -30,8 +30,8 @@ What exists today (from the voice audit):
 - **Audio lib** [`audio.ts`](../src/lib/audio.ts): `startRecording()` (MediaRecorder + an
   `AnalyserNode`) and `readLevel(analyser)`. No VAD, no waveform component.
 - **Settings model** [`src/lib/types.ts`](../src/lib/types.ts): `voice: { engine: 'tts' | 'realtime';
-  voiceId?; rate; vad; autoSend; captions }` already typed. **UI exposes only autoSend / captions /
-  rate, and none of them are wired** (rate not applied to TTS; captions always on; autoSend ignored).
+  voiceId?; rate; vad; autoStopDictation; captions }` is typed. Dictation uses `vad` sensitivity and
+  the default-off `autoStopDictation`; captions and rate apply to voice mode / speech playback.
 - **Run path** the voice loop should ride: `useRuns.startServerRun(threadId, body, prepare)`
   ([`runStore.ts`](../src/features/chat/runStore.ts)) → `runOnServer`
   ([`serverRun.ts`](../src/features/chat/serverRun.ts)); the in-flight assistant text streams into
@@ -213,7 +213,7 @@ half-duplex) ships instead; the loop is never blocked.
   transcript into the field at that caret (with sensible spacing), preserving text on both sides;
   restore focus + caret after the inserted text. Never replace the whole value.
 - **Cancel** restores the prior value untouched. **Never auto-sends.**
-- **Optional auto-stop:** if `settings.voice.autoSend` (auto-stop on silence) is on, the VAD
+- **Optional auto-stop:** if `settings.voice.autoStopDictation` is on, the VAD
   `speechend` ends capture like Accept; default off → manual.
 - State machine per spec: `idle → requesting → recording → transcribing → inserted` (+ `denied`,
   `error`). Reduced motion → static level meter. Bar is an ARIA live region.
@@ -314,7 +314,7 @@ matches ChatGPT’s standard voice with full agentic parity.
 | Speaking rate | `voice.rate` | all TTS |
 | Mic sensitivity | `voice.vad` | voice-mode VAD endpoint + dictation auto-stop |
 | Live captions | `voice.captions` | voice-mode caption default |
-| Auto-stop on silence (dictation) | `voice.autoSend` | dictation only |
+| Auto-stop on silence (dictation) | `voice.autoStopDictation` | dictation only; default off |
 
 `voice.engine` stays `'tts'` for v1 (Realtime is the future toggle).
 

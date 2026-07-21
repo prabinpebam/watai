@@ -33,11 +33,20 @@ export function WaveformVisualizer({ analyser, className = '', bars = 28 }: Wave
     if (!canvas || !ctx) return;
 
     const reduce =
-      typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      typeof window !== 'undefined' &&
+      (!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
+        getComputedStyle(document.documentElement).getPropertyValue('--motion-scale').trim() === '0');
     const freq = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
+    const color = getComputedStyle(canvas).color || '#888';
     let raf = 0;
+    let lastFrame = -Infinity;
 
-    const render = () => {
+    const render = (now = 0) => {
+      if (!reduce && now - lastFrame < 1000 / 30) {
+        raf = requestAnimationFrame(render);
+        return;
+      }
+      lastFrame = now;
       const dpr = window.devicePixelRatio || 1;
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
@@ -51,7 +60,7 @@ export function WaveformVisualizer({ analyser, className = '', bars = 28 }: Wave
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = getComputedStyle(canvas).color || '#888';
+      ctx.fillStyle = color;
 
       if (analyser && freq) analyser.getByteFrequencyData(freq);
 

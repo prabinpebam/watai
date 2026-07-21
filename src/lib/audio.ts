@@ -3,8 +3,32 @@
 export interface Recorder {
   stop: () => Promise<Blob>;
   cancel: () => void;
+  onInterruption: (callback: () => void) => () => void;
   stream: MediaStream;
   analyser: AnalyserNode;
+}
+
+const RECORDING_MIME_CANDIDATES = [
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/mp4;codecs=mp4a.40.2',
+  'audio/mp4',
+] as const;
+
+export function supportedRecordingMime(): string | undefined {
+  if (typeof MediaRecorder === 'undefined') return undefined;
+  if (typeof MediaRecorder.isTypeSupported !== 'function') return undefined;
+  return RECORDING_MIME_CANDIDATES.find((mime) => MediaRecorder.isTypeSupported(mime));
+}
+
+function audioConstraints(deviceId?: string): MediaTrackConstraints {
+  return {
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+    echoCancellation: { ideal: true },
+    noiseSuppression: { ideal: true },
+    autoGainControl: { ideal: true },
+    channelCount: { ideal: 1 },
+  };
 }
 
 /** Open a mic stream, preferring a specific input device and falling back to the system default if
@@ -12,56 +36,108 @@ export interface Recorder {
 async function getInputStream(deviceId?: string): Promise<MediaStream> {
   if (deviceId) {
     try {
-      return await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
-    } catch {
-      /* selected device unavailable — fall back to the default below */
+      return await navigator.mediaDevices.getUserMedia({ audio: audioConstraints(deviceId) });
+    } catch (error) {
+      const name = error instanceof DOMException ? error.name : '';
+      if (name !== 'NotFoundError' && name !== 'OverconstrainedError') throw error;
     }
   }
-  return navigator.mediaDevices.getUserMedia({ audio: true });
+  return navigator.mediaDevices.getUserMedia({ audio: audioConstraints() });
 }
 
 export async function startRecording(deviceId?: string): Promise<Recorder> {
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    throw new DOMException('Audio recording is not supported by this browser.', 'NotSupportedError');
+  }
   const stream = await getInputStream(deviceId);
-  const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
-  const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-  const chunks: BlobPart[] = [];
-  rec.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data);
-  };
-  rec.start();
+  let rec: MediaRecorder | undefined;
+  let audioCtx: AudioContext | undefined;
+  let cleaned = false;
+  try {
+    const requestedMime = supportedRecordingMime();
+    rec = new MediaRecorder(stream, requestedMime ? { mimeType: requestedMime } : undefined);
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
 
-  const audioCtx = new AudioContext();
-  const source = audioCtx.createMediaStreamSource(stream);
-  const analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 256;
-  source.connect(analyser);
+    audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') void audioCtx.resume().catch(() => undefined);
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
 
-  const cleanup = () => {
-    stream.getTracks().forEach((t) => t.stop());
-    audioCtx.close().catch(() => undefined);
-  };
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      stream.getTracks().forEach((track) => track.stop());
+      void audioCtx?.close().catch(() => undefined);
+    };
+    let canceled = false;
+    let stopPromise: Promise<Blob> | null = null;
+    const interruptionListeners = new Set<() => void>();
+    const interrupted = () => {
+      if (!cleaned && !canceled) interruptionListeners.forEach((callback) => callback());
+    };
+    stream.getTracks().forEach((track) => track.addEventListener('ended', interrupted));
+    rec.onerror = interrupted;
+    rec.start(1_000);
 
-  return {
-    stream,
-    analyser,
-    stop: () =>
-      new Promise<Blob>((resolve) => {
-        rec.onstop = () => {
-          cleanup();
-          resolve(new Blob(chunks, { type: mime || 'audio/webm' }));
-        };
-        rec.stop();
-      }),
-    cancel: () => {
-      rec.onstop = null;
+    return {
+      stream,
+      analyser,
+      onInterruption: (callback) => {
+        interruptionListeners.add(callback);
+        return () => interruptionListeners.delete(callback);
+      },
+      stop: () => {
+        if (stopPromise) return stopPromise;
+        stopPromise = new Promise<Blob>((resolve, reject) => {
+          const fail = (message: string) => {
+            cleanup();
+            reject(new Error(message));
+          };
+          rec!.onerror = () => fail('Audio recording failed.');
+          rec!.onstop = () => {
+            cleanup();
+            if (canceled) return reject(new Error('Audio recording was canceled.'));
+            const mime = rec!.mimeType || chunks.find((chunk) => chunk.type)?.type || requestedMime || 'application/octet-stream';
+            resolve(new Blob(chunks, { type: mime }));
+          };
+          if (rec!.state === 'inactive') fail('Audio recording ended unexpectedly.');
+          else rec!.stop();
+        });
+        return stopPromise;
+      },
+      cancel: () => {
+        canceled = true;
+        rec!.ondataavailable = null;
+        rec!.onerror = null;
+        rec!.onstop = null;
+        interruptionListeners.clear();
+        if (rec!.state !== 'inactive') {
+          try {
+            rec!.stop();
+          } catch {
+            /* recorder already stopped */
+          }
+        }
+        cleanup();
+      },
+    };
+  } catch (error) {
+    if (rec?.state !== 'inactive') {
       try {
-        rec.stop();
+        rec?.stop();
       } catch {
-        /* ignore */
+        /* setup already failed */
       }
-      cleanup();
-    },
-  };
+    }
+    stream.getTracks().forEach((track) => track.stop());
+    void audioCtx?.close().catch(() => undefined);
+    throw error;
+  }
 }
 
 export function readLevel(analyser: AnalyserNode): number {

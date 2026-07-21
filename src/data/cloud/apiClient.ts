@@ -101,20 +101,23 @@ export class WataiApiClient implements CloudApi {
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     const token = await this.getToken();
     if (!token) throw new CloudError('unauthorized', 'Not signed in.', 401);
 
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-    let payload: string | undefined;
+    let payload: BodyInit | undefined;
     if (body !== undefined) {
-      headers['Content-Type'] = 'application/json';
-      payload = JSON.stringify(body);
+      if (body instanceof FormData) payload = body;
+      else {
+        headers['Content-Type'] = 'application/json';
+        payload = JSON.stringify(body);
+      }
     }
 
     let res: Response;
     try {
-      res = await this.fetchImpl(this.baseUrl + path, { method, headers, body: payload });
+      res = await this.fetchImpl(this.baseUrl + path, { method, headers, body: payload, signal });
     } catch (err) {
       throw new CloudError('network', err instanceof Error ? err.message : 'Network error.', 0);
     }
@@ -336,12 +339,19 @@ export class WataiApiClient implements CloudApi {
 
   // --- AI proxies (dictation / voice run through the server vault key) ---
   transcribeAudio(body: {
-    audioBase64: string;
+    audio: Blob;
     mime?: string;
     language?: string;
     prompt?: string;
-  }): Promise<{ text: string }> {
-    return this.request('POST', '/ai/transcribe', body);
+  }, signal?: AbortSignal): Promise<{ text: string }> {
+    const mime = body.mime || body.audio.type || 'application/octet-stream';
+    const extension = mime.includes('mp4') ? 'm4a' : mime.includes('mpeg') ? 'mp3' : mime.includes('wav') ? 'wav' : mime.includes('ogg') ? 'ogg' : 'webm';
+    const form = new FormData();
+    form.append('file', body.audio, `audio.${extension}`);
+    form.append('mime', mime);
+    if (body.language) form.append('language', body.language);
+    if (body.prompt) form.append('prompt', body.prompt);
+    return this.request('POST', '/ai/transcribe', form, signal);
   }
 
   synthesizeSpeech(body: { input: string; voice?: string; speed?: number }): Promise<{ audioBase64: string; mime: string }> {
@@ -520,11 +530,11 @@ export interface CloudApi {
   attachLibraryThreadFile(threadId: string, itemId: string): Promise<ThreadFileRecord>;
   deleteThreadFile(threadId: string, fileId: string): Promise<void>;
   transcribeAudio(body: {
-    audioBase64: string;
+    audio: Blob;
     mime?: string;
     language?: string;
     prompt?: string;
-  }): Promise<{ text: string }>;
+  }, signal?: AbortSignal): Promise<{ text: string }>;
   synthesizeSpeech(body: { input: string; voice?: string; speed?: number }): Promise<{ audioBase64: string; mime: string }>;
   fetchWebImage(body: { url: string }): Promise<{ dataBase64: string; mime: string; bytes: number }>;
   chatComplete(messages: Array<{ role: string; content: string }>): Promise<{ text: string }>;

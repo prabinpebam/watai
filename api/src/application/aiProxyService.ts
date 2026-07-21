@@ -6,7 +6,7 @@ import { generateImage } from '../ai/image';
 import type { CredentialDecryptor } from './threadFilesService';
 
 export interface TranscribeInput {
-  audioBase64: string;
+  audio: Uint8Array;
   mime?: string;
   language?: string;
   prompt?: string;
@@ -25,8 +25,21 @@ export interface ImageProxyInput {
   size?: string;
 }
 
-function decodeBase64(data: string): Uint8Array {
-  return new Uint8Array(Buffer.from(data.replace(/^data:[^;]*;base64,/, ''), 'base64'));
+const MAX_TRANSCRIPTION_BYTES = 20 * 1024 * 1024;
+const TRANSCRIPTION_EXTENSIONS: Record<string, string> = {
+  'audio/webm': 'webm',
+  'audio/mp4': 'm4a',
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/ogg': 'ogg',
+};
+
+function normalizedAudioMime(value: string | undefined): { mime: string; extension: string } {
+  const mime = (value || 'audio/webm').split(';', 1)[0].trim().toLowerCase();
+  const extension = TRANSCRIPTION_EXTENSIONS[mime];
+  if (!extension) throw new AppError('validation', 'Unsupported audio format.');
+  return { mime, extension };
 }
 
 /** Azure OpenAI `/audio/speech` accepts `speed` 0.25–4.0; clamp into range and default to 1.0. */
@@ -70,9 +83,12 @@ export class AiProxyService {
   async transcribe(userId: string, input: TranscribeInput): Promise<{ text: string }> {
     const c = await this.credentials.getDecrypted(userId);
     if (!c.models.transcribe) throw new AppError('validation', 'No transcription model is configured.');
-    const bytes = decodeBase64(input.audioBase64 ?? '');
+    const bytes = input.audio;
     if (!bytes.byteLength) throw new AppError('validation', 'No audio was provided.');
-    const mime = input.mime || 'audio/webm';
+    if (bytes.byteLength > MAX_TRANSCRIPTION_BYTES) {
+      throw new AppError('validation', 'Audio must be 20 MB or smaller.');
+    }
+    const { mime, extension } = normalizedAudioMime(input.mime);
     const form = new FormData();
     // Azure resources serve audio transcription only on the CLASSIC deployment surface
     // (/openai/deployments/{model}/audio/transcriptions?api-version=…) — the unified v1 path returns
@@ -80,7 +96,7 @@ export class AiProxyService {
     // works on v1. For OpenAI/compatible endpoints, use the v1 path with the model in the body.
     const azureBase = azureClassicBase(c.baseUrl);
     if (!azureBase) form.append('model', c.models.transcribe);
-    form.append('file', new Blob([bytes], { type: mime }), mime.includes('wav') ? 'audio.wav' : 'audio.webm');
+    form.append('file', new Blob([bytes], { type: mime }), `audio.${extension}`);
     form.append('response_format', 'json');
     if (input.language) form.append('language', input.language);
     if (input.prompt) form.append('prompt', input.prompt);
