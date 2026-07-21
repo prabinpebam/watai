@@ -18,17 +18,17 @@ afterEach(() => {
 describe('HistoryList sync status', () => {
   it('shows activity while checking for thread updates and clears it when settled', async () => {
     useUi.setState({ threadSyncCount: 1 });
-    render(
+    const { container } = render(
       <MemoryRouter>
         <HistoryList />
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Checking for updates')).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Checking for conversation updates' })).toBeInTheDocument();
 
     act(() => useUi.getState().endThreadSync());
 
-    await waitFor(() => expect(screen.queryByText('Checking for updates')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+    expect(container.querySelector('.thread-sync-status')).toBeInTheDocument();
   });
 });

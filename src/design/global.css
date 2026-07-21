@@ -185,21 +185,32 @@ a:hover {
 }
 
 .thread-sync-status {
-  min-height: var(--icon-24);
-  padding: 0 var(--space-3);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-tertiary);
-  font-size: var(--text-caption-size);
+  height: 4px;
+  margin: 1px var(--space-3);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
   opacity: 0;
   transition: opacity var(--motion-fast);
 }
 .thread-sync-status--active {
   opacity: 1;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--color-accent) 0 7px,
+    color-mix(in srgb, var(--color-accent) 42%, var(--color-surface-2)) 7px 14px
+  );
+  background-size: 20px 20px;
+  animation: thread-sync-stripes calc(0.7s * var(--motion-scale, 1)) linear infinite;
 }
-.thread-sync-status .spinner {
-  flex: 0 0 auto;
+@keyframes thread-sync-stripes {
+  to {
+    background-position: 20px 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thread-sync-status--active {
+    animation: none;
+  }
 }
 
 .nav-group__label {

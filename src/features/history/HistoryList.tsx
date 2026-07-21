@@ -5,7 +5,7 @@ import { useUi } from '../../state/store';
 import { useRuns } from '../chat/runStore';
 import { groupThreads } from '../../lib/format';
 import { Icon } from '../../design/icons';
-import { IconButton, Spinner } from '../../design/ui';
+import { IconButton } from '../../design/ui';
 import { Menu, ConfirmDialog, PromptDialog, type MenuItemDef } from '../../design/overlays';
 import type { Thread } from '../../lib/types';
 
@@ -76,15 +76,9 @@ export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProp
       {!collapsed && (
         <div
           className={`thread-sync-status${checkingForUpdates ? ' thread-sync-status--active' : ''}`}
-          aria-live="polite"
-        >
-          {checkingForUpdates && (
-            <>
-              <Spinner size="sm" />
-              <span>Checking for updates</span>
-            </>
-          )}
-        </div>
+          role={checkingForUpdates ? 'progressbar' : undefined}
+          aria-label={checkingForUpdates ? 'Checking for conversation updates' : undefined}
+        />
       )}
       {groups.length === 0 && (
         <p className="muted" style={{ padding: 'var(--space-4)', fontSize: 'var(--text-caption-size)' }}>
