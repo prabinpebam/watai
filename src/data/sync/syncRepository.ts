@@ -68,18 +68,21 @@ function assistantSignature(m: Message): string {
   ].join(':');
 }
 
-/** Whether a pulled server message should overwrite the known local copy. Always true while the
- *  local copy is a streaming assistant (the reply is still being written). Also true for a terminal
- *  ASSISTANT message whose server copy differs by signature, so a stale local copy that predates
- *  late enrichment (webImages, citations, artifacts, …) converges to the server instead of staying
- *  frozen forever. User messages keep their local copy verbatim — they carry local-only staged
- *  fields (localBlobKey/pendingImages) the server never sees. */
-function shouldReplaceKnownMessage(existing: Message, incoming: Message): boolean {
-  if (isStreamingAssistant(existing)) return true;
+/** Reconcile a known local row with the authoritative server snapshot. Assistant snapshots are
+ *  replaced when content/enrichment OR logical chronology differs. User rows retain local-only
+ *  blob fields, but their chronology is repaired from server orderAt so an old browser cache can
+ *  never keep a reply ahead of its prompt indefinitely. */
+function reconcileKnownMessage(existing: Message, incoming: Message): Message | null {
+  if (isStreamingAssistant(existing)) return incoming;
   if (existing.role === 'assistant' && incoming.role === 'assistant') {
-    return assistantSignature(existing) !== assistantSignature(incoming);
+    return assistantSignature(existing) !== assistantSignature(incoming) || existing.createdAt !== incoming.createdAt
+      ? incoming
+      : null;
   }
-  return false;
+  if (existing.role === 'user' && incoming.role === 'user' && existing.createdAt !== incoming.createdAt) {
+    return { ...existing, createdAt: incoming.createdAt };
+  }
+  return null;
 }
 
 export class SyncRepository implements Repository {
@@ -462,8 +465,9 @@ export class SyncRepository implements Repository {
     for (const rec of records) {
       const existing = known.get(rec.id);
       const incoming = messageFromRecord(rec as MessageRecord);
-      if (!existing || shouldReplaceKnownMessage(existing, incoming)) {
-        await this.local.putMessageRaw(incoming);
+      const reconciled = existing ? reconcileKnownMessage(existing, incoming) : incoming;
+      if (reconciled) {
+        await this.local.putMessageRaw(reconciled);
         changed = true;
       }
       if (rec.createdAt > maxCreated) maxCreated = rec.createdAt;

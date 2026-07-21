@@ -5,7 +5,7 @@ import { useUi } from '../../state/store';
 import { useRuns } from '../chat/runStore';
 import { groupThreads } from '../../lib/format';
 import { Icon } from '../../design/icons';
-import { IconButton } from '../../design/ui';
+import { IconButton, Spinner } from '../../design/ui';
 import { Menu, ConfirmDialog, PromptDialog, type MenuItemDef } from '../../design/overlays';
 import type { Thread } from '../../lib/types';
 
@@ -18,6 +18,7 @@ interface HistoryListProps {
 export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProps) {
   const navigate = useNavigate();
   const version = useUi((s) => s.threadsVersion);
+  const checkingForUpdates = useUi((s) => s.threadSyncCount > 0);
   const bump = useUi((s) => s.bumpThreads);
   const pushToast = useUi((s) => s.pushToast);
   // Thread ids with an active run. Subscribe to the keys (joined) so the list only re-renders
@@ -72,6 +73,19 @@ export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProp
 
   return (
     <div className="sidebar__list">
+      {!collapsed && (
+        <div
+          className={`thread-sync-status${checkingForUpdates ? ' thread-sync-status--active' : ''}`}
+          aria-live="polite"
+        >
+          {checkingForUpdates && (
+            <>
+              <Spinner size="sm" />
+              <span>Checking for updates</span>
+            </>
+          )}
+        </div>
+      )}
       {groups.length === 0 && (
         <p className="muted" style={{ padding: 'var(--space-4)', fontSize: 'var(--text-caption-size)' }}>
           No conversations yet.

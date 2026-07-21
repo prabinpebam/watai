@@ -7,6 +7,7 @@ import { SyncRepository } from './sync/syncRepository';
 import { idbKvStore } from './sync/kvStore';
 import { getCloudToken } from '../auth/cloudAuth';
 import type { Message } from '../lib/types';
+import { useUi } from '../state/store';
 
 // Local store is the source of truth for the UI; the sync engine wraps it and
 // mirrors changes to the cloud only when Settings.data.sync is on AND a user is
@@ -30,8 +31,13 @@ export const realtime = new RealtimeClient(() => cloud.negotiate());
 
 /** Push local changes + pull remote deltas (no-op unless sync is on and signed in). Resolves
  *  with the set of thread ids whose local state changed during the pull, so callers can refresh. */
-export function syncNow(): Promise<Set<string>> {
-  return sync.sync();
+export async function syncNow(): Promise<Set<string>> {
+  useUi.getState().beginThreadSync();
+  try {
+    return await sync.sync();
+  } finally {
+    useUi.getState().endThreadSync();
+  }
 }
 
 /** Write a server-authored message into the local store verbatim (no re-queue). Used by the

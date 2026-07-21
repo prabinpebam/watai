@@ -53,6 +53,8 @@ interface UiState {
   connection: 'ok' | 'offline' | 'reauth';
   toasts: Toast[];
   threadsVersion: number;
+  /** Active cloud sync operations. Reference-counted so overlapping focus/realtime checks settle correctly. */
+  threadSyncCount: number;
   /** Per-thread message revision; bumped when a thread's persisted messages change. */
   threadRev: Record<string, number>;
   /** Per-thread run lock (another device is generating). Transient; never persisted/synced. */
@@ -84,6 +86,8 @@ interface UiState {
   pushToast: (message: string, kind?: Toast['kind'], opts?: { persistent?: boolean; key?: string }) => void;
   dismissToast: (id: string) => void;
   bumpThreads: () => void;
+  beginThreadSync: () => void;
+  endThreadSync: () => void;
   bumpThread: (threadId: string) => void;
   setThreadLock: (threadId: string, lock: ThreadLock | null) => void;
   setMemoryNotice: (notice: Omit<MemoryNotice, 'id'> & { id?: string }) => void;
@@ -122,6 +126,7 @@ export const useUi = create<UiState>()(
       connection: 'ok',
       toasts: [],
       threadsVersion: 0,
+      threadSyncCount: 0,
       threadRev: {},
       threadLocks: {},
       memoryNotices: {},
@@ -155,6 +160,8 @@ export const useUi = create<UiState>()(
         })),
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
       bumpThreads: () => set((s) => ({ threadsVersion: s.threadsVersion + 1 })),
+      beginThreadSync: () => set((s) => ({ threadSyncCount: s.threadSyncCount + 1 })),
+      endThreadSync: () => set((s) => ({ threadSyncCount: Math.max(0, s.threadSyncCount - 1) })),
       bumpThread: (threadId) =>
         set((s) => ({ threadRev: { ...s.threadRev, [threadId]: (s.threadRev[threadId] ?? 0) + 1 } })),
       setThreadLock: (threadId, lock) =>

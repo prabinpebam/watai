@@ -184,6 +184,24 @@ a:hover {
   padding: var(--space-3);
 }
 
+.thread-sync-status {
+  min-height: var(--icon-24);
+  padding: 0 var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-caption-size);
+  opacity: 0;
+  transition: opacity var(--motion-fast);
+}
+.thread-sync-status--active {
+  opacity: 1;
+}
+.thread-sync-status .spinner {
+  flex: 0 0 auto;
+}
+
 .nav-group__label {
   font-size: var(--text-label-size);
   line-height: var(--text-label-lh);

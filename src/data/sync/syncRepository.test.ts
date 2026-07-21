@@ -932,6 +932,61 @@ describe('SyncRepository — pull', () => {
     // Not replaced: the local copy (with its own web-image id) is preserved.
     expect(am1?.webImages?.[0].id).toBe('local-w');
   });
+
+  it('repairs stale assistant chronology even when its content signature is unchanged', async () => {
+    const { repo, local, cloud, kv } = setup(true);
+    await kv.set('sync.cursor.messages.t1', '2026-02-01T00:00:09Z');
+    await local.putMessageRaw(msg({
+      id: 'u1', threadId: 't1', role: 'user', content: 'prompt', status: 'complete',
+      createdAt: '2026-02-01T00:00:02Z',
+    }));
+    // Legacy/device-local corruption: identical assistant content but a timestamp before its prompt.
+    await local.putMessageRaw(msg({
+      id: 'a1', threadId: 't1', role: 'assistant', content: 'answer', status: 'complete',
+      createdAt: '2026-02-01T00:00:01Z',
+    }));
+    cloud.seedMessage({
+      id: 'u1', threadId: 't1', role: 'user', content: 'prompt', status: 'complete',
+      createdAt: '2026-02-01T00:00:02Z', orderAt: '2026-02-01T00:00:02Z',
+    });
+    cloud.seedMessage({
+      id: 'a1', threadId: 't1', role: 'assistant', content: 'answer', status: 'complete',
+      createdAt: '2026-02-01T00:00:10Z', orderAt: '2026-02-01T00:00:03Z',
+    });
+
+    const messages = await repo.listMessages('t1');
+
+    expect(messages.map((message) => message.id)).toEqual(['u1', 'a1']);
+    expect(messages.find((message) => message.id === 'a1')?.createdAt).toBe('2026-02-01T00:00:03Z');
+  });
+
+  it('repairs user chronology without dropping local-only attachment fields', async () => {
+    const { repo, local, cloud } = setup(true);
+    await local.putMessageRaw(msg({
+      id: 'u1', threadId: 't1', role: 'user', content: 'prompt', status: 'complete',
+      createdAt: '2026-02-01T00:00:09Z',
+      attachments: [{ id: 'att1', kind: 'image', mime: 'image/png', bytes: 3, localBlobKey: 'att-local' }],
+    }));
+    await local.putMessageRaw(msg({
+      id: 'a1', threadId: 't1', role: 'assistant', content: 'answer', status: 'complete',
+      createdAt: '2026-02-01T00:00:03Z',
+    }));
+    cloud.seedMessage({
+      id: 'u1', threadId: 't1', role: 'user', content: 'prompt', status: 'complete',
+      createdAt: '2026-02-01T00:00:09Z', orderAt: '2026-02-01T00:00:02Z',
+    });
+    cloud.seedMessage({
+      id: 'a1', threadId: 't1', role: 'assistant', content: 'answer', status: 'complete',
+      createdAt: '2026-02-01T00:00:10Z', orderAt: '2026-02-01T00:00:03Z',
+    });
+
+    const messages = await repo.listMessages('t1');
+    const user = messages.find((message) => message.id === 'u1');
+
+    expect(messages.map((message) => message.id)).toEqual(['u1', 'a1']);
+    expect(user?.createdAt).toBe('2026-02-01T00:00:02Z');
+    expect(user?.attachments?.[0].localBlobKey).toBe('att-local');
+  });
 });
 
 describe('SyncRepository — run lock', () => {
