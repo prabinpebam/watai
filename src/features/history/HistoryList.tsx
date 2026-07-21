@@ -73,13 +73,6 @@ export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProp
 
   return (
     <div className="sidebar__list">
-      {!collapsed && (
-        <div
-          className={`thread-sync-status${checkingForUpdates ? ' thread-sync-status--active' : ''}`}
-          role={checkingForUpdates ? 'progressbar' : undefined}
-          aria-label={checkingForUpdates ? 'Checking for conversation updates' : undefined}
-        />
-      )}
       {groups.length === 0 && (
         <p className="muted" style={{ padding: 'var(--space-4)', fontSize: 'var(--text-caption-size)' }}>
           No conversations yet.
@@ -87,7 +80,22 @@ export function HistoryList({ activeId, onNavigate, collapsed }: HistoryListProp
       )}
       {groups.map((g) => (
         <div className="nav-group" key={g.label}>
-          {!collapsed && <div className="nav-group__label">{g.label}</div>}
+          {!collapsed && (
+            <div className="nav-group__label">
+              <span>{g.label}</span>
+              {g.label === 'Today' && (
+                <span
+                  className={`thread-sync-dots${checkingForUpdates ? ' thread-sync-dots--active' : ''}`}
+                  role={checkingForUpdates ? 'status' : undefined}
+                  aria-label={checkingForUpdates ? 'Checking for conversation updates' : undefined}
+                >
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              )}
+            </div>
+          )}
           {g.threads.map((t) => (
             <div
               key={t.id}

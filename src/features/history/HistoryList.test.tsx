@@ -6,7 +6,15 @@ import { useUi } from '../../state/store';
 
 vi.mock('../../data', () => ({
   repo: {
-    listThreads: vi.fn().mockResolvedValue([]),
+    listThreads: vi.fn().mockResolvedValue([{
+      id: 'today-1',
+      title: 'Today conversation',
+      pinned: false,
+      archived: false,
+      temporary: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }]),
   },
 }));
 
@@ -24,11 +32,13 @@ describe('HistoryList sync status', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('progressbar', { name: 'Checking for conversation updates' })).toBeInTheDocument();
+    expect(await screen.findByText('Today')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Checking for conversation updates' })).toBeInTheDocument();
+    expect(container.querySelectorAll('.thread-sync-dots i')).toHaveLength(3);
 
     act(() => useUi.getState().endThreadSync());
 
-    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
-    expect(container.querySelector('.thread-sync-status')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    expect(container.querySelector('.thread-sync-dots')).toBeInTheDocument();
   });
 });
