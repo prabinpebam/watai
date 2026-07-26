@@ -234,43 +234,69 @@ export function ArtifactList({ artifacts }: { artifacts?: Artifact[] }) {
   );
 }
 
+/** Stable identity for a generated image's bytes — changes only if the image is re-pointed. */
+function imageCacheKey(image: ImageRef): string {
+  return `${image.id}:${image.localBlobKey ?? image.blobPath ?? ''}`;
+}
+
+/**
+ * Resolved URLs are cached for the session. Resolution can mean an IndexedDB read or a SAS
+ * download, so without this every viewer mount and every filmstrip step re-resolves every image
+ * in the thread — which is what made stepping through the gallery feel like a full reload.
+ */
+const resolvedImageUrls = new Map<string, string>();
+const inflightImageUrls = new Map<string, Promise<string>>();
+
+function loadImageUrl(image: ImageRef): Promise<string> {
+  const key = imageCacheKey(image);
+  const hit = resolvedImageUrls.get(key);
+  if (hit) return Promise.resolve(hit);
+  const existing = inflightImageUrls.get(key);
+  if (existing) return existing;
+  const pending = repo
+    .resolveImageUrl(image)
+    .catch(() => '')
+    .then((url) => {
+      inflightImageUrls.delete(key);
+      if (url) resolvedImageUrls.set(key, url);
+      return url;
+    });
+  inflightImageUrls.set(key, pending);
+  return pending;
+}
+
 /** Resolve a generated image's URL via the repository (local cache, else cloud read SAS). */
 function useResolvedImage(image: ImageRef): string | null {
-  const [url, setUrl] = useState<string | null>(null);
+  const key = imageCacheKey(image);
+  const [url, setUrl] = useState<string | null>(() => resolvedImageUrls.get(key) ?? null);
   useEffect(() => {
+    const hit = resolvedImageUrls.get(key);
+    if (hit) {
+      setUrl(hit);
+      return;
+    }
     let live = true;
-    repo
-      .resolveImageUrl(image)
-      .then((u) => {
-        if (live) setUrl(u || null);
-      })
-      .catch(() => undefined);
+    void loadImageUrl(image).then((resolved) => {
+      if (live) setUrl(resolved || null);
+    });
     return () => {
       live = false;
     };
-  }, [image.id, image.blobPath, image.localBlobKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
   return url;
 }
 
 function GeneratedImage({
   image,
-  threadImages,
-  viewerImageId,
   onOpenImage,
-  onSelectImage,
-  onCloseImage,
 }: {
   image: ImageRef;
-  threadImages?: ImageRef[];
-  viewerImageId?: string | null;
   onOpenImage?: (image: ImageRef) => void;
-  onSelectImage?: (image: ImageRef) => void;
-  onCloseImage?: () => void;
 }) {
   const url = useResolvedImage(image);
   const [decoded, setDecoded] = useState<{ url: string; aspect: string } | null>(null);
   const revealed = !!url && decoded?.url === url;
-  const open = viewerImageId === image.id;
 
   // Only drop the veil once the bytes are decoded, so the swap is a fade rather than a reflow. The
   // reserved box then adopts the image's true aspect, which is a no-op whenever the stored size is
@@ -336,88 +362,81 @@ function GeneratedImage({
           <IconButton name="expand" label="Expand" size={16} disabled={!url} onClick={() => onOpenImage?.(image)} />
         </>
       }
-    >
-      {open && url && (
-        <GeneratedImageLightbox
-          image={image}
-          url={url}
-          threadImages={threadImages ?? [image]}
-          onSelectImage={onSelectImage ?? onOpenImage ?? (() => {})}
-          onClose={onCloseImage ?? (() => {})}
-        />
-      )}
-    </ImageCardFrame>
-  );
-}
-
-function GeneratedImageLightbox({
-  image,
-  url,
-  threadImages,
-  onSelectImage,
-  onClose,
-}: {
-  image: ImageRef;
-  url: string;
-  threadImages: ImageRef[];
-  onSelectImage: (image: ImageRef) => void;
-  onClose: () => void;
-}) {
-  const gallery = useResolvedGallery(threadImages);
-  const items = gallery.length ? gallery : [{ image, url }];
-  const currentIndex = Math.max(0, items.findIndex((item) => item.image.id === image.id));
-  return (
-    <Lightbox
-      src={url}
-      alt={image.prompt}
-      prompt={image.prompt}
-      onClose={onClose}
-      onDownload={() => download(url, `${image.id}.${image.outputFormat}`)}
-      images={items}
-      currentIndex={currentIndex === -1 ? 0 : currentIndex}
-      onSelect={(item) => onSelectImage(item.image)}
     />
   );
 }
 
+/**
+ * The one full-screen viewer for a thread. It lives above the message list so stepping through the
+ * filmstrip only changes props — the overlay never unmounts, so the strip, the counter and the
+ * already-resolved images all stay put instead of being rebuilt on every selection.
+ */
+export function GeneratedImageViewer({
+  images,
+  currentId,
+  onSelect,
+  onClose,
+}: {
+  images: ImageRef[];
+  currentId: string | null;
+  onSelect: (image: ImageRef) => void;
+  onClose: () => void;
+}) {
+  const gallery = useResolvedGallery(currentId ? images : []);
+  const current = gallery.find((item) => item.image.id === currentId);
+  if (!currentId || !current) return null;
+  return (
+    <Lightbox
+      src={current.url}
+      alt={current.image.prompt}
+      prompt={current.image.prompt}
+      onClose={onClose}
+      onDownload={() => download(current.url, `${current.image.id}.${current.image.outputFormat}`)}
+      images={gallery}
+      currentIndex={Math.max(0, gallery.findIndex((item) => item.image.id === currentId))}
+      onSelect={(item) => onSelect(item.image)}
+    />
+  );
+}
+
+/** Resolve every image in the strip, reusing the session cache and revealing each as it lands. */
 function useResolvedGallery(images: ImageRef[]): GalleryImage[] {
-  const [urls, setUrls] = useState<Record<string, string>>({});
-  const imageKey = images.map((image) => `${image.id}:${image.blobPath ?? image.localBlobKey ?? ''}`).join('|');
+  const [tick, bump] = useState(0);
+  const imageKey = images.map(imageCacheKey).join('|');
   useEffect(() => {
     let live = true;
-    void Promise.all(
-      images.map(async (image) => [image.id, await repo.resolveImageUrl(image).catch(() => '')] as const),
-    ).then((pairs) => {
-      if (!live) return;
-      setUrls(Object.fromEntries(pairs.filter(([, value]) => value)));
-    });
+    const missing = images.filter((image) => !resolvedImageUrls.has(imageCacheKey(image)));
+    if (missing.length === 0) return;
+    for (const image of missing) {
+      void loadImageUrl(image).then((url) => {
+        if (live && url) bump((n) => n + 1);
+      });
+    }
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageKey]);
   return useMemo(
-    () => images.flatMap((image) => (urls[image.id] ? [{ image, url: urls[image.id] }] : [])),
-    [images, urls],
+    () =>
+      images.flatMap((image) => {
+        const url = resolvedImageUrls.get(imageCacheKey(image));
+        return url ? [{ image, url }] : [];
+      }),
+    // `tick` is what re-reads the cache after late arrivals land.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [imageKey, images, tick],
   );
 }
 
 export function GeneratedImages({
   images,
   pending,
-  threadImages,
-  viewerImageId,
   onOpenImage,
-  onSelectImage,
-  onCloseImage,
 }: {
   images?: ImageRef[];
   pending?: PendingImage[];
-  threadImages?: ImageRef[];
-  viewerImageId?: string | null;
   onOpenImage?: (image: ImageRef) => void;
-  onSelectImage?: (image: ImageRef) => void;
-  onCloseImage?: () => void;
 }) {
   const imageCount = images?.length ?? 0;
   const pendingCount = pending?.length ?? 0;
@@ -425,15 +444,7 @@ export function GeneratedImages({
   return (
     <div className={`gen-images ${imageCount + pendingCount > 1 ? 'gen-images--grid' : ''}`}>
       {images?.map((img) => (
-        <GeneratedImage
-          key={img.id}
-          image={img}
-          threadImages={threadImages}
-          viewerImageId={viewerImageId}
-          onOpenImage={onOpenImage}
-          onSelectImage={onSelectImage}
-          onCloseImage={onCloseImage}
-        />
+        <GeneratedImage key={img.id} image={img} onOpenImage={onOpenImage} />
       ))}
       {pending?.map((p) => (
         <ImagePlaceholder key={p.id} size={p.size} />
@@ -460,7 +471,6 @@ function ImageCardFrame({
   className = '',
   media,
   bar,
-  children,
 }: {
   size: string;
   aspect?: string;
@@ -468,7 +478,6 @@ function ImageCardFrame({
   className?: string;
   media: ReactNode;
   bar: ReactNode;
-  children?: ReactNode;
 }) {
   const [w, h] = parseAspect(size);
   return (
@@ -477,7 +486,6 @@ function ImageCardFrame({
         {media}
       </div>
       <div className="image-card__bar">{bar}</div>
-      {children}
     </div>
   );
 }

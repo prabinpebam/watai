@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { IconButton } from '../../design/ui';
 import type { ImageRef } from '../../lib/types';
@@ -40,6 +40,13 @@ export function Lightbox({ src, alt, prompt, onClose, onDownload, images = [], c
   const hasGallery = images.length > 1 && !!onSelect;
   const previous = hasGallery ? images[(currentIndex - 1 + images.length) % images.length] : undefined;
   const next = hasGallery ? images[(currentIndex + 1) % images.length] : undefined;
+  const activeThumbRef = useRef<HTMLButtonElement>(null);
+
+  // The viewer stays mounted while you step through the strip, so the active thumb has to be
+  // brought along rather than relying on a fresh mount starting at the left edge.
+  useEffect(() => {
+    activeThumbRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+  }, [currentIndex]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -97,12 +104,13 @@ export function Lightbox({ src, alt, prompt, onClose, onDownload, images = [], c
               <button
                 key={item.image.id}
                 type="button"
+                ref={index === currentIndex ? activeThumbRef : undefined}
                 className={`viewer__thumb ${index === currentIndex ? 'viewer__thumb--active' : ''}`}
                 aria-label={`Open image ${index + 1}`}
                 aria-current={index === currentIndex ? 'true' : undefined}
                 onClick={() => onSelect?.(item)}
               >
-                <img src={item.url} alt="" />
+                <img src={item.url} alt="" decoding="async" />
               </button>
             ))}
           </div>

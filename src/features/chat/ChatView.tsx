@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useChat } from './useChat';
 import { Composer } from './Composer';
 import { AssistantMessage, UserMessage } from './Message';
+import { GeneratedImageViewer } from './Attachments';
 import { PromptMinimap } from './PromptMinimap';
 import { SourcePane } from './SourcePane';
 import { ThreadFilesPane } from './ThreadFilesPane';
@@ -35,7 +36,9 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   useEffect(() => () => closeFilesPane(), [closeFilesPane]);
 
   const isEmpty = !loading && messages.length === 0;
-  const threadImages = messages.flatMap((message) => message.images ?? []);
+  // Stable identity matters: this list feeds the viewer's filmstrip, which must not rebuild on
+  // every render of the thread.
+  const threadImages = useMemo(() => messages.flatMap((message) => message.images ?? []), [messages]);
 
   // On the empty state the composer sits centered with the greeting above and tips below.
   // The first prompt turns the view into a thread, which docks the composer at the bottom —
@@ -126,6 +129,8 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
     focusImageInThread(image);
   }, [focusImageInThread]);
 
+  const closeImageViewer = useCallback(() => setViewerImageId(null), []);
+
   useEffect(() => {
     if (viewerImageId && !threadImages.some((image) => image.id === viewerImageId)) {
       setViewerImageId(null);
@@ -166,11 +171,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
                   streaming={streaming}
                   onRegenerate={regenerate}
                   memoryUpdateCount={memoryByMessage.get(message.id)}
-                  threadImages={threadImages}
-                  viewerImageId={viewerImageId}
                   onOpenImage={openImageViewer}
-                  onSelectImage={setViewerImage}
-                  onCloseImage={() => setViewerImageId(null)}
                 />
               ),
             )}
@@ -228,6 +229,12 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
       </div>
       {!loading && !isEmpty && <PromptMinimap messages={messages} scrollRef={scrollRef} />}
       </div>
+      <GeneratedImageViewer
+        images={threadImages}
+        currentId={viewerImageId}
+        onSelect={setViewerImage}
+        onClose={closeImageViewer}
+      />
       <SourcePane />
       <ThreadFilesPane />
     </div>

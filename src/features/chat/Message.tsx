@@ -352,11 +352,7 @@ interface AssistantProps {
   streaming: boolean;
   onRegenerate: () => void;
   memoryUpdateCount?: number;
-  threadImages?: ImageRef[];
-  viewerImageId?: string | null;
   onOpenImage?: (image: ImageRef) => void;
-  onSelectImage?: (image: ImageRef) => void;
-  onCloseImage?: () => void;
 }
 
 export function AssistantMessage({
@@ -364,11 +360,7 @@ export function AssistantMessage({
   streaming,
   onRegenerate,
   memoryUpdateCount,
-  threadImages,
-  viewerImageId,
   onOpenImage,
-  onSelectImage,
-  onCloseImage,
 }: AssistantProps) {
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -460,11 +452,7 @@ export function AssistantMessage({
         <GeneratedImages
           images={message.images}
           pending={pendingImages}
-          threadImages={threadImages}
-          viewerImageId={viewerImageId}
           onOpenImage={onOpenImage}
-          onSelectImage={onSelectImage}
-          onCloseImage={onCloseImage}
         />
 
         {message.content ? (
