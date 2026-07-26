@@ -2344,6 +2344,10 @@ button.source-chip:hover {
   align-items: flex-end;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
+  /* Reserved so the bar is the same height while generating (status text only) as it is once the
+     prompt and action buttons arrive. */
+  min-height: calc(var(--size-control-md) + 2 * var(--space-3));
+  box-sizing: border-box;
 }
 .image-card__prompt {
   flex: 1;
@@ -2804,7 +2808,18 @@ button.source-chip:hover {
   grid-template-columns: repeat(2, 1fr);
   gap: var(--space-3);
 }
+/* The media box owns the requested aspect ratio for every stage (generating, decoding, decoded),
+   so swapping the placeholder for the real image is a cross-fade in place with no reflow. */
+.image-card__media {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: var(--color-surface-2);
+  transition: aspect-ratio var(--motion-slow) var(--ease-standard);
+}
 .image-card__hit {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   padding: 0;
@@ -2812,9 +2827,22 @@ button.source-chip:hover {
   background: none;
   cursor: zoom-in;
 }
+.image-card__hit:disabled {
+  cursor: default;
+}
 .image-card__hit img {
   width: 100%;
+  height: 100%;
   display: block;
+  object-fit: contain;
+}
+/* Placeholder layered over the image; fades out once the bytes are decoded. */
+.image-card__veil {
+  transition: opacity var(--motion-slow) var(--ease-standard);
+}
+.image-card--revealed .image-card__veil {
+  opacity: 0;
+  pointer-events: none;
 }
 .image-card--loading {
   min-height: 200px;
@@ -2826,8 +2854,8 @@ button.source-chip:hover {
   max-width: 420px;
 }
 .image-placeholder {
-  position: relative;
-  width: 100%;
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;

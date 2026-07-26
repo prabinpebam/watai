@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { repo } from '../../data';
 import { Icon } from '../../design/icons';
 import { IconButton } from '../../design/ui';
@@ -268,19 +268,76 @@ function GeneratedImage({
   onCloseImage?: () => void;
 }) {
   const url = useResolvedImage(image);
+  const [decoded, setDecoded] = useState<{ url: string; aspect: string } | null>(null);
+  const revealed = !!url && decoded?.url === url;
   const open = viewerImageId === image.id;
-  if (!url) return <ImageLoading size={image.size} />;
+
+  // Only drop the veil once the bytes are decoded, so the swap is a fade rather than a reflow. The
+  // reserved box then adopts the image's true aspect, which is a no-op whenever the stored size is
+  // accurate (the normal case) and avoids letterboxing when it is not.
+  const reveal = async (el: HTMLImageElement, forUrl: string) => {
+    try {
+      await el.decode?.();
+    } catch {
+      // onLoad already proves the resource is available; decode can reject on older engines.
+    }
+    const aspect =
+      el.naturalWidth && el.naturalHeight ? `${el.naturalWidth} / ${el.naturalHeight}` : '';
+    setDecoded({ url: forUrl, aspect });
+  };
+
   return (
-    <div className="image-card" data-image-id={image.id}>
-      <button className="image-card__hit" onClick={() => onOpenImage?.(image)} aria-label="Expand image">
-        <img src={url} alt={image.prompt} loading="lazy" />
-      </button>
-      <div className="image-card__bar">
-        <ImagePrompt text={image.prompt} compact />
-        <IconButton name="download" label="Download" size={16} onClick={() => download(url, `${image.id}.${image.outputFormat}`)} />
-        <IconButton name="expand" label="Expand" size={16} onClick={() => onOpenImage?.(image)} />
-      </div>
-      {open && (
+    <ImageCardFrame
+      size={image.size}
+      aspect={revealed ? decoded?.aspect : undefined}
+      imageId={image.id}
+      className={revealed ? 'image-card--revealed' : ''}
+      media={
+        <>
+          {url && (
+            <button
+              className="image-card__hit"
+              onClick={() => onOpenImage?.(image)}
+              aria-label="Expand image"
+              disabled={!revealed}
+            >
+              <img
+                src={url}
+                alt={image.prompt}
+                loading="lazy"
+                // A cached image can finish before React attaches onLoad, which would strand the veil.
+                ref={(el) => {
+                  if (el?.complete) void reveal(el, url);
+                }}
+                onLoad={(e) => void reveal(e.currentTarget, url)}
+              />
+            </button>
+          )}
+          <span
+            className="image-placeholder image-placeholder--loading image-card__veil"
+            role="img"
+            aria-label="Loading image"
+            aria-hidden={revealed || undefined}
+          >
+            <span className="spinner spinner--on-media" />
+          </span>
+        </>
+      }
+      bar={
+        <>
+          <ImagePrompt text={image.prompt} compact />
+          <IconButton
+            name="download"
+            label="Download"
+            size={16}
+            disabled={!url}
+            onClick={() => url && download(url, `${image.id}.${image.outputFormat}`)}
+          />
+          <IconButton name="expand" label="Expand" size={16} disabled={!url} onClick={() => onOpenImage?.(image)} />
+        </>
+      }
+    >
+      {open && url && (
         <GeneratedImageLightbox
           image={image}
           url={url}
@@ -289,7 +346,7 @@ function GeneratedImage({
           onClose={onCloseImage ?? (() => {})}
         />
       )}
-    </div>
+    </ImageCardFrame>
   );
 }
 
@@ -391,36 +448,48 @@ function parseAspect(size: string): [number, number] {
   return m ? [Number(m[1]), Number(m[2])] : [1, 1];
 }
 
-/** Subtle aspect-correct placeholder shown while a generated image is downloading/decoding. */
-function ImageLoading({ size }: { size: string }) {
+/**
+ * One card geometry for every stage of a generated image: the media box is pinned to the requested
+ * aspect ratio and the action bar has a reserved height, so going from "generating" to the decoded
+ * image is a cross-fade in place — the card never collapses and the transcript never jumps.
+ */
+function ImageCardFrame({
+  size,
+  aspect,
+  imageId,
+  className = '',
+  media,
+  bar,
+  children,
+}: {
+  size: string;
+  aspect?: string;
+  imageId?: string;
+  className?: string;
+  media: ReactNode;
+  bar: ReactNode;
+  children?: ReactNode;
+}) {
   const [w, h] = parseAspect(size);
   return (
-    <div className="image-card image-card--generating">
-      <div
-        className="image-placeholder image-placeholder--loading"
-        style={{ aspectRatio: `${w} / ${h}` }}
-        role="img"
-        aria-label="Loading image"
-      >
-        <span className="spinner spinner--on-media" />
+    <div className={`image-card ${className}`.trim()} {...(imageId ? { 'data-image-id': imageId } : {})}>
+      <div className="image-card__media" style={{ aspectRatio: aspect || `${w} / ${h}` }}>
+        {media}
       </div>
+      <div className="image-card__bar">{bar}</div>
+      {children}
     </div>
   );
 }
 
 /** Animated gradient placeholder shown while an image generates; matches the target aspect ratio. */
 function ImagePlaceholder({ size }: { size: string }) {
-  const [w, h] = parseAspect(size);
   return (
-    <div className="image-card image-card--generating">
-      <div
-        className="image-placeholder"
-        style={{ aspectRatio: `${w} / ${h}` }}
-        role="img"
-        aria-label="Generating image"
-      >
-        <span className="image-placeholder__label">Generating image…</span>
-      </div>
-    </div>
+    <ImageCardFrame
+      size={size}
+      className="image-card--generating"
+      media={<span className="image-placeholder" role="img" aria-label="Generating image" />}
+      bar={<span className="image-card__prompt">Generating image…</span>}
+    />
   );
 }
