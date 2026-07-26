@@ -37,7 +37,7 @@ export interface ResponsesParams {
   input: ResponsesInputItem[];
   tools?: ResponsesTool[];
   toolChoice?: 'auto' | 'required' | 'none';
-  reasoning?: { effort: 'minimal' | 'low' | 'medium' | 'high' };
+  reasoning?: { effort: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' };
   maxOutputTokens?: number;
   previousResponseId?: string;
   headers?: Record<string, string>;

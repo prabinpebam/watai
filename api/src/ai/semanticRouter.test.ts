@@ -56,7 +56,7 @@ describe('semantic router', () => {
     });
     const request = streamFn.mock.calls[0][0];
     expect(request.toolChoice).toBe('required');
-    expect(request.reasoning).toEqual({ effort: 'minimal' });
+    expect(request.reasoning).toEqual({ effort: 'none' });
     expect(request.maxOutputTokens).toBe(500);
     expect(request.tools).toHaveLength(1);
     expect(request.tools?.[0]).toMatchObject({ type: 'function', name: 'select_action', strict: true });
@@ -91,5 +91,56 @@ describe('semantic router', () => {
       }),
     });
     expect(filteredReference?.referenceImageIds).toEqual(['known']);
+  });
+
+  it('retries with another reasoning effort when the model rejects the requested one', async () => {
+    // gpt-5.4 rejects `minimal`; older models reject `none`. A refused effort must not take routing
+    // down — otherwise every run silently degrades to automatic tool selection.
+    const streamFn = vi.fn((params: ResponsesParams) =>
+      params.reasoning?.effort === 'none'
+        ? events({ type: 'error', message: "Unsupported value: 'none' is not supported with this model." })
+        : events({
+            type: 'functionCall',
+            callId: 'c3',
+            name: 'select_action',
+            arguments: '{"action":"generate_image","image_action":"generate","reference_image_ids":[],"rationale":"new image"}',
+          }),
+    );
+
+    const route = await routeTurn({
+      ...base,
+      turns: [{ role: 'user', text: 'draw a fox' }],
+      availableActions: ['respond', 'generate_image'],
+      imageIds: [],
+      streamFn,
+    });
+
+    expect(route?.action).toBe('generate_image');
+    expect(streamFn.mock.calls.map((call) => call[0].reasoning?.effort)).toEqual(['none', 'minimal']);
+  });
+
+  it('falls back to omitting reasoning entirely when every effort is refused', async () => {
+    const streamFn = vi.fn((params: ResponsesParams) =>
+      params.reasoning
+        ? events({ type: 'error', message: 'Unsupported value.' })
+        : events({
+            type: 'functionCall',
+            callId: 'c4',
+            name: 'select_action',
+            arguments: '{"action":"respond","image_action":"none","reference_image_ids":[],"rationale":"chat"}',
+          }),
+    );
+
+    const route = await routeTurn({
+      ...base,
+      turns: [{ role: 'user', text: 'hello' }],
+      availableActions: ['respond'],
+      imageIds: [],
+      streamFn,
+    });
+
+    expect(route?.action).toBe('respond');
+    expect(streamFn.mock.calls).toHaveLength(3);
+    expect(streamFn.mock.calls[2][0].reasoning).toBeUndefined();
   });
 });

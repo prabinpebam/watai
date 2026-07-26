@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "memory:smoke": "npx --yes tsx scripts/memory-smoke.ts",
     "eval": "npx --yes tsx scripts/memory-eval.ts",
+    "route-check": "npx --yes tsx scripts/route-check.ts",
     "embed-check": "npx --yes tsx scripts/embed-check.ts",
     "voice-check": "npx --yes tsx scripts/voice-check.ts",
     "library:inventory": "npx --yes tsx scripts/library-inventory.ts",

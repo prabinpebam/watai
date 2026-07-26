@@ -109,53 +109,77 @@ function routerTool(availableActions: SemanticAction[], imageIds: string[]): Res
   };
 }
 
+/**
+ * Reasoning-effort names are model-specific and change between model generations: `gpt-5.4` accepts
+ * `none|low|medium|high|xhigh` and rejects `minimal`, while earlier models accept `minimal`. A
+ * rejected value fails the whole routing request, so the router tries the cheap efforts in order and
+ * finally omits the field entirely — a routing outage must never be one model rename away.
+ */
+const ROUTER_EFFORTS: Array<{ effort: 'none' | 'minimal' } | null> = [
+  { effort: 'none' },
+  { effort: 'minimal' },
+  null,
+];
+
 /** Run a forced, structured manager step. Returns null on transport/schema failure so the caller can
  *  degrade to ordinary model tool selection instead of failing the user’s run. */
 export async function routeTurn(params: RouteTurnParams): Promise<SemanticRoute | null> {
   const stream = params.streamFn ?? streamResponses;
   const allowed = new Set(params.availableActions);
   const knownImageIds = new Set(params.imageIds);
-  for await (const event of stream({
-    baseUrl: params.baseUrl,
-    key: params.key,
-    model: params.model,
-    input: toInputMessages(params.turns),
-    tools: [routerTool(params.availableActions, params.imageIds)],
-    toolChoice: 'required',
-    reasoning: { effort: 'minimal' },
-    maxOutputTokens: 500,
-    headers: params.headers,
-    signal: params.signal,
-    fetchImpl: params.fetchImpl,
-  })) {
-    if (event.type === 'error') return null;
-    if (event.type !== 'functionCall' || event.name !== 'select_action') continue;
-    try {
-      const raw = JSON.parse(event.arguments) as {
-        action?: unknown;
-        image_action?: unknown;
-        reference_image_ids?: unknown;
-        rationale?: unknown;
-      };
-      if (typeof raw.action !== 'string' || !allowed.has(raw.action as SemanticAction)) return null;
-      const action = raw.action as SemanticAction;
-      const imageAction: ImageAction =
-        action === 'generate_image' && (raw.image_action === 'generate' || raw.image_action === 'edit')
-          ? raw.image_action
-          : 'none';
-      const referenceImageIds =
-        action === 'generate_image' && Array.isArray(raw.reference_image_ids)
-          ? [...new Set(raw.reference_image_ids.filter((id): id is string => typeof id === 'string' && knownImageIds.has(id)))]
-          : [];
-      return {
-        action,
-        imageAction,
-        referenceImageIds,
-        rationale: typeof raw.rationale === 'string' ? raw.rationale.slice(0, 500) : '',
-      };
-    } catch {
-      return null;
+  const input = toInputMessages(params.turns);
+  const tools = [routerTool(params.availableActions, params.imageIds)];
+
+  for (const reasoning of ROUTER_EFFORTS) {
+    let rejected = false;
+    for await (const event of stream({
+      baseUrl: params.baseUrl,
+      key: params.key,
+      model: params.model,
+      input,
+      tools,
+      toolChoice: 'required',
+      ...(reasoning ? { reasoning } : {}),
+      maxOutputTokens: 500,
+      headers: params.headers,
+      signal: params.signal,
+      fetchImpl: params.fetchImpl,
+    })) {
+      if (event.type === 'error') {
+        // The request itself was refused; the next effort (or none at all) may be accepted.
+        console.warn('[routing] router request failed', JSON.stringify({ effort: reasoning?.effort ?? 'omitted', message: event.message }));
+        rejected = true;
+        break;
+      }
+      if (event.type !== 'functionCall' || event.name !== 'select_action') continue;
+      try {
+        const raw = JSON.parse(event.arguments) as {
+          action?: unknown;
+          image_action?: unknown;
+          reference_image_ids?: unknown;
+          rationale?: unknown;
+        };
+        if (typeof raw.action !== 'string' || !allowed.has(raw.action as SemanticAction)) return null;
+        const action = raw.action as SemanticAction;
+        const imageAction: ImageAction =
+          action === 'generate_image' && (raw.image_action === 'generate' || raw.image_action === 'edit')
+            ? raw.image_action
+            : 'none';
+        const referenceImageIds =
+          action === 'generate_image' && Array.isArray(raw.reference_image_ids)
+            ? [...new Set(raw.reference_image_ids.filter((id): id is string => typeof id === 'string' && knownImageIds.has(id)))]
+            : [];
+        return {
+          action,
+          imageAction,
+          referenceImageIds,
+          rationale: typeof raw.rationale === 'string' ? raw.rationale.slice(0, 500) : '',
+        };
+      } catch {
+        return null;
+      }
     }
+    if (!rejected) return null;
   }
   return null;
 }

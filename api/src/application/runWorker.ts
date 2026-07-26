@@ -978,13 +978,18 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
         15_000,
         null,
       );
-      console.log('[routing] semantic manager completed', {
-        runId,
-        action: semanticRoute?.action ?? 'fallback-auto',
-        imageAction: semanticRoute?.imageAction ?? 'none',
-        referenceCount: semanticRoute?.referenceImageIds.length ?? 0,
-        latencyMs: Date.now() - routeStartedAt,
-      });
+      // Single-line JSON: the Functions console capture only keeps the first line of a log call, so
+      // a multi-line object payload is silently dropped and routing becomes undiagnosable.
+      console.log(
+        `[routing] semantic manager ${semanticRoute ? 'selected' : 'unavailable'} ${JSON.stringify({
+          runId,
+          action: semanticRoute?.action ?? 'fallback-auto',
+          imageAction: semanticRoute?.imageAction ?? 'none',
+          referenceCount: semanticRoute?.referenceImageIds.length ?? 0,
+          availableActions,
+          latencyMs: Date.now() - routeStartedAt,
+        })}`,
+      );
     }
     const offeredToolNames = semanticRoute
       ? semanticRoute.action === 'respond'
