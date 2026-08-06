@@ -4,7 +4,7 @@ import { Icon } from '../../design/icons';
 import { IconButton } from '../../design/ui';
 import { ImagePrompt, Lightbox, type GalleryImage } from './Lightbox';
 import { formatBytes } from '../../lib/format';
-import { saveFile } from '../../lib/saveFile';
+import { prepareFile, saveFile } from '../../lib/saveFile';
 import type { Artifact, Attachment, ImageRef, PendingImage } from '../../lib/types';
 
 function isDirectUrl(s?: string): s is string {
@@ -24,6 +24,9 @@ function useAttachmentUrl(att: Attachment): string | null {
       live = false;
     };
   }, [att.id, att.blobPath, att.localBlobKey]);
+  useEffect(() => {
+    if (url) void prepareFile(url)?.catch(() => undefined);
+  }, [url]);
   return url;
 }
 
@@ -258,7 +261,10 @@ function loadImageUrl(image: ImageRef): Promise<string> {
     .catch(() => '')
     .then((url) => {
       inflightImageUrls.delete(key);
-      if (url) resolvedImageUrls.set(key, url);
+      if (url) {
+        resolvedImageUrls.set(key, url);
+        void prepareFile(url)?.catch(() => undefined);
+      }
       return url;
     });
   inflightImageUrls.set(key, pending);

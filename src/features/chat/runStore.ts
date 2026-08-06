@@ -63,6 +63,21 @@ export const useRuns = create<RunsStore>((set, get) => ({
   startServerRun: async (threadId, body, prepare) => {
     if (get().isRunning(threadId) || startingThreads.has(threadId)) return; // one run per thread
     const ctrl = new AbortController();
+    const snapshotKey = `${SNAPSHOT_PREFIX}${threadId}`;
+    let latestSnapshot: Message | null = null;
+    let snapshotTimer: ReturnType<typeof setTimeout> | null = null;
+    let snapshotWrite = Promise.resolve();
+    const writeSnapshot = () => {
+      snapshotTimer = null;
+      const snapshot = latestSnapshot;
+      if (!snapshot) return;
+      snapshotWrite = snapshotWrite.then(() => kv.set(snapshotKey, snapshot)).catch(() => undefined);
+    };
+    const scheduleSnapshot = () => {
+      if (snapshotTimer === null) snapshotTimer = setTimeout(writeSnapshot, 1000);
+    };
+    const onPageHide = () => writeSnapshot();
+    window.addEventListener('pagehide', onPageHide);
 
     // Optimistic UI: show an assistant 'streaming' bubble immediately, before the server responds.
     const seed: Message = {
@@ -82,6 +97,8 @@ export const useRuns = create<RunsStore>((set, get) => ({
 
     // Write a (possibly partial) assistant message into the live overlay for this thread.
     const applyOverlay = (msg: Message) => {
+      latestSnapshot = msg;
+      scheduleSnapshot();
       set((s) => {
         const r = s.runs[threadId];
         return r ? { runs: { ...s.runs, [threadId]: { ...r, message: msg } } } : s;
@@ -121,6 +138,10 @@ export const useRuns = create<RunsStore>((set, get) => ({
     if (ctrl.signal.aborted) {
       offMessage();
       offThread();
+      window.removeEventListener('pagehide', onPageHide);
+      if (snapshotTimer !== null) clearTimeout(snapshotTimer);
+      await snapshotWrite;
+      await kv.delete(snapshotKey).catch(() => undefined);
       set((s) => {
         const next = { ...s.runs };
         delete next[threadId];
@@ -155,7 +176,7 @@ export const useRuns = create<RunsStore>((set, get) => ({
           },
           getRun: (tid, rid) => cloudApi.getRun(tid, rid),
           getAssistantMessage: async (tid, mid, since) => {
-            const recs = await cloudApi.listMessages(tid, { since });
+            const recs = await cloudApi.listMessages(tid, { since, signal: ctrl.signal });
             const rec = recs.find((r) => r.id === mid);
             return rec ? messageFromRecord(rec) : null;
           },
@@ -192,6 +213,10 @@ export const useRuns = create<RunsStore>((set, get) => ({
     } finally {
       offMessage();
       offThread();
+      window.removeEventListener('pagehide', onPageHide);
+      if (snapshotTimer !== null) clearTimeout(snapshotTimer);
+      await snapshotWrite;
+      await kv.delete(snapshotKey).catch(() => undefined);
       // Land the finished reply locally so it survives the overlay clearing (the bulk sync cursor
       // skips the streaming message), then clear the overlay and reload the persisted list.
       if (finalAssistant) await saveServerMessage(finalAssistant).catch(() => {});

@@ -40,6 +40,8 @@ export interface ServerRunDeps {
   pollIntervalMs?: number;
   /** Stop *watching* after this long; the run keeps going server-side (default 5 min). */
   timeoutMs?: number;
+  /** Release the local streaming lock after this many consecutive read failures (default 8). */
+  maxConsecutivePollErrors?: number;
   /** Abort the watch (e.g. the user pressed Stop). The run is canceled separately. */
   signal?: AbortSignal;
 }
@@ -69,6 +71,7 @@ export async function runOnServer(
 ): Promise<ServerRunResult> {
   const interval = deps.pollIntervalMs ?? 450;
   const timeout = deps.timeoutMs ?? 5 * 60_000;
+  const maxConsecutivePollErrors = deps.maxConsecutivePollErrors ?? 8;
 
   // Ensure the lazily-created thread exists server-side so the submit can find it. This is a single
   // idempotent write instead of a full bidirectional sync — the submit appends the user message
@@ -86,15 +89,24 @@ export async function runOnServer(
 
   const start = deps.now();
   let last: Message | null = null;
+  let consecutivePollErrors = 0;
   for (;;) {
     if (deps.signal?.aborted) return { run: null, assistant: last };
     await deps.sleep(interval);
+    if (deps.signal?.aborted) return { run: null, assistant: last };
+    if (deps.now() - start > timeout) {
+      const run = await deps.getRun(threadId, ack.runId).catch(() => null);
+      return { run, assistant: last };
+    }
 
     let msg: Message | null = null;
     try {
       msg = await deps.getAssistantMessage(threadId, ack.assistantMessageId, since);
-    } catch {
-      msg = null; // transient (e.g. not written yet) — keep polling within the timeout.
+      consecutivePollErrors = 0;
+    } catch (error) {
+      if (deps.signal?.aborted) return { run: null, assistant: last };
+      consecutivePollErrors += 1;
+      if (consecutivePollErrors >= maxConsecutivePollErrors) throw error;
     }
 
     if (msg) {

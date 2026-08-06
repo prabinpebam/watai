@@ -10,10 +10,11 @@ const mocks = vi.hoisted(() => ({
   getLibraryLineage: vi.fn(),
   listLibrary: vi.fn(),
   saveFile: vi.fn(),
+  prepareFile: vi.fn(),
 }));
 
 vi.mock('../../data', () => ({ cloudApi: { getLibraryItem: mocks.getLibraryItem, getLibraryLineage: mocks.getLibraryLineage, listLibrary: mocks.listLibrary } }));
-vi.mock('../../lib/saveFile', () => ({ saveFile: mocks.saveFile }));
+vi.mock('../../lib/saveFile', () => ({ saveFile: mocks.saveFile, prepareFile: mocks.prepareFile }));
 vi.mock('../../lib/hooks', async () => {
   const actual = await vi.importActual<typeof import('../../lib/hooks')>('../../lib/hooks');
   return { ...actual, useIsExpanded: () => true };

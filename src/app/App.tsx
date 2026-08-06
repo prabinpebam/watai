@@ -1,12 +1,6 @@
 import { useEffect, useState, lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { AppShell } from './AppShell';
-import { ChatScreen } from '../features/chat/ChatScreen';
-import { SearchView } from '../features/history/SearchView';
-import { ImagesView } from '../features/images/ImagesView';
-import { Settings } from '../features/settings/Settings';
-import { Onboarding } from '../features/onboarding/Onboarding';
-import { VoiceMode } from '../features/voice/VoiceMode';
 import { Spinner, Button } from '../design/ui';
 import { useUi } from '../state/store';
 import { repo, cloudApi, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync, realtime } from '../data';
@@ -15,9 +9,16 @@ import { clearApiCredentials } from '../data/secureStore';
 import { isSignedIn, signOut } from '../auth/cloudAuth';
 import { loadMe, cachedMe } from '../auth/access';
 import { newId } from '../lib/ids';
-import { LibraryView } from '../features/library/LibraryView';
-import { LibraryDetail } from '../features/library/LibraryDetail';
 import { ScreenBar } from './ScreenBar';
+
+const ChatScreen = lazy(() => import('../features/chat/ChatScreen').then((module) => ({ default: module.ChatScreen })));
+const SearchView = lazy(() => import('../features/history/SearchView').then((module) => ({ default: module.SearchView })));
+const ImagesView = lazy(() => import('../features/images/ImagesView').then((module) => ({ default: module.ImagesView })));
+const Settings = lazy(() => import('../features/settings/Settings').then((module) => ({ default: module.Settings })));
+const Onboarding = lazy(() => import('../features/onboarding/Onboarding').then((module) => ({ default: module.Onboarding })));
+const VoiceMode = lazy(() => import('../features/voice/VoiceMode').then((module) => ({ default: module.VoiceMode })));
+const LibraryView = lazy(() => import('../features/library/LibraryView').then((module) => ({ default: module.LibraryView })));
+const LibraryDetail = lazy(() => import('../features/library/LibraryDetail').then((module) => ({ default: module.LibraryDetail })));
 
 // Dev-only chat component gallery. The dynamic import sits in a branch that is statically
 // false in production, so the chunk is tree-shaken out of the prod bundle entirely.
@@ -191,11 +192,18 @@ export function App() {
         })
         .catch(() => undefined);
     tick();
-    const onFocus = () => tick();
-    window.addEventListener('focus', onFocus);
+    const onResume = () => tick();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    window.addEventListener('focus', onResume);
+    window.addEventListener('pageshow', onResume);
+    document.addEventListener('visibilitychange', onVisibility);
     const id = window.setInterval(tick, 30_000);
     return () => {
-      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('focus', onResume);
+      window.removeEventListener('pageshow', onResume);
+      document.removeEventListener('visibilitychange', onVisibility);
       window.clearInterval(id);
     };
   }, []);
@@ -282,6 +290,7 @@ export function App() {
   }, []);
 
   return (
+    <Suspense fallback={<div className="center-screen"><Spinner size="xl" /></div>}>
     <Routes>
       <Route path="/onboarding/*" element={<Onboarding />} />
       <Route path="/voice/:threadId?" element={<VoiceMode />} />
@@ -353,5 +362,6 @@ export function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }

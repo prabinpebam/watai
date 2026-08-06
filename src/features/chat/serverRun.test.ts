@@ -117,6 +117,33 @@ describe('runOnServer', () => {
     expect(out.assistant?.content).toBe('done');
   });
 
+  it('releases the watcher after repeated message-read failures', async () => {
+    const deps = baseDeps({
+      getAssistantMessage: vi.fn(async () => {
+        throw new Error('network unavailable');
+      }),
+      maxConsecutivePollErrors: 2,
+    });
+
+    await expect(runOnServer(deps, 't1', { text: 'hi' })).rejects.toThrow('network unavailable');
+    expect(deps.getAssistantMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start another message read after resuming beyond the timeout', async () => {
+    let now = 0;
+    const deps = baseDeps({
+      now: () => now,
+      sleep: async () => {
+        now = 10_000;
+      },
+      timeoutMs: 1000,
+    });
+
+    await runOnServer(deps, 't1', { text: 'hi' });
+
+    expect(deps.getAssistantMessage).not.toHaveBeenCalled();
+  });
+
   it('stops watching after the timeout, returning the last seen message', async () => {
     let t = 0;
     const deps = baseDeps({

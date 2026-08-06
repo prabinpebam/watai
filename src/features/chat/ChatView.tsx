@@ -24,6 +24,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   const stickRef = useRef(true); // is the view pinned to the bottom?
   const lastTopRef = useRef(0); // previous scrollTop, to detect user-driven upward scrolls
   const roRef = useRef<ResizeObserver | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
   const composerSlotRef = useRef<HTMLDivElement>(null);
   const prevComposerTopRef = useRef<number | null>(null);
   const wasEmptyRef = useRef(false);
@@ -80,19 +81,30 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   const setColumnRef = useCallback((node: HTMLDivElement | null) => {
     roRef.current?.disconnect();
     roRef.current = null;
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+      scrollFrameRef.current = null;
+    }
     if (!node) return;
     const ro = new ResizeObserver(() => {
       const el = scrollRef.current;
-      if (el && stickRef.current) {
-        el.scrollTop = el.scrollHeight; // instant: smooth lags behind fast streaming
-        lastTopRef.current = el.scrollTop;
-      }
+      if (!el || !stickRef.current || scrollFrameRef.current !== null) return;
+      scrollFrameRef.current = window.requestAnimationFrame(() => {
+        scrollFrameRef.current = null;
+        const current = scrollRef.current;
+        if (!current || !stickRef.current) return;
+        current.scrollTop = current.scrollHeight;
+        lastTopRef.current = current.scrollTop;
+      });
     });
     ro.observe(node);
     roRef.current = ro;
   }, []);
 
-  useEffect(() => () => roRef.current?.disconnect(), []);
+  useEffect(() => () => {
+    roRef.current?.disconnect();
+    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+  }, []);
 
   const onScroll = () => {
     const el = scrollRef.current;

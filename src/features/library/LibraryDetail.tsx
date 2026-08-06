@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { LibraryItemDTO, LibraryListQuery } from '../../data/cloud/types';
 import { Button, IconButton, InlineAlert } from '../../design/ui';
 import { Icon } from '../../design/icons';
-import { saveFile } from '../../lib/saveFile';
+import { prepareFile, saveFile } from '../../lib/saveFile';
 import { Markdown } from '../chat/Markdown';
 import { LIBRARY_COPY } from './content';
 import { formatBytes, formatDate, iconForKind, itemTitle, kindLabel, originLabel } from './format';
@@ -155,6 +155,10 @@ export function LibraryDetail() {
   useEffect(() => {
     if (item) headingRef.current?.focus();
   }, [item]);
+
+  useEffect(() => {
+    if (item?.url) void prepareFile(item.url)?.catch(() => undefined);
+  }, [item?.url]);
 
   const goBack = () => navigate(backTo, { replace: false, state: state?.focusId ? { restoreFocusId: state.focusId } : undefined });
   const download = async () => {

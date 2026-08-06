@@ -182,7 +182,7 @@ export class WataiApiClient implements CloudApi {
   // --- messages ---
   async listMessages(
     threadId: string,
-    opts?: { since?: string; limit?: number },
+    opts?: { since?: string; limit?: number; signal?: AbortSignal },
   ): Promise<MessageRecord[]> {
     const q = new URLSearchParams();
     if (opts?.since) q.set('since', opts.since);
@@ -191,6 +191,8 @@ export class WataiApiClient implements CloudApi {
     const out = await this.request<{ messages: MessageRecord[] }>(
       'GET',
       `/threads/${encodeURIComponent(threadId)}/messages${qs ? `?${qs}` : ''}`,
+      undefined,
+      opts?.signal,
     );
     return out.messages;
   }
@@ -498,7 +500,7 @@ export interface CloudApi {
   createThread(body: CreateThreadBody): Promise<ThreadRecord>;
   updateThread(id: string, body: UpdateThreadBody): Promise<ThreadRecord>;
   deleteThread(id: string): Promise<void>;
-  listMessages(threadId: string, opts?: { since?: string; limit?: number }): Promise<MessageRecord[]>;
+  listMessages(threadId: string, opts?: { since?: string; limit?: number; signal?: AbortSignal }): Promise<MessageRecord[]>;
   appendMessage(threadId: string, body: AppendMessageBody): Promise<MessageRecord>;
   acquireThreadLock(
     threadId: string,

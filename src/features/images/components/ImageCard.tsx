@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../design/icons';
 import { cloudApi } from '../../../data';
 import type { StudioImage as ImageRecord } from '../../../data/cloud/types';
 import { useImageStudio } from '../imageStudioStore';
 import { aspectRatio, downloadImage } from './download';
+import { prepareFile } from '../../../lib/saveFile';
 
 /** Friendlier copy for the common, user-correctable error codes. */
 function errorLabel(img: ImageRecord): string {
@@ -21,6 +22,10 @@ export function ImageCard({ img }: { img: ImageRecord }) {
   const applyServerImage = useImageStudio((s) => s.applyServerImage);
   const recoveredRef = useRef(false);
   const [broken, setBroken] = useState(false);
+
+  useEffect(() => {
+    if (img.status === 'ready' && img.url) void prepareFile(img.url)?.catch(() => undefined);
+  }, [img.status, img.url]);
 
   const style = { aspectRatio: aspectRatio(img.size) };
 

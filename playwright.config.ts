@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -8,7 +8,6 @@ export default defineConfig({
   reporter: [['list'], ['html', { outputFolder: 'playwright-report/library-experience', open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:4173',
-    browserName: 'chromium',
     viewport: null,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -16,13 +15,21 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
-      use: { launchOptions: { args: ['--window-size=1440,900'] } },
+      use: { browserName: 'chromium', launchOptions: { args: ['--window-size=1440,900'] } },
     },
     {
       name: 'mobile',
       use: {
+        browserName: 'chromium',
         hasTouch: true,
         launchOptions: { args: ['--window-size=390,844'] },
+      },
+    },
+    {
+      name: 'mobile-webkit',
+      use: {
+        ...devices['iPhone 13'],
+        browserName: 'webkit',
       },
     },
   ],

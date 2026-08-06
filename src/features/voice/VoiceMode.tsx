@@ -10,6 +10,7 @@ import { useChat } from '../chat/useChat';
 import { createReplySpeaker, type ReplySpeaker } from '../../lib/replySpeaker';
 import { createTtsQueue, type TtsClip, type TtsQueue } from '../../lib/ttsQueue';
 import type { Settings } from '../../lib/types';
+import { createAudioElement, playAudioSource, primeAudioElement } from '../../lib/audioPlayback';
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'muted' | 'error';
 
@@ -41,6 +42,7 @@ export function VoiceMode() {
   const recRef = useRef<Recorder | null>(null);
   const settingsRef = useRef<Settings['voice'] | null>(null);
   const speakerRef = useRef<ReplySpeaker | null>(null);
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const lastContentRef = useRef('');
   const runningRef = useRef(false);
   const turnedRef = useRef(false);
@@ -72,26 +74,33 @@ export function VoiceMode() {
         speed: v?.rate,
       });
       const url = URL.createObjectURL(base64ToBlob(audioBase64, mime));
-      const audio = new Audio(url);
+      const audio = voiceAudioRef.current ?? createAudioElement();
+      voiceAudioRef.current = audio;
+      let settled = false;
+      let resolvePlayback: (() => void) | null = null;
+      const finishPlayback = () => {
+        if (settled) return;
+        settled = true;
+        if (audio.onended === finishPlayback) audio.onended = null;
+        if (audio.onerror === finishPlayback) audio.onerror = null;
+        URL.revokeObjectURL(url);
+        resolvePlayback?.();
+      };
       return {
         play: () =>
           new Promise<void>((resolve) => {
-            audio.onended = () => {
-              URL.revokeObjectURL(url);
+            if (settled) {
               resolve();
-            };
-            audio.onerror = () => {
-              URL.revokeObjectURL(url);
-              resolve();
-            };
-            void audio.play().catch(() => {
-              URL.revokeObjectURL(url);
-              resolve();
-            });
+              return;
+            }
+            resolvePlayback = resolve;
+            audio.onended = finishPlayback;
+            audio.onerror = finishPlayback;
+            void playAudioSource(audio, url).catch(finishPlayback);
           }),
         stop: () => {
           audio.pause();
-          URL.revokeObjectURL(url);
+          finishPlayback();
         },
       };
     };
@@ -124,6 +133,9 @@ export function VoiceMode() {
   }, [run]);
 
   const startListening = useCallback(async () => {
+    const audio = voiceAudioRef.current ?? createAudioElement();
+    voiceAudioRef.current = audio;
+    primeAudioElement(audio);
     setErrored(false);
     try {
       recRef.current = await startRecording(settingsRef.current?.inputDeviceId);
@@ -190,6 +202,8 @@ export function VoiceMode() {
     () => () => {
       recRef.current?.cancel();
       ttsRef.current?.stop();
+      voiceAudioRef.current?.pause();
+      voiceAudioRef.current = null;
     },
     [],
   );

@@ -4,6 +4,7 @@ import { Button, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { cloudApi } from '../../data';
 import { base64ToBlob } from '../../lib/files';
+import { createAudioElement, playAudioSource, primeAudioElement } from '../../lib/audioPlayback';
 
 export interface VoiceOption {
   value: string;
@@ -33,9 +34,11 @@ export function VoicePicker({ value, rate, options, onChange, onClose }: VoicePi
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const operationRef = useRef(0);
   const cacheRef = useRef<Map<string, string>>(new Map());
 
   const stopPlayback = () => {
+    operationRef.current += 1;
     audioRef.current?.pause();
     audioRef.current = null;
     setPlayingId(null);
@@ -58,6 +61,10 @@ export function VoicePicker({ value, rate, options, onChange, onClose }: VoicePi
       return;
     }
     stopPlayback();
+    const operation = ++operationRef.current;
+    const audio = createAudioElement();
+    primeAudioElement(audio);
+    audioRef.current = audio;
     setFailed(false);
     setLoadingId(voiceId);
     try {
@@ -69,21 +76,23 @@ export function VoicePicker({ value, rate, options, onChange, onClose }: VoicePi
         url = URL.createObjectURL(base64ToBlob(audioBase64, mime));
         cacheRef.current.set(key, url);
       }
-      const audio = new Audio(url);
-      audioRef.current = audio;
+      if (operation !== operationRef.current) return;
       audio.onended = () => {
-        if (audioRef.current === audio) {
+        if (operation === operationRef.current && audioRef.current === audio) {
           audioRef.current = null;
           setPlayingId(null);
         }
       };
       setLoadingId(null);
       setPlayingId(voiceId);
-      await audio.play();
+      await playAudioSource(audio, url);
     } catch {
-      setLoadingId(null);
-      setPlayingId(null);
-      setFailed(true);
+      if (operation === operationRef.current) {
+        audioRef.current = null;
+        setLoadingId(null);
+        setPlayingId(null);
+        setFailed(true);
+      }
     }
   };
 

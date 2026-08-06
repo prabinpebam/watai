@@ -8,7 +8,41 @@ import { useUi } from '../../state/store';
 import { repo, cloudApi } from '../../data';
 import { base64ToBlob } from '../../lib/files';
 import { speakableText } from '../../lib/speakable';
+import { createAudioElement, playAudioSource, primeAudioElement } from '../../lib/audioPlayback';
 import type { Citation, ImageRef, Message, MessageMemoryRef, PendingImage, ToolCall } from '../../lib/types';
+
+function useThrottledStreamingValue(value: string, streaming: boolean): string {
+  const [throttled, setThrottled] = useState(value);
+  const latestRef = useRef(value);
+  const timerRef = useRef<number | null>(null);
+  latestRef.current = value;
+
+  useEffect(() => {
+    if (!streaming) {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+      setThrottled(value);
+      return;
+    }
+    if (timerRef.current === null) {
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        setThrottled(latestRef.current);
+      }, 500);
+    }
+  }, [streaming, value]);
+
+  useEffect(() => () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+  }, []);
+
+  return streaming ? throttled : value;
+}
+
+export function MessageContent({ content, streaming }: { content: string; streaming: boolean }) {
+  const rendered = useThrottledStreamingValue(content, streaming);
+  return <Markdown content={rendered} streaming={streaming} />;
+}
 
 function domainOf(url: string): string {
   try {
@@ -365,6 +399,8 @@ export function AssistantMessage({
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const audioOperationRef = useRef(0);
   const pushToast = useUi((s) => s.pushToast);
   const isStreamingThis = streaming && message.status === 'streaming';
 
@@ -387,6 +423,18 @@ export function AssistantMessage({
   });
   const toolEntries = groupedToolCards(toolCards);
 
+  const releaseReadAudio = () => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = null;
+  };
+
+  useEffect(() => () => {
+    audioOperationRef.current += 1;
+    releaseReadAudio();
+  }, []);
+
   const copy = () => {
     navigator.clipboard.writeText(message.content).then(() => {
       setCopied(true);
@@ -396,11 +444,17 @@ export function AssistantMessage({
 
   const readAloud = async () => {
     if (speaking && audioRef.current) {
-      audioRef.current.pause();
+      audioOperationRef.current += 1;
+      releaseReadAudio();
       setSpeaking(false);
       return;
     }
+    const operation = ++audioOperationRef.current;
+    const audio = createAudioElement();
+    primeAudioElement(audio);
+    audioRef.current = audio;
     setSpeaking(true);
+    let url: string | null = null;
     try {
       const settings = await repo.getSettings().catch(() => null);
       const spoken = speakableText(message.content).slice(0, 4000);
@@ -410,20 +464,28 @@ export function AssistantMessage({
         speed: settings?.voice.rate,
       });
       if (!audioBase64) {
+        releaseReadAudio();
         setSpeaking(false);
         return;
       }
-      const url = URL.createObjectURL(base64ToBlob(audioBase64, mime));
-      const audio = new Audio(url);
-      audioRef.current = audio;
+      if (operation !== audioOperationRef.current) return;
+      url = URL.createObjectURL(base64ToBlob(audioBase64, mime));
+      audioUrlRef.current = url;
       audio.onended = () => {
-        setSpeaking(false);
-        URL.revokeObjectURL(url);
+        if (operation === audioOperationRef.current) {
+          audioRef.current = null;
+          setSpeaking(false);
+        }
+        if (url) URL.revokeObjectURL(url);
+        if (audioUrlRef.current === url) audioUrlRef.current = null;
       };
-      await audio.play();
+      await playAudioSource(audio, url);
     } catch (e) {
-      setSpeaking(false);
-      pushToast(e instanceof Error ? e.message : 'Could not read aloud', 'error');
+      if (operation === audioOperationRef.current) {
+        releaseReadAudio();
+        setSpeaking(false);
+        pushToast(e instanceof Error ? e.message : 'Could not read aloud', 'error');
+      }
     }
   };
 
@@ -457,7 +519,7 @@ export function AssistantMessage({
 
         {message.content ? (
           <div className={isStreamingThis ? 'typing-caret' : ''}>
-            <Markdown content={message.content} />
+            <MessageContent content={message.content} streaming={isStreamingThis} />
           </div>
         ) : isStreamingThis ? (
           <div className="typing-dots" aria-label="Assistant is typing">

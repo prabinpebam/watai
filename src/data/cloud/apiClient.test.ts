@@ -210,6 +210,16 @@ describe('WataiApiClient', () => {
     );
   });
 
+  it('passes an abort signal to message reads', async () => {
+    const { fetchImpl, calls } = stubFetch([{ status: 200, body: { messages: [] } }]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+    const controller = new AbortController();
+
+    await client.listMessages('t1', { signal: controller.signal });
+
+    expect(calls[0].signal).toBe(controller.signal);
+  });
+
   it('acquires the run lock with a POST body', async () => {
     const { fetchImpl, calls } = stubFetch([
       { status: 200, body: { thread: { id: 't1' }, lock: { deviceId: 'd1', deviceLabel: 'Chrome on Windows' } } },

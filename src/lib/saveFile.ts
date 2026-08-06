@@ -18,11 +18,33 @@ function isIOS(): boolean {
   return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
-async function resolveBlob(source: Blob | string): Promise<Blob> {
-  if (typeof source !== 'string') return source;
+const preparedFiles = new Map<string, Promise<Blob>>();
+
+async function fetchBlob(source: string): Promise<Blob> {
   const res = await fetch(source);
   if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
   return res.blob();
+}
+
+export function prepareFile(source: string): Promise<Blob> | undefined {
+  if (!isIOS() || !/^https?:/.test(source)) return undefined;
+  const existing = preparedFiles.get(source);
+  if (existing) return existing;
+  if (preparedFiles.size >= 8) {
+    const oldest = preparedFiles.keys().next().value;
+    if (oldest) preparedFiles.delete(oldest);
+  }
+  const prepared = fetchBlob(source).catch((error) => {
+    preparedFiles.delete(source);
+    throw error;
+  });
+  preparedFiles.set(source, prepared);
+  return prepared;
+}
+
+async function resolveBlob(source: Blob | string): Promise<Blob> {
+  if (typeof source !== 'string') return source;
+  return preparedFiles.get(source) ?? fetchBlob(source);
 }
 
 function anchorDownload(url: string, filename: string): void {

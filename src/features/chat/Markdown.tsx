@@ -139,6 +139,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 
 interface MarkdownProps {
   content: string;
+  streaming?: boolean;
 }
 
 /** Allow safe links + inline data-image URLs; block javascript: and other schemes. */
@@ -169,14 +170,16 @@ function normalizeMath(src: string): string {
     .join('');
 }
 
-export const Markdown = memo(function Markdown({ content }: MarkdownProps) {
+export const Markdown = memo(function Markdown({ content, streaming = false }: MarkdownProps) {
   const [light, setLight] = useState<{ src: string; alt: string } | null>(null);
 
   return (
     <div className="md">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex, [rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+        rehypePlugins={streaming
+          ? [rehypeKatex]
+          : [rehypeKatex, [rehypeHighlight, { detect: true, ignoreMissing: true }]]}
         urlTransform={safeUrl}
         components={{
           pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,

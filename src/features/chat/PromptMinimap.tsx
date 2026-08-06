@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { formatTime, relativeDay } from '../../lib/format';
 import type { Message } from '../../lib/types';
 
@@ -22,7 +22,7 @@ function touchLike(pointerType?: string): boolean {
   return pointerType === 'touch' || pointerType === 'pen';
 }
 
-export function PromptMinimap({ messages, scrollRef }: PromptMinimapProps) {
+export const PromptMinimap = memo(function PromptMinimap({ messages, scrollRef }: PromptMinimapProps) {
   const prompts = useMemo(() => messages.filter((message) => message.role === 'user'), [messages]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -240,4 +240,15 @@ export function PromptMinimap({ messages, scrollRef }: PromptMinimapProps) {
       )}
     </nav>
   );
-}
+}, (previous, next) => {
+  if (previous.scrollRef !== next.scrollRef) return false;
+  const previousPrompts = previous.messages.filter((message) => message.role === 'user');
+  const nextPrompts = next.messages.filter((message) => message.role === 'user');
+  return previousPrompts.length === nextPrompts.length
+    && previousPrompts.every((message, index) => {
+      const nextMessage = nextPrompts[index];
+      return message.id === nextMessage.id
+        && message.content === nextMessage.content
+        && message.createdAt === nextMessage.createdAt;
+    });
+});

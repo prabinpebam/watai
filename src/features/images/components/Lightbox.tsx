@@ -4,6 +4,7 @@ import { Icon } from '../../../design/icons';
 import { useUi } from '../../../state/store';
 import { useImageStudio } from '../imageStudioStore';
 import { downloadImage } from './download';
+import { prepareFile } from '../../../lib/saveFile';
 
 const SIZE_LABEL: Record<string, string> = {
   '1024x1024': 'Square · 1024×1024',
@@ -23,6 +24,10 @@ export function Lightbox() {
   const remove = useImageStudio((s) => s.remove);
 
   const img = images.find((i) => i.id === lightboxId) ?? null;
+
+  useEffect(() => {
+    if (img?.url) void prepareFile(img.url)?.catch(() => undefined);
+  }, [img?.url]);
 
   useEffect(() => {
     if (!img) return;
