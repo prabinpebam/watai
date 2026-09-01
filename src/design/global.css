@@ -1438,6 +1438,12 @@ a:hover {
 .chat--empty {
   justify-content: center;
 }
+:root[data-keyboard-open] .chat--empty {
+  /* The keyboard inset already reserves the obscured part of the full-height
+     shell. Dock the empty-state group against it rather than centering that
+     reserved space, which leaves a large visible gap below the editor. */
+  justify-content: flex-end;
+}
 .chat--empty .chat__scroll {
   flex: 0 0 auto;
   overflow: visible;

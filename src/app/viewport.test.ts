@@ -10,6 +10,7 @@ afterEach(() => {
   });
   document.documentElement.style.removeProperty('--app-height');
   document.documentElement.style.removeProperty('--keyboard-inset');
+  document.documentElement.removeAttribute('data-keyboard-open');
   document.body.replaceChildren();
 });
 
@@ -27,6 +28,7 @@ describe('syncViewport', () => {
 
     expect(document.documentElement.style.getPropertyValue('--app-height')).toBe(`${window.innerHeight}px`);
     expect(document.documentElement.style.getPropertyValue('--keyboard-inset')).toBe('260px');
+    expect(document.documentElement.hasAttribute('data-keyboard-open')).toBe(true);
   });
 
   it('does not treat browser chrome as a keyboard without a focused editor', () => {
@@ -38,5 +40,6 @@ describe('syncViewport', () => {
     syncViewport();
 
     expect(document.documentElement.style.getPropertyValue('--keyboard-inset')).toBe('0px');
+    expect(document.documentElement.hasAttribute('data-keyboard-open')).toBe(false);
   });
 });

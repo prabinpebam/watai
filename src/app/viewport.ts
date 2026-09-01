@@ -15,6 +15,7 @@ export function syncViewport(): void {
 
   document.documentElement.style.setProperty('--app-height', `${height}px`);
   document.documentElement.style.setProperty('--keyboard-inset', `${keyboardInset}px`);
+  document.documentElement.toggleAttribute('data-keyboard-open', keyboardInset > 0);
 }
 
 export function installViewportSync(): () => void {
@@ -42,5 +43,6 @@ export function installViewportSync(): () => void {
     document.removeEventListener('focusout', schedule);
     window.visualViewport?.removeEventListener('resize', schedule);
     window.visualViewport?.removeEventListener('scroll', schedule);
+    document.documentElement.removeAttribute('data-keyboard-open');
   };
 }

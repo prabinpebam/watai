@@ -132,15 +132,15 @@ const vv = window.visualViewport;
 function syncViewport() {
   const keyboard = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
   document.documentElement.style.setProperty('--keyboard-inset', keyboard + 'px');
-  document.documentElement.style.setProperty('--app-height', vv.height + 'px');
+  document.documentElement.toggleAttribute('data-keyboard-open', keyboard > 0);
 }
 vv?.addEventListener('resize', syncViewport);
 vv?.addEventListener('scroll', syncViewport);
 ```
 
-- The composer container translates up by `--keyboard-inset`; the scroll region height uses
-  `--app-height`; on focus, the active field + last message scroll into view
-  (`scrollIntoView({block:'end'})`).
+- The composer container translates up by `--keyboard-inset`. While the keyboard is open, an
+  empty chat docks its greeting/composer group against that inset instead of centering the
+  keyboard-reserved space. Existing chats keep their latest message pinned during the resize.
 - **VirtualKeyboard API** (Chromium): optionally set
   `navigator.virtualKeyboard.overlaysContent = true` and use `env(keyboard-inset-*)` for a
   cleaner path; feature-detect and fall back to the visualViewport approach.
