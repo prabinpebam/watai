@@ -31,8 +31,13 @@ function mount() {
 
 // One-time: wipe stale MSAL auth cache left by the local-account → cloud migration (it wedges
 // sign-in; a clean profile / incognito works). Must run before MSAL reads localStorage.
-installViewportSync();
-clearStaleAuthCacheOnce();
-// Complete any returning MSAL sign-in redirect BEFORE the HashRouter mounts (so the auth
-// response in the URL hash isn't clobbered by the router), then render either way.
-void initAuth().finally(mount);
+// MSAL's prompt=none flow returns to this same URL inside a hidden sandboxed iframe. The parent
+// MSAL instance reads that iframe's hash itself; booting Watai here would start sync and another
+// silent token iframe recursively. Render and initialise auth only in the top-level window.
+if (window.self === window.top) {
+  installViewportSync();
+  clearStaleAuthCacheOnce();
+  // Complete any returning sign-in redirect BEFORE the HashRouter mounts (so the auth
+  // response in the URL hash isn't clobbered by the router), then render either way.
+  void initAuth().finally(mount);
+}

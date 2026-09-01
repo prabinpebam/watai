@@ -191,20 +191,30 @@ export function App() {
           changed.forEach((id) => ui.bumpThread(id));
         })
         .catch(() => undefined);
-    tick();
+    let live = true;
+    let dispose: (() => void) | undefined;
     const onResume = () => tick();
     const onVisibility = () => {
       if (document.visibilityState === 'visible') tick();
     };
-    window.addEventListener('focus', onResume);
-    window.addEventListener('pageshow', onResume);
-    document.addEventListener('visibilitychange', onVisibility);
-    const id = window.setInterval(tick, 30_000);
+    void (async () => {
+      if (!(await isSignedIn()) || !live) return;
+      // The migration effect below performs the initial sync. This effect owns only recurring
+      // sync, and must never ask MSAL for a token on the signed-out welcome screen.
+      window.addEventListener('focus', onResume);
+      window.addEventListener('pageshow', onResume);
+      document.addEventListener('visibilitychange', onVisibility);
+      const id = window.setInterval(tick, 30_000);
+      dispose = () => {
+        window.removeEventListener('focus', onResume);
+        window.removeEventListener('pageshow', onResume);
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.clearInterval(id);
+      };
+    })();
     return () => {
-      window.removeEventListener('focus', onResume);
-      window.removeEventListener('pageshow', onResume);
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.clearInterval(id);
+      live = false;
+      dispose?.();
     };
   }, []);
 

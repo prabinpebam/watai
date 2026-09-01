@@ -15,6 +15,17 @@ const API_SCOPE =
   (import.meta.env.VITE_WATAI_API_SCOPE as string) || `api://${CLIENT_ID}/access_as_user`;
 
 let pcaPromise: Promise<IPublicClientApplication> | null = null;
+let tokenPromise: Promise<string | null> | null = null;
+const REAUTH_FLAG = 'watai.reauth';
+
+function isAuthResponseHash(hash: string): boolean {
+  return /^#(?:code|error)=/.test(hash);
+}
+
+function clearAuthResponseHash(): void {
+  if (typeof window === 'undefined' || !isAuthResponseHash(window.location.hash)) return;
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+}
 
 function redirectUri(): string {
   if (typeof window === 'undefined') return 'http://localhost:5173';
@@ -47,11 +58,24 @@ async function getPca(): Promise<IPublicClientApplication> {
       // usable client the user can sign in with fresh.
       try {
         const result = await pca.handleRedirectPromise({ navigateToLoginRequestUrl: false });
-        if (result?.account) pca.setActiveAccount(result.account);
+        if (result?.account) {
+          pca.setActiveAccount(result.account);
+          try {
+            sessionStorage.removeItem(REAUTH_FLAG);
+          } catch {
+            /* ignore */
+          }
+        }
       } catch (e) {
         console.warn('[auth] could not complete the sign-in redirect; starting clean', e);
-        if (typeof window !== 'undefined' && /[#&]code=/.test(window.location.hash)) {
-          history.replaceState(null, '', window.location.pathname + window.location.search);
+        // A failed response (`#error=login_required...`) is just as terminal as a stale code.
+        // Leaving either in the URL lets HashRouter treat it as an application route and retries
+        // the same broken response on every reload.
+        clearAuthResponseHash();
+        try {
+          sessionStorage.setItem(REAUTH_FLAG, '1');
+        } catch {
+          /* ignore */
         }
       }
       return pca;
@@ -71,7 +95,9 @@ function activeAccount(pca: IPublicClientApplication): AccountInfo | null {
  *  while leaving the app's own settings/data intact. A no-op after the first run, and it must run
  *  BEFORE MSAL initialises (it reads that cache on construction). */
 export function clearStaleAuthCacheOnce(): void {
-  const FLAG = 'watai.authReset.v1';
+  // v2 clears accounts/tokens left wedged by builds that booted the full SPA recursively inside
+  // MSAL's silent-response iframe. Users authenticate once more through the normal top-level flow.
+  const FLAG = 'watai.authReset.v2';
   try {
     if (typeof localStorage === 'undefined' || localStorage.getItem(FLAG)) return;
     const markers = [CLIENT_ID, 'msal.', 'msal', 'ciamlogin', 'login.microsoftonline', 'login.windows'];
@@ -96,8 +122,6 @@ export async function initAuth(): Promise<void> {
 /** Guard so a stale session triggers at most ONE automatic recovery redirect per browsing
  *  session — set before redirecting, cleared on the next silent success — so a token that still
  *  can't be minted after re-auth falls through to the sign-in screen instead of looping. */
-const REAUTH_FLAG = 'watai.reauth';
-
 /** Auth health, broadcast to the app so it can surface a "session expired" banner instead of
  *  failing silently. `ok` means a token was just minted; `reauth-required` means the session
  *  can't be renewed silently (expired refresh token, or a static host blocking the renewal
@@ -106,14 +130,17 @@ const REAUTH_FLAG = 'watai.reauth';
 export type AuthState = 'ok' | 'reauth-required';
 type AuthListener = (state: AuthState) => void;
 const authListeners = new Set<AuthListener>();
+let currentAuthState: AuthState = 'ok';
 
 /** Subscribe to auth-health changes. Returns an unsubscribe fn. */
 export function onAuthState(listener: AuthListener): () => void {
   authListeners.add(listener);
+  listener(currentAuthState);
   return () => authListeners.delete(listener);
 }
 
 function emitAuthState(state: AuthState): void {
+  currentAuthState = state;
   for (const listener of [...authListeners]) {
     try {
       listener(state);
@@ -128,10 +155,18 @@ function emitAuthState(state: AuthState): void {
  *  third-party cookie the renewal iframe needs), recover with a top-level interactive redirect,
  *  which reaches the session and mints a fresh refresh token. Resolves to null only when truly
  *  signed out or already mid-recovery. */
-export async function getCloudToken(): Promise<string | null> {
+async function acquireCloudToken(): Promise<string | null> {
   const pca = await getPca();
   const account = activeAccount(pca);
   if (!account) return null;
+  try {
+    if (sessionStorage.getItem(REAUTH_FLAG) === '1') {
+      emitAuthState('reauth-required');
+      return null;
+    }
+  } catch {
+    /* storage unavailable — try MSAL normally */
+  }
   try {
     const res = await pca.acquireTokenSilent({ account, scopes: [API_SCOPE] });
     try {
@@ -160,11 +195,6 @@ export async function getCloudToken(): Promise<string | null> {
       try {
         await pca.acquireTokenRedirect({ account, scopes: [API_SCOPE] });
       } catch {
-        try {
-          sessionStorage.removeItem(REAUTH_FLAG);
-        } catch {
-          /* ignore */
-        }
         // The auto-recovery redirect couldn't even start — the user must sign in by hand.
         emitAuthState('reauth-required');
       }
@@ -177,9 +207,26 @@ export async function getCloudToken(): Promise<string | null> {
   }
 }
 
+/** De-duplicate callers at startup (setup gate, sync, realtime, settings). Without this, one
+ *  expired session creates several concurrent prompt=none iframes, amplifying a single
+ *  interaction-required response into repeated sandbox failures. */
+export function getCloudToken(): Promise<string | null> {
+  if (!tokenPromise) {
+    tokenPromise = acquireCloudToken().finally(() => {
+      tokenPromise = null;
+    });
+  }
+  return tokenPromise;
+}
+
 /** Interactive sign-in / sign-up via the Entra External ID user flow (popup). */
 export async function signIn(): Promise<AccountInfo | null> {
   const pca = await getPca();
+  try {
+    sessionStorage.removeItem(REAUTH_FLAG);
+  } catch {
+    /* ignore */
+  }
   const res = await pca.loginPopup({ scopes: [API_SCOPE] });
   if (res.account) pca.setActiveAccount(res.account);
   return res.account ?? null;
@@ -189,6 +236,11 @@ export async function signIn(): Promise<AccountInfo | null> {
  *  app reloads at the redirect URI and `getPca()` completes it. */
 export async function signInRedirect(): Promise<void> {
   const pca = await getPca();
+  try {
+    sessionStorage.removeItem(REAUTH_FLAG);
+  } catch {
+    /* ignore */
+  }
   await pca.loginRedirect({ scopes: [API_SCOPE] });
 }
 
