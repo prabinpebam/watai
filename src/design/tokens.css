@@ -185,10 +185,9 @@
   --blur-appbar: 8px;
   --blur-scrim: 2px;
 
-  /* Layout vars. dvh tracks mobile browser chrome; the OS/browser handles the
-     on-screen keyboard natively (no JS viewport juggling). */
+      /* Live viewport height. viewport.ts maps this to iOS Safari's visible height
+        while the keyboard is open, without following focus-driven viewport pans. */
   --app-height: 100dvh;
-  --keyboard-inset: 0px;
 }
 
 :root[data-theme='dark'] {

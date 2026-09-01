@@ -7,15 +7,24 @@ function isEditable(element: Element | null): boolean {
 
 export function syncViewport(): void {
   const viewport = window.visualViewport;
-  const height = Math.max(1, window.innerHeight);
-  const overlap = viewport
-    ? Math.max(0, height - viewport.height - viewport.offsetTop)
-    : 0;
-  const keyboardInset = isEditable(document.activeElement) && overlap > 80 ? overlap : 0;
+  const layoutHeight = Math.max(1, window.innerHeight);
+  const visualHeight = Math.max(1, viewport?.height ?? layoutHeight);
+  const keyboardOpen = Boolean(
+    viewport
+    && isEditable(document.activeElement)
+    && (viewport.scale ?? 1) <= 1.01
+    && layoutHeight - visualHeight > 80,
+  );
+  const appHeight = keyboardOpen ? visualHeight : layoutHeight;
 
-  document.documentElement.style.setProperty('--app-height', `${height}px`);
-  document.documentElement.style.setProperty('--keyboard-inset', `${keyboardInset}px`);
-  document.documentElement.toggleAttribute('data-keyboard-open', keyboardInset > 0);
+  // Use exactly one keyboard compensation model. The shell maps to the visible
+  // viewport height; adding the keyboard height as composer padding as well
+  // would move the editor twice. Deliberately ignore offsetTop: Safari changes it
+  // while keeping a focused editor visible, and moving the editor in response
+  // creates a scroll/layout feedback loop that interrupts typing.
+  document.documentElement.style.setProperty('--app-height', `${appHeight}px`);
+  document.documentElement.style.removeProperty('--keyboard-inset');
+  document.documentElement.toggleAttribute('data-keyboard-open', keyboardOpen);
 }
 
 export function installViewportSync(): () => void {
@@ -32,7 +41,6 @@ export function installViewportSync(): () => void {
   document.addEventListener('focusin', schedule, { passive: true });
   document.addEventListener('focusout', schedule, { passive: true });
   window.visualViewport?.addEventListener('resize', schedule, { passive: true });
-  window.visualViewport?.addEventListener('scroll', schedule, { passive: true });
 
   return () => {
     window.cancelAnimationFrame(frame);
@@ -42,7 +50,8 @@ export function installViewportSync(): () => void {
     document.removeEventListener('focusin', schedule);
     document.removeEventListener('focusout', schedule);
     window.visualViewport?.removeEventListener('resize', schedule);
-    window.visualViewport?.removeEventListener('scroll', schedule);
+    document.documentElement.style.removeProperty('--app-height');
+    document.documentElement.style.removeProperty('--keyboard-inset');
     document.documentElement.removeAttribute('data-keyboard-open');
   };
 }

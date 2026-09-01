@@ -318,8 +318,9 @@ the chat column adapts inside the expanded pane.
 
 **Viewport-height units:** full-height surfaces use `100dvh` with `min-height: 100svh`
 fallback; never bare `100vh` (it ignores mobile browser chrome + keyboard). The app shell
-height is driven by `--app-height` (set from `visualViewport`) and exposes
-`--keyboard-inset` so the composer rides above the on-screen keyboard.
+height is driven by `--app-height` (set from `visualViewport`). The shell stays anchored rather
+than following Safari's focus-driven `offsetTop`, and the composer receives no second
+keyboard-height offset.
 
 **Input-capability queries:** adapt affordances (not just size) to the pointer/hover
 capability:

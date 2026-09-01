@@ -1024,11 +1024,16 @@ a:hover {
 /* ---- Composer ---- */
 .composer-wrap {
   flex: 0 0 auto;
-  padding: var(--space-3) var(--space-5) calc(var(--space-4) + var(--keyboard-inset));
+  padding: var(--space-3) var(--space-5) var(--space-4);
   padding-left: max(var(--space-5), env(safe-area-inset-left, 0));
   padding-right: max(var(--space-5), env(safe-area-inset-right, 0));
-  padding-bottom: max(calc(var(--space-4) + var(--keyboard-inset)), env(safe-area-inset-bottom, 0));
+  padding-bottom: max(var(--space-4), env(safe-area-inset-bottom, 0));
   background: linear-gradient(to top, var(--color-bg) 60%, transparent);
+}
+:root[data-keyboard-open] .composer-wrap {
+  /* The keyboard owns the device's bottom safe area. Keep only product spacing
+     between the editor and keyboard edge. */
+  padding-bottom: var(--space-4);
 }
 .composer {
   max-width: var(--size-column-max);
@@ -1439,9 +1444,7 @@ a:hover {
   justify-content: center;
 }
 :root[data-keyboard-open] .chat--empty {
-  /* The keyboard inset already reserves the obscured part of the full-height
-     shell. Dock the empty-state group against it rather than centering that
-     reserved space, which leaves a large visible gap below the editor. */
+  /* Dock within the visual-height shell; no keyboard-height spacer exists. */
   justify-content: flex-end;
 }
 .chat--empty .chat__scroll {

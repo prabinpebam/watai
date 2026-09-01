@@ -154,7 +154,7 @@ lines scroll-x; "Copied" feedback.
 - **Editing-from sub-state:** when editing a prior user message (fork), the composer shows
   an "Editing message" hint chip with Cancel; sending creates a branch.
 - **Keyboard-aware (mobile):** the composer stays pinned **above** the on-screen keyboard
-  using `interactive-widget=resizes-content` + the `visualViewport`/`--keyboard-inset`
+  using `interactive-widget=resizes-content` + the anchored `visualViewport` shell height
   strategy; on focus, the field + latest message scroll into view; no layout jump when the
   browser address bar shows/hides. The field font-size is ≥ 16px to prevent iOS focus-zoom.
   (See [09-responsive-and-platform.md](09-responsive-and-platform.md) §4.)

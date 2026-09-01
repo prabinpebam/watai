@@ -125,22 +125,28 @@ must remain visible while typing.
 - **Primary:** `interactive-widget=resizes-content` (§2.3) + the flex/`dvh` shell — the
   layout shrinks and the composer rides up automatically.
 - **Fallback (iOS Safari & older engines):** subscribe to `window.visualViewport`
-  `resize`/`scroll` and compute a keyboard inset:
+  `resize` and map the app shell to its visible height:
 
 ```ts
 const vv = window.visualViewport;
 function syncViewport() {
-  const keyboard = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-  document.documentElement.style.setProperty('--keyboard-inset', keyboard + 'px');
-  document.documentElement.toggleAttribute('data-keyboard-open', keyboard > 0);
+  const keyboardOpen = isEditable(document.activeElement)
+    && window.innerHeight - vv.height > 80;
+  document.documentElement.style.setProperty(
+    '--app-height',
+    (keyboardOpen ? vv.height : window.innerHeight) + 'px',
+  );
+  document.documentElement.toggleAttribute('data-keyboard-open', keyboardOpen);
 }
 vv?.addEventListener('resize', syncViewport);
-vv?.addEventListener('scroll', syncViewport);
 ```
 
-- The composer container translates up by `--keyboard-inset`. While the keyboard is open, an
-  empty chat docks its greeting/composer group against that inset instead of centering the
-  keyboard-reserved space. Existing chats keep their latest message pinned during the resize.
+- Use one compensation model only: size the app shell to `visualViewport.height`. Never also add
+  the keyboard height as composer padding. Do not move the shell in response to
+  `visualViewport.offsetTop` or subscribe to visual-viewport `scroll`: Safari changes that offset
+  while maintaining focused-editor visibility, and chasing it creates a feedback loop in which
+  the view scrolls during typing. While the keyboard is open, an empty chat docks its
+  greeting/composer group inside the visual-height shell.
 - **VirtualKeyboard API** (Chromium): optionally set
   `navigator.virtualKeyboard.overlaysContent = true` and use `env(keyboard-inset-*)` for a
   cleaner path; feature-detect and fall back to the visualViewport approach.
