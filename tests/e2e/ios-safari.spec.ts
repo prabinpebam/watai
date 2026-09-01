@@ -36,6 +36,15 @@ test.describe('iOS Safari reliability', () => {
           scrollHandlers.forEach((handler) => handler(new Event('scroll')));
         },
       });
+      Object.defineProperty(window, '__setTestViewports', {
+        configurable: true,
+        value: (height: number) => {
+          Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
+          viewport.height = height;
+          resizeHandlers.forEach((handler) => handler(new Event('resize')));
+          window.dispatchEvent(new Event('resize'));
+        },
+      });
     });
   });
 
@@ -116,6 +125,46 @@ test.describe('iOS Safari reliability', () => {
     expect(gap.top).toBeGreaterThanOrEqual(gap.visualTop);
     expect(gap.bottom).toBeLessThanOrEqual(gap.visualBottom);
     expect(gap.visualBottom - gap.bottom).toBeLessThanOrEqual(24);
+  });
+
+  test('docks correctly when iOS shrinks both layout and visual viewports', async ({ page }) => {
+    await page.goto('/#/dev/gallery');
+    await expect(page.getByText('Chat components DEV')).toBeVisible();
+    const geometry = await page.evaluate(async () => {
+      const root = document.querySelector('#root');
+      if (!root) throw new Error('Missing app root');
+      root.innerHTML = `
+        <div class="app"><main class="app__main"><div class="chat-area">
+          <div class="chat chat--empty"><div class="chat__scroll"></div>
+            <div class="chat__intro"><div class="empty__greeting">Start a chat</div></div>
+            <div class="composer-slot"><div class="composer-wrap"><div class="composer">
+              <div class="composer__input"><textarea class="composer__textarea" aria-label="Message"></textarea></div>
+            </div></div></div>
+          </div>
+        </div></main></div>`;
+      const textarea = root.querySelector<HTMLTextAreaElement>('textarea');
+      if (!textarea) throw new Error('Missing composer textarea');
+      const fullHeight = window.innerHeight;
+      textarea.focus();
+      (window as typeof window & { __setTestViewports(height: number): void })
+        .__setTestViewports(fullHeight - 260);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const keyboardOpen = document.documentElement.hasAttribute('data-keyboard-open');
+      // The CSS focus trigger is intentional defense in depth: layout must remain correct even
+      // when a browser's viewport metrics make inferred keyboard state transiently ambiguous.
+      document.documentElement.removeAttribute('data-keyboard-open');
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const rect = textarea.getBoundingClientRect();
+      return {
+        keyboardOpen,
+        bottom: rect.bottom,
+        visibleBottom: window.innerHeight,
+      };
+    });
+
+    expect(geometry.keyboardOpen).toBe(true);
+    expect(geometry.bottom).toBeLessThanOrEqual(geometry.visibleBottom);
+    expect(geometry.visibleBottom - geometry.bottom).toBeLessThanOrEqual(24);
   });
 
   test('keeps the whole chat visible without chasing Safari focus panning', async ({ page }) => {

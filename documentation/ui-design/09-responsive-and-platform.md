@@ -129,12 +129,15 @@ must remain visible while typing.
 
 ```ts
 const vv = window.visualViewport;
+let stableHeight = Math.min(window.innerHeight, vv?.height ?? window.innerHeight);
 function syncViewport() {
-  const keyboardOpen = isEditable(document.activeElement)
-    && window.innerHeight - vv.height > 80;
+  const visibleHeight = Math.min(window.innerHeight, vv?.height ?? window.innerHeight);
+  const editing = isEditable(document.activeElement) && (vv?.scale ?? 1) <= 1.01;
+  if (!editing) stableHeight = visibleHeight;
+  const keyboardOpen = editing && stableHeight - visibleHeight > 80;
   document.documentElement.style.setProperty(
     '--app-height',
-    (keyboardOpen ? vv.height : window.innerHeight) + 'px',
+    (keyboardOpen ? visibleHeight : window.innerHeight) + 'px',
   );
   document.documentElement.toggleAttribute('data-keyboard-open', keyboardOpen);
 }
@@ -147,6 +150,17 @@ vv?.addEventListener('resize', syncViewport);
   while maintaining focused-editor visibility, and chasing it creates a feedback loop in which
   the view scrolls during typing. While the keyboard is open, an empty chat docks its
   greeting/composer group inside the visual-height shell.
+- Keyboard detection compares the current visible height against the last stable, non-editing
+  height. Do not infer keyboard state from `window.innerHeight - visualViewport.height`: some
+  contexts shrink only the visual viewport, while others shrink both values and make that
+  difference zero.
+- Empty-chat docking and focused-composer bottom spacing also use `:focus-within` as their direct
+  semantic trigger. Correct input placement must not depend exclusively on inferred keyboard
+  state when the browser already tells us that the user is editing the composer.
+- Safari 26 changed Home Screen behavior so any saved site may open as a web app, and it changed
+  native selection/keyboard-scrolling behavior. Treat Safari tabs and Home Screen web apps as
+  distinct viewport environments and feature-detect; do not branch on the frozen iOS user-agent
+  version string.
 - **VirtualKeyboard API** (Chromium): optionally set
   `navigator.virtualKeyboard.overlaysContent = true` and use `env(keyboard-inset-*)` for a
   cleaner path; feature-detect and fall back to the visualViewport approach.

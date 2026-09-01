@@ -5,17 +5,33 @@ function isEditable(element: Element | null): boolean {
     || (element instanceof HTMLElement && element.isContentEditable);
 }
 
+const KEYBOARD_THRESHOLD = 80;
+let stableViewportHeight = 0;
+
+function visibleViewportHeight(): number {
+  const layoutHeight = Math.max(1, window.innerHeight);
+  const visualHeight = Math.max(1, window.visualViewport?.height ?? layoutHeight);
+  return Math.min(layoutHeight, visualHeight);
+}
+
+/** Reset the pre-keyboard baseline after orientation changes and in isolated tests. */
+export function resetViewportBaseline(): void {
+  stableViewportHeight = 0;
+}
+
 export function syncViewport(): void {
   const viewport = window.visualViewport;
   const layoutHeight = Math.max(1, window.innerHeight);
-  const visualHeight = Math.max(1, viewport?.height ?? layoutHeight);
-  const keyboardOpen = Boolean(
-    viewport
-    && isEditable(document.activeElement)
-    && (viewport.scale ?? 1) <= 1.01
-    && layoutHeight - visualHeight > 80,
-  );
-  const appHeight = keyboardOpen ? visualHeight : layoutHeight;
+  const visibleHeight = visibleViewportHeight();
+  const editing = isEditable(document.activeElement) && (viewport?.scale ?? 1) <= 1.01;
+
+  // Capture the viewport before editing starts. On older iOS only visualViewport shrinks;
+  // in other browser/web-app modes both visualViewport and innerHeight shrink. Comparing the
+  // two current values therefore misses an entire class of keyboards. Comparing the current
+  // visible height with the stable pre-focus height handles both models.
+  if (!editing || stableViewportHeight === 0) stableViewportHeight = visibleHeight;
+  const keyboardOpen = editing && stableViewportHeight - visibleHeight > KEYBOARD_THRESHOLD;
+  const appHeight = keyboardOpen ? visibleHeight : layoutHeight;
 
   // Use exactly one keyboard compensation model. The shell maps to the visible
   // viewport height; adding the keyboard height as composer padding as well
@@ -34,9 +50,14 @@ export function installViewportSync(): () => void {
     frame = window.requestAnimationFrame(syncViewport);
   };
 
+  const onOrientationChange = () => {
+    resetViewportBaseline();
+    schedule();
+  };
+
   syncViewport();
   window.addEventListener('resize', schedule, { passive: true });
-  window.addEventListener('orientationchange', schedule, { passive: true });
+  window.addEventListener('orientationchange', onOrientationChange, { passive: true });
   window.addEventListener('pageshow', schedule, { passive: true });
   document.addEventListener('focusin', schedule, { passive: true });
   document.addEventListener('focusout', schedule, { passive: true });
@@ -45,7 +66,7 @@ export function installViewportSync(): () => void {
   return () => {
     window.cancelAnimationFrame(frame);
     window.removeEventListener('resize', schedule);
-    window.removeEventListener('orientationchange', schedule);
+    window.removeEventListener('orientationchange', onOrientationChange);
     window.removeEventListener('pageshow', schedule);
     document.removeEventListener('focusin', schedule);
     document.removeEventListener('focusout', schedule);
@@ -53,5 +74,6 @@ export function installViewportSync(): () => void {
     document.documentElement.style.removeProperty('--app-height');
     document.documentElement.style.removeProperty('--keyboard-inset');
     document.documentElement.removeAttribute('data-keyboard-open');
+    resetViewportBaseline();
   };
 }

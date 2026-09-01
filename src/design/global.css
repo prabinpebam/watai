@@ -1030,9 +1030,11 @@ a:hover {
   padding-bottom: max(var(--space-4), env(safe-area-inset-bottom, 0));
   background: linear-gradient(to top, var(--color-bg) 60%, transparent);
 }
-:root[data-keyboard-open] .composer-wrap {
+:root[data-keyboard-open] .composer-wrap,
+.chat:focus-within .composer-wrap {
   /* The keyboard owns the device's bottom safe area. Keep only product spacing
-     between the editor and keyboard edge. */
+     between the editor and keyboard edge. focus-within is the semantic fallback
+     when an iOS viewport mode makes keyboard geometry ambiguous. */
   padding-bottom: var(--space-4);
 }
 .composer {
@@ -1443,8 +1445,10 @@ a:hover {
 .chat--empty {
   justify-content: center;
 }
-:root[data-keyboard-open] .chat--empty {
-  /* Dock within the visual-height shell; no keyboard-height spacer exists. */
+:root[data-keyboard-open] .chat--empty,
+.chat--empty:focus-within {
+  /* Dock while editing even if the browser shrinks both viewport metrics and
+     keyboard detection is temporarily ambiguous. */
   justify-content: flex-end;
 }
 .chat--empty .chat__scroll {
