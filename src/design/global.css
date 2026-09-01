@@ -1150,7 +1150,10 @@ a:hover {
   resize: none;
   max-height: 200px;
   padding: var(--space-3) var(--space-2);
-  font-size: var(--text-body-lg-size);
+  /* iOS zooms the entire page when a focused editor computes below 16px.
+     Small text scale makes 1.0625rem equal 15.3px, so keep this control at
+     the platform-safe floor without preventing user pinch zoom. */
+  font-size: max(16px, var(--text-body-lg-size));
   line-height: var(--text-body-lg-lh);
 }
 .composer__textarea--highlighted {

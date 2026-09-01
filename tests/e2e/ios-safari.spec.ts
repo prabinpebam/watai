@@ -53,4 +53,18 @@ test.describe('iOS Safari reliability', () => {
     expect(metrics.keyboardInset).toBe('260px');
     expect(pageErrors).toEqual([]);
   });
+
+  test('keeps the composer editor above the iOS focus-zoom threshold', async ({ page }) => {
+    await page.goto('/#/dev/gallery');
+
+    const fontSize = await page.evaluate(() => {
+      document.documentElement.style.fontSize = '14.4px';
+      const textarea = document.createElement('textarea');
+      textarea.className = 'composer__textarea';
+      document.body.append(textarea);
+      return getComputedStyle(textarea).fontSize;
+    });
+
+    expect(fontSize).toBe('16px');
+  });
 });
