@@ -19,7 +19,11 @@ vi.mock('@azure/msal-browser', () => {
     loginRedirect = vi.fn();
     logoutRedirect = vi.fn();
   }
-  return { InteractionRequiredAuthError, PublicClientApplication };
+  return {
+    CacheLookupPolicy: { AccessTokenAndRefreshToken: 2 },
+    InteractionRequiredAuthError,
+    PublicClientApplication,
+  };
 });
 
 import { clearStaleAuthCacheOnce, getCloudToken, signIn } from './cloudAuth';
@@ -56,6 +60,9 @@ describe('getCloudToken', () => {
 
     expect(second).toBe(first);
     await vi.waitFor(() => expect(auth.acquireTokenSilent).toHaveBeenCalledTimes(1));
+    expect(auth.acquireTokenSilent).toHaveBeenCalledWith(expect.objectContaining({
+      cacheLookupPolicy: 2,
+    }));
 
     resolve({ accessToken: 'token' });
     await expect(first).resolves.toBe('token');

@@ -150,11 +150,10 @@ function emitAuthState(state: AuthState): void {
   }
 }
 
-/** Token provider for the API client. Silent-first; if the session can't be renewed silently
- *  (an expired refresh token, or — on static hosts like GitHub Pages — the browser blocking the
- *  third-party cookie the renewal iframe needs), recover with a top-level interactive redirect,
- *  which reaches the session and mints a fresh refresh token. Resolves to null only when truly
- *  signed out or already mid-recovery. */
+/** Token provider for the API client. Cache/refresh-token first; if the refresh token expires,
+ *  recover with a top-level interactive redirect. `AccessTokenAndRefreshToken` deliberately
+ *  disables MSAL's final prompt=none iframe fallback: it is unreliable when third-party cookies
+ *  are blocked and previously booted this SPA recursively at the redirect URI. */
 async function acquireCloudToken(): Promise<string | null> {
   const pca = await getPca();
   const account = activeAccount(pca);
@@ -168,7 +167,12 @@ async function acquireCloudToken(): Promise<string | null> {
     /* storage unavailable — try MSAL normally */
   }
   try {
-    const res = await pca.acquireTokenSilent({ account, scopes: [API_SCOPE] });
+    const { CacheLookupPolicy } = await import('@azure/msal-browser');
+    const res = await pca.acquireTokenSilent({
+      account,
+      scopes: [API_SCOPE],
+      cacheLookupPolicy: CacheLookupPolicy.AccessTokenAndRefreshToken,
+    });
     try {
       sessionStorage.removeItem(REAUTH_FLAG);
     } catch {
@@ -207,9 +211,8 @@ async function acquireCloudToken(): Promise<string | null> {
   }
 }
 
-/** De-duplicate callers at startup (setup gate, sync, realtime, settings). Without this, one
- *  expired session creates several concurrent prompt=none iframes, amplifying a single
- *  interaction-required response into repeated sandbox failures. */
+/** De-duplicate callers at startup (setup gate, sync, realtime, settings) so one expired
+ *  session produces one recovery decision rather than several competing auth operations. */
 export function getCloudToken(): Promise<string | null> {
   if (!tokenPromise) {
     tokenPromise = acquireCloudToken().finally(() => {
