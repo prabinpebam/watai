@@ -1,20 +1,131 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { syncViewport } from './viewport';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { installViewportSync, syncViewport } from './viewport';
 
 const originalVisualViewport = window.visualViewport;
 const originalInnerHeight = window.innerHeight;
+let uninstall: (() => void) | undefined;
 
 afterEach(() => {
   Object.defineProperty(window, 'visualViewport', {
     configurable: true,
     value: originalVisualViewport,
   });
+  uninstall?.();
+  uninstall = undefined;
+  vi.restoreAllMocks();
   Object.defineProperty(window, 'innerHeight', {
     configurable: true,
     value: originalInnerHeight,
   });
   document.documentElement.style.removeProperty('--app-height');
   document.body.replaceChildren();
+});
+
+function touch(target: Element, type: string, clientY: number, count = 1, clientX = 100): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'touches', {
+    value: Array.from({ length: count }, (_, identifier) => ({ identifier, clientX, clientY })),
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+describe('viewport touch containment', () => {
+  it('prevents dragging non-scrollable chrome from panning the document', () => {
+    uninstall = installViewportSync();
+    const header = document.createElement('header');
+    document.body.append(header);
+    touch(header, 'touchstart', 100);
+
+    expect(touch(header, 'touchmove', 50).defaultPrevented).toBe(true);
+  });
+
+  it('allows history scrolling but stops outward drags at either edge', () => {
+    uninstall = installViewportSync();
+    const scroller = document.createElement('div');
+    scroller.style.overflowY = 'auto';
+    Object.defineProperties(scroller, {
+      scrollHeight: { value: 1000 },
+      clientHeight: { value: 300 },
+    });
+    document.body.append(scroller);
+
+    touch(scroller, 'touchstart', 100);
+    expect(touch(scroller, 'touchmove', 150).defaultPrevented).toBe(true);
+    expect(touch(scroller, 'touchmove', 100).defaultPrevented).toBe(false);
+
+    scroller.scrollTop = 700;
+    touch(scroller, 'touchstart', 100);
+    expect(touch(scroller, 'touchmove', 50).defaultPrevented).toBe(true);
+    expect(touch(scroller, 'touchmove', 100).defaultPrevented).toBe(false);
+  });
+
+  it('does not block pinch zoom or panning a zoomed viewport', () => {
+    uninstall = installViewportSync();
+    touch(document.body, 'touchstart', 100, 2);
+    expect(touch(document.body, 'touchmove', 50, 2).defaultPrevented).toBe(false);
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: { height: 400, offsetTop: 0, scale: 2 },
+    });
+    touch(document.body, 'touchstart', 100);
+    expect(touch(document.body, 'touchmove', 50).defaultPrevented).toBe(false);
+  });
+
+  it('removes touch handlers on cleanup', () => {
+    installViewportSync()();
+    touch(document.body, 'touchstart', 100);
+    expect(touch(document.body, 'touchmove', 50).defaultPrevented).toBe(false);
+  });
+
+  it('keeps textarea selection handles and range sliders usable', () => {
+    uninstall = installViewportSync();
+    const textarea = document.createElement('textarea');
+    textarea.value = 'Select this text';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    document.body.append(textarea, slider);
+    textarea.focus();
+    textarea.setSelectionRange(0, 6);
+    touch(textarea, 'touchstart', 100);
+    expect(touch(textarea, 'touchmove', 50).defaultPrevented).toBe(false);
+    touch(slider, 'touchstart', 100);
+    expect(touch(slider, 'touchmove', 50).defaultPrevented).toBe(false);
+  });
+
+  it('contains an overflowing textarea before its outer scroller', () => {
+    uninstall = installViewportSync();
+    const outer = document.createElement('div');
+    const textarea = document.createElement('textarea');
+    for (const element of [outer, textarea]) {
+      element.style.overflowY = 'auto';
+      Object.defineProperties(element, {
+        scrollHeight: { value: 1000 }, clientHeight: { value: 300 },
+      });
+    }
+    outer.append(textarea);
+    document.body.append(outer);
+    outer.scrollTop = 300;
+    touch(textarea, 'touchstart', 100);
+    expect(touch(textarea, 'touchmove', 150).defaultPrevented).toBe(true);
+    textarea.scrollTop = 200;
+    touch(textarea, 'touchstart', 100);
+    expect(touch(textarea, 'touchmove', 50).defaultPrevented).toBe(false);
+  });
+
+  it('allows horizontal code scrolling without letting vertical drags escape', () => {
+    uninstall = installViewportSync();
+    const code = document.createElement('pre');
+    code.style.overflowX = 'auto';
+    Object.defineProperties(code, {
+      scrollWidth: { value: 1000 }, clientWidth: { value: 300 },
+    });
+    document.body.append(code);
+    touch(code, 'touchstart', 100);
+    expect(touch(code, 'touchmove', 100, 1, 50).defaultPrevented).toBe(false);
+    touch(code, 'touchstart', 100);
+    expect(touch(code, 'touchmove', 50).defaultPrevented).toBe(true);
+  });
 });
 
 describe('syncViewport', () => {

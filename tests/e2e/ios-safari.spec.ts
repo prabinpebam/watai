@@ -320,6 +320,34 @@ test.describe('iOS Safari reliability', () => {
     await expect.poll(distanceFromBottom).toBeLessThanOrEqual(1);
     await expect(page.getByText('Latest viewport reply')).toBeInViewport();
 
+    const gestures = await page.evaluate(() => {
+      const history = document.querySelector<HTMLElement>('.chat__scroll')!;
+      const content = history.querySelector<HTMLElement>('.chat__column')!;
+      const header = document.querySelector<HTMLElement>('.appbar')!;
+      const drag = (target: HTMLElement, direction: number) => {
+        const start = new Event('touchstart', { bubbles: true });
+        Object.defineProperty(start, 'touches', { value: [{ clientX: 100, clientY: 200 }] });
+        target.dispatchEvent(start);
+        const move = new Event('touchmove', { bubbles: true, cancelable: true });
+        Object.defineProperty(move, 'touches', { value: [{ clientX: 100, clientY: 200 + direction }] });
+        target.dispatchEvent(move);
+        target.dispatchEvent(new Event('touchend', { bubbles: true }));
+        return move.defaultPrevented;
+      };
+      const headerBlocked = drag(header, -50);
+      history.scrollTop = 0;
+      const topOutwardBlocked = drag(content, 50);
+      const topInwardAllowed = !drag(content, -50);
+      history.scrollTop = history.scrollHeight;
+      const bottomOutwardBlocked = drag(content, -50);
+      const bottomInwardAllowed = !drag(content, 50);
+      return { headerBlocked, topOutwardBlocked, topInwardAllowed, bottomOutwardBlocked, bottomInwardAllowed };
+    });
+    expect(gestures).toEqual({
+      headerBlocked: true, topOutwardBlocked: true, topInwardAllowed: true,
+      bottomOutwardBlocked: true, bottomInwardAllowed: true,
+    });
+
     await scroller.evaluate((element) => element.scrollTo(0, 250));
     await expect(page.getByRole('button', { name: 'Jump to latest' })).toBeVisible();
     await page.evaluate((height) => {
@@ -385,6 +413,26 @@ test.describe('iOS Safari reliability', () => {
     await expect.poll(() => page.locator('.composer').evaluate((element) => element.getAnimations().length)).toBe(0);
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeInViewport();
     await expect(header).toBeInViewport();
+    const textareaScroll = await editor.evaluate((element: HTMLTextAreaElement) => {
+      element.setSelectionRange(element.value.length, element.value.length);
+      element.scrollTop = 0;
+      const drag = (distance: number) => {
+        const start = new Event('touchstart', { bubbles: true });
+        Object.defineProperty(start, 'touches', { value: [{ clientX: 100, clientY: 200 }] });
+        element.dispatchEvent(start);
+        const move = new Event('touchmove', { bubbles: true, cancelable: true });
+        Object.defineProperty(move, 'touches', { value: [{ clientX: 100, clientY: 200 + distance }] });
+        element.dispatchEvent(move);
+        return move.defaultPrevented;
+      };
+      return {
+        overflow: element.scrollHeight > element.clientHeight,
+        containment: !CSS.supports('overscroll-behavior-y', 'contain')
+          || getComputedStyle(element).getPropertyValue('overscroll-behavior-y') === 'contain',
+        outwardBlocked: drag(50), inwardAllowed: !drag(-50),
+      };
+    });
+    expect(textareaScroll).toEqual({ overflow: true, containment: true, outwardBlocked: true, inwardAllowed: true });
     const geometry = await page.evaluate(() => {
       window.scrollTo(0, 500);
       const app = document.querySelector('.app')!;
@@ -420,4 +468,39 @@ test('desktop empty composer does not jump on focus', async ({ page }, testInfo)
   await expect(editor).toBeFocused();
   expect((await editor.boundingBox())!.y).toBeCloseTo(before!.y, 0);
   await testInfo.attach('desktop-empty-composer', { body: await page.screenshot(), contentType: 'image/png' });
+});
+
+test('native touch drags scroll history without moving the header', async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile', 'Chromium native touch input coverage');
+  await page.setViewportSize({ width: 390, height: 500 });
+  await page.goto('/#/dev/gallery');
+  const history = page.locator('.chat__scroll');
+  const header = page.locator('.appbar');
+  await expect(history).toBeVisible();
+  await expect(history).toHaveCSS('overscroll-behavior-y', 'contain');
+  const headerBefore = await header.boundingBox();
+  const client = await context.newCDPSession(page);
+  const drag = async (startY: number, endY: number) => {
+    await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 180, y: startY }] });
+    for (let step = 1; step <= 8; step += 1) {
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchMove', touchPoints: [{ x: 180, y: startY + (endY - startY) * step / 8 }],
+      });
+    }
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  };
+  await drag(390, 180);
+  await expect.poll(() => history.evaluate((element) => element.scrollTop)).toBeGreaterThan(50);
+  await history.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+  await drag(390, 180);
+  await expect(header).toBeInViewport();
+  expect((await header.boundingBox())!.y).toBe(headerBefore!.y);
+  await history.evaluate((element) => element.scrollTo(0, 0));
+  await drag(180, 390);
+  await expect.poll(() => history.evaluate((element) => element.scrollTop)).toBe(0);
+  await drag(25, 160);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect((await header.boundingBox())!.y).toBe(headerBefore!.y);
+  await testInfo.attach('native-touch-header', { body: await page.screenshot(), contentType: 'image/png' });
+  await client.detach();
 });

@@ -107,7 +107,9 @@ The frontend production build writes to `docs/`. Commit those generated files wh
 
 The document is a fixed, non-scrolling frame sized to `visualViewport.height`; message history owns its scrolling. Viewport sizing does not infer keyboard state from focus, height thresholds, or a cached baseline, and ignores pinch-zoom resizes and focus-driven viewport pans. The mobile composer stays bottom-docked even on an empty chat, and its editor does not animate between single-line and multiline layouts. History stays pinned through viewport resizes only when the reader was already at the bottom.
 
-Run `npx playwright test tests/e2e/ios-safari.spec.ts --project=mobile-webkit --project=desktop` for the layout regressions. These exercise real React chat components with simulated keyboard geometry; Playwright WebKit does not open the native iOS keyboard. Physical iPhone Safari remains the final device check.
+Fixed positioning and overflow clipping alone do not prevent Safari from scrolling the outer viewport with the keyboard open. Scroll regions have CSS overscroll containment before gestures begin, and a document-level non-passive touch handler cancels drags on non-scrollable chrome and outward drags at pane boundaries. Internal history, textarea and horizontal scrolling remain native; pinch zoom, selection handles and range sliders are preserved. This containment does not resize or reposition the shell.
+
+Run `npx playwright test tests/e2e/ios-safari.spec.ts --project=mobile-webkit --project=mobile --project=desktop` for the layout regressions. These exercise real React chat components with simulated keyboard geometry, cancelable WebKit touch events, and native Chromium touch drags; Playwright WebKit does not open the native iOS keyboard. Physical iPhone Safari remains the final device check.
 
 ## Deploy
 

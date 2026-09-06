@@ -1,3 +1,5 @@
+import { installScrollContainment } from './scrollContainment';
+
 export function syncViewport(): void {
   const viewport = window.visualViewport;
   if (viewport && viewport.scale !== 1) return;
@@ -6,6 +8,7 @@ export function syncViewport(): void {
 }
 
 export function installViewportSync(): () => void {
+  const removeScrollContainment = installScrollContainment();
   let frame = 0;
   const schedule = () => {
     window.cancelAnimationFrame(frame);
@@ -18,6 +21,7 @@ export function installViewportSync(): () => void {
   window.visualViewport?.addEventListener('resize', schedule, { passive: true });
 
   return () => {
+    removeScrollContainment();
     window.cancelAnimationFrame(frame);
     window.removeEventListener('resize', schedule);
     window.removeEventListener('pageshow', schedule);
