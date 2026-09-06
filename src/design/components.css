@@ -506,7 +506,7 @@
 /* ============================ Overlays ============================ */
 .scrim {
   position: fixed;
-  inset: 0;
+  inset: var(--viewport-top) 0 var(--viewport-bottom);
   background: var(--color-scrim);
   z-index: var(--z-modal-scrim);
   animation: fade-in var(--motion-base) var(--ease-standard);
@@ -520,7 +520,7 @@
 .modal {
   position: fixed;
   z-index: var(--z-modal);
-  inset: 0;
+  inset: var(--viewport-top) 0 var(--viewport-bottom);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -531,7 +531,7 @@
   pointer-events: auto;
   width: 100%;
   max-width: 480px;
-  max-height: 90vh;
+  max-height: 100%;
   overflow: auto;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
@@ -615,7 +615,7 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: var(--viewport-bottom);
   z-index: var(--z-sheet);
   background: var(--color-bg);
   border-top-left-radius: var(--radius-2xl);
@@ -623,7 +623,7 @@
   box-shadow: var(--elevation-3);
   padding: var(--space-3) var(--space-5) calc(var(--space-6) + env(safe-area-inset-bottom, 0));
   animation: slide-up var(--motion-slow) var(--ease-spring);
-  max-height: 85vh;
+  max-height: calc(var(--app-height) * 0.85);
   overflow: auto;
 }
 /* The sheet hosts the shared modal header/footer with no extra inline padding. */
@@ -684,7 +684,7 @@
 /* Drawer (compact history) */
 .drawer-scrim {
   position: fixed;
-  inset: 0;
+  inset: var(--viewport-top) 0 var(--viewport-bottom);
   background: var(--color-scrim);
   z-index: var(--z-drawer-scrim);
   animation: fade-in var(--motion-base);
@@ -700,8 +700,8 @@
 }
 .drawer {
   position: fixed;
-  top: 0;
-  bottom: 0;
+  top: var(--viewport-top);
+  bottom: var(--viewport-bottom);
   left: 0;
   width: min(86vw, 320px);
   z-index: var(--z-drawer);
@@ -721,7 +721,7 @@
 .toast-host {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--space-7) + env(safe-area-inset-bottom, 0));
+  bottom: calc(var(--viewport-bottom) + var(--space-7) + env(safe-area-inset-bottom, 0));
   transform: translateX(-50%);
   z-index: var(--z-toast);
   display: flex;
@@ -758,7 +758,7 @@
 /* ============================ Connection banner ============================ */
 .conn-banner {
   position: fixed;
-  top: 0;
+  top: var(--viewport-top);
   left: 0;
   right: 0;
   z-index: var(--z-toast);
@@ -1585,7 +1585,7 @@ button.source-chip:hover {
 }
 .source-pane--overlay {
   position: fixed;
-  inset: 0 0 0 auto;
+  inset: var(--viewport-top) 0 var(--viewport-bottom) auto;
   width: min(440px, 92vw);
   z-index: var(--z-sheet);
   box-shadow: var(--elevation-3);
@@ -2243,7 +2243,7 @@ button.source-chip:hover {
 /* ============================ Voice mode ============================ */
 .voice {
   position: fixed;
-  inset: 0;
+  inset: var(--viewport-top) 0 var(--viewport-bottom);
   z-index: var(--z-voice);
   background: var(--color-bg);
   display: flex;
@@ -2382,7 +2382,7 @@ button.source-chip:hover {
 }
 .viewer {
   position: fixed;
-  inset: 0;
+  inset: var(--viewport-top) 0 var(--viewport-bottom);
   z-index: var(--z-modal);
   background: rgba(0, 0, 0, 0.92);
   display: flex;
@@ -3021,7 +3021,7 @@ button.source-chip:hover {
 .dev-fab {
   position: fixed;
   right: var(--space-4);
-  bottom: var(--space-4);
+  bottom: calc(var(--viewport-bottom) + var(--space-4));
   z-index: var(--z-tooltip);
   width: 40px;
   height: 40px;

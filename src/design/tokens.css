@@ -186,6 +186,8 @@
   --blur-scrim: 2px;
 
   --app-height: 100dvh;
+  --viewport-top: 0px;
+  --viewport-bottom: calc(100% - var(--viewport-top) - var(--app-height));
 }
 
 :root[data-theme='dark'] {

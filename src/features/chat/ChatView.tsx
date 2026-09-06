@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from './useChat';
 import { Composer } from './Composer';
 import { AssistantMessage, UserMessage } from './Message';
@@ -25,9 +25,6 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   const lastTopRef = useRef(0); // previous scrollTop, to detect user-driven upward scrolls
   const roRef = useRef<ResizeObserver | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
-  const composerSlotRef = useRef<HTMLDivElement>(null);
-  const prevComposerTopRef = useRef<number | null>(null);
-  const wasEmptyRef = useRef(false);
   const [showJump, setShowJump] = useState(false);
   const [viewerImageId, setViewerImageId] = useState<string | null>(null);
 
@@ -40,28 +37,6 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
   // Stable identity matters: this list feeds the viewer's filmstrip, which must not rebuild on
   // every render of the thread.
   const threadImages = useMemo(() => messages.flatMap((message) => message.images ?? []), [messages]);
-
-  // On the empty state the composer sits centered with the greeting above and tips below.
-  // The first prompt turns the view into a thread, which docks the composer at the bottom —
-  // FLIP the slide so that jump reads as a smooth downward glide rather than a hard cut.
-  useLayoutEffect(() => {
-    const el = composerSlotRef.current;
-    if (!el) return;
-    const prevTop = prevComposerTopRef.current;
-    if (wasEmptyRef.current && !isEmpty && prevTop != null) {
-      const nowTop = el.getBoundingClientRect().top;
-      const dy = prevTop - nowTop;
-      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-      if (Math.abs(dy) > 1 && !reduce) {
-        el.animate(
-          [{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
-          { duration: 260, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
-        );
-      }
-    }
-    prevComposerTopRef.current = el.getBoundingClientRect().top;
-    wasEmptyRef.current = isEmpty;
-  });
 
   const STICK_THRESHOLD = 80; // px from the bottom that still counts as "at the bottom"
 
@@ -228,7 +203,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
           </span>
         </div>
       )}
-      <div className="composer-slot" ref={composerSlotRef}>
+      <div className="composer-slot">
         <Composer
           threadId={threadId}
           value={draft}

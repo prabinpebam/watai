@@ -4,16 +4,21 @@
 *::before,
 *::after {
   box-sizing: border-box;
-  overscroll-behavior: contain;
 }
 
 html,
-body,
-#root {
+body {
   height: 100%;
   width: 100%;
-  max-width: 100%;
   overflow: hidden;
+}
+
+#root {
+  position: fixed;
+  top: var(--viewport-top, 0px);
+  left: 0;
+  width: 100%;
+  height: var(--app-height);
   overflow: clip;
 }
 
@@ -33,9 +38,6 @@ html {
 }
 
 body {
-  position: fixed;
-  inset: 0;
-  height: var(--app-height);
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--text-body-size);
@@ -109,7 +111,7 @@ a:hover {
 
 .app {
   display: flex;
-  height: var(--app-height);
+  height: 100%;
   min-height: 0;
   width: 100%;
   max-width: 100vw;
@@ -1442,9 +1444,6 @@ a:hover {
 }
 
 /* ---- Empty state ---- */
-/* Greeting + composer centered as a single group on a fresh thread. The composer stays
-   mounted in one place (`.composer-slot`); `.chat--empty` just changes the flex alignment so
-   the group sits in the middle, and ChatView FLIP-slides it to the bottom on the first prompt. */
 .chat--empty {
   justify-content: center;
 }

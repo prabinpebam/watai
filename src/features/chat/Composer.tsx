@@ -176,9 +176,10 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
     }
   }, [value, multiline]);
 
-  // Focus the input when a new/empty chat is opened, so the user can start typing immediately.
   useEffect(() => {
-    if (autoFocus) taRef.current?.focus();
+    if (autoFocus && !window.matchMedia('(pointer: coarse)').matches) {
+      taRef.current?.focus({ preventScroll: true });
+    }
   }, [autoFocus]);
 
   useEffect(() => {
