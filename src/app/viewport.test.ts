@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { resetViewportBaseline, syncViewport } from './viewport';
+import { syncViewport } from './viewport';
 
 const originalVisualViewport = window.visualViewport;
 const originalInnerHeight = window.innerHeight;
@@ -13,9 +13,7 @@ afterEach(() => {
     configurable: true,
     value: originalInnerHeight,
   });
-  resetViewportBaseline();
   document.documentElement.style.removeProperty('--app-height');
-  document.documentElement.removeAttribute('data-keyboard-open');
   document.body.replaceChildren();
 });
 
@@ -33,10 +31,9 @@ describe('syncViewport', () => {
     syncViewport();
 
     expect(document.documentElement.style.getPropertyValue('--app-height')).toBe(`${window.innerHeight - 260}px`);
-    expect(document.documentElement.hasAttribute('data-keyboard-open')).toBe(true);
   });
 
-  it('detects a keyboard when both layout and visual viewports shrink', () => {
+  it('sizes the shell when both layout and visual viewports shrink', () => {
     syncViewport();
     const keyboardHeight = 260;
     Object.defineProperty(window, 'innerHeight', {
@@ -54,7 +51,6 @@ describe('syncViewport', () => {
     syncViewport();
 
     expect(document.documentElement.style.getPropertyValue('--app-height')).toBe(`${originalInnerHeight - keyboardHeight}px`);
-    expect(document.documentElement.hasAttribute('data-keyboard-open')).toBe(true);
   });
 
   it('ignores Safari focus panning so the editor does not chase the viewport', () => {
@@ -74,7 +70,7 @@ describe('syncViewport', () => {
     expect(document.documentElement.style.getPropertyValue('--keyboard-inset')).toBe('');
   });
 
-  it('does not treat browser chrome as a keyboard without a focused editor', () => {
+  it('uses the visible viewport even without a focused editor', () => {
     syncViewport();
     Object.defineProperty(window, 'visualViewport', {
       configurable: true,
@@ -83,7 +79,43 @@ describe('syncViewport', () => {
 
     syncViewport();
 
+    expect(document.documentElement.style.getPropertyValue('--app-height')).toBe(`${window.innerHeight - 120}px`);
+  });
+
+  it('does not expand the shell on blur before the keyboard has closed', () => {
+    syncViewport();
+    const textarea = document.createElement('textarea');
+    document.body.append(textarea);
+    textarea.focus();
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: { height: window.innerHeight - 260, offsetTop: 0, scale: 1 },
+    });
+    syncViewport();
+
+    textarea.blur();
+    syncViewport();
+
+    expect(document.documentElement.style.getPropertyValue('--app-height')).toBe(`${window.innerHeight - 260}px`);
+  });
+
+  it('does not reflow the shell during pinch zoom', () => {
+    syncViewport();
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: { height: window.innerHeight / 2, offsetTop: 96, scale: 2 },
+    });
+
+    syncViewport();
+
     expect(document.documentElement.style.getPropertyValue('--app-height')).toBe(`${window.innerHeight}px`);
-    expect(document.documentElement.hasAttribute('data-keyboard-open')).toBe(false);
+  });
+
+  it('falls back to the window height without VisualViewport', () => {
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: undefined });
+
+    syncViewport();
+
+    expect(document.documentElement.style.getPropertyValue('--app-height')).toBe(`${window.innerHeight}px`);
   });
 });

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ChatView } from '../features/chat/ChatView';
 import { UserMessage, AssistantMessage } from '../features/chat/Message';
 import { IconButton } from '../design/ui';
 import type { Attachment, ImageRef, Message } from '../lib/types';
@@ -219,8 +220,9 @@ const SECTIONS: Section[] = [
 
 export default function ChatGallery() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div className="app"><main className="app__main">
       <div className="appbar">
         <IconButton name="close" label="Back to app" onClick={() => navigate('/')} />
         <div className="appbar__title">
@@ -244,7 +246,7 @@ export default function ChatGallery() {
         <div style={{ width: 40 }} />
       </div>
 
-      <div className="chat__scroll">
+      {params.has('chat') ? <ChatView threadId="viewport-eval" /> : <div className="chat__scroll">
         {SECTIONS.map((s) => (
           <div className="chat__column" key={s.id}>
             <div
@@ -265,7 +267,7 @@ export default function ChatGallery() {
           </div>
         ))}
         <div style={{ height: 64 }} />
-      </div>
-    </div>
+      </div>}
+    </main></div>
   );
 }

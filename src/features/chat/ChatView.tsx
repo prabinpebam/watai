@@ -98,6 +98,7 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
       });
     });
     ro.observe(node);
+    if (scrollRef.current) ro.observe(scrollRef.current);
     roRef.current = ro;
   }, []);
 

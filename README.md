@@ -103,6 +103,12 @@ Set-Location ..
 
 The frontend production build writes to `docs/`. Commit those generated files when deploying the frontend through GitHub Pages.
 
+### Mobile Layout
+
+The document is a fixed, non-scrolling frame sized to `visualViewport.height`; message history owns its scrolling. Viewport sizing does not infer keyboard state from focus, height thresholds, or a cached baseline, and ignores pinch-zoom resizes and focus-driven viewport pans. The mobile composer stays bottom-docked even on an empty chat, and its editor does not animate between single-line and multiline layouts. History stays pinned through viewport resizes only when the reader was already at the bottom.
+
+Run `npx playwright test tests/e2e/ios-safari.spec.ts --project=mobile-webkit --project=desktop` for the layout regressions. These exercise real React chat components with simulated keyboard geometry; Playwright WebKit does not open the native iOS keyboard. Physical iPhone Safari remains the final device check.
+
 ## Deploy
 
 Push `master` to publish the GitHub Pages frontend from `docs/`.

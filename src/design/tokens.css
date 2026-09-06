@@ -185,8 +185,6 @@
   --blur-appbar: 8px;
   --blur-scrim: 2px;
 
-      /* Live viewport height. viewport.ts maps this to iOS Safari's visible height
-        while the keyboard is open, without following focus-driven viewport pans. */
   --app-height: 100dvh;
 }
 

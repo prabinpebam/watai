@@ -7,8 +7,11 @@ test.describe('iOS Safari reliability', () => {
     await page.addInitScript(() => {
       const resizeHandlers = new Set<EventListener>();
       const scrollHandlers = new Set<EventListener>();
+      const nativeViewport = window.visualViewport;
+      let simulatedHeight: number | undefined;
       const viewport = {
-        height: window.innerHeight,
+        get height() { return simulatedHeight ?? nativeViewport?.height ?? window.innerHeight; },
+        set height(value: number) { simulatedHeight = value; },
         offsetTop: 0,
         scale: 1,
         addEventListener: (type: string, handler: EventListener) => {
@@ -68,14 +71,12 @@ test.describe('iOS Safari reliability', () => {
       return {
         appHeight: document.documentElement.style.getPropertyValue('--app-height'),
         appTop: document.documentElement.style.getPropertyValue('--app-top'),
-        keyboardOpen: document.documentElement.hasAttribute('data-keyboard-open'),
         innerHeight: window.innerHeight,
       };
     });
 
     expect(metrics.appHeight).toBe(`${metrics.innerHeight - 260}px`);
-  expect(metrics.appTop).toBe('');
-    expect(metrics.keyboardOpen).toBe(true);
+    expect(metrics.appTop).toBe('');
     expect(pageErrors).toEqual([]);
   });
 
@@ -149,20 +150,13 @@ test.describe('iOS Safari reliability', () => {
       (window as typeof window & { __setTestViewports(height: number): void })
         .__setTestViewports(fullHeight - 260);
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const keyboardOpen = document.documentElement.hasAttribute('data-keyboard-open');
-      // The CSS focus trigger is intentional defense in depth: layout must remain correct even
-      // when a browser's viewport metrics make inferred keyboard state transiently ambiguous.
-      document.documentElement.removeAttribute('data-keyboard-open');
-      await new Promise((resolve) => requestAnimationFrame(resolve));
       const rect = textarea.getBoundingClientRect();
       return {
-        keyboardOpen,
         bottom: rect.bottom,
         visibleBottom: window.innerHeight,
       };
     });
 
-    expect(geometry.keyboardOpen).toBe(true);
     expect(geometry.bottom).toBeLessThanOrEqual(geometry.visibleBottom);
     expect(geometry.visibleBottom - geometry.bottom).toBeLessThanOrEqual(24);
   });
@@ -291,4 +285,139 @@ test.describe('iOS Safari reliability', () => {
 
     expect(fontSize).toBe('16px');
   });
+
+  test('real message history follows viewport resizing only while pinned to latest', async ({ page }) => {
+    await page.goto('/#/dev/gallery');
+    await expect(page.getByText('Chat components DEV')).toBeVisible();
+    await page.evaluate(async () => {
+      const modulePath = '/src/data/local/localRepository.ts';
+      const { LocalRepository } = await import(modulePath);
+      const local = new LocalRepository();
+      await local.createThread({ id: 'viewport-eval' });
+      for (let index = 0; index < 20; index += 1) {
+        await local.appendMessage({
+          id: `viewport-message-${index}`,
+          threadId: 'viewport-eval',
+          role: 'assistant',
+          content: index === 19 ? 'Latest viewport reply' : `Reply ${index}. ${'A message with enough text to exercise the history scroller. '.repeat(4)}`,
+          status: 'complete',
+          createdAt: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+        });
+      }
+    });
+    await page.goto('/#/dev/gallery?chat');
+    const scroller = page.locator('.chat__scroll');
+    const distanceFromBottom = () => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop);
+    await expect(page.getByText('Latest viewport reply')).toBeVisible();
+    await expect.poll(distanceFromBottom).toBeLessThanOrEqual(1);
+    const fullHeight = await page.evaluate(() => window.innerHeight);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).tap();
+    await page.evaluate((height) => {
+      (window as typeof window & { __setTestVisualViewport(height: number): void })
+        .__setTestVisualViewport(height);
+    }, fullHeight - 300);
+    await expect.poll(() => page.locator('.app').evaluate((element) => element.clientHeight)).toBe(fullHeight - 300);
+    await expect.poll(distanceFromBottom).toBeLessThanOrEqual(1);
+    await expect(page.getByText('Latest viewport reply')).toBeInViewport();
+
+    await scroller.evaluate((element) => element.scrollTo(0, 250));
+    await expect(page.getByRole('button', { name: 'Jump to latest' })).toBeVisible();
+    await page.evaluate((height) => {
+      (window as typeof window & { __setTestVisualViewport(height: number): void })
+        .__setTestVisualViewport(height);
+    }, fullHeight);
+    await expect.poll(() => page.locator('.app').evaluate((element) => element.clientHeight)).toBe(fullHeight);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(250);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
+  test('real composer stays docked through focus, typing, blur, and keyboard dismissal', async ({ page }, testInfo) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto('/#/dev/gallery?chat');
+    const editor = page.getByRole('textbox', { name: 'Message', exact: true });
+    const header = page.getByRole('button', { name: 'Back to app' });
+    await expect(page.locator('.chat--empty')).toBeVisible();
+    await expect(editor).toBeVisible();
+    const fullHeight = await page.evaluate(() => window.innerHeight);
+
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      await editor.evaluate((element) => element.blur());
+      const beforeFocus = await editor.boundingBox();
+      await editor.tap();
+      await expect(editor).toBeFocused();
+      const afterFocus = await editor.boundingBox();
+      expect(afterFocus!.y).toBeCloseTo(beforeFocus!.y, 0);
+
+      await page.evaluate((height) => {
+        (window as typeof window & { __setTestVisualViewport(height: number): void })
+          .__setTestVisualViewport(height);
+      }, fullHeight - 300);
+      await expect.poll(() => page.locator('.app').evaluate((element) => element.clientHeight)).toBe(fullHeight - 300);
+      await editor.pressSequentially(`Keyboard cycle ${cycle}. `);
+      await expect(editor).toBeFocused();
+      await expect(editor).toHaveValue(new RegExp(`Keyboard cycle ${cycle}`));
+      await expect.poll(() => editor.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) === element;
+      })).toBe(true);
+
+      const whileOpen = await editor.boundingBox();
+      await editor.evaluate((element) => element.blur());
+      await expect.poll(() => page.locator('.app').evaluate((element) => element.clientHeight)).toBe(fullHeight - 300);
+      expect((await editor.boundingBox())!.y).toBeCloseTo(whileOpen!.y, 0);
+      await editor.tap();
+      await page.evaluate((height) => {
+        (window as typeof window & { __setTestVisualViewport(height: number): void })
+          .__setTestVisualViewport(height);
+      }, fullHeight);
+      await expect.poll(() => page.locator('.app').evaluate((element) => element.clientHeight)).toBe(fullHeight);
+      await expect(editor).toBeFocused();
+      await expect(header).toBeInViewport();
+    }
+
+    await page.evaluate((height) => {
+      (window as typeof window & { __setTestVisualViewport(height: number): void })
+        .__setTestVisualViewport(height);
+    }, fullHeight - 300);
+    await editor.fill('A multiline prompt with enough content to fill the editor. '.repeat(20));
+    await expect(page.locator('.composer--multiline')).toBeVisible();
+    await expect.poll(() => page.locator('.composer').evaluate((element) => element.getAnimations().length)).toBe(0);
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeInViewport();
+    await expect(header).toBeInViewport();
+    const geometry = await page.evaluate(() => {
+      window.scrollTo(0, 500);
+      const app = document.querySelector('.app')!;
+      const composer = document.querySelector('.composer')!;
+      return {
+        windowScroll: window.scrollY,
+        bodyScroll: document.body.scrollTop,
+        rootScroll: document.querySelector('#root')!.scrollTop,
+        appTop: app.getBoundingClientRect().top,
+        composerBottom: composer.getBoundingClientRect().bottom,
+        visibleBottom: window.visualViewport!.height,
+      };
+    });
+    expect(geometry.windowScroll).toBe(0);
+    expect(geometry.bodyScroll).toBe(0);
+    expect(geometry.rootScroll).toBe(0);
+    expect(geometry.appTop).toBe(0);
+    expect(geometry.composerBottom).toBeLessThanOrEqual(geometry.visibleBottom);
+    expect(errors).toEqual([]);
+    await testInfo.attach('real-composer-keyboard', { body: await page.screenshot(), contentType: 'image/png' });
+  });
+});
+
+test('desktop empty composer does not jump on focus', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'Desktop focus regression');
+  await page.goto('/#/dev/gallery?chat');
+  await expect(page.locator('.chat--empty')).toBeVisible();
+  const editor = page.getByRole('textbox', { name: 'Message', exact: true });
+  await editor.evaluate((element) => element.blur());
+  const before = await editor.boundingBox();
+  await editor.click();
+  await editor.pressSequentially('Desktop focus');
+  await expect(editor).toBeFocused();
+  expect((await editor.boundingBox())!.y).toBeCloseTo(before!.y, 0);
+  await testInfo.attach('desktop-empty-composer', { body: await page.screenshot(), contentType: 'image/png' });
 });
