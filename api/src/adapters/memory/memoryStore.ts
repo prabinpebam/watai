@@ -68,6 +68,13 @@ export class InMemoryMemoryStore implements MemoryStore {
     return record;
   }
 
+  async putIfRevision(record: MemoryRecord, expectedRevision: number): Promise<MemoryRecord | null> {
+    const current = this.memories.get(key(record.userId, record.id));
+    if (!current || (current.revision ?? 1) !== expectedRevision) return null;
+    await this.put(record);
+    return record;
+  }
+
   async exclude(record: MemoryRecord, exclusion: MemoryExclusion): Promise<void> {
     this.memories.set(key(record.userId, record.id), { ...record, sourceRefs: record.sourceRefs.map((ref) => ({ ...ref })) });
     this.exclusions.set(key(exclusion.userId, exclusion.id), { ...exclusion, sourceKeys: [...exclusion.sourceKeys] });

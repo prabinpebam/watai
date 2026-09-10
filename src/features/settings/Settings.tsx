@@ -836,34 +836,11 @@ function memoryStateLabel(item: MemoryRecord): string {
   return 'Legacy unknown';
 }
 
-const MEMORY_KIND_VALUES = new Set<MemoryKind>(['fact', 'preference', 'instruction', 'work_style', 'project_context', 'thread_summary', 'avoidance', 'entity', 'procedure']);
-const MEMORY_STATUS_VALUES = new Set<string>(['active', 'suppressed', 'invalidated']);
-const MEMORY_VISIBILITY_VALUES = new Set<string>(['normal', 'top_of_mind', 'background']);
-
-/** Serialize memories to the editable raw-JSON shape (only fields the API can round-trip). */
-function memoryToEditableJson(items: MemoryRecord[]): string {
-  return JSON.stringify(
-    items.map((i) => ({ id: i.id, kind: i.kind, text: i.text, status: i.status, visibility: i.visibility, pinned: i.pinned, salience: Number(i.salience.toFixed(2)) })),
-    null,
-    2,
-  );
-}
-
-/** Lenient JSON parse for the manual editor: strips code fences and trailing commas before parsing. */
-function lenientJsonParse(raw: string): unknown {
-  const cleaned = raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    return JSON.parse(cleaned.replace(/,(\s*[}\]])/g, '$1'));
-  }
-}
-
 export function MemoryManager({ enabled }: { enabled: boolean }) {
   const pushToast = useUi((s) => s.pushToast);
   const [items, setItems] = useState<MemoryRecord[]>([]);
   const [profile, setProfile] = useState<MemoryProfileView | null>(null);
-  const [view, setView] = useState<'structured' | 'evidence' | 'json'>('structured');
+  const [view, setView] = useState<'structured' | 'evidence'>('structured');
   const [status, setStatus] = useState<Extract<MemoryStatus, 'active' | 'suppressed' | 'invalidated' | 'deleted'>>('active');
   const [text, setText] = useState('');
   const [kind, setKind] = useState<Exclude<MemoryKind, 'thread_summary' | 'entity'>>('fact');
@@ -873,9 +850,6 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [editKind, setEditKind] = useState<Exclude<MemoryKind, 'thread_summary' | 'entity'>>('fact');
-  const [jsonText, setJsonText] = useState('');
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const [jsonSaving, setJsonSaving] = useState(false);
   const [activeById, setActiveById] = useState<Map<string, MemoryRecord>>(new Map());
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; text: string } | null>(null);
@@ -931,9 +905,12 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
     }
   };
 
-  const patch = async (id: string, update: Parameters<typeof repo.updateMemory>[1], label: string) => {
+  type MemoryEditPatch = Omit<Parameters<typeof repo.updateMemory>[1], 'expectedRevision'>;
+  const patch = async (id: string, update: MemoryEditPatch, label: string) => {
     try {
-      await repo.updateMemory(id, update);
+      const current = items.find((item) => item.id === id) ?? activeById.get(id);
+      if (!current?.revision) throw new Error('This legacy memory has no safe revision and cannot be edited.');
+      await repo.updateMemory(id, { ...update, expectedRevision: current.revision });
       await load();
       pushToast(label, 'success');
     } catch (e) {
@@ -974,93 +951,6 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
     if (!value) return;
     await patch(id, { text: value, kind: editKind }, 'Memory updated');
     setEditingId(null);
-  };
-
-  useEffect(() => {
-    if (view === 'json') {
-      setJsonText(memoryToEditableJson(items.filter((i) => !removedIds.has(i.id))));
-      setJsonError(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
-
-  const formatJson = () => {
-    try {
-      setJsonText(JSON.stringify(lenientJsonParse(jsonText), null, 2));
-      setJsonError(null);
-    } catch (e) {
-      setJsonError(e instanceof Error ? e.message : 'Invalid JSON.');
-    }
-  };
-
-  const saveJson = async () => {
-    let parsed: unknown;
-    try {
-      parsed = lenientJsonParse(jsonText);
-    } catch (e) {
-      setJsonError(`Could not parse JSON: ${e instanceof Error ? e.message : 'invalid'}`);
-      return;
-    }
-    if (!Array.isArray(parsed)) {
-      setJsonError('The top level must be a JSON array of memory objects.');
-      return;
-    }
-    const edited: Array<{ id?: string; kind: MemoryKind; text: string; status?: MemoryStatus; visibility?: MemoryRecord['visibility']; pinned?: boolean; salience?: number }> = [];
-    for (let i = 0; i < parsed.length; i++) {
-      const r = parsed[i] as Record<string, unknown>;
-      if (!r || typeof r !== 'object') { setJsonError(`Item ${i + 1} is not an object.`); return; }
-      const value = typeof r.text === 'string' ? r.text.trim() : '';
-      if (!value) { setJsonError(`Item ${i + 1} is missing a non-empty "text".`); return; }
-      const itemKind = (typeof r.kind === 'string' ? r.kind : 'fact') as MemoryKind;
-      if (!MEMORY_KIND_VALUES.has(itemKind)) { setJsonError(`Item ${i + 1} has an invalid "kind": ${String(r.kind)}.`); return; }
-      const itemStatus = r.status as MemoryStatus | undefined;
-      if (itemStatus && !MEMORY_STATUS_VALUES.has(itemStatus)) { setJsonError(`Item ${i + 1} has an invalid "status": ${String(r.status)}.`); return; }
-      const itemVisibility = r.visibility as MemoryRecord['visibility'] | undefined;
-      if (itemVisibility && !MEMORY_VISIBILITY_VALUES.has(itemVisibility)) { setJsonError(`Item ${i + 1} has an invalid "visibility": ${String(r.visibility)}.`); return; }
-      edited.push({
-        id: typeof r.id === 'string' && r.id ? r.id : undefined,
-        kind: itemKind,
-        text: value,
-        status: itemStatus,
-        visibility: itemVisibility,
-        pinned: typeof r.pinned === 'boolean' ? r.pinned : undefined,
-        salience: typeof r.salience === 'number' ? Math.max(0, Math.min(1, r.salience)) : undefined,
-      });
-    }
-    const currentById = new Map(items.map((i) => [i.id, i]));
-    const editedIds = new Set(edited.filter((e) => e.id).map((e) => e.id as string));
-    const toDelete = items.filter((i) => !editedIds.has(i.id));
-    if (toDelete.length && !window.confirm(`Saving will delete ${toDelete.length} item(s) removed from the JSON. Continue?`)) return;
-    setJsonSaving(true);
-    setJsonError(null);
-    try {
-      let created = 0;
-      let updated = 0;
-      let deleted = 0;
-      for (const e of edited) {
-        const current = e.id ? currentById.get(e.id) : undefined;
-        if (current) {
-          const update: Parameters<typeof repo.updateMemory>[1] = {};
-          if (e.text !== current.text) update.text = e.text;
-          if (e.kind !== current.kind) update.kind = e.kind;
-          if (e.status && e.status !== current.status) update.status = e.status as Parameters<typeof repo.updateMemory>[1]['status'];
-          if (e.visibility && e.visibility !== current.visibility) update.visibility = e.visibility;
-          if (e.pinned !== undefined && e.pinned !== current.pinned) update.pinned = e.pinned;
-          if (e.salience !== undefined && Math.abs(e.salience - current.salience) > 1e-6) update.salience = e.salience;
-          if (Object.keys(update).length) { await repo.updateMemory(current.id, update); updated++; }
-        } else {
-          await repo.addMemory({ text: e.text, kind: e.kind as Parameters<typeof repo.addMemory>[0]['kind'], visibility: e.visibility, pinned: e.pinned });
-          created++;
-        }
-      }
-      for (const d of toDelete) { await repo.removeMemory(d.id); deleted++; }
-      pushToast(`Saved: ${created} created · ${updated} updated · ${deleted} deleted`, 'success');
-      await load();
-    } catch (e) {
-      pushToast(e instanceof Error ? e.message : 'Could not save JSON changes.', 'error');
-    } finally {
-      setJsonSaving(false);
-    }
   };
 
   const visibleItems = items.filter((i) => !removedIds.has(i.id));
@@ -1109,7 +999,6 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
           options={[
             { value: 'structured', label: 'Structured' },
             { value: 'evidence', label: 'Evidence' },
-            { value: 'json', label: 'Raw JSON' },
           ]}
           onChange={setView}
         />
@@ -1142,25 +1031,6 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
             <div className="setting-row"><Spinner size="sm" /><div className="setting-row__body"><div className="setting-row__sub">Loading memory…</div></div></div>
           ) : error ? (
             <InlineAlert tone="danger">{error}</InlineAlert>
-          ) : view === 'json' ? (
-            <div className="col" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
-              <div className="setting-row__sub">
-                Editing {visibleItems.length} {status === 'active' ? 'active' : status} item(s) as raw JSON. Editable fields: <code>text</code>, <code>kind</code>, <code>status</code>, <code>visibility</code>, <code>pinned</code>, <code>salience</code>. Remove an object to delete it; omit <code>id</code> to create a new one. Basic formatting (code fences, trailing commas) is corrected on save.
-              </div>
-              <textarea
-                className="memory-json-editor"
-                spellCheck={false}
-                rows={18}
-                value={jsonText}
-                onChange={(e) => { setJsonText(e.target.value); setJsonError(null); }}
-              />
-              {jsonError && <InlineAlert tone="danger">{jsonError}</InlineAlert>}
-              <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                <Button variant="primary" loading={jsonSaving} onClick={saveJson}>Save JSON</Button>
-                <Button variant="outline" onClick={formatJson}>Format</Button>
-                <Button variant="outline" onClick={() => { setJsonText(memoryToEditableJson(visibleItems)); setJsonError(null); }}>Reset</Button>
-              </div>
-            </div>
           ) : visibleItems.length === 0 ? (
             <div className="setting-row"><div className="setting-row__body"><div className="setting-row__title">No {status === 'active' ? 'active' : status} memories</div><div className="setting-row__sub">Items you add here appear in this list.</div></div></div>
           ) : (

@@ -67,6 +67,19 @@ export class CosmosMemoryStore implements MemoryStore {
     return record;
   }
 
+  async putIfRevision(record: MemoryRecord, expectedRevision: number): Promise<MemoryRecord | null> {
+    const item = this.container.item(record.id, record.userId);
+    try {
+      const { resource } = await item.read<MemoryRecord & { _etag?: string }>();
+      if (!resource || (resource.revision ?? 1) !== expectedRevision || !resource._etag) return null;
+      const { resource: replaced } = await item.replace(record, { accessCondition: { type: 'IfMatch', condition: resource._etag } });
+      return replaced ? strip(replaced as MemoryRecord) : record;
+    } catch (error) {
+      if ([404, 409, 412].includes((error as { code?: number }).code ?? 0)) return null;
+      throw error;
+    }
+  }
+
   async exclude(record: MemoryRecord, exclusion: MemoryExclusion): Promise<void> {
     const exclusionDocument = { ...exclusion, recordType: 'memory-exclusion' };
     const operations = [record, exclusionDocument]

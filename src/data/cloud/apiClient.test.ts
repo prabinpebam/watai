@@ -296,7 +296,7 @@ describe('WataiApiClient', () => {
 
     await expect(client.listMemory({ q: 'short plans', limit: 10 })).resolves.toEqual({ memories: [memory], cursor: 'next' });
     await client.createMemory({ text: 'User prefers short plans.', kind: 'preference' });
-    await client.patchMemory('mem_1', { status: 'suppressed' });
+    await client.patchMemory('mem_1', { expectedRevision: 1, status: 'suppressed' });
     await client.deleteMemory('mem_1');
 
     expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
@@ -306,7 +306,7 @@ describe('WataiApiClient', () => {
       'DELETE https://api.test/api/memory/mem_1',
     ]);
     expect(calls[1].body).toEqual({ text: 'User prefers short plans.', kind: 'preference' });
-    expect(calls[2].body).toEqual({ status: 'suppressed' });
+    expect(calls[2].body).toEqual({ expectedRevision: 1, status: 'suppressed' });
   });
 
   it('GETs the structured memory profile', async () => {

@@ -27,7 +27,7 @@ describe('memoryController', () => {
     expect(listed.status).toBe(200);
     expect((listed.body as any).memories).toHaveLength(1);
 
-    const patched = await ctrl.patch({ claims: { sub: 'userA' }, params: { memoryId: id }, body: { status: 'suppressed' } });
+    const patched = await ctrl.patch({ claims: { sub: 'userA' }, params: { memoryId: id }, body: { expectedRevision: 1, status: 'suppressed' } });
     expect(patched.status).toBe(200);
     expect((patched.body as any).status).toBe('suppressed');
 
@@ -43,7 +43,7 @@ describe('memoryController', () => {
     expect((invalid.body as any).error.code).toBe('validation');
 
     const created = await ctrl.create({ claims: { sub: 'userA' }, body: { text: 'Only mine.' } });
-    const hidden = await ctrl.patch({ claims: { sub: 'userB' }, params: { memoryId: (created.body as any).id }, body: { pinned: true } });
+    const hidden = await ctrl.patch({ claims: { sub: 'userB' }, params: { memoryId: (created.body as any).id }, body: { expectedRevision: 1, pinned: true } });
     expect(hidden.status).toBe(404);
   });
 

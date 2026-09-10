@@ -99,7 +99,7 @@ describe('MemoryService', () => {
     const { service } = makeService();
     const active = await service.createManual('userA', { text: 'Keep this.' });
     const hidden = await service.createManual('userA', { text: 'Hide this.' });
-    await service.patch('userA', hidden.id, { status: 'suppressed' });
+    await service.patch('userA', hidden.id, { expectedRevision: 1, status: 'suppressed' });
     await service.delete('userA', active.id);
 
     expect((await service.list('userA', {})).memories).toHaveLength(0);
@@ -124,11 +124,21 @@ describe('MemoryService', () => {
   it('invalidates with invalidAt and rejects patching deleted memories', async () => {
     const { service } = makeService();
     const record = await service.createManual('userA', { text: 'Old fact.' });
-    const invalidated = await service.patch('userA', record.id, { status: 'invalidated' });
+    const invalidated = await service.patch('userA', record.id, { expectedRevision: 1, status: 'invalidated' });
     expect(invalidated.invalidAt).toBe('2026-01-01T00:00:01Z');
 
     await service.delete('userA', record.id);
-    expect(await code(() => service.patch('userA', record.id, { text: 'New text.' }))).toBe('conflict');
+    expect(await code(() => service.patch('userA', record.id, { expectedRevision: 2, text: 'New text.' }))).toBe('conflict');
+  });
+
+  it('rejects stale edits and preserves the newer approved correction', async () => {
+    const { service } = makeService();
+    const record = await service.createManual('userA', { text: 'Original' });
+    const corrected = await service.patch('userA', record.id, { expectedRevision: 1, text: 'Corrected' });
+    expect(corrected.revision).toBe(2);
+    await expect(service.patch('userA', record.id, { expectedRevision: 1, text: 'Stale overwrite' }))
+      .rejects.toMatchObject({ code: 'conflict' });
+    await expect(service.list('userA', {})).resolves.toMatchObject({ memories: [{ text: 'Corrected', revision: 2 }] });
   });
 
   it('stores and replaces the user summary', async () => {

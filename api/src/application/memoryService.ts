@@ -105,6 +105,7 @@ export class MemoryService {
     const current = await this.store.get(userId, memoryId);
     if (!current) throw new AppError('not_found', 'Memory not found.');
     if (current.status === 'deleted') throw new AppError('conflict', 'Deleted memory cannot be changed.');
+    if ((current.revision ?? 1) !== patch.expectedRevision) throw new AppError('conflict', 'Memory changed. Reload before saving.');
     const ts = this.clock.now();
     const nextText = patch.text?.trim();
     const nextKind = patch.kind ?? current.kind;
@@ -123,7 +124,9 @@ export class MemoryService {
       revision: (current.revision ?? 0) + 1,
       updatedAt: ts,
     });
-    return this.store.put(next);
+    const saved = await this.store.putIfRevision(next, patch.expectedRevision);
+    if (!saved) throw new AppError('conflict', 'Memory changed. Reload before saving.');
+    return saved;
   }
 
   async delete(userId: string, memoryId: string): Promise<MemoryDeleteReceipt> {

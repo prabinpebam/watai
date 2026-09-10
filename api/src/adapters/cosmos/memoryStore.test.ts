@@ -108,4 +108,25 @@ describe('CosmosMemoryStore', () => {
     expect([...first.memories, ...second.memories]).toHaveLength(101);
     expect(seen).toEqual([{ token: undefined, max: 100 }, { token: 'page-2', max: 100 }]);
   });
+
+  it('replaces only the expected memory revision through its ETag', async () => {
+    let replaced = 0;
+    const stored = {
+      id: 'm1', userId: 'userA', kind: 'fact', status: 'active', text: 'Current', revision: 2,
+      sourceRefs: [{ type: 'manual', createdAt: '2026' }], confidence: 1, salience: 0.5,
+      pinned: false, sensitive: false, visibility: 'normal', createdAt: '2026', updatedAt: '2026', useCount: 0,
+    };
+    const container = { item: () => ({
+      read: async () => ({ resource: { ...stored, _etag: 'etag-2' } }),
+      replace: async (record: unknown, options: { accessCondition: { condition: string } }) => {
+        replaced++;
+        expect(options.accessCondition.condition).toBe('etag-2');
+        return { resource: record };
+      },
+    }) };
+    const store = new CosmosMemoryStore(container as never);
+    await expect(store.putIfRevision({ ...stored, text: 'New', revision: 3 } as never, 2)).resolves.toMatchObject({ text: 'New', revision: 3 });
+    await expect(store.putIfRevision({ ...stored, text: 'Stale', revision: 3 } as never, 1)).resolves.toBeNull();
+    expect(replaced).toBe(1);
+  });
 });

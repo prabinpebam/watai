@@ -628,7 +628,7 @@ describe('SyncRepository — sync disabled', () => {
     const { repo, cloud } = setup(false);
     const memory = await repo.addMemory({ text: 'Local memory only.', kind: 'preference' });
     expect((await repo.listMemory()).map((m) => m.id)).toEqual([memory.id]);
-    await repo.updateMemory(memory.id, { status: 'suppressed' });
+    await repo.updateMemory(memory.id, { expectedRevision: 1, status: 'suppressed' });
     expect(await repo.listMemory()).toEqual([]);
     await repo.removeMemory(memory.id);
     expect(cloud.calls).toEqual([]);
@@ -640,7 +640,7 @@ describe('SyncRepository — memory', () => {
     const { repo, cloud } = setup(true);
     const memory = await repo.addMemory({ text: 'Cloud memory.', kind: 'preference' });
     await expect(repo.listMemory()).resolves.toHaveLength(1);
-    await repo.updateMemory(memory.id, { status: 'suppressed' });
+    await repo.updateMemory(memory.id, { expectedRevision: 1, status: 'suppressed' });
     await repo.removeMemory(memory.id);
     expect(cloud.calls).toEqual(['createMemory', 'listMemory', `patchMemory:${memory.id}`, `deleteMemory:${memory.id}`]);
   });

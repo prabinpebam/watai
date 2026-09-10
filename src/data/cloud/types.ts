@@ -210,6 +210,7 @@ export interface CreateMemoryBody {
 }
 
 export interface PatchMemoryBody {
+  expectedRevision: number;
   text?: string;
   kind?: MemoryKind;
   status?: Extract<MemoryStatus, 'active' | 'suppressed' | 'invalidated'>;

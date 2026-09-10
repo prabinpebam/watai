@@ -121,13 +121,14 @@ describe('memory API request schemas', () => {
   });
 
   it('accepts patchable fields but rejects deleted status and unknown fields', () => {
-    expect(parsePatchMemory({ status: 'suppressed', visibility: 'background', salience: 0.25 })).toEqual({
+    expect(parsePatchMemory({ expectedRevision: 1, status: 'suppressed', visibility: 'background', salience: 0.25 })).toEqual({
+      expectedRevision: 1,
       status: 'suppressed',
       visibility: 'background',
       salience: 0.25,
     });
-    expect(code(() => parsePatchMemory({ status: 'deleted' }))).toBe('validation');
-    expect(code(() => parsePatchMemory({ unknown: true }))).toBe('validation');
+    expect(code(() => parsePatchMemory({ expectedRevision: 1, status: 'deleted' }))).toBe('validation');
+    expect(code(() => parsePatchMemory({ expectedRevision: 1, unknown: true }))).toBe('validation');
   });
 
   it('validates summary, query preview, import, and rebuild requests', () => {

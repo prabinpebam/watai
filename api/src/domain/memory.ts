@@ -140,6 +140,7 @@ export type CreateMemoryInput = z.infer<typeof createMemorySchema>;
 
 const patchMemorySchema = z
   .object({
+    expectedRevision: z.number().int().positive(),
     text: text.optional(),
     kind: z.enum(MEMORY_KINDS).optional(),
     status: z.enum(['active', 'suppressed', 'invalidated']).optional(),
