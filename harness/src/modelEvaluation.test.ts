@@ -23,6 +23,14 @@ const contract = (): LiveModelEvaluationContract => ({
   repetitions: 3,
   thresholds: { minimumSemanticPassRate: 1, maximumErrorRate: 0, maximumP95LatencyMs: 30_000 },
   budget: { usd: 2, inputTokens: 30_000, outputTokens: 6_000, requests: 6, aiCredits: 6 },
+  staging: {
+    canaryCaseId: "bounded-read",
+    canaryRepetitions: 1,
+    maximumWallClockMs: 240_000,
+    budget: { usd: 0, inputTokens: 5_000, outputTokens: 1_000, requests: 1, aiCredits: 1 },
+    qualificationReason: "Prove one complete path before the repeated denominator.",
+    stopCondition: "Stop on any canary failure.",
+  },
   requiresUsageReceipts: true,
   requiresPortableJsonl: true,
 });

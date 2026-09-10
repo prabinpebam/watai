@@ -46,6 +46,7 @@ console.log(JSON.stringify({
     purpose: evaluation.purpose,
     expectedRuns: evaluation.caseIds.length * evaluation.repetitions,
     budget: evaluation.budget,
+    staging: evaluation.staging ?? null,
     thresholds: evaluation.thresholds,
     qualityDenominator: evaluation.qualityDenominator ?? null,
   })),

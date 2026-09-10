@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +19,7 @@ import {
   type ModelCaseManifest,
 } from "./modelCases.js";
 import { writeModelObservationClaims, writePortableModelObservations } from "./modelObservationWriter.js";
+import { verifyEvaluationCanaryReport, type EvaluationCanaryReport } from "./evaluationCostGate.js";
 import { canonical, sha256 } from "./trust.js";
 import {
   loadImplementationAgentEvaluationAuthority,
@@ -67,6 +69,27 @@ const caseSet = caseManifest.evaluations.find((candidate) => candidate.evaluatio
 if (!contract || !caseSet) throw new Error(`Unknown live-model evaluation ${evaluationId}.`);
 
 const smokeWorkerImageSha256 = process.env.WATAI_WORKER_IMAGE_SHA256?.trim() ?? "";
+if (contract.purpose === "implementation-agent") {
+  const canaryPath = process.env.WATAI_CANARY_REPORT_PATH?.trim();
+  if (!canaryPath || !contract.staging) {
+    throw new Error("A fresh passing WATAI_CANARY_REPORT_PATH is required before full implementation-agent qualification.");
+  }
+  const definition = caseSet.cases.find((candidate) => candidate.id === contract.staging!.canaryCaseId);
+  if (!definition) throw new Error("Frozen canary case is missing.");
+  const report = JSON.parse(await readFile(resolve(canaryPath), "utf8")) as EvaluationCanaryReport;
+  const sourceSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  const canaryBlockers = verifyEvaluationCanaryReport({
+    report,
+    sourceSha,
+    runtimeImageSha256: smokeWorkerImageSha256,
+    contract,
+    definition,
+    now: Date.now(),
+  });
+  if (canaryBlockers.length > 0) {
+    throw new Error(`Full qualification blocked by canary: ${canaryBlockers.map((blocker) => blocker.code).join(", ")}`);
+  }
+}
 const authority = contract.purpose === "implementation-agent"
   ? await loadImplementationAgentEvaluationAuthority(root, smokeWorkerImageSha256)
   : await loadOperationalAuthority(root, "evaluation");

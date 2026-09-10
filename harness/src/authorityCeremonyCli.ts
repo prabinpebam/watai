@@ -130,10 +130,16 @@ const manifest = JSON.parse(
     readFile(resolve(root, "harness", "evaluator", "model-evaluations.json"), "utf8")),
 ) as LiveModelEvaluationManifest;
 const contract = manifest.evaluations.find((evaluation) => evaluation.id === "implementation-agent-smoke");
-if (!contract) throw new Error("Frozen implementation-agent-smoke contract is missing.");
+if (!contract?.staging) throw new Error("Frozen implementation-agent-smoke staged contract is missing.");
+const evaluationStage = process.env.WATAI_EVALUATION_STAGE?.trim() || "canary";
+if (evaluationStage !== "canary" && evaluationStage !== "qualification") {
+  throw new Error("WATAI_EVALUATION_STAGE must be canary or qualification.");
+}
+const evaluationBudget = evaluationStage === "canary" ? contract.staging.budget : contract.budget;
 const attemptId = randomUUID();
 const request = buildAuthorityCeremonyRequest({
   attemptId,
+  evaluationStage,
   repositoryId: process.env.WATAI_REPOSITORY_ID?.trim() || "prabinpebam/watai",
   evidence: {
     sourceSha,
@@ -147,8 +153,8 @@ const request = buildAuthorityCeremonyRequest({
     gitHubCliAuthenticated: true,
     dockerServerVersion,
   },
-  evaluationBudget: contract.budget,
-  maxAiCredits: contract.budget.aiCredits,
+  evaluationBudget,
+  maxAiCredits: evaluationBudget.aiCredits,
   claimLifetimeSeconds: 60 * 60,
 });
 
@@ -195,6 +201,7 @@ console.log(JSON.stringify({
   releaseEligible: false,
   sourceSha,
   attemptId,
+  evaluationStage,
   smokeWorkerImageSha256,
   candidateWorkerImageSha256,
   evidenceSha256: request.evidenceSha256,

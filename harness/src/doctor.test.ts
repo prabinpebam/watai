@@ -34,16 +34,17 @@ describe("DoD doctor report", () => {
     expect(report.hSlices.find((item) => item.id === "H01")?.status).toBe("BLOCKED");
   });
 
-  it("requires both implementation and evaluation readiness for automated implementation", () => {
+  it("allows implementation to begin before candidate evaluation infrastructure is ready", () => {
     const report = buildDoctorReport({
       generatedAt: "2026-09-10T11:00:00.000Z",
       preflight: preflight(true),
       implementation: readiness("implementation", true),
       evaluation: readiness("evaluation", false),
       release: readiness("release", false),
-      schedule: { selected: null, ready: [], blocked: [], reason: "NO_READY_SLICE", priorityMode: "canonical" },
+      schedule: { selected: { id: "H01" } as never, ready: ["H01"], blocked: [], reason: "NEXT_DEPENDENCY_READY_SLICE", priorityMode: "canonical" },
     });
-    expect(report.automatedImplementationReady).toBe(false);
+    expect(report.status).toBe("EXECUTION_READY");
+    expect(report.automatedImplementationReady).toBe(true);
     expect(report.candidateEvaluationReady).toBe(false);
   });
 

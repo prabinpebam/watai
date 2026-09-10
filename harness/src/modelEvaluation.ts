@@ -19,6 +19,14 @@ export interface LiveModelEvaluationContract {
     maximumP95LatencyMs: number;
   };
   budget: LiveModelBudgetAmount;
+  staging?: {
+    canaryCaseId: string;
+    canaryRepetitions: 1;
+    maximumWallClockMs: number;
+    budget: LiveModelBudgetAmount;
+    qualificationReason: string;
+    stopCondition: string;
+  };
   qualityDenominator?: {
     minimumAttemptedEpisodes: number;
     minimumIndependentNegativeTimelines: number;
@@ -146,6 +154,17 @@ export function validateLiveModelEvaluationManifest(
     const exactVersionValid = contract.resolvedVersionPolicy === "exact"
       ? Boolean(contract.expectedResolvedVersion?.trim())
       : contract.expectedResolvedVersion === null;
+    const stagingValid = contract.purpose !== "implementation-agent" || Boolean(
+      contract.staging &&
+      contract.caseIds.includes(contract.staging.canaryCaseId) &&
+      contract.staging.canaryRepetitions === 1 &&
+      Number.isSafeInteger(contract.staging.maximumWallClockMs) &&
+      contract.staging.maximumWallClockMs > 0 &&
+      validAmount(contract.staging.budget) &&
+      !exceeds(contract.staging.budget, contract.budget) &&
+      contract.staging.qualificationReason.trim() &&
+      contract.staging.stopCondition.trim()
+    );
     const valid = /^[a-z][a-z0-9-]+$/.test(contract.id) &&
       contract.applicableGates.length > 0 &&
       contract.applicableGates.every((gate) => /^G\d{2}$/.test(gate)) &&
@@ -160,6 +179,7 @@ export function validateLiveModelEvaluationManifest(
       contract.thresholds.maximumErrorRate >= 0 && contract.thresholds.maximumErrorRate < 1 &&
       Number.isSafeInteger(contract.thresholds.maximumP95LatencyMs) && contract.thresholds.maximumP95LatencyMs > 0 &&
       validAmount(contract.budget) && contract.budget.requests >= contract.caseIds.length * contract.repetitions &&
+      stagingValid &&
       (contract.qualityDenominator === undefined || (
         Number.isSafeInteger(contract.qualityDenominator.minimumAttemptedEpisodes) &&
         contract.qualityDenominator.minimumAttemptedEpisodes >= 1 &&

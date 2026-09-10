@@ -41,6 +41,7 @@ export interface AuthorityCeremonyRequest {
   status: "READY_FOR_INDEPENDENT_REVIEW";
   releaseEligible: false;
   attemptId: string;
+  evaluationStage: "canary" | "qualification";
   repositoryId: string;
   sourceSha: string;
   rootFixedFields: AuthorityContractDigests;
@@ -57,6 +58,7 @@ export interface AuthorityCeremonyRequest {
 
 export function buildAuthorityCeremonyRequest(input: {
   attemptId: string;
+  evaluationStage: "canary" | "qualification";
   repositoryId: string;
   evidence: AuthorityCeremonyEvidence;
   evaluationBudget: {
@@ -116,6 +118,7 @@ export function buildAuthorityCeremonyRequest(input: {
     status: "READY_FOR_INDEPENDENT_REVIEW",
     releaseEligible: false,
     attemptId: input.attemptId,
+    evaluationStage: input.evaluationStage,
     repositoryId: input.repositoryId,
     sourceSha: input.evidence.sourceSha,
     rootFixedFields: input.evidence.rootInputs,
@@ -144,10 +147,10 @@ export function buildAuthorityCeremonyRequest(input: {
     unsignedClaimRequests: [
       {
         kind: "authorization-grant",
-        artifactId: `bootstrap-${prefix}-evaluation-grant`,
+        artifactId: `bootstrap-${prefix}-${input.evaluationStage}-evaluation-grant`,
         maximumLifetimeSeconds: input.claimLifetimeSeconds,
         payload: {
-          grantId: `bootstrap-${prefix}-evaluation-grant`,
+          grantId: `bootstrap-${prefix}-${input.evaluationStage}-evaluation-grant`,
           repositoryId: input.repositoryId,
           policySha256: input.evidence.rootInputs.policySha256,
           modes: ["evaluation"],

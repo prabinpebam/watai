@@ -54,6 +54,8 @@ npm run validate:harness
 npm run harness:preflight
 npm run harness:doctor
 npm run harness:model-eval-plan
+npm run harness:work-decision -- <request.json>
+npm run harness:evaluate-canary
 npm run harness:authority-ceremony
 npm run harness:controller-apply
 npm run harness:probe-worker

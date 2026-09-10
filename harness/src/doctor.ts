@@ -165,7 +165,14 @@ export function buildDoctorReport(input: DoctorInput): HarnessDoctorReport {
     "Provision the external public trust root and signed runtime grant outside the repository.",
   ].filter((value): value is string => Boolean(value));
 
-  const automatedImplementationReady = evaluationReady && blockers.length === 0 && schedulable;
+  const implementationBlockers = [
+    ...(input.authorityError ? [input.authorityError] : []),
+    ...input.preflight.blockers,
+    ...input.implementation.blockers,
+  ];
+  const automatedImplementationReady = implementationReady &&
+    implementationBlockers.length === 0 &&
+    schedulable;
   return {
     schemaVersion: "1.0",
     status: automatedImplementationReady ? "EXECUTION_READY" : "BLOCKED_SAFE",

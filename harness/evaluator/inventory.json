@@ -8,8 +8,8 @@
       "cwd": ".",
       "executable": "npm",
       "args": ["run", "validate:harness"],
-      "expectedTestFiles": 33,
-      "expectedTests": 205,
+      "expectedTestFiles": 35,
+      "expectedTests": 209,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },
@@ -18,8 +18,8 @@
       "cwd": ".",
       "executable": "npm",
       "args": ["test"],
-      "expectedTestFiles": 65,
-      "expectedTests": 436,
+      "expectedTestFiles": 67,
+      "expectedTests": 440,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },

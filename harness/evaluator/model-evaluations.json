@@ -19,6 +19,14 @@
         "maximumP95LatencyMs": 180000
       },
       "budget": { "usd": 0, "inputTokens": 45000, "outputTokens": 9000, "requests": 9, "aiCredits": 270 },
+      "staging": {
+        "canaryCaseId": "bounded-read",
+        "canaryRepetitions": 1,
+        "maximumWallClockMs": 240000,
+        "budget": { "usd": 0, "inputTokens": 15000, "outputTokens": 3000, "requests": 3, "aiCredits": 30 },
+        "qualificationReason": "A passing canary proves real authentication, model access, gateway tools, isolated validation, usage capture and durable submission before the remaining eight runs are funded.",
+        "stopCondition": "Do not run full qualification unless the canary completes, passes its exact oracle, reports provider usage and stays within all canary ceilings."
+      },
       "requiresUsageReceipts": true,
       "requiresPortableJsonl": true
     },
