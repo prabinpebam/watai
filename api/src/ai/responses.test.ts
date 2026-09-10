@@ -64,5 +64,14 @@ describe('normalizeResponsesEvent — code interpreter container id', () => {
       type: 'response.incomplete',
       response: { incomplete_details: { reason: 'max_output_tokens' } },
     })).toEqual({ type: 'error', message: 'The response was incomplete: max_output_tokens' });
+    expect(normalizeResponsesEvent({ type: 'error', message: 'generic failure' }))
+      .toEqual({ type: 'error', message: 'generic failure' });
+  });
+
+  it('rejects a tool item that reaches done event with a failed status', () => {
+    expect(normalizeResponsesEvent({
+      type: 'response.output_item.done',
+      item: { type: 'code_interpreter_call', id: 'ci-failed', status: 'failed' },
+    })).toEqual({ type: 'error', message: 'The code_interpreter_call item ended with status failed.' });
   });
 });

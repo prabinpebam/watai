@@ -112,15 +112,62 @@ export async function aiFetch(req: AiRequest): Promise<Response> {
   }
   if (req.stream) headers['Accept'] = 'text/event-stream';
 
+  let response: Response;
   try {
-    return await fetchImpl(url, { method: req.method ?? 'POST', headers, body: payload, signal });
-  } finally {
+    response = await fetchImpl(url, { method: req.method ?? 'POST', headers, body: payload, signal });
+  } catch (error) {
     cleanup();
+    throw error;
   }
+  if (!req.stream || !response.body) {
+    cleanup();
+    return response;
+  }
+  const reader = response.body.getReader();
+  let finished = false;
+  let onAbort: (() => void) | undefined;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+    cleanup();
+  };
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      onAbort = () => {
+        void reader.cancel(signal.reason).catch(() => undefined);
+        controller.error(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+        finish();
+      };
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    },
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          finish();
+          controller.close();
+        } else controller.enqueue(value);
+      } catch (error) {
+        finish();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      finish();
+      await reader.cancel(reason).catch(() => undefined);
+    },
+  });
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
 
 /** Parse an SSE stream into `data:` payloads, yielding raw JSON strings (skips [DONE]). */
-export async function* parseSse(res: Response, signal?: AbortSignal): AsyncGenerator<string> {
+export async function* parseSse(
+  res: Response,
+  signal?: AbortSignal,
+  options: { idleTimeoutMs?: number } = {},
+): AsyncGenerator<string> {
   const reader = res.body?.getReader();
   if (!reader) return;
   const decoder = new TextDecoder();
@@ -130,7 +177,32 @@ export async function* parseSse(res: Response, signal?: AbortSignal): AsyncGener
       await reader.cancel();
       return;
     }
-    const { done, value } = await reader.read();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    const read = reader.read();
+    const guards: Array<Promise<never>> = [];
+    if (options.idleTimeoutMs) {
+      guards.push(new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new DOMException('The response stream was idle too long.', 'TimeoutError')), options.idleTimeoutMs);
+      }));
+    }
+    if (signal) {
+      guards.push(new Promise((_, reject) => {
+        onAbort = () => reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+        signal.addEventListener('abort', onAbort, { once: true });
+      }));
+    }
+    let chunk: Awaited<ReturnType<typeof reader.read>>;
+    try {
+      chunk = await Promise.race([read, ...guards]);
+    } catch (error) {
+      await reader.cancel(error).catch(() => undefined);
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (onAbort) signal?.removeEventListener('abort', onAbort);
+    }
+    const { done, value } = chunk;
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');

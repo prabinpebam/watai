@@ -43,6 +43,8 @@ export interface ResponsesParams {
   headers?: Record<string, string>;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
+  totalTimeoutMs?: number;
+  idleTimeoutMs?: number;
 }
 
 /** Normalized stream events (the service's verbose vocabulary collapsed to what we render). */
@@ -94,6 +96,7 @@ interface RawEvent {
     usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
   };
   error?: { message?: string };
+  message?: string;
   item?: {
     type?: string;
     id?: string;
@@ -202,6 +205,9 @@ export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
     }
     case 'response.output_item.done': {
       const item = ev.item;
+      if (item?.status && !['completed', 'done'].includes(item.status)) {
+        return { type: 'error', message: `The ${item.type ?? 'output'} item ended with status ${item.status}.` };
+      }
       if (item?.type === 'function_call' && item.call_id && item.name) {
         return { type: 'functionCall', callId: item.call_id, name: item.name, arguments: item.arguments ?? '' };
       }
@@ -245,6 +251,8 @@ export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
     }
     case 'response.error':
       return { type: 'error', message: ev.error?.message ?? 'The response failed.' };
+    case 'error':
+      return { type: 'error', message: ev.error?.message ?? ev.message ?? 'The response failed.' };
     case 'response.failed':
       return { type: 'error', message: ev.response?.error?.message ?? 'The response failed.' };
     case 'response.incomplete':
@@ -263,8 +271,9 @@ export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
 export async function* parseResponsesStream(
   res: Response,
   signal?: AbortSignal,
+  idleTimeoutMs = 30_000,
 ): AsyncGenerator<ResponsesEvent> {
-  for await (const data of parseSse(res, signal)) {
+  for await (const data of parseSse(res, signal, { idleTimeoutMs })) {
     let raw: unknown;
     try {
       raw = JSON.parse(data);
@@ -295,13 +304,14 @@ export async function* streamResponses(p: ResponsesParams): AsyncGenerator<Respo
     signal: p.signal,
     headers: p.headers,
     fetchImpl: p.fetchImpl,
+    timeoutMs: p.totalTimeoutMs ?? 10 * 60_000,
   });
   if (!res.ok) {
     const err = await normalizeHttpError(res, 'chat');
     yield { type: 'error', message: err.message };
     return;
   }
-  yield* parseResponsesStream(res, p.signal);
+  yield* parseResponsesStream(res, p.signal, p.idleTimeoutMs ?? 30_000);
 }
 
 /** Build Responses `input` message items from simple role/text(/image) turns. */
