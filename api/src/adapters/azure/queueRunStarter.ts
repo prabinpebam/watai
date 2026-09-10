@@ -8,6 +8,9 @@ export interface RunJob {
   runId: string;
   threadId: string;
   userId: string;
+  releaseId: string;
+  executionToken: string;
+  attempt: number;
 }
 
 /**
@@ -42,7 +45,17 @@ export class QueueRunStarter implements RunStarter {
       await q.createIfNotExists();
       this.ensured = true;
     }
-    const job: RunJob = { runId: run.id, threadId: run.threadId, userId: run.userId };
+    if (!run.releaseId || !run.executionToken || !run.dispatchAttempt) {
+      throw new Error('Run is missing dispatch fencing metadata.');
+    }
+    const job: RunJob = {
+      runId: run.id,
+      threadId: run.threadId,
+      userId: run.userId,
+      releaseId: run.releaseId,
+      executionToken: run.executionToken,
+      attempt: run.dispatchAttempt,
+    };
     // base64 so the message is encoding-agnostic across the queue extension's settings.
     await q.sendMessage(Buffer.from(JSON.stringify(job), 'utf8').toString('base64'));
     return { instanceId: run.id };

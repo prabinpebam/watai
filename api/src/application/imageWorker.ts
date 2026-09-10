@@ -96,11 +96,10 @@ async function finalizeError(
   record: ImageGenRecord,
   error: ImageError,
 ): Promise<void> {
-  const current = await deps.imageStore.get(record.userId, record.id);
-  if (!current) return; // deleted while generating — do not resurrect
-  const errored: ImageGenRecord = { ...current, status: 'error', error, updatedAt: deps.clock.now() };
-  await deps.imageStore.put(errored);
-  await push(deps, errored);
+  const errored = await deps.imageStore.transition(record.userId, record.id, ['generating'], {
+    status: 'error', error, updatedAt: deps.clock.now(),
+  });
+  if (errored?.status === 'error') await push(deps, errored);
 }
 
 /**
@@ -113,6 +112,7 @@ export async function processImageJob(
   deps: ImageWorkerDeps,
   userId: string,
   imageId: string,
+  fence?: { releaseId: string; executionToken: string; attempt: number },
 ): Promise<void> {
   const { imageStore, credentials, minter, clock } = deps;
   const genImage = deps.generateImage ?? defaultGenerateImage;
@@ -121,11 +121,17 @@ export async function processImageJob(
 
   const rec = await imageStore.get(userId, imageId);
   if (!rec || !isActiveImage(rec.status)) return; // already finalized / deleted — idempotent
+  if (fence && (rec.releaseId !== fence.releaseId || rec.executionToken !== fence.executionToken || rec.dispatchAttempt !== fence.attempt)) return;
 
-  const generating: ImageGenRecord = { ...rec, status: 'generating', updatedAt: clock.now() };
-  await imageStore.put(generating);
+  const generating = await imageStore.transition(userId, imageId, ['queued'], { status: 'generating', updatedAt: clock.now() });
+  if (!generating || generating.status !== 'generating') return;
+  const heartbeat = setInterval(() => {
+    void imageStore.transition(userId, imageId, ['generating'], { updatedAt: clock.now() });
+  }, 60_000);
+  heartbeat.unref?.();
   await push(deps, generating);
 
+  try {
   try {
     const creds = await credentials.getDecrypted(userId);
     if (!creds.models.image) {
@@ -210,20 +216,19 @@ export async function processImageJob(
     }
 
     // Re-read so a delete that landed mid-generation is not resurrected.
-    const current = await imageStore.get(userId, imageId);
-    if (!current) return;
-    const ready: ImageGenRecord = {
-      ...current,
+    const ready = await imageStore.transition(userId, imageId, ['generating'], {
       status: 'ready',
       libraryItemId,
       blobPath,
       ...(first.revisedPrompt ? { revisedPrompt: first.revisedPrompt } : {}),
       error: null,
       updatedAt: clock.now(),
-    };
-    await imageStore.put(ready);
-    await push(deps, ready);
+    });
+    if (ready?.status === 'ready') await push(deps, ready);
   } catch (e) {
     await finalizeError(deps, generating, toImageError(e));
+  }
+  } finally {
+    clearInterval(heartbeat);
   }
 }

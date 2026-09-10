@@ -26,6 +26,20 @@ export interface ImageGenRecord {
   error?: ImageError | null;
   createdAt: string;
   updatedAt: string;
+  releaseId?: string;
+  executionToken?: string;
+  dispatchAttempt?: number;
+}
+
+export interface ImageDispatchRecord {
+  imageId: string;
+  userId: string;
+  releaseId: string;
+  executionToken: string;
+  attempt: number;
+  state: 'pending' | 'sent';
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ImageListOptions {
@@ -47,6 +61,11 @@ export interface ImageListResult {
 export interface ImageStore {
   get(userId: string, id: string): Promise<ImageGenRecord | null>;
   put(record: ImageGenRecord): Promise<ImageGenRecord>;
+  putQueued(record: ImageGenRecord): Promise<ImageGenRecord>;
+  transition(userId: string, id: string, expected: ImageStatus[], patch: Partial<ImageGenRecord>): Promise<ImageGenRecord | null>;
+  listPendingDispatch(limit?: number): Promise<ImageDispatchRecord[]>;
+  listStaleActive(before: string, limit?: number): Promise<ImageGenRecord[]>;
+  markDispatchSent(record: ImageDispatchRecord, sentAt: string): Promise<void>;
   list(userId: string, options?: ImageListOptions): Promise<ImageListResult>;
   delete(userId: string, id: string): Promise<void>;
 }

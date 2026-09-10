@@ -3,5 +3,6 @@
 import './functions/health';
 import './functions/api';
 import './functions/runWorker';
+import './functions/runDispatch';
 import './functions/imageWorker';
 import './functions/memoryWorker';

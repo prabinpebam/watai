@@ -14,7 +14,11 @@ app.storageQueue('runWorker', {
   handler: async (message: unknown, ctx: InvocationContext): Promise<void> => {
     const job = decodeRunJob(message);
     try {
-      await processRun(container().runWorker, job.userId, job.threadId, job.runId);
+      await processRun(container().runWorker, job.userId, job.threadId, job.runId, {
+        releaseId: job.releaseId,
+        executionToken: job.executionToken,
+        attempt: job.attempt,
+      });
     } catch (err) {
       ctx.error(`runWorker failed for run ${job.runId}`, err);
       throw err;

@@ -2,6 +2,9 @@
 export interface ImageJob {
   imageId: string;
   userId: string;
+  releaseId: string;
+  executionToken: string;
+  attempt: number;
 }
 
 /**

@@ -64,6 +64,20 @@ async function seedQueued(store: InMemoryImageStore, over: Partial<ImageGenRecor
 }
 
 describe('processImageJob', () => {
+  it('rejects stale release or execution-token queue authority', async () => {
+    const store = new InMemoryImageStore();
+    await seedQueued(store, { releaseId: 'release-new', executionToken: 'token-new', dispatchAttempt: 2 });
+    const generateImage = vi.fn(async (): Promise<ImageResult[]> => [{ b64: Buffer.from('x').toString('base64') }]);
+    const workerDeps: ImageWorkerDeps = {
+      imageStore: store, credentials: creds('gpt-image-1'), minter, clock: makeClock(), generateImage, fetchImpl: okFetch(),
+    };
+    await processImageJob(workerDeps, 'userA', 'img1', {
+      releaseId: 'release-old', executionToken: 'token-old', attempt: 1,
+    });
+    expect(generateImage).not.toHaveBeenCalled();
+    expect((await store.get('userA', 'img1'))?.status).toBe('queued');
+  });
+
   it('drives queued -> generating -> ready, uploads the blob, and pushes each change', async () => {
     const store = new InMemoryImageStore();
     await seedQueued(store);

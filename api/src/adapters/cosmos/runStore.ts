@@ -1,5 +1,5 @@
 import type { Container, OperationInput, SqlParameter } from '@azure/cosmos';
-import type { RunAdmissionRequest, RunAdmissionResult, RunRecord, RunStore, RunTransitionResult } from '../../ports/runStore';
+import type { RunAdmissionRequest, RunAdmissionResult, RunDispatchRecord, RunRecord, RunStore, RunTransitionResult } from '../../ports/runStore';
 import { getCosmosDatabase } from './cosmosClient';
 import { ownerScopedDocumentId } from './ownerScopedId';
 import { isActive, type RunStatus } from '../../domain/run';
@@ -21,6 +21,7 @@ interface RunSlotDocument {
   threadId: string;
   runId: string;
 }
+type RunDispatchDocument = RunDispatchRecord & { id: string; recordType: 'run-dispatch'; _etag?: string };
 
 function fromDocument(document: RunDocument): RunRecord {
   const { runId, _etag: _etag, ...record } = document;
@@ -41,6 +42,10 @@ function admissionId(userId: string, idempotencyKey: string): string {
 
 function slotId(userId: string): string {
   return ownerScopedDocumentId('run-slot', userId, 'active');
+}
+
+function dispatchId(userId: string, runId: string): string {
+  return ownerScopedDocumentId('run-dispatch', userId, runId);
 }
 
 /** Cosmos-backed RunStore. Container `runs`, partition key /threadId. */
@@ -121,7 +126,23 @@ export class CosmosRunStore implements RunStore {
       threadId: run.threadId,
       runId: run.id,
     };
-    const operations = [toDocument(run), receipt, slot].map((resourceBody) => ({
+    if (!run.releaseId || !run.executionToken || !run.dispatchAttempt) {
+      throw new Error('Run admission requires dispatch fencing metadata.');
+    }
+    const dispatch: RunDispatchDocument = {
+      id: dispatchId(run.userId, run.id),
+      recordType: 'run-dispatch',
+      runId: run.id,
+      threadId: run.threadId,
+      userId: run.userId,
+      releaseId: run.releaseId,
+      executionToken: run.executionToken,
+      attempt: run.dispatchAttempt,
+      state: 'pending',
+      createdAt: run.createdAt,
+      updatedAt: run.createdAt,
+    };
+    const operations = [toDocument(run), receipt, slot, dispatch].map((resourceBody) => ({
       operationType: 'Create' as const,
       resourceBody,
     })) as OperationInput[];
@@ -222,6 +243,40 @@ export class CosmosRunStore implements RunStore {
       if ((error as { code?: number }).code !== 409 && (error as { code?: number }).code !== 412) throw error;
       const latest = await this.get(userId, threadId, runId);
       return latest ? { outcome: 'unchanged', run: latest } : { outcome: 'missing' };
+    }
+  }
+
+  async listPendingDispatch(limit = 50): Promise<RunDispatchRecord[]> {
+    const query = 'SELECT * FROM c WHERE c.recordType = @type AND c.state = @state OFFSET 0 LIMIT @limit';
+    const parameters: SqlParameter[] = [
+      { name: '@type', value: 'run-dispatch' },
+      { name: '@state', value: 'pending' },
+      { name: '@limit', value: limit },
+    ];
+    const { resources } = await this.container.items
+      .query<RunDispatchDocument>({ query, parameters })
+      .fetchAll();
+    return resources.map(({ id: _id, recordType: _recordType, ...record }) => record);
+  }
+
+  async listStaleActive(before: string, limit = 50): Promise<RunRecord[]> {
+    const { resources } = await this.container.items.query<RunDocument>({
+      query: "SELECT * FROM c WHERE c.recordType != 'run-dispatch' AND c.heartbeatAt < @before AND (c.status = 'queued' OR c.status = 'running') OFFSET 0 LIMIT @limit",
+      parameters: [{ name: '@before', value: before }, { name: '@limit', value: limit }],
+    }).fetchAll();
+    return resources.filter((document) => !!document.runId).map(fromDocument);
+  }
+
+  async markDispatchSent(record: RunDispatchRecord, sentAt: string): Promise<void> {
+    const item = this.container.item(dispatchId(record.userId, record.runId), record.threadId);
+    try {
+      const { resource } = await item.read<RunDispatchDocument>();
+      if (!resource || resource.state !== 'pending' || resource.attempt !== record.attempt || resource.executionToken !== record.executionToken) return;
+      await item.replace({ ...resource, state: 'sent', updatedAt: sentAt }, resource._etag
+        ? { accessCondition: { type: 'IfMatch', condition: resource._etag } }
+        : undefined);
+    } catch (error) {
+      if (![404, 409, 412].includes((error as { code?: number }).code ?? 0)) throw error;
     }
   }
 

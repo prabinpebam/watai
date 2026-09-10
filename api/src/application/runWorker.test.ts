@@ -154,6 +154,19 @@ describe('processRun', () => {
   let ctx: ReturnType<typeof setup>;
   beforeEach(() => (ctx = setup()));
 
+  it('rejects a queue delivery whose release or execution token no longer matches', async () => {
+    const record = await seed(ctx);
+    await ctx.runStore.put({ ...record, releaseId: 'release-new', executionToken: 'token-new', dispatchAttempt: 2 });
+    const runAgent = vi.fn(script([{ type: 'text', delta: 'must not run' }, { type: 'done' }]));
+
+    await processRunForOwner(ctx.deps(runAgent), 'userA', 't1', 'r1', {
+      releaseId: 'release-old', executionToken: 'token-old', attempt: 1,
+    });
+
+    expect(runAgent).not.toHaveBeenCalled();
+    expect((await ctx.runStore.get('t1', 'r1'))?.status).toBe('queued');
+  });
+
   it('streams the agent answer into a finalized assistant message and completes the run', async () => {
     await seed(ctx);
     await processRun(

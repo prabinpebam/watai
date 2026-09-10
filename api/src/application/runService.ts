@@ -27,6 +27,7 @@ export class RunService {
     private readonly runStore: RunStore,
     private readonly starter: RunStarter,
     private readonly clock: ServiceClock,
+    private readonly releaseId = process.env.WATAI_RELEASE_ID?.trim() || 'local-development',
   ) {}
 
   private async requireOwnThread(userId: string, threadId: string): Promise<void> {
@@ -59,6 +60,9 @@ export class RunService {
       startedAt: null,
       endedAt: null,
       heartbeatAt: ts,
+      releaseId: this.releaseId,
+      executionToken: this.clock.newId(),
+      dispatchAttempt: 1,
     };
     const requestFingerprint = createHash('sha256').update(JSON.stringify({
       text: parsed.text ?? '',
@@ -94,15 +98,12 @@ export class RunService {
         ...(parsed.attachments?.length ? { attachments: parsed.attachments } : {}),
       });
       const { instanceId } = await this.starter.start(saved);
+      const dispatch = (await this.runStore.listPendingDispatch()).find((record) =>
+        record.userId === userId && record.threadId === threadId && record.runId === saved.id);
+      if (dispatch) await this.runStore.markDispatchSent(dispatch, this.clock.now());
       return (await this.runStore.acknowledgeStart(userId, threadId, saved.id, instanceId)) ?? saved;
     } catch {
-      // Could not start the worker — fail the run so the thread is not stuck "active".
-      await this.runStore.transition(userId, threadId, saved.id, ['queued'], {
-        status: 'error',
-        error: { code: 'internal', message: 'Could not start generation.' },
-        endedAt: this.clock.now(),
-      });
-      throw new AppError('internal', 'Could not start generation.');
+      return saved;
     }
   }
 

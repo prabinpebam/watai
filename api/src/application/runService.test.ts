@@ -186,12 +186,12 @@ describe('RunService.submit', () => {
     expect(run.allowDestructive).toEqual(['delete_thread']);
   });
 
-  it('marks the run errored (not stuck active) when the worker fails to start', async () => {
+  it('leaves an accepted run queued for reconciliation when immediate enqueue fails', async () => {
     const failing = setup({ failStart: true });
     await seedThread(failing.threadStore);
-    expect(await code(() => failing.svc.submit('userA', 't1', { text: 'x' }))).toBe('internal');
-    // No active run remains → the thread is not locked forever.
-    expect(await failing.runStore.listActive('userA', 't1')).toHaveLength(0);
+    const run = await failing.svc.submit('userA', 't1', { text: 'x', clientMessageId: 'cm-recover' });
+    expect(run.status).toBe('queued');
+    expect(await failing.runStore.listActive('userA', 't1')).toHaveLength(1);
   });
 
   it('does not overwrite fast worker progress with the enqueue acknowledgement', async () => {

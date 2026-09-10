@@ -112,6 +112,12 @@ export interface RunWorkerDeps {
   artifactCaptureRetryMs?: number;
 }
 
+export interface RunExecutionFence {
+  releaseId: string;
+  executionToken: string;
+  attempt: number;
+}
+
 const DEFAULT_FLUSH_MS = 250;
 /** Per-run artifact guards (code interpreter outputs persisted to Blob Storage). */
 const MAX_ARTIFACTS = 16;
@@ -696,13 +702,24 @@ async function* streamAgentWithRetry(
  * this runs in a queue worker (not the request), closing the app cannot interrupt it. Idempotent:
  * a redelivered message that finds a terminal/canceled run is a no-op.
  */
-export async function processRun(deps: RunWorkerDeps, userId: string, threadId: string, runId: string): Promise<void> {
+export async function processRun(
+  deps: RunWorkerDeps,
+  userId: string,
+  threadId: string,
+  runId: string,
+  fence?: RunExecutionFence,
+): Promise<void> {
   const { runStore, messageStore, threadStore, credentials, clock } = deps;
   const runAgent = deps.runAgent ?? defaultRunAgent;
   const flushMs = deps.flushIntervalMs ?? DEFAULT_FLUSH_MS;
 
   const queuedRun = await runStore.get(userId, threadId, runId);
   if (!queuedRun || !isActive(queuedRun.status)) return; // already finalized / canceled — idempotent
+  if (fence && (
+    queuedRun.releaseId !== fence.releaseId ||
+    queuedRun.executionToken !== fence.executionToken ||
+    queuedRun.dispatchAttempt !== fence.attempt
+  )) return;
   const started = await runStore.transition(userId, threadId, runId, ['queued'], {
     status: 'running',
     startedAt: clock.now(),
@@ -710,6 +727,10 @@ export async function processRun(deps: RunWorkerDeps, userId: string, threadId: 
   });
   if (started.outcome !== 'updated') return;
   const run = started.run;
+  const heartbeat = setInterval(() => {
+    void runStore.transition(userId, threadId, runId, ['running'], { heartbeatAt: clock.now() });
+  }, 60_000);
+  heartbeat.unref?.();
 
   const thread = await threadStore.get(run.userId, threadId);
   const orderAt = run.createdAt;
@@ -1306,4 +1327,5 @@ export async function processRun(deps: RunWorkerDeps, userId: string, threadId: 
       endedAt: clock.now(),
     });
   }
+  clearInterval(heartbeat);
 }

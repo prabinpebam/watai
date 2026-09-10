@@ -23,6 +23,7 @@ export class ImageService {
     private readonly minter: SasMinter,
     private readonly clock: ServiceClock,
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly releaseId = process.env.WATAI_RELEASE_ID?.trim() || 'local-development',
   ) {}
 
   async create(userId: string, input: unknown): Promise<ImageDTO[]> {
@@ -64,25 +65,22 @@ export class ImageService {
         error: null,
         createdAt: ts,
         updatedAt: ts,
+        releaseId: this.releaseId,
+        executionToken: this.clock.newId(),
+        dispatchAttempt: 1,
       };
       queued.libraryItemId = libraryItemIdFor(userId, 'studio_generated_image', queued.id);
       queued.referenceItemIds = source
         ? [source.libraryItemId ?? libraryItemIdFor(userId, 'studio_generated_image', source.id)]
         : [];
-      const saved = await this.imageStore.put(queued);
+      const saved = await this.imageStore.putQueued(queued);
       try {
-        await this.starter.start({ imageId: saved.id, userId });
+        await this.starter.start({ imageId: saved.id, userId, releaseId: saved.releaseId!, executionToken: saved.executionToken!, attempt: saved.dispatchAttempt! });
+        const dispatch = (await this.imageStore.listPendingDispatch()).find((record) => record.userId === userId && record.imageId === saved.id);
+        if (dispatch) await this.imageStore.markDispatchSent(dispatch, this.clock.now());
         records.push(saved);
       } catch {
-        // Could not enqueue — fail the record so it isn't stuck "queued" forever.
-        const errored: ImageGenRecord = {
-          ...saved,
-          status: 'error',
-          error: { code: 'internal', message: 'Could not start generation.' },
-          updatedAt: this.clock.now(),
-        };
-        await this.imageStore.put(errored);
-        records.push(errored);
+        records.push(saved);
       }
     }
 

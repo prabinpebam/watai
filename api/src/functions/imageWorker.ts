@@ -14,7 +14,9 @@ app.storageQueue('imageWorker', {
   handler: async (message: unknown, ctx: InvocationContext) => {
     const job = decodeImageJob(message);
     try {
-      await processImageJob(container().imageWorker, job.userId, job.imageId);
+      await processImageJob(container().imageWorker, job.userId, job.imageId, {
+        releaseId: job.releaseId, executionToken: job.executionToken, attempt: job.attempt,
+      });
     } catch (err) {
       ctx.error(`imageWorker failed for image ${job.imageId}`, err);
       throw err;

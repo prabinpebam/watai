@@ -104,6 +104,9 @@ function run(userId: string): RunRecord {
     allowDestructive: [],
     createdAt: '2026-01-01T00:00:00Z',
     heartbeatAt: '2026-01-01T00:00:00Z',
+    releaseId: 'release-1',
+    executionToken: `token-${userId}`,
+    dispatchAttempt: 1,
   };
 }
 

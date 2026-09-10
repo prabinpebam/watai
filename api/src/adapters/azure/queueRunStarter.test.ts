@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { decodeRunJob } from './queueRunStarter';
 
 describe('decodeRunJob', () => {
-  const job = { runId: 'r1', threadId: 't1', userId: 'u1' };
+  const job = { runId: 'r1', threadId: 't1', userId: 'u1', releaseId: 'release-1', executionToken: 'token-1', attempt: 1 };
 
   it('decodes a base64-encoded JSON message (as the starter sends it)', () => {
     const b64 = Buffer.from(JSON.stringify(job)).toString('base64');

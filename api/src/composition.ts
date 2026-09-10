@@ -68,6 +68,8 @@ import { createAiProxyController } from './http/aiProxyController';
 import { createWebController } from './http/webController';
 import { createLibraryController } from './http/libraryController';
 import { WebImageService } from './application/webImageService';
+import { RunDispatchService } from './application/runDispatchService';
+import { ImageDispatchService } from './application/imageDispatchService';
 import { AppError } from './domain/errors';
 import type { TokenVerifier } from './ports/tokenVerifier';
 import type { KeyWrapper } from './ports/keyWrapper';
@@ -99,6 +101,8 @@ export interface ApiContainer {
   imageWorker: ImageWorkerDeps;
   /** Background memory extraction worker service. */
   memoryWorker: MemoryExtractionService;
+  runDispatch: RunDispatchService;
+  imageDispatch: ImageDispatchService;
 }
 
 /** Production uses an Azure Key Vault RSA key as the KEK; local dev falls back to an
@@ -148,7 +152,9 @@ export function container(): ApiContainer {
     (process.env.ADMIN_OID ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   );
   const credentialService = new CredentialService(credentialStore, buildKeyWrapper(), clock);
-  const imageService = new ImageService(imageStore, credentialService, new QueueImageStarter(), minter, clock);
+  const imageStarter = new QueueImageStarter();
+  const imageService = new ImageService(imageStore, credentialService, imageStarter, minter, clock);
+  const imageDispatch = new ImageDispatchService(imageStore, imageStarter, clock);
   const memoryService = new MemoryService(memoryStore, clock);
   const memoryModelService = new MemoryModelService(
     appConfigStore,
@@ -184,7 +190,9 @@ export function container(): ApiContainer {
     clock,
   });
   const messageService = new MessageService(threadStore, messageStore, clock, memoryExtractionService, libraryStore);
-  const runService = new RunService(threadStore, messageService, runStore, new QueueRunStarter(), clock);
+  const runStarter = new QueueRunStarter();
+  const runService = new RunService(threadStore, messageService, runStore, runStarter, clock);
+  const runDispatch = new RunDispatchService(runStore, runStarter, clock);
   const threadFilesService = new ThreadFilesService(threadStore, credentialService, aoaiFiles, clock, {
     uploadOriginal: makeUploadImage(assetService, 'thread_document'),
     resolveLibraryItem: async (userId, itemId) => {
@@ -281,6 +289,8 @@ export function container(): ApiContainer {
       clock,
     },
     memoryWorker: memoryExtractionService,
+    runDispatch,
+    imageDispatch,
   };
   return cached;
 }

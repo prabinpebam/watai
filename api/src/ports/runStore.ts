@@ -25,6 +25,21 @@ export interface RunRecord {
   endedAt?: string | null;
   /** Liveness heartbeat for stale-run detection. */
   heartbeatAt: string;
+  releaseId?: string;
+  executionToken?: string;
+  dispatchAttempt?: number;
+}
+
+export interface RunDispatchRecord {
+  runId: string;
+  threadId: string;
+  userId: string;
+  releaseId: string;
+  executionToken: string;
+  attempt: number;
+  state: 'pending' | 'sent';
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface RunAdmissionRequest {
@@ -57,6 +72,9 @@ export interface RunStore {
     expectedStatuses: RunStatus[],
     patch: Partial<Omit<RunRecord, 'id' | 'userId' | 'threadId'>>,
   ): Promise<RunTransitionResult>;
+  listPendingDispatch(limit?: number): Promise<RunDispatchRecord[]>;
+  listStaleActive(before: string, limit?: number): Promise<RunRecord[]>;
+  markDispatchSent(record: RunDispatchRecord, sentAt: string): Promise<void>;
   put(record: RunRecord): Promise<RunRecord>;
   /** Active (queued|running) runs for a thread — enforces one run per thread. */
   listActive(userId: string, threadId: string): Promise<RunRecord[]>;

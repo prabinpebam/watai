@@ -94,15 +94,16 @@ describe('ImageService.create', () => {
     await expect(svc.create('userA', { prompt: 'x', sourceImageId: 'src', useReference: true })).rejects.toMatchObject({ code: 'validation' });
   });
 
-  it('marks the record error when the job cannot be enqueued', async () => {
+  it('leaves the accepted image queued for reconciliation when enqueue fails', async () => {
     const store = new InMemoryImageStore();
     const failing: ImageJobStarter = { start: async () => { throw new Error('queue down'); } };
     const svc = new ImageService(store, creds('gpt-image-1'), failing, minter, makeClock());
 
     const out = await svc.create('userA', { prompt: 'x' });
-    expect(out[0].status).toBe('error');
+    expect(out[0].status).toBe('queued');
     const stored = await store.get('userA', out[0].id);
-    expect(stored?.status).toBe('error');
+    expect(stored?.status).toBe('queued');
+    expect(await store.listPendingDispatch()).toHaveLength(1);
   });
 });
 
