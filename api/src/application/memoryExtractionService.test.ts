@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryMemoryStore } from '../adapters/memory/memoryStore';
 import { InMemoryMemoryJobStore } from '../adapters/memory/memoryJobStore';
 import { InMemoryMessageStore } from '../adapters/memory/messageStore';
@@ -9,13 +9,18 @@ import type { Embedder } from '../ports/embedder';
 import { MemoryExtractionService, type MemoryExtractorPort, type MemoryQueuePort } from './memoryExtractionService';
 import { MemoryService } from './memoryService';
 
-function setup(extractor: MemoryExtractorPort, embedder?: Embedder, settingsOverride?: { get: () => Promise<typeof DEFAULT_SETTINGS> }) {
+function setup(
+  extractor: MemoryExtractorPort,
+  embedder?: Embedder,
+  settingsOverride?: { get: () => Promise<typeof DEFAULT_SETTINGS> },
+  queueOverride?: MemoryQueuePort,
+) {
   const memoryStore = new InMemoryMemoryStore();
   const jobStore = new InMemoryMemoryJobStore();
   const messageStore = new InMemoryMessageStore();
   const threadStore = new InMemoryThreadStore();
   const enqueued: string[] = [];
-  const queue: MemoryQueuePort = { enqueue: async (job) => void enqueued.push(job.id) };
+  const queue: MemoryQueuePort = queueOverride ?? { enqueue: async (job) => void enqueued.push(job.id) };
   let n = 0;
   let t = 0;
   const clock = { newId: () => `id_${++n}`, now: () => `2026-01-01T00:00:${String(t++).padStart(2, '0')}Z` };
@@ -46,9 +51,10 @@ async function seedThread(ctx: ReturnType<typeof setup>, temporary = false, user
 
 describe('MemoryExtractionService', () => {
   it('enqueues turn jobs idempotently and applies LLM add output', async () => {
-    const ctx = setup(async () => ({
-      operations: [{ op: 'add', kind: 'preference', text: 'User prefers concise implementation plans.', confidence: 0.92, salience: 0.8, sourceMessageIds: ['u1'], reason: 'Stable preference.' }],
+    const extractor = vi.fn(async () => ({
+      operations: [{ op: 'add' as const, kind: 'preference' as const, text: 'User prefers concise implementation plans.', confidence: 0.92, salience: 0.8, sourceMessageIds: ['u1'], reason: 'Stable preference.' }],
     }));
+    const ctx = setup(extractor);
     await seedThread(ctx);
     const first = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
     const second = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
@@ -56,13 +62,47 @@ describe('MemoryExtractionService', () => {
     expect(ctx.enqueued).toEqual([first?.id]);
 
     await ctx.svc.processJob('userA', first!.id);
+    await ctx.svc.processJob('userA', first!.id);
 
     const memories = (await ctx.memoryStore.list('userA', { status: 'active' })).memories;
     expect(memories).toHaveLength(1);
     expect(memories[0]).toMatchObject({ kind: 'preference', text: 'User prefers concise implementation plans.' });
     expect(memories[0].sourceRefs[0]).toMatchObject({ type: 'message', threadId: 't1', messageId: 'u1' });
     expect((await ctx.jobStore.get('userA', first!.id))?.status).toBe('completed');
+    expect(extractor).toHaveBeenCalledTimes(1);
     expect(ctx.sends).toEqual([{ target: 'memory', payload: expect.objectContaining({ acceptedCount: 1, threadId: 't1', assistantMessageId: 'a1' }) }]);
+  });
+
+  it('lets only one simultaneous duplicate delivery claim the extraction job', async () => {
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const extractor = vi.fn(async () => {
+      await blocked;
+      return { operations: [{ op: 'ignore' as const, reason: 'done once' }] };
+    });
+    const ctx = setup(extractor);
+    await seedThread(ctx);
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    const first = ctx.svc.processJob('userA', job!.id);
+    const second = ctx.svc.processJob('userA', job!.id);
+    await vi.waitFor(() => expect(extractor).toHaveBeenCalledTimes(1));
+    release();
+    await Promise.all([first, second]);
+    expect(extractor).toHaveBeenCalledTimes(1);
+    expect((await ctx.jobStore.get('userA', job!.id))?.attempts).toBe(1);
+  });
+
+  it('keeps accepted learning work pending when immediate queue dispatch fails', async () => {
+    const ctx = setup(
+      async () => ({ operations: [{ op: 'ignore', reason: 'unused' }] }),
+      undefined,
+      undefined,
+      { enqueue: async () => { throw new Error('queue unavailable'); } },
+    );
+    await seedThread(ctx);
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    expect(job?.status).toBe('queued');
+    await expect(ctx.jobStore.listPendingDispatch()).resolves.toMatchObject([{ jobId: job?.id, state: 'pending' }]);
   });
 
   it('does not recreate a deleted memory when extraction is replayed with a paraphrase from the same source', async () => {
@@ -121,7 +161,23 @@ describe('MemoryExtractionService', () => {
     const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
     await ctx.svc.processJob('userA', job!.id);
     expect((await ctx.memoryStore.list('userA', { status: 'active' })).memories).toEqual([]);
-    expect((await ctx.jobStore.get('userA', job!.id))?.status).toBe('ignored');
+    expect(await ctx.jobStore.get('userA', job!.id)).toMatchObject({ status: 'ignored', terminalReason: 'policy_revoked' });
+  });
+
+  it('rejects mutation when a source message is deleted during extraction', async () => {
+    let ctx: ReturnType<typeof setup>;
+    ctx = setup(async () => {
+      await ctx.messageStore.delete('userA', 't1', 'u1');
+      return { operations: [{
+        op: 'add', kind: 'preference', text: 'Must not persist.', confidence: 0.99, salience: 0.99,
+        sourceMessageIds: ['u1'], reason: 'source deleted',
+      }] };
+    });
+    await seedThread(ctx);
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    await ctx.svc.processJob('userA', job!.id);
+    expect((await ctx.memoryStore.list('userA', { status: 'active' })).memories).toEqual([]);
+    expect(await ctx.jobStore.get('userA', job!.id)).toMatchObject({ status: 'ignored', terminalReason: 'no_operations_accepted' });
   });
 
   it('records ignored decisions and rejects one-off/low-confidence output', async () => {

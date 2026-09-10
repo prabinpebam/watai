@@ -98,6 +98,9 @@ const jobMessageSchema = z
     userId: id,
     threadId: id,
     kind: z.enum(MEMORY_JOB_KINDS),
+    releaseId: id,
+    executionToken: id,
+    attempt: z.number().int().positive(),
   })
   .strict();
 
@@ -112,6 +115,10 @@ const jobRecordSchema = z
     assistantMessageId: id.optional(),
     runId: id.optional(),
     dedupeKey: z.string().trim().min(1).max(160),
+    sourceRevision: z.string().regex(/^[a-f0-9]{64}$/),
+    releaseId: id,
+    executionToken: id,
+    dispatchAttempt: z.number().int().positive(),
     attempts: z.number().int().nonnegative(),
     operationCounts: z
       .object({ add: z.number().int().nonnegative(), merge: z.number().int().nonnegative(), invalidate: z.number().int().nonnegative(), suppress: z.number().int().nonnegative(), ignore: z.number().int().nonnegative() })
@@ -121,6 +128,7 @@ const jobRecordSchema = z
     rejectedCount: z.number().int().nonnegative().optional(),
     lastErrorCode: z.string().trim().min(1).max(80).optional(),
     lastErrorMessage: z.string().trim().min(1).max(400).optional(),
+    terminalReason: z.string().trim().min(1).max(160).optional(),
     createdAt: z.string().trim().min(1).max(40),
     updatedAt: z.string().trim().min(1).max(40),
     completedAt: z.string().trim().min(1).max(40).optional(),

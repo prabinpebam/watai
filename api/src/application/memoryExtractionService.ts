@@ -59,12 +59,16 @@ function chrono(message: MessageRecord): string {
   return message.orderAt ?? message.createdAt;
 }
 
-function commandDedupe(userMessageId: string): string {
-  return `memory-command:${userMessageId}`;
+function messageRevision(message: MessageRecord): string {
+  return createHash('sha256').update(`${message.id}\n${message.createdAt}\n${message.content}`).digest('hex');
 }
 
-function turnDedupe(assistantMessageId: string): string {
-  return `memory-turn:${assistantMessageId}`;
+function commandDedupe(userMessageId: string, sourceRevision: string): string {
+  return `memory-command:${userMessageId}:${sourceRevision.slice(0, 24)}`;
+}
+
+function turnDedupe(assistantMessageId: string, sourceRevision: string): string {
+  return `memory-turn:${assistantMessageId}:${sourceRevision.slice(0, 24)}`;
 }
 
 /** Mechanical floor: a window/message with less than this many non-space characters is too trivial
@@ -94,7 +98,10 @@ async function embedFor(
 }
 
 export class MemoryExtractionService {
-  constructor(private readonly deps: MemoryExtractionDeps) {}
+  constructor(
+    private readonly deps: MemoryExtractionDeps,
+    private readonly releaseId = process.env.WATAI_RELEASE_ID?.trim() || 'local-development',
+  ) {}
 
   private async eligible(userId: string, threadId: string): Promise<ThreadRecord | null> {
     const thread = await this.deps.threadStore.get(userId, threadId);
@@ -115,7 +122,8 @@ export class MemoryExtractionService {
     if (!thread) return null;
     const msg = await this.deps.messageStore.get(userId, threadId, userMessageId);
     if (!msg || msg.userId !== userId || msg.role !== 'user' || msg.content.trim().length < MIN_MEANINGFUL_CHARS) return null;
-    return this.enqueueJob(userId, threadId, 'command', commandDedupe(userMessageId), { userMessageId, runId });
+    const sourceRevision = messageRevision(msg);
+    return this.enqueueJob(userId, threadId, 'command', commandDedupe(userMessageId, sourceRevision), { userMessageId, runId, sourceRevision });
   }
 
   async enqueueTurn(userId: string, threadId: string, assistantMessageId: string, runId?: string): Promise<import('../domain/memoryExtraction').MemoryExtractionJobRecord | null> {
@@ -125,7 +133,8 @@ export class MemoryExtractionService {
     if (!msg || msg.userId !== userId || msg.role !== 'assistant' || msg.status !== 'complete') return null;
     const window = await this.messagesAround(userId, threadId, assistantMessageId);
     if (!window.some((message) => message.role === 'user' && message.content.trim().length >= MIN_MEANINGFUL_CHARS)) return null;
-    return this.enqueueJob(userId, threadId, 'turn', turnDedupe(assistantMessageId), { assistantMessageId, runId });
+    const sourceRevision = messageRevision(msg);
+    return this.enqueueJob(userId, threadId, 'turn', turnDedupe(assistantMessageId, sourceRevision), { assistantMessageId, runId, sourceRevision });
   }
 
   async enqueueAfterMessage(record: MessageRecord): Promise<void> {
@@ -142,38 +151,48 @@ export class MemoryExtractionService {
     threadId: string,
     kind: 'command' | 'turn',
     dedupeKey: string,
-    ids: { userMessageId?: string; assistantMessageId?: string; runId?: string },
+    ids: { userMessageId?: string; assistantMessageId?: string; runId?: string; sourceRevision: string },
   ) {
     const existing = await this.deps.jobStore.getByDedupeKey(userId, dedupeKey);
-    if (existing && existing.status !== 'failed') return existing;
+    if (existing) return existing;
     const ts = this.deps.clock.now();
     const job = parseMemoryExtractionJobRecord({
-      id: existing?.id ?? this.deps.clock.newId(),
+      id: `memory-job-${createHash('sha256').update(dedupeKey).digest('hex').slice(0, 32)}`,
       userId,
       threadId,
       kind,
       status: 'queued',
       ...ids,
       dedupeKey,
-      attempts: existing ? existing.attempts + 1 : 0,
-      createdAt: existing?.createdAt ?? ts,
+      sourceRevision: ids.sourceRevision,
+      releaseId: this.releaseId,
+      executionToken: this.deps.clock.newId(),
+      dispatchAttempt: 1,
+      attempts: 0,
+      createdAt: ts,
       updatedAt: ts,
     });
-    await this.deps.jobStore.put(job);
-    await this.deps.queue.enqueue(job);
-    return job;
+    const admission = await this.deps.jobStore.admit(job);
+    if (admission.outcome === 'replay') return admission.job;
+    try {
+      await this.deps.queue.enqueue(admission.job);
+      const dispatch = (await this.deps.jobStore.listPendingDispatch()).find((record) =>
+        record.userId === userId && record.jobId === admission.job.id);
+      if (dispatch) await this.deps.jobStore.markDispatchSent(dispatch, this.deps.clock.now());
+    } catch {
+      // The durable pending dispatch is reconciled by the timer; accepted learning work is not lost.
+    }
+    return admission.job;
   }
 
-  async processJob(userId: string, jobId: string): Promise<void> {
-    const job = await this.deps.jobStore.get(userId, jobId);
+  async processJob(userId: string, jobId: string, fence?: { releaseId: string; executionToken: string; attempt: number }): Promise<void> {
+    const job = await this.deps.jobStore.claim(userId, jobId, this.deps.clock.now(), fence);
     if (!job) return;
-    const ts = this.deps.clock.now();
-    await this.deps.jobStore.put({ ...job, status: 'running', attempts: job.attempts + 1, updatedAt: ts });
     try {
       const thread = await this.eligible(job.userId, job.threadId);
-      if (!thread) return await this.finish(job, 'ignored', { ignore: 1 }, 0, 0);
+      if (!thread) return await this.finish(job, 'ignored', { ignore: 1 }, 0, 0, 'policy_or_source_ineligible');
       const messages = await this.windowFor(job);
-      if (!messages.length) return await this.finish(job, 'ignored', { ignore: 1 }, 0, 0);
+      if (!messages.length) return await this.finish(job, 'ignored', { ignore: 1 }, 0, 0, 'source_missing');
       const creds = await this.deps.credentials.getDecrypted(job.userId);
       const embedder = this.deps.embedder
         ? { embed: (text: string) => this.deps.embedder!.embed(creds, text), model: this.deps.embedder.model }
@@ -187,15 +206,15 @@ export class MemoryExtractionService {
         messages: messages.map((m) => ({ id: m.id, role: m.role as 'user' | 'assistant', content: m.content.slice(0, 4096), createdAt: chrono(m) })),
         existingMemories: candidates.map((m) => ({ id: m.id, kind: m.kind, status: m.status, text: m.text, entities: m.entities, topics: m.topics, validAt: m.validAt, invalidAt: m.invalidAt })),
       });
-      if (!(await this.learningAllowed(job.userId))) return await this.finish(job, 'ignored', { ignore: 1 }, 0, 0);
+      if (!(await this.learningAllowed(job.userId))) return await this.finish(job, 'ignored', { ignore: 1 }, 0, 0, 'policy_revoked');
       const result = await this.applyOperations(job.userId, job.threadId, job.kind, messages, candidates, out, embedder);
       if (embedder) await this.backfillEmbeddings(job.userId, embedder);
-      await this.finish(job, result.accepted > 0 ? 'completed' : 'ignored', result.counts, result.accepted, result.rejected);
+      await this.finish(job, result.accepted > 0 ? 'completed' : 'ignored', result.counts, result.accepted, result.rejected, result.accepted > 0 ? 'committed' : 'no_operations_accepted');
     } catch (e) {
       await this.deps.jobStore.put({
         ...job,
         status: 'failed',
-        attempts: job.attempts + 1,
+        attempts: job.attempts,
         lastErrorCode: 'extract_failed',
         lastErrorMessage: e instanceof Error ? e.message.slice(0, 400) : 'Memory extraction failed.',
         updatedAt: this.deps.clock.now(),
@@ -210,6 +229,7 @@ export class MemoryExtractionService {
     counts: Partial<Record<'add' | 'merge' | 'invalidate' | 'suppress' | 'ignore', number>>,
     accepted: number,
     rejected: number,
+    terminalReason: string,
   ): Promise<void> {
     const ts = this.deps.clock.now();
     await this.deps.jobStore.put({
@@ -218,6 +238,7 @@ export class MemoryExtractionService {
       operationCounts: { add: counts.add ?? 0, merge: counts.merge ?? 0, invalidate: counts.invalidate ?? 0, suppress: counts.suppress ?? 0, ignore: counts.ignore ?? 0 },
       acceptedCount: accepted,
       rejectedCount: rejected,
+      terminalReason,
       updatedAt: ts,
       completedAt: ts,
     });
@@ -262,6 +283,15 @@ export class MemoryExtractionService {
     return refs;
   }
 
+  private async sourcesCurrent(userId: string, refs: MemorySourceRef[]): Promise<boolean> {
+    for (const ref of refs) {
+      if (ref.type !== 'message' || !ref.threadId || !ref.messageId) continue;
+      const current = await this.deps.messageStore.get(userId, ref.threadId, ref.messageId);
+      if (!current || current.deletedAt || current.content.slice(0, 500) !== (ref.quote ?? '') || chrono(current) !== ref.createdAt) return false;
+    }
+    return true;
+  }
+
   private async applyOperations(
     userId: string,
     threadId: string,
@@ -281,6 +311,7 @@ export class MemoryExtractionService {
         if (op.op === 'ignore') continue;
         const refs = this.sourceRefs(threadId, messages, op.sourceMessageIds);
         if (!refs) { rejected++; continue; }
+        if (!(await this.sourcesCurrent(userId, refs))) { rejected++; continue; }
         if (op.op === 'add') {
           const minConfidence = mode === 'command' ? 0.65 : 0.82;
           const minSalience = mode === 'command' ? 0.4 : 0.65;

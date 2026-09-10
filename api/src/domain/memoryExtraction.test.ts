@@ -81,13 +81,18 @@ describe('memory extraction domain', () => {
     ).toBe('validation');
   });
 
-  it('validates queue messages by id only', () => {
-    expect(parseMemoryJobMessage({ jobId: 'job1', userId: 'user1', threadId: 'thr1', kind: 'turn' })).toEqual({
+  it('requires queue messages to carry exact execution fencing', () => {
+    const message = { jobId: 'job1', userId: 'user1', threadId: 'thr1', kind: 'turn', releaseId: 'release1', executionToken: 'token1', attempt: 1 };
+    expect(parseMemoryJobMessage(message)).toEqual({
       jobId: 'job1',
       userId: 'user1',
       threadId: 'thr1',
       kind: 'turn',
+      releaseId: 'release1',
+      executionToken: 'token1',
+      attempt: 1,
     });
-    expect(code(() => parseMemoryJobMessage({ jobId: 'job1', userId: 'user1', threadId: 'thr1', kind: 'turn', content: 'nope' }))).toBe('validation');
+    expect(code(() => parseMemoryJobMessage({ jobId: 'job1', userId: 'user1', threadId: 'thr1', kind: 'turn' }))).toBe('validation');
+    expect(code(() => parseMemoryJobMessage({ ...message, content: 'nope' }))).toBe('validation');
   });
 });

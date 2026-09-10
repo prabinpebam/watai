@@ -70,6 +70,7 @@ import { createLibraryController } from './http/libraryController';
 import { WebImageService } from './application/webImageService';
 import { RunDispatchService } from './application/runDispatchService';
 import { ImageDispatchService } from './application/imageDispatchService';
+import { MemoryDispatchService } from './application/memoryDispatchService';
 import { AppError } from './domain/errors';
 import type { TokenVerifier } from './ports/tokenVerifier';
 import type { KeyWrapper } from './ports/keyWrapper';
@@ -103,6 +104,7 @@ export interface ApiContainer {
   memoryWorker: MemoryExtractionService;
   runDispatch: RunDispatchService;
   imageDispatch: ImageDispatchService;
+  memoryDispatch: MemoryDispatchService;
 }
 
 /** Production uses an Azure Key Vault RSA key as the KEK; local dev falls back to an
@@ -165,6 +167,7 @@ export function container(): ApiContainer {
   const assetService = new AssetService(threadStore, minter);
   const settingsService = new SettingsService(settingsStore);
   const memoryEmbedModel = process.env.MEMORY_EMBED_MODEL?.trim();
+  const memoryQueue = new QueueMemoryStarter();
   const memoryEmbedder = memoryEmbedModel ? azureEmbedder(memoryEmbedModel) : undefined;
   const memoryRetriever = memoryEmbedder ? new InProcessRetriever(memoryStore) : undefined;
   const memoryProfileEnabled = process.env.MEMORY_PROFILE === '1' || process.env.MEMORY_PROFILE === 'true';
@@ -181,7 +184,7 @@ export function container(): ApiContainer {
     jobStore: memoryJobStore,
     messageStore,
     threadStore,
-    queue: new QueueMemoryStarter(),
+    queue: memoryQueue,
     settings: settingsService,
     credentials: credentialService,
     extractor: async (creds, input) => extractMemories(creds, input, { model: await memoryModelService.effectiveModel(input.mode) }),
@@ -189,6 +192,7 @@ export function container(): ApiContainer {
     signalr: signalr ?? undefined,
     clock,
   });
+  const memoryDispatch = new MemoryDispatchService(memoryJobStore, memoryQueue, clock);
   const messageService = new MessageService(threadStore, messageStore, clock, memoryExtractionService, libraryStore);
   const runStarter = new QueueRunStarter();
   const runService = new RunService(threadStore, messageService, runStore, runStarter, clock);
@@ -291,6 +295,7 @@ export function container(): ApiContainer {
     memoryWorker: memoryExtractionService,
     runDispatch,
     imageDispatch,
+    memoryDispatch,
   };
   return cached;
 }

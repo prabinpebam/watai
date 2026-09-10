@@ -26,7 +26,15 @@ export class QueueMemoryStarter {
       await q.createIfNotExists();
       this.ensured = true;
     }
-    const message: MemoryJobMessage = { jobId: job.id, userId: job.userId, threadId: job.threadId, kind: job.kind };
+    const message: MemoryJobMessage = {
+      jobId: job.id,
+      userId: job.userId,
+      threadId: job.threadId,
+      kind: job.kind,
+      releaseId: job.releaseId,
+      executionToken: job.executionToken,
+      attempt: job.dispatchAttempt,
+    };
     await q.sendMessage(Buffer.from(JSON.stringify(message), 'utf8').toString('base64'));
   }
 }

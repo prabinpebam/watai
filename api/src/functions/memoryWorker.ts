@@ -8,7 +8,9 @@ app.storageQueue('memoryWorker', {
   handler: async (message: unknown, ctx: InvocationContext): Promise<void> => {
     const job = decodeMemoryJob(message);
     try {
-      await container().memoryWorker.processJob(job.userId, job.jobId);
+      await container().memoryWorker.processJob(job.userId, job.jobId, {
+        releaseId: job.releaseId, executionToken: job.executionToken, attempt: job.attempt,
+      });
     } catch (err) {
       ctx.error(`memoryWorker failed for job ${job.jobId}`, err);
       throw err;
