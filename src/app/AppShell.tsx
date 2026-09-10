@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useIsExpanded } from '../lib/hooks';
 import { useUi } from '../state/store';
@@ -47,13 +47,15 @@ function SidebarContent({
         </div>
       )}
       <div className="sidebar__actions">
-        <Button variant="secondary" icon="pen-square" onClick={newChat} full>
+        <Button variant="secondary" icon="pen-square" onClick={newChat} full aria-label={collapsed ? 'New chat' : undefined} title={collapsed ? 'New chat' : undefined}>
           {!collapsed && <span className="btn--full-label">New chat</span>}
         </Button>
         <Button
           variant="ghost"
           icon="search"
           full
+          aria-label={collapsed ? 'Search' : undefined}
+          title={collapsed ? 'Search' : undefined}
           onClick={() => {
             navigate('/search');
             onNavigate?.();
@@ -86,6 +88,8 @@ function SidebarContent({
           variant="ghost"
           icon="settings"
           full
+          aria-label={collapsed ? 'Settings' : undefined}
+          title={collapsed ? 'Settings' : undefined}
           onClick={() => {
             navigate('/settings');
             onNavigate?.();
@@ -104,10 +108,29 @@ export function AppShell({ libraryPath = '/library' }: { libraryPath?: string })
   const drawerOpen = useUi((s) => s.drawerOpen);
   const toggleDrawer = useUi((s) => s.toggleDrawer);
   const collapsed = useUi((s) => s.sidebarCollapsed);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+  const drawerTriggerRef = useRef<HTMLElement | null>(null);
 
   // Close the drawer when switching to expanded layout
   useEffect(() => {
     if (expanded && drawerOpen) toggleDrawer(false);
+  }, [expanded, drawerOpen, toggleDrawer]);
+
+  useEffect(() => {
+    if (expanded || !drawerOpen) return;
+    drawerTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    mainRef.current?.setAttribute('inert', '');
+    drawerRef.current?.querySelector<HTMLElement>('button')?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') toggleDrawer(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      mainRef.current?.removeAttribute('inert');
+      if (drawerTriggerRef.current?.isConnected) drawerTriggerRef.current.focus();
+    };
   }, [expanded, drawerOpen, toggleDrawer]);
 
   return (
@@ -118,14 +141,14 @@ export function AppShell({ libraryPath = '/library' }: { libraryPath?: string })
         </aside>
       )}
 
-      <div className="app__main">
+      <div className="app__main" ref={mainRef}>
         <Outlet />
       </div>
 
       {!expanded && drawerOpen && (
         <>
           <div className="drawer-scrim" onClick={() => toggleDrawer(false)} />
-          <aside className="drawer">
+          <aside className="drawer" ref={drawerRef} role="dialog" aria-modal="true" aria-label="Navigation menu">
             <div className="sidebar__top">
               <div className="sidebar__brand">
                 <Logo size={26} />

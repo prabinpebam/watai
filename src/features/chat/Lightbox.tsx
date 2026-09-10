@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { IconButton } from '../../design/ui';
+import { useDialogLayer } from '../../design/overlays';
 import type { ImageRef } from '../../lib/types';
 
 export interface GalleryImage {
@@ -41,6 +42,7 @@ export function Lightbox({ src, alt, prompt, onClose, onDownload, images = [], c
   const previous = hasGallery ? images[(currentIndex - 1 + images.length) % images.length] : undefined;
   const next = hasGallery ? images[(currentIndex + 1) % images.length] : undefined;
   const activeThumbRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // The viewer stays mounted while you step through the strip, so the active thumb has to be
   // brought along rather than relying on a fresh mount starting at the left edge.
@@ -48,22 +50,20 @@ export function Lightbox({ src, alt, prompt, onClose, onDownload, images = [], c
     activeThumbRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
   }, [currentIndex]);
 
+  useDialogLayer(dialogRef, true, onClose, (event) => {
+    if (event.key === 'ArrowLeft' && previous) onSelect?.(previous);
+    if (event.key === 'ArrowRight' && next) onSelect?.(next);
+  });
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowLeft' && previous) onSelect?.(previous);
-      if (e.key === 'ArrowRight' && next) onSelect?.(next);
-    };
-    window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {
-      window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [next, onClose, onSelect, previous]);
+  }, []);
 
   return createPortal(
-    <div className="viewer" role="dialog" aria-modal="true" aria-label={alt || 'Image'} onClick={onClose}>
+    <div ref={dialogRef} className="viewer" role="dialog" aria-modal="true" aria-label={alt || 'Image'} onClick={onClose}>
       <div className="viewer__bar" onClick={(e) => e.stopPropagation()}>
         <span className="viewer__title">{hasGallery ? `${currentIndex + 1} of ${images.length}` : alt}</span>
         {onDownload && <IconButton name="download" label="Download" onClick={onDownload} />}

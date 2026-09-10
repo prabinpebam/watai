@@ -1,4 +1,4 @@
-import { useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './icons';
 import { useDismiss } from '../lib/hooks';
@@ -122,16 +122,29 @@ interface SegmentedProps<T extends string> {
 }
 
 export function Segmented<T extends string>({ value, options, onChange, disabled = false }: SegmentedProps<T>) {
+  const move = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let next = index;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % options.length;
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + options.length) % options.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = options.length - 1;
+    else return;
+    event.preventDefault();
+    onChange(options[next].value);
+    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+  };
   return (
     <div className="segmented" role="tablist">
-      {options.map((o) => (
+      {options.map((o, index) => (
         <button
           key={o.value}
           role="tab"
           aria-selected={o.value === value}
           disabled={disabled}
+          tabIndex={o.value === value ? 0 : -1}
           className={`segmented__item ${o.value === value ? 'segmented__item--active' : ''}`}
           onClick={() => onChange(o.value)}
+          onKeyDown={(event) => move(event, index)}
         >
           {o.label}
         </button>
@@ -152,11 +165,38 @@ export function SelectMenu<T extends string>({ value, options, onChange, label, 
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  useDismiss(open, () => setOpen(false), [buttonRef, menuRef]);
+  const close = () => {
+    setOpen(false);
+    buttonRef.current?.focus();
+  };
+  useDismiss(open, close, [buttonRef, menuRef]);
   const selected = options.find((option) => option.value === value) ?? options[0];
   const rect = buttonRef.current?.getBoundingClientRect();
   const left = rect ? Math.min(rect.left, window.innerWidth - 260) : 0;
   const top = rect ? rect.bottom + 6 : 0;
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+  }, [open]);
+
+  const onListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]')];
+    const current = Math.max(0, items.indexOf(document.activeElement as HTMLButtonElement));
+    let next = current;
+    if (event.key === 'ArrowDown') next = (current + 1) % items.length;
+    else if (event.key === 'ArrowUp') next = (current - 1 + items.length) % items.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = items.length - 1;
+    else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+      return;
+    } else return;
+    event.preventDefault();
+    items[next]?.focus();
+  };
 
   return (
     <>
@@ -168,12 +208,17 @@ export function SelectMenu<T extends string>({ value, options, onChange, label, 
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+          event.preventDefault();
+          setOpen(true);
+        }}
       >
         <span className="select-menu__label">{selected?.label ?? value}</span>
         <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} className="select-menu__chevron" />
       </button>
       {open && rect && createPortal(
-        <div ref={menuRef} className="select-menu-pop" style={{ left, top }} role="listbox" aria-label={label}>
+        <div ref={menuRef} className="select-menu-pop" style={{ left, top }} role="listbox" aria-label={label} onKeyDown={onListKeyDown}>
           {options.map((option) => {
             const active = option.value === value;
             return (
@@ -182,10 +227,11 @@ export function SelectMenu<T extends string>({ value, options, onChange, label, 
                 type="button"
                 role="option"
                 aria-selected={active}
+                tabIndex={active ? 0 : -1}
                 className={`select-menu-pop__item ${active ? 'is-active' : ''}`}
                 onClick={() => {
                   onChange(option.value);
-                  setOpen(false);
+                  close();
                 }}
               >
                 <span className="select-menu-pop__text">

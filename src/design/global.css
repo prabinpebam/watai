@@ -656,6 +656,15 @@ a:hover {
 .md-img-wrap .md-img {
   margin: 0;
 }
+.md-img-open {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: zoom-in;
+}
 .md-img-use {
   position: absolute;
   top: var(--space-3);

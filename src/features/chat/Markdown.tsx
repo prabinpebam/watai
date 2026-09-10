@@ -25,7 +25,9 @@ function MdImage({ src, alt, onOpen }: { src: string; alt: string; onOpen: () =>
   const usable = /^https?:\/\//i.test(src);
   return (
     <span className="md-img-wrap">
-      <img className="md-img" src={src} alt={alt} loading="lazy" onClick={onOpen} />
+      <button type="button" className="md-img-open" aria-label={`Expand ${alt || 'image'}`} onClick={onOpen}>
+        <img className="md-img" src={src} alt={alt} loading="lazy" />
+      </button>
       {usable && (
         <button
           type="button"

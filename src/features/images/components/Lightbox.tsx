@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { IconButton, Button } from '../../../design/ui';
 import { Icon } from '../../../design/icons';
 import { useUi } from '../../../state/store';
 import { useImageStudio } from '../imageStudioStore';
 import { downloadImage } from './download';
 import { prepareFile } from '../../../lib/saveFile';
+import { useDialogLayer } from '../../../design/overlays';
 
 const SIZE_LABEL: Record<string, string> = {
   '1024x1024': 'Square · 1024×1024',
@@ -24,21 +25,16 @@ export function Lightbox() {
   const remove = useImageStudio((s) => s.remove);
 
   const img = images.find((i) => i.id === lightboxId) ?? null;
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (img?.url) void prepareFile(img.url)?.catch(() => undefined);
   }, [img?.url]);
 
-  useEffect(() => {
-    if (!img) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-      else if (e.key === 'ArrowLeft') step(-1);
-      else if (e.key === 'ArrowRight') step(1);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [img, close, step]);
+  useDialogLayer(dialogRef, !!img, close, (event) => {
+    if (event.key === 'ArrowLeft') step(-1);
+    else if (event.key === 'ArrowRight') step(1);
+  });
 
   if (!img) return null;
 
@@ -59,7 +55,7 @@ export function Lightbox() {
   };
 
   return (
-    <div className="viewer studio-lightbox" role="dialog" aria-label="Image viewer" aria-modal="true">
+    <div ref={dialogRef} className="viewer studio-lightbox" role="dialog" aria-label="Image viewer" aria-modal="true">
       <div className="viewer__bar">
         <IconButton name="close" label="Close" onClick={close} />
         <span className="grow" />
