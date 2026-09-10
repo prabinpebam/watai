@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { writeSync } from "node:fs";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -185,7 +186,7 @@ async function main(): Promise<void> {
     const stored = await receipts.list(runId);
     const toolIds = stored.filter((receipt) => receipt.status === "completed" && receipt.response?.status === "success")
       .map((receipt) => receipt.tool);
-    process.stdout.write(JSON.stringify({
+    writeSync(1, JSON.stringify({
       status: "completed",
       artifact: {
         kind: "gateway-contract",
@@ -211,7 +212,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
+main().then(() => {
+  process.exit(0);
+}).catch((error) => {
   if (!activeRequest) {
     process.stderr.write(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
@@ -234,7 +237,7 @@ main().catch((error) => {
           : typeof candidateCode === "number"
             ? `COPILOT_RPC_${Math.abs(candidateCode)}`
             : "COPILOT_SMOKE_FAILED";
-  process.stdout.write(JSON.stringify({
+  writeSync(1, JSON.stringify({
     status: "failed",
     artifact,
     latencyMs: Date.now() - activeStartedAt,
@@ -244,4 +247,5 @@ main().catch((error) => {
     errorCode,
     completedAt: new Date().toISOString(),
   }));
+  process.exit(0);
 });
