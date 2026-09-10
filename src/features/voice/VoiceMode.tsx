@@ -12,11 +12,12 @@ import { createTtsQueue, type TtsClip, type TtsQueue } from '../../lib/ttsQueue'
 import type { Settings } from '../../lib/types';
 import { createAudioElement, playAudioSource, primeAudioElement } from '../../lib/audioPlayback';
 
-type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'muted' | 'error';
+type Phase = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'speaking' | 'muted' | 'error';
 
 const PHASE_LABEL: Record<Phase, string> = {
   idle: 'Tap to speak',
   listening: 'Listening…',
+  transcribing: 'Transcribing…',
   thinking: 'Thinking…',
   speaking: 'Speaking…',
   muted: 'Muted',
@@ -35,6 +36,7 @@ export function VoiceMode() {
 
   const [listening, setListening] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const [muted, setMuted] = useState(false);
   const [errored, setErrored] = useState(false);
   const [caption, setCaption] = useState('');
@@ -46,6 +48,26 @@ export function VoiceMode() {
   const lastContentRef = useRef('');
   const runningRef = useRef(false);
   const turnedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const mutedRef = useRef(false);
+  const captureEpochRef = useRef(0);
+  const captureStartingRef = useRef(false);
+  const turnEpochRef = useRef(0);
+  const transcriptionAbortRef = useRef<AbortController | null>(null);
+  mutedRef.current = muted;
+
+  const cancelLocalWork = useCallback(() => {
+    captureEpochRef.current += 1;
+    turnEpochRef.current += 1;
+    recRef.current?.cancel();
+    recRef.current = null;
+    transcriptionAbortRef.current?.abort();
+    transcriptionAbortRef.current = null;
+    if (mountedRef.current) {
+      setListening(false);
+      setTranscribing(false);
+    }
+  }, []);
 
   // Load the voice settings once so each TTS clip doesn't await the repo on the playback path.
   useEffect(() => {
@@ -133,38 +155,64 @@ export function VoiceMode() {
   }, [run]);
 
   const startListening = useCallback(async () => {
+    if (captureStartingRef.current) return;
+    captureStartingRef.current = true;
+    const epoch = ++captureEpochRef.current;
     const audio = voiceAudioRef.current ?? createAudioElement();
     voiceAudioRef.current = audio;
     primeAudioElement(audio);
     setErrored(false);
     try {
-      recRef.current = await startRecording(settingsRef.current?.inputDeviceId);
+      const recorder = await startRecording(settingsRef.current?.inputDeviceId);
+      if (!mountedRef.current || mutedRef.current || epoch !== captureEpochRef.current) {
+        recorder.cancel();
+        return;
+      }
+      recRef.current = recorder;
       setCaption('');
       setListening(true);
-    } catch {
+    } catch (error) {
+      if (!mountedRef.current || epoch !== captureEpochRef.current) return;
       setErrored(true);
-      setCaption('Microphone permission is needed for voice mode.');
+      const name = error instanceof DOMException ? error.name : '';
+      setCaption(name === 'NotFoundError' || name === 'OverconstrainedError'
+        ? 'The selected microphone is unavailable.'
+        : name === 'NotAllowedError'
+          ? 'Microphone permission is needed for voice mode.'
+          : error instanceof Error ? error.message : 'Could not start microphone capture.');
+    } finally {
+      captureStartingRef.current = false;
     }
   }, []);
 
   const stopListening = useCallback(async () => {
+    const epoch = ++turnEpochRef.current;
     const rec = recRef.current;
     recRef.current = null;
     setListening(false);
     if (!rec) return;
+    setTranscribing(true);
+    const controller = new AbortController();
+    transcriptionAbortRef.current?.abort();
+    transcriptionAbortRef.current = controller;
     let text = '';
     try {
       const blob = await rec.stop();
       const res = await cloudApi.transcribeAudio({
         audio: blob,
         mime: blob.type,
-      });
+      }, controller.signal);
       text = res.text.trim();
     } catch (e) {
+      if (controller.signal.aborted) return;
       setErrored(true);
       setCaption(e instanceof Error ? e.message : 'Could not transcribe');
       return;
+    } finally {
+      if (transcriptionAbortRef.current === controller) transcriptionAbortRef.current = null;
+      if (mountedRef.current && epoch === turnEpochRef.current) setTranscribing(false);
     }
+    if (!mountedRef.current || mutedRef.current || epoch !== turnEpochRef.current) return;
     if (!text) return;
     setCaption(text);
     // Resolve the current voice/rate up front so the ENTIRE reply is spoken in one voice. Without this,
@@ -191,27 +239,30 @@ export function VoiceMode() {
   };
 
   const exit = useCallback(() => {
-    recRef.current?.cancel();
+    cancelLocalWork();
     ttsRef.current?.stop();
     // The server run keeps generating after we leave, so land back in the thread to see the reply.
     navigate(turnedRef.current || routeThreadId ? `/c/${tid}` : '/new');
-  }, [navigate, routeThreadId, tid]);
+  }, [cancelLocalWork, navigate, routeThreadId, tid]);
 
   // Stop local mic + audio on unmount; the server run is untouched (it persists into the thread).
   useEffect(
     () => () => {
-      recRef.current?.cancel();
+      mountedRef.current = false;
+      cancelLocalWork();
       ttsRef.current?.stop();
       voiceAudioRef.current?.pause();
       voiceAudioRef.current = null;
     },
-    [],
+    [cancelLocalWork],
   );
 
   const phase: Phase = errored
     ? 'error'
     : listening
       ? 'listening'
+      : transcribing
+        ? 'transcribing'
       : playing
         ? 'speaking'
         : run
@@ -252,7 +303,11 @@ export function VoiceMode() {
           label={muted ? 'Unmute microphone' : 'Mute microphone'}
           big
           variant="muted"
-          onClick={() => setMuted((m) => !m)}
+          onClick={() => setMuted((current) => {
+            const next = !current;
+            if (next) cancelLocalWork();
+            return next;
+          })}
         />
         <IconButton name="close" label="End" big variant="accent" onClick={exit} />
       </div>
