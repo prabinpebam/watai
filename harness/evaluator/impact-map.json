@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "1.0",
+  "status": "CANDIDATE_FROZEN",
+  "domains": [
+    {
+      "id": "read-only",
+      "allowedRoots": [],
+      "requiredGates": ["G00", "G01"],
+      "mayMutate": false
+    },
+    {
+      "id": "policy",
+      "allowedRoots": [
+        "documentation/implementation/2026-09-10-autonomous-delivery/contracts",
+        "documentation/implementation/2026-09-10-autonomous-delivery/validate-plan.mjs",
+        "harness/policy",
+        "harness/trust-root"
+      ],
+      "requiredGates": ["G00", "G01", "G12"],
+      "mayMutate": true
+    },
+    {
+      "id": "controller",
+      "allowedRoots": [
+        ".npmrc",
+        "api/.npmrc",
+        "harness/contracts",
+        "harness/src",
+        "package-lock.json",
+        "package.json",
+        "tsconfig.harness.build.json",
+        "tsconfig.harness.json",
+        "vitest.config.ts"
+      ],
+      "requiredGates": ["G00", "G01", "G05", "G08", "G12"],
+      "mayMutate": true
+    },
+    {
+      "id": "evaluator",
+      "allowedRoots": [
+        ".github/workflows",
+        "api/package-lock.json",
+        "api/package.json",
+        "api/vitest.config.ts",
+        "api/vitest.integration.config.ts",
+        "harness/evaluator",
+        "playwright.config.ts",
+        "tests"
+      ],
+      "requiredGates": ["G00", "G01", "G02", "G07", "G12"],
+      "mayMutate": true
+    },
+    {
+      "id": "release-plane",
+      "allowedRoots": [
+        ".github/workflows",
+        "harness/release-broker",
+        "infra"
+      ],
+      "requiredGates": ["G00", "G01", "G05", "G09", "G12"],
+      "mayMutate": true
+    },
+    {
+      "id": "release",
+      "allowedRoots": [],
+      "requiredGates": ["G00", "G01", "G09", "G10"],
+      "mayMutate": false
+    },
+    {
+      "id": "product",
+      "allowedRoots": ["api/src", "public", "src"],
+      "requiredGates": ["G00", "G01", "G02", "G03", "G04", "G05", "G08", "G09"],
+      "mayMutate": true
+    }
+  ]
+}

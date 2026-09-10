@@ -33,8 +33,7 @@ async function expectCenterHit(page: Page, selector: string) {
 }
 
 test.describe('Library read-only experience', () => {
-  test('catalog loading uses structural shimmer and no circular spinner', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', 'One project is sufficient for loading-state paint');
+  test('@desktop-only catalog loading uses structural shimmer and no circular spinner', async ({ page }) => {
     await page.goto(`${ROOT}?fixture=slow`);
     await expect(page.getByRole('status', { name: 'Loading Library' })).toBeVisible();
     await expect(page.locator('.library-skeleton-row')).toHaveCount(8);
@@ -42,8 +41,7 @@ test.describe('Library read-only experience', () => {
     await expect(page.locator('.library-row')).toHaveCount(8);
   });
 
-  test('image columns justify the full width and reduce only at the minimum tile size', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', 'One project drives the responsive width matrix');
+  test('@desktop-only image columns justify the full width and reduce only at the minimum tile size', async ({ page }) => {
     await page.goto(`${ROOT}?kind=image`);
     await expect(page.locator('.library-tile')).toHaveCount(2);
     const widths = [390, 560, 760, 1024, 1440];
@@ -74,8 +72,7 @@ test.describe('Library read-only experience', () => {
     expect(measurements.find((measurement) => measurement.viewport === 1440)?.tracks).toHaveLength(5);
   });
 
-  test('desktop browse, URL filters, keyboard search, image paint, detail, and focus return', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', 'Desktop-specific shell and density checks');
+  test('@desktop-only desktop browse, URL filters, keyboard search, image paint, detail, and focus return', async ({ page }, testInfo) => {
     await page.goto(ROOT);
     await expect(page.getByText('A precise Watai launch poster with crisp cobalt typography')).toBeVisible();
     const hiddenGeometry = await page.locator('.sr-only').evaluateAll((elements) => elements.map((element) => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height, position: getComputedStyle(element).position, overflow: getComputedStyle(element).overflow })));
@@ -122,8 +119,7 @@ test.describe('Library read-only experience', () => {
     await attachState(page, testInfo, 'desktop-browse');
   });
 
-  test('desktop type-specific details are honest and usable', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', 'Desktop detail matrix');
+  test('@desktop-only desktop type-specific details are honest and usable', async ({ page }, testInfo) => {
 
     await page.goto(`${ROOT}/brief-pdf`);
     const pdf = page.locator('iframe.library-pdf');
@@ -164,8 +160,7 @@ test.describe('Library read-only experience', () => {
     await attachState(page, testInfo, `${testInfo.project.name}-recovery`);
   });
 
-  test('mobile drawer, two-column gallery, touch targets, and detail bar do not overlap', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'mobile', 'Mobile-specific shell and hit-target checks');
+  test('@mobile-only mobile drawer, two-column gallery, touch targets, and detail bar do not overlap', async ({ page }, testInfo) => {
     await page.goto(`${ROOT}?kind=image`);
     await expect(page.locator('.library-tile')).toHaveCount(2);
     const columns = await page.locator('.library-grid').evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length);
@@ -240,8 +235,7 @@ test.describe('Library read-only experience', () => {
     await attachState(page, testInfo, `${testInfo.project.name}-picker`, '.library-picker-eval');
   });
 
-  test('direct upload shows progress, uses one reservation PUT, finalizes, and appears in Library', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', 'One browser project is sufficient for the upload transaction');
+  test('@desktop-only direct upload shows progress, uses one reservation PUT, finalizes, and appears in Library', async ({ page }, testInfo) => {
     let putCount = 0;
     await page.route('https://fixture.blob/**', async (route) => {
       putCount++;
@@ -260,8 +254,7 @@ test.describe('Library read-only experience', () => {
     await attachState(page, testInfo, 'desktop-upload');
   });
 
-  test('Use in new chat stages the item in a minted lazy thread and does not auto-send', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', 'One project is sufficient for navigation semantics');
+  test('@desktop-only Use in new chat stages the item in a minted lazy thread and does not auto-send', async ({ page }, testInfo) => {
     await page.goto(`${ROOT}/generated-image`);
     await page.getByRole('button', { name: 'Use in new chat' }).click();
     await expect(page).toHaveURL(/#\/dev\/library-new-chat-eval\/.+/);

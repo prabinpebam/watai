@@ -207,8 +207,7 @@ test.describe('Visual viewport frame', () => {
   });
 });
 
-test('native touch drags scroll history while the header stays visible', async ({ page, context }, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile', 'Chromium native touch input');
+test('@mobile-only native touch drags scroll history while the header stays visible', async ({ page, context }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 500 });
   await page.goto('/#/dev/gallery');
   const history = page.locator('.chat__scroll');

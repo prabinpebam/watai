@@ -42,6 +42,7 @@ numeric maturity score or a passing subset relabeled complete.
 | [06-design-validation-and-review.md](06-design-validation-and-review.md) | Local mechanical evidence, adversarial findings and design revisions |
 | [07-harness-implementation-review.md](07-harness-implementation-review.md) | Executable-controller critique, implemented safeguards and remaining blockers |
 | [08-execution-readiness.md](08-execution-readiness.md) | Current DoD readiness, bootstrap ceremony and execution-ready criteria |
+| [09-value-effort-priorities.md](09-value-effort-priorities.md) | Safety-constrained value/effort ordering for ready slices |
 | [contracts/backlog.json](contracts/backlog.json) | Canonical 56-slice execution backlog; each finding has explicit closure slices |
 | [contracts/policy.json](contracts/policy.json) | Proposed gate/authority/budget policy, disabled by default |
 | [contracts/workflow.json](contracts/workflow.json) | Typed transition table and bounded exception paths |

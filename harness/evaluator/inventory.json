@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1.0",
+  "status": "CANDIDATE_FROZEN",
+  "releaseEligible": false,
+  "commands": [
+    {
+      "id": "harness-complete",
+      "cwd": ".",
+      "executable": "npm",
+      "args": ["run", "validate:harness"],
+      "expectedTestFiles": 21,
+      "expectedTests": 138,
+      "repetitions": 1,
+      "requiresIsolatedStage": false
+    },
+    {
+      "id": "root-unit",
+      "cwd": ".",
+      "executable": "npm",
+      "args": ["test"],
+      "expectedTestFiles": 53,
+      "expectedTests": 369,
+      "repetitions": 1,
+      "requiresIsolatedStage": false
+    },
+    {
+      "id": "root-build",
+      "cwd": ".",
+      "executable": "npm",
+      "args": ["run", "build"],
+      "expectedTestFiles": 0,
+      "expectedTests": 0,
+      "repetitions": 1,
+      "requiresIsolatedStage": false
+    },
+    {
+      "id": "api-unit",
+      "cwd": "api",
+      "executable": "npm",
+      "args": ["test"],
+      "expectedTestFiles": 76,
+      "expectedTests": 557,
+      "repetitions": 1,
+      "requiresIsolatedStage": false
+    },
+    {
+      "id": "api-typecheck",
+      "cwd": "api",
+      "executable": "npm",
+      "args": ["run", "typecheck"],
+      "expectedTestFiles": 0,
+      "expectedTests": 0,
+      "repetitions": 1,
+      "requiresIsolatedStage": false
+    },
+    {
+      "id": "api-build",
+      "cwd": "api",
+      "executable": "npm",
+      "args": ["run", "build"],
+      "expectedTestFiles": 0,
+      "expectedTests": 0,
+      "repetitions": 1,
+      "requiresIsolatedStage": false
+    },
+    {
+      "id": "browser-complete",
+      "cwd": ".",
+      "executable": "npm",
+      "args": ["exec", "--", "playwright", "test"],
+      "expectedTestFiles": 3,
+      "expectedTests": 44,
+      "repetitions": 3,
+      "requiresIsolatedStage": false
+    },
+    {
+      "id": "api-isolated-integration",
+      "cwd": ".",
+      "executable": "npm",
+      "args": ["run", "harness:test-integration-stage"],
+      "expectedTestFiles": 5,
+      "expectedTests": 11,
+      "repetitions": 1,
+      "requiresIsolatedStage": true
+    }
+  ],
+  "requiredProperties": {
+    "zeroFailures": true,
+    "zeroSkipped": true,
+    "zeroTimedOut": true,
+    "retries": 0,
+    "candidateProcessUntrusted": true,
+    "supervisorCapturesReports": true,
+    "rawReportsImmutable": true
+  }
+}

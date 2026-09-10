@@ -15,10 +15,12 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
+      grepInvert: /@mobile-only/,
       use: { browserName: 'chromium', launchOptions: { args: ['--window-size=1440,900'] } },
     },
     {
       name: 'mobile',
+      grepInvert: /@desktop-only/,
       use: {
         browserName: 'chromium',
         hasTouch: true,
@@ -27,6 +29,7 @@ export default defineConfig({
     },
     {
       name: 'mobile-webkit',
+      grepInvert: /@desktop-only|@mobile-only/,
       use: {
         ...devices['iPhone 13'],
         browserName: 'webkit',

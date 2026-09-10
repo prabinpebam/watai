@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1.0",
+  "status": "OBSERVED_UNSIGNED",
+  "releaseEligible": false,
+  "observedAt": "2026-09-10T07:04:00.000Z",
+  "repositoryId": "prabinpebam/watai",
+  "frontend": {
+    "url": "https://prabinpebam.github.io/watai/",
+    "publication": {
+      "buildType": "legacy",
+      "sourceBranch": "master",
+      "sourcePath": "/docs",
+      "httpsEnforced": true
+    },
+    "sourceSha": "f7dc195300c4039aae5b9a7a8fb1691327864ea1",
+    "verifiedFiles": [
+      {
+        "path": "docs/index.html",
+        "sha256": "4c0994c72d777a8e2956e2e3876e76f910af598c0137c509f1d6ec46d90eebc0"
+      },
+      {
+        "path": "docs/assets/index-DJZzRSIi.js",
+        "sha256": "a711010561e5dd4a555ff2bb8b0964d50fd3295e020b2a9d74ed9226e8eec500"
+      },
+      {
+        "path": "docs/assets/index-xocoEhBv.css",
+        "sha256": "0c6f71574b5e413c313a5aae1e3c7fc5fc3f79eac3d0f50dcf3de61be1e1d68d"
+      }
+    ]
+  },
+  "backend": {
+    "resourceId": "/resourceGroups/rg-watai-dev/providers/Microsoft.Web/sites/func-watai-cbroocyg3omrk",
+    "host": "func-watai-cbroocyg3omrk.azurewebsites.net",
+    "state": "Running",
+    "healthStatus": 200,
+    "runtime": {
+      "name": "node",
+      "version": "20",
+      "region": "East US 2",
+      "instanceMemoryMB": 2048,
+      "maximumInstanceCount": 40,
+      "alwaysReady": ["function:runWorker=1"]
+    },
+    "deploymentPackage": {
+      "storage": "stwataicbroocyg3omrk/deployments/released-package.zip",
+      "lastModified": "2026-07-26T09:02:10Z",
+      "etag": "0x8DEEAF493EC69F1",
+      "sizeBytes": 56419586,
+      "sha256": "7519a39a0c191d2a6cee8d12cccd7cb8f9bfdef345881080be4b59e76bb65e42"
+    },
+    "sourceSha": null,
+    "sourceReason": "The historical manual Flex deployment has no commit marker and sampled deployed source blobs match no reachable Git commit. The exact package is byte-bound; source commit remains explicitly unknown."
+  },
+  "infrastructure": {
+    "latestTrackedDeployment": {
+      "name": "main",
+      "state": "Succeeded",
+      "timestamp": "2026-06-24T17:17:43.494781Z",
+      "templateHash": "1465707057966520912"
+    },
+    "functionLastModified": "2026-09-01T05:57:31.56Z",
+    "dataSchemaRevision": null,
+    "queueGeneration": null
+  },
+  "isolatedIntegrationStage": {
+    "cosmosDatabase": "watai-harness-stage",
+    "cosmosContainers": ["threads", "messages", "settings", "invites"],
+    "storageContainer": "harness-media-integration",
+    "testResult": "11/11 passed"
+  },
+  "unknowns": [
+    "backend source commit",
+    "deployed data schema revision",
+    "deployed queue generation",
+    "admissible rollback tuple"
+  ],
+  "signatures": [],
+  "decision": "OBSERVATION_READY_FOR_INDEPENDENT_SIGNATURE_NOT_A_PROMOTION_PERMIT"
+}

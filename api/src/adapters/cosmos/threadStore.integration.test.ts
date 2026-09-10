@@ -3,9 +3,6 @@ import { CosmosThreadStore } from './threadStore';
 import { getCosmosDatabase } from './cosmosClient';
 import type { ThreadRecord } from '../../ports/threadStore';
 
-// Only runs when pointed at a real Cosmos account (skipped in the normal offline suite).
-const RUN = !!process.env.COSMOS_ENDPOINT;
-
 function rec(userId: string, id: string, over: Partial<ThreadRecord> = {}): ThreadRecord {
   return {
     id,
@@ -22,7 +19,7 @@ function rec(userId: string, id: string, over: Partial<ThreadRecord> = {}): Thre
   };
 }
 
-describe.runIf(RUN)('CosmosThreadStore (integration)', () => {
+describe('CosmosThreadStore (integration)', () => {
   let store: CosmosThreadStore;
   const userA = `it-a-${Date.now()}`;
   const userB = `it-b-${Date.now()}`;

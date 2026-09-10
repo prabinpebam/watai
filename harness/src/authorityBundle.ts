@@ -7,6 +7,7 @@ import type {
 } from "./readiness.js";
 import type { AuthorityBindings, DependencyReceipt } from "./taskSpec.js";
 import type { DeploymentObservation } from "./preflight.js";
+import type { ValueAssessment } from "./scheduler.js";
 import {
   TrustVerifier,
   type SignedClaim,
@@ -48,6 +49,7 @@ export interface LoadedAuthorityBundle {
     observedAt: string;
   }>;
   taskSpecBindings: AuthorityBindings;
+  valueAssessments: ValueAssessment[];
 }
 
 export class AuthorityBundleError extends Error {
@@ -192,6 +194,9 @@ export async function loadAuthorityBundle(
         policySha256: string;
         observedAt: string;
       }>(claim)),
+    valueAssessments: validClaims
+      .filter((claim) => claim.kind === "value-assessment")
+      .map((claim) => materialize<ValueAssessment>(claim)),
     taskSpecBindings: {
       backlogSha256: root.backlogSha256,
       policySha256: root.policySha256,

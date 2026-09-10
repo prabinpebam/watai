@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0",
+  "status": "OBSERVED_UNSIGNED",
+  "releaseEligible": false,
+  "observedAt": "2026-09-10T08:05:00.000Z",
+  "repositoryId": "prabinpebam/watai",
+  "capabilities": {
+    "agentProvider": {
+      "sdkVersion": "1.0.13",
+      "bundledCliVersion": "1.0.83",
+      "installedCliVersion": "1.0.84-1",
+      "explicitTokenAuthentication": true,
+      "modelCount": 21,
+      "modelRequestExecuted": false
+    },
+    "dockerEngine": {
+      "serverVersion": "29.6.2",
+      "os": "linux",
+      "architecture": "amd64",
+      "controls": {
+        "uid": 1000,
+        "gid": 1000,
+        "rootFilesystemReadOnly": true,
+        "networkMode": "none",
+        "noNewPrivileges": true,
+        "effectiveCapabilities": "0000000000000000",
+        "pidsLimit": 64,
+        "memoryBytes": 268435456,
+        "nanoCpus": 500000000
+      },
+      "approvedWorkerImage": false,
+      "reason": "Controls were probed with an existing unapproved local image. No approved registry/base artifact is available."
+    },
+    "durableLocalStore": {
+      "engine": "SQLite 3.50.4 via Node built-in node:sqlite",
+      "journalMode": "WAL",
+      "synchronous": "FULL",
+      "atomicCandidateEventOutbox": true,
+      "fencedLeases": true,
+      "durableBudgetReservations": true,
+      "scope": "same-host implementation only; not distributed release authority"
+    },
+    "candidateWorktree": {
+      "externalRootRequired": true,
+      "exactSourceSha": true,
+      "canonicalBranch": true,
+      "collisionRejected": true
+    },
+    "toolGateway": {
+      "manifestBound": true,
+      "requestIdempotent": true,
+      "trackedReads": true,
+      "pathConfinedPatches": true,
+      "fixedValidationCommands": true,
+      "networkAccess": false
+    },
+    "watchdog": {
+      "leaseExpiryFencing": true,
+      "queryableReceiptReconciliation": true,
+      "unqueryableOutcome": "outcome-unknown",
+      "blindPaidRetry": false
+    },
+    "credentialBroker": {
+      "source": "GitHub CLI token command",
+      "allowedHosts": ["github.com", "api.github.com"],
+      "storage": "memory-only",
+      "cacheSeconds": 300,
+      "tokenLogged": false
+    }
+  },
+  "evaluation": {
+    "harness": "21 files / 138 tests passed",
+    "root": "53 files / 369 tests passed",
+    "apiUnit": "76 files / 557 tests passed, zero skipped",
+    "browser": "3 consecutive runs x 44 tests passed, zero skipped, retries 0",
+    "apiIntegration": "5 files / 11 tests passed against isolated stage",
+    "independentlyAttested": false
+  },
+  "dependencyState": {
+    "apiAudit": "0 vulnerabilities",
+    "rootAudit": "1 critical, 1 high, 5 moderate; 2 moderate production-only",
+    "approvedFeedBlockers": [
+      "@oxc-project/types@0.148.0 tarball missing",
+      "cookie@1.0.1/1.0.2/1.1.0/1.1.1 tarballs missing",
+      "@remix-run/router@1.23.3/1.23.4 tarballs missing"
+    ]
+  },
+  "signatures": [],
+  "decision": "READY_FOR_INDEPENDENT_REVIEW_NOT_A_CAPABILITY_ATTESTATION"
+}

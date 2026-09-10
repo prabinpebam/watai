@@ -14,6 +14,7 @@ export type TrustedArtifactKind =
   | "policy-candidate"
   | "release-permit"
   | "taskspec-lock"
+  | "value-assessment"
   | "worker-isolation-attestation";
 
 export interface TrustIssuer {

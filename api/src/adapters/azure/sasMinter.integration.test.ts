@@ -3,12 +3,10 @@ import { BlobServiceClient } from '@azure/storage-blob';
 import { DefaultAzureCredential } from '@azure/identity';
 import { AzureSasMinter } from './sasMinter';
 
-// Only runs when pointed at a real Storage account (skipped in the normal offline suite).
-const RUN = !!process.env.STORAGE_ACCOUNT;
 const account = process.env.STORAGE_ACCOUNT ?? '';
 const container = process.env.MEDIA_CONTAINER ?? 'media';
 
-describe.runIf(RUN)('AzureSasMinter (integration)', () => {
+describe('AzureSasMinter (integration)', () => {
   let minter: AzureSasMinter;
   const blobPath = `it-sas-${Date.now()}/thread/asset.txt`;
   const content = `hello-${Date.now()}`;

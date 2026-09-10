@@ -3,9 +3,6 @@ import { CosmosMessageStore } from './messageStore';
 import { getCosmosDatabase } from './cosmosClient';
 import type { MessageRecord } from '../../ports/messageStore';
 
-// Only runs when pointed at a real Cosmos account (skipped in the normal offline suite).
-const RUN = !!process.env.COSMOS_ENDPOINT;
-
 function msg(threadId: string, id: string, over: Partial<MessageRecord> = {}): MessageRecord {
   return {
     id,
@@ -20,7 +17,7 @@ function msg(threadId: string, id: string, over: Partial<MessageRecord> = {}): M
   };
 }
 
-describe.runIf(RUN)('CosmosMessageStore (integration)', () => {
+describe('CosmosMessageStore (integration)', () => {
   let store: CosmosMessageStore;
   const threadA = `it-mA-${Date.now()}`;
   const threadB = `it-mB-${Date.now()}`;

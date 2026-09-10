@@ -23,6 +23,12 @@ network access, spending, staging, deployment, or release.
 - Pinned Copilot SDK empty-mode worker policy with split credential broker/tool sandbox.
 - Worst-case budget and fenced-effect reducers.
 - Independent candidate evidence admission.
+- Transactional SQLite candidate/outbox/lease/budget storage for same-host execution.
+- External exact-SHA candidate worktree preparation.
+- Manifest-bound gateway service and bounded Copilot create/resume runner.
+- Watchdog and provider-receipt reconciliation.
+- Fixed local evaluator inventory with three browser runs and isolated cloud integration.
+- Signed value-per-effort scheduling within immutable safety tiers.
 
 ## Commands
 

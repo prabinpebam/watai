@@ -7,6 +7,7 @@
   "description": "Watai API (Azure Functions): server-authoritative generation + encrypted credential vault. Persists threads/messages/runs in Cosmos and runs Azure OpenAI server-side.",
   "scripts": {
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "memory:smoke": "npx --yes tsx scripts/memory-smoke.ts",
@@ -34,8 +35,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
-    "esbuild": "^0.24.2",
+    "esbuild": "0.28.2",
     "typescript": "^5.5.4",
-    "vitest": "^2.1.8"
+    "vitest": "4.1.11"
   }
 }

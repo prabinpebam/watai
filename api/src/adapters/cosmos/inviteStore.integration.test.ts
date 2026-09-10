@@ -2,10 +2,7 @@ import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import { CosmosInviteStore } from './inviteStore';
 import { getCosmosDatabase } from './cosmosClient';
 
-// Only runs when pointed at a real Cosmos account (skipped in the normal offline suite).
-const RUN = !!process.env.COSMOS_ENDPOINT;
-
-describe.runIf(RUN)('CosmosInviteStore (integration)', () => {
+describe('CosmosInviteStore (integration)', () => {
   let store: CosmosInviteStore;
   const email = `it-invite-${Date.now()}@example.com`;
 

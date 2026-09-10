@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0",
+  "status": "CANDIDATE_FROZEN",
+  "ids": [
+    "NC-root-substitution",
+    "NC-forged-issuer-role",
+    "NC-authority-path-junction",
+    "NC-policy-self-authorization",
+    "NC-protected-path-escape",
+    "NC-extra-worker-tool",
+    "NC-self-asserted-guard",
+    "NC-release-permit-reuse",
+    "NC-skipped-required-check",
+    "NC-stale-lease-completion",
+    "NC-budget-overrun",
+    "NC-unapproved-package-source",
+    "NC-priority-safety-bypass"
+  ]
+}

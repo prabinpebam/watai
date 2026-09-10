@@ -28,3 +28,8 @@ An authorization grant can use `billing.kind: "subscription"` with zero USD only
 when request/token ceilings are positive and the independent `agent-provider` and
 `budget-reservation` capability attestations prove that subscription path. A
 logged-in CLI session is not such an attestation.
+
+After a clean commit, run `npm run harness:authority-inputs` to produce the exact
+root digest inputs and the unsigned H01 observation hash. The command never
+generates a key, signs a claim, or grants authority; those remain an independent
+owner-controlled ceremony.

@@ -51,6 +51,7 @@ let authorities: ReadinessAuthorities = {
 let grants: RuntimeAuthorizationGrant[] = [];
 let capabilities = [] as Awaited<ReturnType<typeof loadAuthorityBundle>>["capabilityAttestations"];
 let completions = [] as Awaited<ReturnType<typeof loadAuthorityBundle>>["dependencyReceipts"];
+let valueAssessments = [] as Awaited<ReturnType<typeof loadAuthorityBundle>>["valueAssessments"];
 let authorityError: { code: string; message: string } | undefined;
 let preflight = localPreflight;
 const authorityDirectory = process.env.WATAI_HARNESS_AUTHORITY_DIR;
@@ -77,6 +78,7 @@ if (authorityDirectory) {
     grants = bundle.authorizationGrants;
     capabilities = bundle.capabilityAttestations;
     completions = bundle.dependencyReceipts;
+    valueAssessments = bundle.valueAssessments;
     if (bundle.deploymentObservations.length === 1) {
       const observation = bundle.deploymentObservations[0];
       preflight = await collectLocalPreflight(root, {
@@ -131,6 +133,7 @@ const report = buildDoctorReport({
       verified: true,
     })),
     [],
+    valueAssessments,
   ),
   authorityError,
 });

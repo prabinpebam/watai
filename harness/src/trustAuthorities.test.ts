@@ -35,6 +35,7 @@ const kinds: TrustedArtifactKind[] = [
   "policy-candidate",
   "release-permit",
   "taskspec-lock",
+  "value-assessment",
   "worker-isolation-attestation",
 ];
 const root: TrustRootManifest = {

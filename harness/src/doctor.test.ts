@@ -27,7 +27,7 @@ describe("DoD doctor report", () => {
       implementation: readiness("implementation", false),
       evaluation: readiness("evaluation", false),
       release: readiness("release", false),
-      schedule: { selected: { id: "H01" } as never, ready: ["H01"], blocked: [], reason: "NEXT_DEPENDENCY_READY_SLICE" },
+      schedule: { selected: { id: "H01" } as never, ready: ["H01"], blocked: [], reason: "NEXT_DEPENDENCY_READY_SLICE", priorityMode: "canonical" },
     });
     expect(report.status).toBe("BLOCKED_SAFE");
     expect(report.nextSlice).toBe("H01");
@@ -41,7 +41,7 @@ describe("DoD doctor report", () => {
       implementation: readiness("implementation", true),
       evaluation: readiness("evaluation", false),
       release: readiness("release", false),
-      schedule: { selected: null, ready: [], blocked: [], reason: "NO_READY_SLICE" },
+      schedule: { selected: null, ready: [], blocked: [], reason: "NO_READY_SLICE", priorityMode: "canonical" },
     });
     expect(report.automatedImplementationReady).toBe(false);
     expect(report.candidateEvaluationReady).toBe(false);
@@ -54,7 +54,7 @@ describe("DoD doctor report", () => {
       implementation: readiness("implementation", true),
       evaluation: readiness("evaluation", true),
       release: readiness("release", false),
-      schedule: { selected: { id: "H01" } as never, ready: ["H01"], blocked: [], reason: "NEXT_DEPENDENCY_READY_SLICE" },
+      schedule: { selected: { id: "H01" } as never, ready: ["H01"], blocked: [], reason: "NEXT_DEPENDENCY_READY_SLICE", priorityMode: "canonical" },
       authorityError: { code: "AUTHORITY_CLAIMS_REJECTED", message: "Rejected" },
     });
     expect(report.status).toBe("BLOCKED_SAFE");
@@ -68,7 +68,7 @@ describe("DoD doctor report", () => {
       implementation: readiness("implementation", true),
       evaluation: readiness("evaluation", true),
       release: readiness("release", false),
-      schedule: { selected: null, ready: [], blocked: [], reason: "NO_READY_SLICE" },
+      schedule: { selected: null, ready: [], blocked: [], reason: "NO_READY_SLICE", priorityMode: "canonical" },
     });
     expect(report.status).toBe("BLOCKED_SAFE");
     expect(report.automatedImplementationReady).toBe(false);

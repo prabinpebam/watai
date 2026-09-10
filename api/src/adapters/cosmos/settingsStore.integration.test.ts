@@ -3,10 +3,7 @@ import { CosmosSettingsStore } from './settingsStore';
 import { getCosmosDatabase } from './cosmosClient';
 import { DEFAULT_SETTINGS } from '../../domain/settings';
 
-// Only runs when pointed at a real Cosmos account (skipped in the normal offline suite).
-const RUN = !!process.env.COSMOS_ENDPOINT;
-
-describe.runIf(RUN)('CosmosSettingsStore (integration)', () => {
+describe('CosmosSettingsStore (integration)', () => {
   let store: CosmosSettingsStore;
   const userId = `it-set-${Date.now()}`;
 

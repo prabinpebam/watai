@@ -20,7 +20,11 @@
 | Blocker | SDK permissions could be mistaken for isolation | Added a split broker/tool-sandbox launch contract and fixed manifest-bound proxy tools against SDK 1.0.13 |
 | High | Exit zero could be mistaken for acceptance | Added signed per-check evidence admission with exact gates, acceptance IDs, denominators, DAGs and negative controls |
 | High | Dispatch budgets and effects existed only in prose | Added worst-case reservation and fenced effect reducers with terminal unknown outcomes |
-| High | Package sources could bypass the approved proxy through lock URLs | Added project npm policy, removed registry-resolved URLs and made source validation a hard harness check |
+| High | Package sources could bypass the approved proxy through lock URLs | Added root/API npm policy, removed registry-resolved URLs and made layered source validation a hard harness check |
+| Blocker | No runnable coding-worker lifecycle or gateway existed | Added bounded create/resume runner, manifest-bound gateway service and external exact-SHA worktrees |
+| Blocker | Same-host restart/race state was a JSON rehearsal | Added SQLite WAL/FULL-sync CAS for candidate/event/outbox/lease/budget state and watchdog reconciliation |
+| High | Browser/API inventory reported applicability as skips | Added static browser project filters and a fail-closed isolated-stage API inventory; three 44/44 browser runs and 11/11 integrations pass |
+| High | Canonical ordering ignored value per effort | Added signed value/risk/effort scoring inside immutable safety/dependency tiers |
 
 ## What this earns
 
@@ -38,14 +42,14 @@ exist.
 ## Remaining blockers
 
 1. No external signed authorization root, runtime grant or independently managed verifier keys exist.
-2. Docker client is installed but the configured Linux server is stopped; no worker isolation attestation exists.
+2. Docker Linux is running and isolation controls pass, but no approved Watai image source or signed worker attestation exists.
 3. The local file ledger is not distributed Cosmos CAS, immutable evidence or a production scheduler; an orphaned local lock fails closed and is not automatically reclaimed.
-4. No durable worktree/tool-gateway/budget/watchdog/effect-reconciler/credential-broker implementations are attested.
-5. No trusted evaluator pack, complete browser runner, trusted build or immutable evidence service is attested.
+4. Durable local worktree/gateway/SQLite budget/watchdog/reconciler/agent components exist but are not independently attested; the credential broker remains external.
+5. A complete local evaluator/browser/integration inventory passes, but no independently signed evaluator pack, trusted isolated build or immutable evidence service is attested.
 6. No release broker, immutable stage, LKG routing, queue fencing or rollback adapter exists.
 7. H01 has not observed deployed source/runtime/configuration through an authorized read-only identity.
-8. Root npm audit reports 1 critical, 4 high and 6 moderate advisories; API reports 1 critical, 4 high and 3 moderate. Direct test/build fixes require major toolchain changes and must be independently evaluated before `trusted-build` can pass.
-9. The API suite has 11 skipped cloud integration tests; G02 requires zero required skips in the trusted inventory.
+8. API audit is zero. Root remains 1 critical/1 high/5 moderate (2 moderate production-only); approved-feed tarball gaps block the coherent stable root upgrades and clean-install proof.
+9. API unit and browser inventories now have zero skips; all 11 isolated cloud integrations pass. Independent evidence authority is still required.
 
 Consequently, implementation, evaluation and release statuses remain
 `BLOCKED_SAFE`. Changing the doctor, capability list or tests is not a substitute
@@ -63,7 +67,7 @@ npm run harness:status -- implementation
 
 The combined validation runs the original plan validator, strict harness
 typechecking, all harness tests, a standalone Node ESM build and approved package
-source checks. Latest local results: 107 harness tests passed; the full root suite
-passed 338 tests and production build; the API passed 557 tests with 11 integration
-tests skipped, then typecheck/build passed. These are local observations, not
-independent gate attestations.
+source checks. Latest inventory: 138 harness tests and 369 root tests;
+the API passed 557 unit and 11 isolated integration tests with zero skips, then
+typecheck/build passed; three browser runs passed 44/44 each. These are local
+observations, not independent gate attestations.
