@@ -4,6 +4,8 @@
 
 Spend wall time, provider requests, AI credits, money, browser capacity and engineering attention only when the next action is necessary on the current critical path and is the cheapest check that can change the decision.
 
+This governance optimizes execution; it does not stop necessary work. A failed or inefficient approach triggers a changed, cheaper continuation, not abandonment. Safety, authority, spend and resource ceilings still fail closed.
+
 ## Expensive action
 
 An action is expensive when it can exceed two minutes, make a live provider call, consume AI credits or metered spend, build or pull a container, run a complete browser/integration denominator, deploy, or mutate remote/cloud state.
@@ -17,6 +19,7 @@ An action is expensive when it can exceed two minutes, make a live provider call
 5. Continue to a focused subset only when the canary passes.
 6. Run the full frozen denominator only when it is required for an explicit DoD claim.
 7. Reuse a passing qualification until relevant source, image, contract or behavior changes.
+8. When a stage fails, preserve its evidence, fix the root cause or choose a materially different route, and continue the objective without repeating unchanged work.
 
 ## Work decision
 

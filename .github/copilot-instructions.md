@@ -18,7 +18,9 @@ The decision must state:
 
 Use staged execution: static check, single canary, focused validation, then full matrix only when the preceding stage passes. Never run a full expensive denominator to diagnose basic startup, authentication, configuration, or lifecycle failures.
 
-Stop when observed cost/time crosses the decision ceiling, the continuation criterion fails, or new evidence makes the work unnecessary. Preserve failed reservations and evidence; do not erase history to retry.
+Cost and time review must not be used to abandon necessary work. Its purpose is to maximize useful progress per minute and unit of spend. When an approach crosses its ceiling, fails its continuation criterion, or stops producing discriminating evidence, stop that approach, preserve its evidence, identify the root cause, and immediately continue with the cheapest viable changed approach. Hard safety, authorization, spend, and resource ceilings remain non-negotiable.
+
+Prefer fixing the architecture or workflow over repeatedly extending timeouts, budgets, retries, or denominators. Ask whether work belongs on the critical path and whether the same outcome can be reached with less repeated setup, fewer model turns, narrower validation, or reuse of existing evidence.
 
 A full qualification may be necessary for a DoD claim, but repeated qualification is forbidden unless source, runtime image, contract, or relevant behavior changed.
 
