@@ -5,6 +5,7 @@ node_modules/
 dist/
 .harness-dist/
 .harness-state/
+.release-artifacts/
 *.tsbuildinfo
 .vite/
 
