@@ -68,3 +68,23 @@ export interface Repository {
 export interface SyncLocalStore extends Repository {
   putMessageRaw(message: Message): Promise<void>;
 }
+
+export interface LocalOutboxRecord {
+  operationId: string;
+  kind: string;
+  state?: 'pending' | 'failed';
+}
+
+export interface TransactionalSyncLocalStore extends SyncLocalStore {
+  listOutbox<T extends LocalOutboxRecord>(): Promise<T[]>;
+  mutateOutbox<T extends LocalOutboxRecord>(mutate: (records: T[]) => T[]): Promise<T[]>;
+  createThreadWithOutbox<T extends LocalOutboxRecord>(init: Partial<Thread>, operation: T): Promise<Thread>;
+  updateThreadWithOutbox<T extends LocalOutboxRecord>(id: Id, patch: Partial<Thread>, operation: T): Promise<Thread>;
+  appendMessageWithOutbox<T extends LocalOutboxRecord>(message: Message, operation: T): Promise<Message>;
+  deleteThreadWithOutbox<T extends LocalOutboxRecord>(id: Id, deleteOperation: T): Promise<void>;
+  saveSettingsWithOutbox<T extends LocalOutboxRecord>(settings: Settings, operation: T): Promise<void>;
+}
+
+export function hasTransactionalOutbox(store: SyncLocalStore): store is TransactionalSyncLocalStore {
+  return 'mutateOutbox' in store && typeof store.mutateOutbox === 'function';
+}

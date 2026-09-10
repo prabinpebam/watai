@@ -1,7 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type { Message, Settings, Thread, MemoryItem, ApiConfig } from '../lib/types';
 
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 export const LOCAL_QUARANTINE_OWNER = 'signed-out-quarantine';
 
 interface Schema {
@@ -9,6 +9,7 @@ interface Schema {
   messages: Message;
   blobs: Blob;
   kv: unknown;
+  outbox: { operationId: string };
 }
 
 const dbPromises = new Map<string, Promise<IDBPDatabase>>();
@@ -46,6 +47,10 @@ export function db(ownerId = activeOwnerId): Promise<IDBPDatabase> {
         }
         if (!database.objectStoreNames.contains('kv')) {
           database.createObjectStore('kv');
+        }
+        if (!database.objectStoreNames.contains('outbox')) {
+          const outbox = database.createObjectStore('outbox', { keyPath: 'operationId' });
+          outbox.createIndex('byState', 'state');
         }
       },
     });

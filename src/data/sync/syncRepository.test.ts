@@ -685,6 +685,42 @@ describe('SyncRepository — push', () => {
     expect(await kv.get('sync.queue')).toEqual([]);
   });
 
+  it('preserves an operation enqueued while an earlier push is in flight', async () => {
+    const { repo, cloud, kv } = setup(true);
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const originalCreate = cloud.createThread.bind(cloud);
+    cloud.createThread = async (body) => {
+      if (body.title === 'First') {
+        entered();
+        await blocked;
+      }
+      return originalCreate(body);
+    };
+    await repo.createThread({ id: 'first', title: 'First' });
+    const pushing = repo.push();
+    await started;
+    await repo.createThread({ id: 'second', title: 'Second' });
+    release();
+    await pushing;
+
+    const queue = await kv.get<Array<{ kind: string; id?: string }>>('sync.queue');
+    expect(cloud.threads.get('second')?.title).toBe('Second');
+    expect(queue).toEqual([]);
+  });
+
+  it('drains through the exclusive cross-tab outbox lock when available', async () => {
+    const { repo } = setup(true);
+    const request = vi.fn(async (_name: string, _options: LockOptions, callback: () => Promise<void>) => callback());
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: { request } });
+    await repo.createThread({ title: 'Locked' });
+    await repo.push();
+    expect(request).toHaveBeenCalledWith('watai.sync.outbox.v2', { mode: 'exclusive' }, expect.any(Function));
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
+  });
+
   it('pushes appended messages with their client id', async () => {
     const { repo, cloud } = setup(true);
     const t = await repo.createThread({ title: 'A' });
@@ -735,7 +771,7 @@ describe('SyncRepository — push', () => {
     expect(await kv.get('sync.queue')).toBeUndefined();
   });
 
-  it('keeps a retryable op for later but drops a permanent one', async () => {
+  it('keeps retryable work pending and permanent failures inspectable', async () => {
     const retry = setup(true);
     await retry.repo.createThread({ title: 'A' });
     retry.cloud.createThread = async () => {
@@ -750,7 +786,9 @@ describe('SyncRepository — push', () => {
       throw new CloudError('validation', 'bad', 400);
     };
     await perm.repo.push();
-    expect(await perm.kv.get('sync.queue')).toEqual([]);
+    expect(await perm.kv.get('sync.queue')).toMatchObject([
+      { kind: 'thread.create', state: 'failed', failure: { code: 'validation' } },
+    ]);
   });
 
   it('keeps an op when access is forbidden (invite may be granted later), never dropping data', async () => {
@@ -776,7 +814,7 @@ describe('SyncRepository — push', () => {
   });
 
   it('retains the stricter privacy policy after a stale offline patch conflicts', async () => {
-    const { repo, local, cloud } = setup(true);
+    const { repo, local, cloud, kv } = setup(true);
     cloud.serverSettings = {
       ...DEFAULT_SETTINGS,
       personalization: {
@@ -806,6 +844,9 @@ describe('SyncRepository — push', () => {
     expect(effective.personalization.memoryEnabled).toBe(false);
     expect(effective.personalization.memory?.paused).toBe(true);
     expect(effective.data.retention).toBe('30d');
+    expect(await kv.get('sync.queue')).toMatchObject([
+      { kind: 'settings.save', state: 'failed', failure: { code: 'conflict' } },
+    ]);
   });
 
   it('keeps microphone device selection local and sends no account patch', async () => {

@@ -8,6 +8,7 @@ class FakeDatabase {
     ['messages', new Map()],
     ['blobs', new Map()],
     ['kv', new Map()],
+    ['outbox', new Map()],
   ]);
 
   async get(store: string, key: string): Promise<unknown> {
@@ -35,15 +36,25 @@ class FakeDatabase {
     this.stores.get(store)?.clear();
   }
 
-  transaction(store: string): { store: { delete: (key: string) => Promise<void>; index: () => { getAll: (threadId: string) => Promise<unknown[]> } }; done: Promise<void> } {
+  transaction(store: string | string[]) {
+    const access = (storeName: string) => ({
+      get: (key: string) => this.get(storeName, key),
+      getAll: () => this.getAll(storeName),
+      put: (value: unknown, key?: string) => this.put(storeName, value, key),
+      delete: (key: string) => this.delete(storeName, key),
+      clear: () => this.clear(storeName),
+      index: () => ({
+        getAll: async (threadId: string) => [...(this.stores.get(storeName)?.values() ?? [])]
+          .filter((value) => (value as { threadId?: string }).threadId === threadId),
+        getAllKeys: async (threadId: string) => [...(this.stores.get(storeName)?.entries() ?? [])]
+          .filter(([, value]) => (value as { threadId?: string }).threadId === threadId)
+          .map(([key]) => key),
+      }),
+    });
+    const primary = Array.isArray(store) ? store[0] : store;
     return {
-      store: {
-        delete: (key: string) => this.delete(store, key),
-        index: () => ({
-          getAll: async (threadId: string) => [...(this.stores.get(store)?.values() ?? [])]
-            .filter((value) => (value as { threadId?: string }).threadId === threadId),
-        }),
-      },
+      store: access(primary),
+      objectStore: access,
       done: Promise.resolve(),
     };
   }
@@ -87,6 +98,9 @@ describe('account-scoped local repository', () => {
     await localB.createThread({ id: 'same-thread', title: 'Owner B' });
 
     expect((await localA2.listThreads()).map((thread) => thread.title)).toEqual(['Owner A']);
+    await expect(localA2.listOutbox()).resolves.toMatchObject([
+      { kind: 'thread.create', id: 'same-thread', state: 'pending' },
+    ]);
     expect((await localB.listThreads()).map((thread) => thread.title)).toEqual(['Owner B']);
     await localA1.putBlob('same-blob', new Blob(['A']));
     await localB.putBlob('same-blob', new Blob(['B']));
@@ -97,5 +111,6 @@ describe('account-scoped local repository', () => {
     expect(cloudB.createThread).not.toHaveBeenCalled();
     await syncA.push();
     expect(cloudA.createThread).toHaveBeenCalledWith(expect.objectContaining({ id: 'same-thread', title: 'Owner A' }));
+    await expect(localA2.listOutbox()).resolves.toEqual([]);
   });
 });

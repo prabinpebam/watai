@@ -1,5 +1,5 @@
 import { db, kvGet, kvSet } from '../db';
-import type { SearchHit, SyncLocalStore } from '../repository';
+import type { LocalOutboxRecord, SearchHit, SyncLocalStore, TransactionalSyncLocalStore } from '../repository';
 import { newId } from '../../lib/ids';
 import { DEFAULT_SETTINGS, type Id, type ImageRef, type Message, type Settings, type Thread, type MemoryKind } from '../../lib/types';
 import type { CreateMemoryBody, ListMemoryQuery, MemoryProfileView, MemoryRecord, PatchMemoryBody } from '../cloud/types';
@@ -60,8 +60,88 @@ function emptyProfile(userId = 'local'): MemoryProfileView {
   };
 }
 
-export class LocalRepository implements SyncLocalStore {
+export class LocalRepository implements TransactionalSyncLocalStore {
   constructor(private readonly ownerId: string) {}
+
+  async listOutbox<T extends LocalOutboxRecord>(): Promise<T[]> {
+    return (await (await db(this.ownerId)).getAll('outbox')) as T[];
+  }
+
+  async mutateOutbox<T extends LocalOutboxRecord>(mutate: (records: T[]) => T[]): Promise<T[]> {
+    const transaction = (await db(this.ownerId)).transaction('outbox', 'readwrite');
+    const current = await transaction.store.getAll() as T[];
+    const next = mutate(current);
+    await transaction.store.clear();
+    await Promise.all(next.map((record) => transaction.store.put(record)));
+    await transaction.done;
+    return next;
+  }
+
+  async createThreadWithOutbox<T extends LocalOutboxRecord>(init: Partial<Thread>, operation: T): Promise<Thread> {
+    const thread: Thread = {
+      id: init.id ?? newId(), title: init.title ?? 'New chat', pinned: false, archived: false,
+      temporary: init.temporary ?? false, model: init.model, createdAt: nowIso(), updatedAt: nowIso(),
+      messageCount: 0, ...init,
+    };
+    const transaction = (await db(this.ownerId)).transaction(['threads', 'outbox'], 'readwrite');
+    await transaction.objectStore('threads').put(thread);
+    await transaction.objectStore('outbox').put(operation);
+    await transaction.done;
+    return thread;
+  }
+
+  async updateThreadWithOutbox<T extends LocalOutboxRecord>(id: Id, patch: Partial<Thread>, operation: T): Promise<Thread> {
+    const transaction = (await db(this.ownerId)).transaction(['threads', 'outbox'], 'readwrite');
+    const threads = transaction.objectStore('threads');
+    const existing = await threads.get(id) as Thread | undefined;
+    if (!existing) throw new Error('thread not found');
+    const merged = { ...existing, ...patch, updatedAt: patch.updatedAt ?? nowIso() };
+    await threads.put(merged);
+    await transaction.objectStore('outbox').put(operation);
+    await transaction.done;
+    return merged;
+  }
+
+  async appendMessageWithOutbox<T extends LocalOutboxRecord>(message: Message, operation: T): Promise<Message> {
+    const transaction = (await db(this.ownerId)).transaction(['threads', 'messages', 'outbox'], 'readwrite');
+    await transaction.objectStore('messages').put(message);
+    const threads = transaction.objectStore('threads');
+    const thread = await threads.get(message.threadId) as Thread | undefined;
+    if (thread) {
+      await threads.put({
+        ...thread,
+        messageCount: thread.messageCount + 1,
+        lastMessagePreview: message.content.slice(0, 120),
+        updatedAt: nowIso(),
+      });
+    }
+    await transaction.objectStore('outbox').put(operation);
+    await transaction.done;
+    return message;
+  }
+
+  async deleteThreadWithOutbox<T extends LocalOutboxRecord>(id: Id, deleteOperation: T): Promise<void> {
+    const transaction = (await db(this.ownerId)).transaction(['threads', 'messages', 'outbox'], 'readwrite');
+    const outbox = transaction.objectStore('outbox');
+    const operations = await outbox.getAll() as Array<LocalOutboxRecord & { id?: string; threadId?: string }>;
+    const unsynced = operations.some((operation) => operation.kind === 'thread.create' && operation.id === id);
+    for (const operation of operations) {
+      if (operation.id === id || operation.threadId === id) await outbox.delete(operation.operationId);
+    }
+    if (!unsynced) await outbox.put(deleteOperation);
+    const messages = transaction.objectStore('messages');
+    const messageKeys = await messages.index('byThread').getAllKeys(id);
+    await Promise.all(messageKeys.map((key) => messages.delete(key)));
+    await transaction.objectStore('threads').delete(id);
+    await transaction.done;
+  }
+
+  async saveSettingsWithOutbox<T extends LocalOutboxRecord>(settings: Settings, operation: T): Promise<void> {
+    const transaction = (await db(this.ownerId)).transaction(['kv', 'outbox'], 'readwrite');
+    await transaction.objectStore('kv').put(settings, SETTINGS_KEY);
+    await transaction.objectStore('outbox').put(operation);
+    await transaction.done;
+  }
 
   async listThreads(opts?: { includeArchived?: boolean }): Promise<Thread[]> {
     const all = (await (await db(this.ownerId)).getAll('threads')) as Thread[];

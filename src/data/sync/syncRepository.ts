@@ -5,9 +5,10 @@
 // passthrough to the local store. The token provider is injected via the CloudApi,
 // so this whole engine is unit-testable without MSAL.
 import { DEFAULT_SETTINGS, type Id, type ImageRef, type Message, type Settings, type Thread, type ThreadLock } from '../../lib/types';
-import type { Repository, RunLockResult, SearchHit, SyncLocalStore } from '../repository';
+import { hasTransactionalOutbox, type Repository, type RunLockResult, type SearchHit, type SyncLocalStore } from '../repository';
 import { CloudError, type CloudApi } from '../cloud/apiClient';
 import { getDeviceId, getDeviceLabel } from '../../lib/device';
+import { newId } from '../../lib/ids';
 import {
   appendBodyFromMessage,
   type AccountSettingsPatch,
@@ -33,13 +34,18 @@ const MSG_CURSOR_PREFIX = 'sync.cursor.messages.';
 const SYNC_KEY_PREFIX = 'sync.';
 const SETTINGS_HYDRATED_KEY = 'sync.settings.hydrated';
 const SETTINGS_REVISION_KEY = 'sync.settings.revision';
+const OUTBOX_LOCK = 'watai.sync.outbox.v2';
+let localPush: Promise<void> | null = null;
 
-type SyncOp =
+type SyncOp = { operationId: string; state?: 'pending' | 'failed'; failure?: { code: string; at: string } } & (
   | { kind: 'thread.create'; id: Id; body: CreateThreadBody }
   | { kind: 'thread.update'; id: Id; body: UpdateThreadBody }
   | { kind: 'thread.delete'; id: Id }
   | { kind: 'message.append'; threadId: Id; id: Id; body: AppendMessageBody }
-  | { kind: 'settings.save'; patch: AccountSettingsPatch; expectedRevision: number };
+  | { kind: 'settings.save'; patch: AccountSettingsPatch; expectedRevision: number }
+);
+type WithoutOperationId<T> = T extends unknown ? Omit<T, 'operationId'> : never;
+type NewSyncOp = WithoutOperationId<SyncOp>;
 
 function objectDiff(current: Record<string, unknown>, next: Record<string, unknown>, excluded = new Set<string>()): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
@@ -287,13 +293,19 @@ export class SyncRepository implements Repository {
 
   // ---- mutations: local first, then enqueue ----
   async createThread(init?: Partial<Thread>): Promise<Thread> {
-    const thread = await this.local.createThread(init);
-    if (!thread.temporary && (await this.syncEnabled())) {
-      await this.enqueue({
+    const syncEnabled = await this.syncEnabled();
+    const prepared = { ...init, id: init?.id ?? newId() };
+    if (!prepared.temporary && syncEnabled && hasTransactionalOutbox(this.local)) {
+      return this.local.createThreadWithOutbox(prepared, {
+        operationId: newId(), state: 'pending',
         kind: 'thread.create',
-        id: thread.id,
-        body: { id: thread.id, title: thread.title },
+        id: prepared.id,
+        body: { id: prepared.id, title: prepared.title ?? 'New chat' },
       });
+    }
+    const thread = await this.local.createThread(prepared);
+    if (!thread.temporary && syncEnabled) {
+      await this.enqueue({ kind: 'thread.create', id: thread.id, body: { id: thread.id, title: thread.title } });
       // create only carries title; sync non-default pinned/archived via a follow-up update.
       if (thread.pinned || thread.archived) {
         await this.enqueueThreadUpdate(thread.id, flagsPatch(thread));
@@ -303,16 +315,24 @@ export class SyncRepository implements Repository {
   }
 
   async updateThread(id: Id, patch: Partial<Thread>): Promise<Thread> {
-    const updated = await this.local.updateThread(id, patch);
-    if (!updated.temporary && (await this.syncEnabled())) {
-      const body = updateBodyFromPatch(patch);
-      if (Object.keys(body).length > 0) await this.enqueueThreadUpdate(id, body);
+    const existing = await this.local.getThread(id);
+    const body = updateBodyFromPatch(patch);
+    if (existing && !existing.temporary && (await this.syncEnabled()) && Object.keys(body).length > 0 && hasTransactionalOutbox(this.local)) {
+      return this.local.updateThreadWithOutbox(id, patch, {
+        operationId: newId(), state: 'pending', kind: 'thread.update', id, body,
+      });
     }
+    const updated = await this.local.updateThread(id, patch);
+    if (!updated.temporary && (await this.syncEnabled()) && Object.keys(body).length > 0) await this.enqueueThreadUpdate(id, body);
     return updated;
   }
 
   async deleteThread(id: Id): Promise<void> {
     const existing = await this.local.getThread(id);
+    if (existing && !existing.temporary && (await this.syncEnabled()) && hasTransactionalOutbox(this.local)) {
+      await this.local.deleteThreadWithOutbox(id, { operationId: newId(), state: 'pending', kind: 'thread.delete', id });
+      return;
+    }
     await this.local.deleteThread(id);
     if (existing && !existing.temporary && (await this.syncEnabled())) {
       await this.enqueueThreadDelete(id);
@@ -320,19 +340,26 @@ export class SyncRepository implements Repository {
   }
 
   async appendMessage(m: Message): Promise<Message> {
-    const saved = await this.local.appendMessage(m);
     if (await this.syncEnabled()) {
       const thread = await this.local.getThread(m.threadId);
       if (thread && !thread.temporary) {
+        if (hasTransactionalOutbox(this.local)) {
+          return this.local.appendMessageWithOutbox(m, {
+            operationId: newId(), state: 'pending', kind: 'message.append', threadId: m.threadId,
+            id: m.id, body: appendBodyFromMessage(m),
+          });
+        }
+        const saved = await this.local.appendMessage(m);
         await this.enqueue({
           kind: 'message.append',
           threadId: m.threadId,
           id: saved.id,
           body: appendBodyFromMessage(saved),
         });
+        return saved;
       }
     }
-    return saved;
+    return this.local.appendMessage(m);
   }
 
   /** Merge a server-authored message into the local store verbatim (no re-queue). Used by the
@@ -426,9 +453,17 @@ export class SyncRepository implements Repository {
       next = preserveDeviceSettings(mergeAccountSettings(hydrated, patch), s);
       revision = await this.kv.get<number>(SETTINGS_REVISION_KEY);
     }
-    await this.local.saveSettings(next);
     if (s.data.sync && revision !== undefined && Object.keys(patch).length) {
-      await this.enqueueSettingsPatch(patch, revision);
+      if (hasTransactionalOutbox(this.local)) {
+        await this.local.saveSettingsWithOutbox(next, {
+          operationId: newId(), state: 'pending', kind: 'settings.save', patch, expectedRevision: revision,
+        });
+      } else {
+        await this.local.saveSettings(next);
+        await this.enqueueSettingsPatch(patch, revision);
+      }
+    } else {
+      await this.local.saveSettings(next);
     }
   }
 
@@ -455,8 +490,7 @@ export class SyncRepository implements Repository {
     const server = await this.cloud.getSettings();
     const { revision, ...serverSettings } = server;
     await this.local.saveSettings(preserveDeviceSettings(serverSettings, local));
-    const queue = await this.loadQueue();
-    await this.saveQueue(queue.filter((operation) => operation.kind !== 'settings.save'));
+    await this.mutateQueue((queue) => queue.filter((operation) => operation.kind !== 'settings.save'));
     await this.kv.set(SETTINGS_REVISION_KEY, revision);
     await this.kv.set(SETTINGS_HYDRATED_KEY, true);
   }
@@ -481,18 +515,29 @@ export class SyncRepository implements Repository {
 
   async push(): Promise<void> {
     if (!(await this.syncEnabled())) return;
-    let queue = await this.loadQueue();
-    while (queue.length > 0) {
-      const op = queue[0];
+    if (localPush) return localPush;
+    const drain = () => this.drainOutbox();
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    const promise: Promise<void> = locks
+      ? locks.request(OUTBOX_LOCK, { mode: 'exclusive' }, () => drain()) as unknown as Promise<void>
+      : drain();
+    localPush = promise.finally(() => { localPush = null; });
+    await localPush;
+  }
+
+  private async drainOutbox(): Promise<void> {
+    while (true) {
+      const op = (await this.loadQueue()).find((operation) => operation.state !== 'failed');
+      if (!op) return;
       try {
         await this.applyOp(op);
       } catch (err) {
         if (!(err instanceof CloudError) || err.retryable) break; // transient: stop, keep op
-        // permanent (4xx): drop the op and continue
-        console.warn(`[sync] dropping ${op.kind}: ${(err as CloudError).code}`);
+        console.warn(`[sync] retaining failed ${op.kind}: ${err.code}`);
+        await this.failOperation(op.operationId, err.code);
+        continue;
       }
-      queue = queue.slice(1);
-      await this.saveQueue(queue);
+      await this.acknowledge(op.operationId);
     }
   }
 
@@ -639,58 +684,84 @@ export class SyncRepository implements Repository {
     return appendBodyFromMessage(message);
   }
 
-  private loadQueue(): Promise<SyncOp[]> {
-    return this.kv.get<SyncOp[]>(QUEUE_KEY).then((q) => q ?? []);
+  private async loadQueue(): Promise<SyncOp[]> {
+    if (hasTransactionalOutbox(this.local)) return this.local.listOutbox<SyncOp>();
+    const queue = (await this.kv.get<Array<SyncOp | NewSyncOp>>(QUEUE_KEY)) ?? [];
+    let migrated = false;
+    const normalized = queue.map((operation) => {
+      if ('operationId' in operation && operation.operationId) return operation as SyncOp;
+      migrated = true;
+      return { ...operation, operationId: newId() } as SyncOp;
+    });
+    if (migrated) await this.saveQueue(normalized);
+    return normalized;
   }
   private saveQueue(queue: SyncOp[]): Promise<void> {
+    if (hasTransactionalOutbox(this.local)) return this.local.mutateOutbox<SyncOp>(() => queue).then(() => undefined);
     return this.kv.set(QUEUE_KEY, queue);
   }
 
-  private async enqueue(op: SyncOp): Promise<void> {
-    const queue = await this.loadQueue();
-    queue.push(op);
-    await this.saveQueue(queue);
+  private mutateQueue(mutate: (queue: SyncOp[]) => SyncOp[]): Promise<SyncOp[]> {
+    if (hasTransactionalOutbox(this.local)) return this.local.mutateOutbox<SyncOp>(mutate);
+    return this.kv.update<SyncOp[]>(QUEUE_KEY, (queue) => mutate(queue ?? [])).then((queue) => queue ?? []);
+  }
+
+  private async enqueue(op: NewSyncOp): Promise<void> {
+    await this.mutateQueue((queue) => [
+      ...queue,
+      { ...op, operationId: newId() } as SyncOp,
+    ]);
+  }
+
+  private async acknowledge(operationId: string): Promise<void> {
+    await this.mutateQueue((queue) => queue.filter((operation) => operation.operationId !== operationId));
+  }
+
+  private async failOperation(operationId: string, code: string): Promise<void> {
+    await this.mutateQueue((queue) => queue.map((operation) => operation.operationId === operationId
+        ? { ...operation, state: 'failed', failure: { code, at: new Date().toISOString() } }
+        : operation));
   }
 
   private async enqueueSettingsPatch(patch: AccountSettingsPatch, expectedRevision: number): Promise<void> {
-    const queue = await this.loadQueue();
-    const pending = queue.find(
-      (operation): operation is Extract<SyncOp, { kind: 'settings.save' }> =>
-        operation.kind === 'settings.save' && operation.expectedRevision === expectedRevision,
-    );
-    if (pending) {
-      pending.patch = {
-        ...pending.patch,
-        ...patch,
-        personalization: {
-          ...pending.patch.personalization,
-          ...patch.personalization,
-          ...((pending.patch.personalization?.memory || patch.personalization?.memory)
-            ? { memory: { ...pending.patch.personalization?.memory, ...patch.personalization?.memory } }
-            : {}),
-        },
-        appearance: { ...pending.patch.appearance, ...patch.appearance },
-        voice: { ...pending.patch.voice, ...patch.voice },
-        data: { ...pending.patch.data, ...patch.data },
-      };
-    }
-    else queue.push({ kind: 'settings.save', patch, expectedRevision });
-    await this.saveQueue(queue);
+    await this.mutateQueue((current) => {
+      const queue = [...current];
+      const pending = queue.find(
+        (operation): operation is Extract<SyncOp, { kind: 'settings.save' }> =>
+          operation.kind === 'settings.save' && operation.expectedRevision === expectedRevision,
+      );
+      if (pending) {
+        pending.patch = {
+          ...pending.patch,
+          ...patch,
+          personalization: {
+            ...pending.patch.personalization,
+            ...patch.personalization,
+            ...((pending.patch.personalization?.memory || patch.personalization?.memory)
+              ? { memory: { ...pending.patch.personalization?.memory, ...patch.personalization?.memory } }
+              : {}),
+          },
+          appearance: { ...pending.patch.appearance, ...patch.appearance },
+          voice: { ...pending.patch.voice, ...patch.voice },
+          data: { ...pending.patch.data, ...patch.data },
+        };
+      } else queue.push({ kind: 'settings.save', patch, expectedRevision, operationId: newId() });
+      return queue;
+    });
   }
 
   /** Coalesce repeated updates to the same thread into a single pending op. */
   private async enqueueThreadUpdate(id: Id, body: UpdateThreadBody): Promise<void> {
-    const queue = await this.loadQueue();
-    const pending = queue.find(
-      (op): op is Extract<SyncOp, { kind: 'thread.update' }> =>
-        op.kind === 'thread.update' && op.id === id,
-    );
-    if (pending) {
-      Object.assign(pending.body, body);
-    } else {
-      queue.push({ kind: 'thread.update', id, body });
-    }
-    await this.saveQueue(queue);
+    await this.mutateQueue((current) => {
+      const queue = [...current];
+      const pending = queue.find(
+        (op): op is Extract<SyncOp, { kind: 'thread.update' }> =>
+          op.kind === 'thread.update' && op.id === id,
+      );
+      if (pending) Object.assign(pending.body, body);
+      else queue.push({ kind: 'thread.update', id, body, operationId: newId() });
+      return queue;
+    });
   }
 
   /**
@@ -699,15 +770,16 @@ export class SyncRepository implements Repository {
    * enqueue the delete and discard any pending updates for it.
    */
   private async enqueueThreadDelete(id: Id): Promise<void> {
-    const queue = await this.loadQueue();
-    const unsynced = queue.some((op) => op.kind === 'thread.create' && op.id === id);
-    const kept = queue.filter((op) => {
-      if (op.kind === 'thread.create' || op.kind === 'thread.update') return op.id !== id;
-      if (op.kind === 'message.append') return op.threadId !== id;
-      return true;
+    await this.mutateQueue((current) => {
+      const unsynced = current.some((op) => op.kind === 'thread.create' && op.id === id);
+      const kept = current.filter((op) => {
+        if (op.kind === 'thread.create' || op.kind === 'thread.update') return op.id !== id;
+        if (op.kind === 'message.append') return op.threadId !== id;
+        return true;
+      });
+      if (!unsynced) kept.push({ kind: 'thread.delete', id, operationId: newId() });
+      return kept;
     });
-    if (!unsynced) kept.push({ kind: 'thread.delete', id });
-    await this.saveQueue(kept);
   }
 }
 
