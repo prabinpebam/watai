@@ -1272,10 +1272,10 @@ a:hover {
 }
 .composer-thumb__remove {
   position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 18px;
-  height: 18px;
+  top: 0;
+  right: 0;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -1310,10 +1310,10 @@ a:hover {
 }
 .composer-file__remove {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 18px;
-  height: 18px;
+  top: 0;
+  right: 0;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -1511,6 +1511,23 @@ a:hover {
 }
 
 @media (max-width: 599px) {
+  .appbar {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .appbar::-webkit-scrollbar {
+    display: none;
+  }
+  .appbar > .icon-btn,
+  .appbar > .select-menu,
+  .appbar__actions {
+    flex: 0 0 auto;
+  }
+  .appbar__title {
+    flex: 1 0 min(120px, 38vw);
+  }
   .composer-wrap {
     padding-left: max(var(--space-3), env(safe-area-inset-left, 0));
     padding-right: max(var(--space-3), env(safe-area-inset-right, 0));

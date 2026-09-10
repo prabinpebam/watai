@@ -41,8 +41,8 @@
   --color-border: #e1e1e6;
   --color-border-strong: var(--gray-300);
   --color-text-primary: var(--gray-950);
-  --color-text-secondary: var(--gray-600);
-  --color-text-tertiary: var(--gray-400);
+  --color-text-secondary: #5f5f68;
+  --color-text-tertiary: #62626b;
   --color-text-on-accent: #ffffff;
   --color-accent: var(--blue-500);
   --color-accent-hover: var(--blue-600);
@@ -200,7 +200,7 @@
   --color-border-strong: rgba(255, 255, 255, 0.18);
   --color-text-primary: #f5f5f6;
   --color-text-secondary: #b4b4bd;
-  --color-text-tertiary: #7e7e89;
+  --color-text-tertiary: #9898a2;
   --color-text-on-accent: #ffffff;
   --color-accent: var(--blue-400);
   --color-accent-hover: var(--blue-300);

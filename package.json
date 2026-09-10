@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "lint:ds": "node scripts/check-design-system.mjs",
-    "build": "npm run lint:ds && tsc -b && vite build",
+    "lint:contrast": "node scripts/check-contrast.mjs",
+    "build": "npm run lint:ds && npm run lint:contrast && tsc -b && vite build",
     "build:harness": "tsc -p tsconfig.harness.build.json",
     "build:nocheck": "vite build",
     "preview": "vite preview",
