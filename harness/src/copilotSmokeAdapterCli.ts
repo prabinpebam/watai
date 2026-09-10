@@ -57,6 +57,12 @@ async function main(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "watai-copilot-smoke-"));
   try {
     await mkdir(join(root, "src"));
+    const brokerScratchDirectory = join(root, "broker");
+    const brokerHomeDirectory = join(root, "home");
+    await Promise.all([
+      mkdir(brokerScratchDirectory),
+      mkdir(brokerHomeDirectory),
+    ]);
     await writeFile(join(root, "src", "value.ts"), "export const value = 1;\n", "utf8");
     git(root, ["init", "-q"]);
     git(root, ["add", "."]);
@@ -142,8 +148,15 @@ async function main(): Promise<void> {
         sdkVersion: "1.0.13", bundledCliVersion: "1.0.83", runtimeImageSha256: imageSha256,
         containerDependencyDirectory: "/opt/watai/node_modules",
         model: request.contract.requestedModel, providerId: "github-copilot", maxAiCredits: 3,
-        brokerScratchDirectory: join(root, "broker"), brokerHomeDirectory: join(root, "home"),
-        brokerEnvironment: { PATH: process.env.PATH ?? "" }, credentialReference: "local-gh-token-provider",
+        brokerScratchDirectory, brokerHomeDirectory,
+        brokerEnvironment: {
+          PATH: process.env.PATH ?? "",
+          SystemRoot: process.env.SystemRoot ?? "C:\\Windows",
+          WINDIR: process.env.WINDIR ?? "C:\\Windows",
+          TEMP: brokerScratchDirectory,
+          TMP: brokerScratchDirectory,
+        },
+        credentialReference: "local-gh-token-provider",
         gatewayTools: task.allowedTools, validationCommands, memoryMb: 1024, cpuCount: 1, pidsLimit: 64,
       },
       sandbox: {
