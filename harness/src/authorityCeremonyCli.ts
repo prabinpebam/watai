@@ -43,9 +43,11 @@ function inside(parent: string, child: string): boolean {
 const status = execute("git", ["status", "--porcelain=v1", "--untracked-files=all"]);
 if (status) throw new Error("Source is dirty. Commit and revalidate bootstrap changes before generating authority requests.");
 const sourceSha = execute("git", ["rev-parse", "HEAD"]);
-const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
-const validation = execute(npmExecutable, ["run", "validate:harness"]);
-const npmRegistry = execute(npmExecutable, ["config", "get", "registry"]);
+const npmEntryPoint = process.env.npm_execpath?.trim();
+if (!npmEntryPoint) throw new Error("npm_execpath is required to invoke the pinned npm CLI portably.");
+const npm = (args: string[]) => execute(process.execPath, [npmEntryPoint, ...args]);
+const validation = npm(["run", "validate:harness"]);
+const npmRegistry = npm(["config", "get", "registry"]);
 if (npmRegistry !== approvedRegistry) throw new Error(`Effective npm registry is not approved: ${npmRegistry}`);
 
 const imageReference = process.env.WATAI_SMOKE_WORKER_IMAGE?.trim() || "watai-harness-smoke-worker:local";
