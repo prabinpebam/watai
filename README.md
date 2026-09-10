@@ -156,6 +156,7 @@ The structured direction is documented in [documentation/memory-system/10-struct
 
 ## Key Documentation
 
+- [Implementation audit and improvement proposal (2026-09-10)](documentation/audits/2026-09-10-implementation-audit/README.md)
 - [documentation/README.md](documentation/README.md)
 - [documentation/02-architecture.md](documentation/02-architecture.md)
 - [documentation/06-server-runs-and-migration.md](documentation/06-server-runs-and-migration.md)
