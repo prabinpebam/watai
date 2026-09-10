@@ -93,7 +93,16 @@ export interface AgentAttemptResult {
 }
 
 export class AgentRunnerError extends Error {
-  constructor(readonly code: string, message: string) {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly observedUsage?: {
+      inputTokens: number;
+      outputTokens: number;
+      requests: number;
+      aiCredits: number;
+    },
+  ) {
     super(message);
     this.name = "AgentRunnerError";
   }
@@ -204,14 +213,20 @@ export async function runAgentAttempt(input: AgentAttemptInput): Promise<AgentAt
       observedOutputTokens += event.data.outputTokens ?? 0;
       observedRequests += 1;
       observedAiCredits += (event.data.copilotUsage?.totalNanoAiu ?? 0) / 1_000_000_000;
+      const observedUsage = () => ({
+        inputTokens: observedInputTokens,
+        outputTokens: observedOutputTokens,
+        requests: observedRequests,
+        aiCredits: observedAiCredits,
+      });
       const exceeded = observedInputTokens > input.task.budgets.maxInputTokens
-        ? new AgentRunnerError("AGENT_INPUT_TOKEN_BUDGET_EXCEEDED", "Copilot input tokens crossed the TaskSpec ceiling.")
+        ? new AgentRunnerError("AGENT_INPUT_TOKEN_BUDGET_EXCEEDED", "Copilot input tokens crossed the TaskSpec ceiling.", observedUsage())
         : observedOutputTokens > input.task.budgets.maxOutputTokens
-          ? new AgentRunnerError("AGENT_OUTPUT_TOKEN_BUDGET_EXCEEDED", "Copilot output tokens crossed the TaskSpec ceiling.")
+          ? new AgentRunnerError("AGENT_OUTPUT_TOKEN_BUDGET_EXCEEDED", "Copilot output tokens crossed the TaskSpec ceiling.", observedUsage())
           : observedRequests > input.task.budgets.maxRequests
-            ? new AgentRunnerError("AGENT_REQUEST_BUDGET_EXCEEDED", "Copilot requests crossed the TaskSpec ceiling.")
+            ? new AgentRunnerError("AGENT_REQUEST_BUDGET_EXCEEDED", "Copilot requests crossed the TaskSpec ceiling.", observedUsage())
             : observedAiCredits > input.task.budgets.maxAiCredits
-              ? new AgentRunnerError("AGENT_AI_CREDIT_BUDGET_EXCEEDED", "Copilot AI credits crossed the TaskSpec ceiling.")
+              ? new AgentRunnerError("AGENT_AI_CREDIT_BUDGET_EXCEEDED", "Copilot AI credits crossed the TaskSpec ceiling.", observedUsage())
               : undefined;
       if (exceeded) {
         usageBudgetExceeded = exceeded;

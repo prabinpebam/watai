@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { runAgentAttempt } from "./agentRunner.js";
+import { AgentRunnerError } from "./agentRunner.js";
 import { createLocalGhTokenProvider } from "./credentialBroker.js";
 import { GatewayService, MemoryGatewayReceiptStore } from "./gatewayService.js";
 import type { LockedTaskSpec } from "./taskSpec.js";
@@ -228,8 +229,28 @@ main().then(() => {
   const oracle = activeRequest.definition.oracle;
   const stored = activeReceipts && activeRunId ? await activeReceipts.list(activeRunId) : [];
   const attemptedToolIds = stored.map((receipt) => receipt.tool);
+  const attempts = stored.map((receipt) => {
+    const result = receipt.response?.result;
+    const validation = result && typeof result === "object" &&
+      typeof (result as { passed?: unknown }).passed === "boolean"
+      ? {
+          passed: (result as { passed: boolean }).passed,
+          exitCode: typeof (result as { exitCode?: unknown }).exitCode === "number"
+            ? (result as { exitCode: number }).exitCode
+            : null,
+          stdoutSha256: sha256(String((result as { stdout?: unknown }).stdout ?? "")),
+          stderrSha256: sha256(String((result as { stderr?: unknown }).stderr ?? "")),
+        }
+      : undefined;
+    return {
+      tool: receipt.tool,
+      status: receipt.status,
+      responseStatus: receipt.response?.status,
+      ...(validation ? { validation } : {}),
+    };
+  });
   const artifact = oracle.kind === "gateway-contract"
-    ? { kind: "gateway-contract" as const, toolIds: attemptedToolIds, submitted: false, changedPaths: [] }
+    ? { kind: "gateway-contract" as const, toolIds: attemptedToolIds, submitted: false, changedPaths: [], attempts }
     : { kind: "gateway-contract" as const, toolIds: [], submitted: false, changedPaths: [] };
   const candidateCode = (error as { code?: unknown }).code;
   const message = error instanceof Error ? error.message : String(error);
@@ -244,11 +265,18 @@ main().then(() => {
           : typeof candidateCode === "number"
             ? `COPILOT_RPC_${Math.abs(candidateCode)}`
             : "COPILOT_SMOKE_FAILED";
+  const observedUsage = error instanceof AgentRunnerError ? error.observedUsage : undefined;
   writeSync(1, JSON.stringify({
     status: "failed",
     artifact,
     latencyMs: Date.now() - activeStartedAt,
-    usage: { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0, aiCredits: 0 },
+    usage: {
+      usd: 0,
+      inputTokens: observedUsage?.inputTokens ?? 0,
+      outputTokens: observedUsage?.outputTokens ?? 0,
+      requests: observedUsage?.requests ?? 0,
+      aiCredits: observedUsage?.aiCredits ?? 0,
+    },
     responseSha256: null,
     resolvedModelVersion: null,
     errorCode,

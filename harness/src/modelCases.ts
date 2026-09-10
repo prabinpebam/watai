@@ -34,7 +34,18 @@ export interface ModelCaseManifest {
 }
 
 export type ModelCaseArtifact =
-  | { kind: "gateway-contract"; toolIds: string[]; submitted: boolean; changedPaths: string[] }
+  | {
+      kind: "gateway-contract";
+      toolIds: string[];
+      submitted: boolean;
+      changedPaths: string[];
+      attempts?: Array<{
+        tool: string;
+        status: "pending" | "completed";
+        responseStatus?: "success" | "failure";
+        validation?: { passed: boolean; exitCode: number | null; stdoutSha256: string; stderrSha256: string };
+      }>;
+    }
   | { kind: "semantic-action"; selectedAction: string }
   | { kind: "event-contract"; eventTypes: string[]; toolCallCount: number }
   | { kind: "external-metric"; metric: string; passed: boolean; reportSha256: string };
