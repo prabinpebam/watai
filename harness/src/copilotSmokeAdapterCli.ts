@@ -131,7 +131,7 @@ async function main(): Promise<void> {
       rollback: "Delete temporary fixture",
       budgets: {
         maxAttempts: 1, maxActiveMinutes: 5, maxAttemptMinutes: 4, maxUsd: 0,
-        maxInputTokens: 15_000, maxOutputTokens: 3_000, maxRequests: 3, maxAiCredits: 30,
+        maxInputTokens: 30_000, maxOutputTokens: 3_000, maxRequests: 4, maxAiCredits: 30,
       },
       preparedAt: new Date().toISOString(),
       deadline: new Date(Date.now() + 4 * 60_000).toISOString(),

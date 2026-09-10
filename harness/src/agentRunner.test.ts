@@ -212,7 +212,7 @@ describe("agent attempt runner", () => {
     await expect(runAgentAttempt({
       task, manifest, credentialBroker: broker, gatewayTransport: transport,
       now: () => Date.parse("2026-09-10T11:00:00.000Z"), createClient: () => fake.client,
-    })).rejects.toMatchObject({ code: "AGENT_USAGE_BUDGET_EXCEEDED" });
+    })).rejects.toMatchObject({ code: "AGENT_INPUT_TOKEN_BUDGET_EXCEEDED" });
     expect(fake.client.forceStop).toHaveBeenCalledOnce();
   });
 

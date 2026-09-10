@@ -179,7 +179,7 @@ export async function runAgentAttempt(input: AgentAttemptInput): Promise<AgentAt
   let observedOutputTokens = 0;
   let observedRequests = 0;
   let observedAiCredits = 0;
-  let usageBudgetExceeded = false;
+  let usageBudgetExceeded: AgentRunnerError | undefined;
   let primaryError: unknown;
   try {
     await client.start();
@@ -203,13 +203,17 @@ export async function runAgentAttempt(input: AgentAttemptInput): Promise<AgentAt
       observedOutputTokens += event.data.outputTokens ?? 0;
       observedRequests += 1;
       observedAiCredits += (event.data.copilotUsage?.totalNanoAiu ?? 0) / 1_000_000_000;
-      if (
-        observedInputTokens > input.task.budgets.maxInputTokens ||
-        observedOutputTokens > input.task.budgets.maxOutputTokens ||
-        observedRequests > input.task.budgets.maxRequests ||
-        observedAiCredits > input.task.budgets.maxAiCredits
-      ) {
-        usageBudgetExceeded = true;
+      const exceeded = observedInputTokens > input.task.budgets.maxInputTokens
+        ? new AgentRunnerError("AGENT_INPUT_TOKEN_BUDGET_EXCEEDED", "Copilot input tokens crossed the TaskSpec ceiling.")
+        : observedOutputTokens > input.task.budgets.maxOutputTokens
+          ? new AgentRunnerError("AGENT_OUTPUT_TOKEN_BUDGET_EXCEEDED", "Copilot output tokens crossed the TaskSpec ceiling.")
+          : observedRequests > input.task.budgets.maxRequests
+            ? new AgentRunnerError("AGENT_REQUEST_BUDGET_EXCEEDED", "Copilot requests crossed the TaskSpec ceiling.")
+            : observedAiCredits > input.task.budgets.maxAiCredits
+              ? new AgentRunnerError("AGENT_AI_CREDIT_BUDGET_EXCEEDED", "Copilot AI credits crossed the TaskSpec ceiling.")
+              : undefined;
+      if (exceeded) {
+        usageBudgetExceeded = exceeded;
         void client.forceStop().catch(() => undefined);
       }
     });
@@ -242,7 +246,7 @@ export async function runAgentAttempt(input: AgentAttemptInput): Promise<AgentAt
     if (attemptTimedOut) throw new AgentRunnerError("ATTEMPT_DEADLINE_EXPIRED", "Copilot attempt exceeded its hard deadline.");
     if (heartbeatError) throw new AgentRunnerError("EFFECT_LEASE_LOST", "Effect lease renewal failed during agent execution.");
     if (limitExhausted) throw new AgentRunnerError("AGENT_AI_CREDIT_LIMIT_EXHAUSTED", "Copilot stopped at the configured AI-credit ceiling.");
-    if (usageBudgetExceeded) throw new AgentRunnerError("AGENT_USAGE_BUDGET_EXCEEDED", "Copilot usage crossed the TaskSpec ceiling during execution.");
+    if (usageBudgetExceeded) throw usageBudgetExceeded;
     const metrics = await session.rpc.usage.getMetrics().catch((error) => {
       throw new AgentRunnerError(
         "AGENT_USAGE_UNAVAILABLE",
@@ -257,13 +261,17 @@ export async function runAgentAttempt(input: AgentAttemptInput): Promise<AgentAt
     const aiCredits = metrics.totalNanoAiu === undefined
       ? metrics.totalPremiumRequestCost
       : metrics.totalNanoAiu / 1_000_000_000;
-    if (
-      inputTokens > input.task.budgets.maxInputTokens ||
-      outputTokens > input.task.budgets.maxOutputTokens ||
-      requests > input.task.budgets.maxRequests
-      || aiCredits > input.task.budgets.maxAiCredits
-    ) {
-      throw new AgentRunnerError("AGENT_USAGE_BUDGET_EXCEEDED", "Observed Copilot usage exceeded the reserved TaskSpec ceiling.");
+    if (inputTokens > input.task.budgets.maxInputTokens) {
+      throw new AgentRunnerError("AGENT_INPUT_TOKEN_BUDGET_EXCEEDED", "Observed Copilot input tokens exceeded the TaskSpec ceiling.");
+    }
+    if (outputTokens > input.task.budgets.maxOutputTokens) {
+      throw new AgentRunnerError("AGENT_OUTPUT_TOKEN_BUDGET_EXCEEDED", "Observed Copilot output tokens exceeded the TaskSpec ceiling.");
+    }
+    if (requests > input.task.budgets.maxRequests) {
+      throw new AgentRunnerError("AGENT_REQUEST_BUDGET_EXCEEDED", "Observed Copilot requests exceeded the TaskSpec ceiling.");
+    }
+    if (aiCredits > input.task.budgets.maxAiCredits) {
+      throw new AgentRunnerError("AGENT_AI_CREDIT_BUDGET_EXCEEDED", "Observed Copilot AI credits exceeded the TaskSpec ceiling.");
     }
     const submission = await input.gatewayTransport.getSubmission(input.task.runId);
     if (!submission || submission.runId !== input.task.runId) {
@@ -287,9 +295,7 @@ export async function runAgentAttempt(input: AgentAttemptInput): Promise<AgentAt
       cleanupErrors: [],
     };
   } catch (error) {
-    primaryError = usageBudgetExceeded
-      ? new AgentRunnerError("AGENT_USAGE_BUDGET_EXCEEDED", "Copilot usage crossed the TaskSpec ceiling during execution.")
-      : error;
+    primaryError = usageBudgetExceeded ?? error;
     throw primaryError;
   } finally {
     if (heartbeatTimer) clearInterval(heartbeatTimer);

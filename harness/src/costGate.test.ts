@@ -55,7 +55,7 @@ describe("project cost gate", () => {
       alternativesConsidered: ["Static checks cannot prove provider and tool behavior."],
       evidenceReuse: ["Reuse image isolation and local tests."],
       estimatedMinutes: 4,
-      ceilings: { wallClockMinutes: 4, requests: 3, aiCredits: 30, usd: 0 },
+      ceilings: { wallClockMinutes: 4, requests: 4, aiCredits: 30, usd: 0 },
       continueIf: "Exact canary oracle passes with usage.",
       stopIf: "Any provider, oracle, time or budget failure.",
       rollback: "Retain failed reservation and do not qualify.",
