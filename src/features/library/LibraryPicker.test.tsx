@@ -61,4 +61,25 @@ describe('LibraryPicker', () => {
     await waitFor(() => expect(close).toHaveBeenCalled());
     expect(useUi.getState().stagedLibraryByThread['thread-1']).toBeUndefined();
   });
+
+  it('retries an initial failure without changing the current query', async () => {
+    mocks.listLibrary.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ items: [image], totalApprox: 1 });
+    render(<LibraryPicker threadId="thread-1" onClose={() => {}} />);
+    expect(await screen.findByText('Library couldn’t be loaded.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry Library' }));
+    expect(await screen.findByText('Reference.png')).toBeInTheDocument();
+    expect(mocks.listLibrary).toHaveBeenCalledTimes(2);
+  });
+
+  it('loads and deduplicates cursor pages', async () => {
+    mocks.listLibrary
+      .mockResolvedValueOnce({ items: [image], cursor: 'page-2', totalApprox: 2 })
+      .mockResolvedValueOnce({ items: [image, pdf], totalApprox: 2 });
+    render(<LibraryPicker threadId="thread-1" onClose={() => {}} />);
+    await screen.findByText('Reference.png');
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(await screen.findByText('Brief.pdf')).toBeInTheDocument();
+    expect(screen.getAllByText('Reference.png')).toHaveLength(1);
+    expect(mocks.listLibrary).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'page-2', limit: 50 }));
+  });
 });

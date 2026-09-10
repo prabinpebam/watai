@@ -23,8 +23,11 @@ export function LibraryPicker({ threadId, onClose, returnFocus }: { threadId: st
   const [query, setQuery] = useState('');
   const [showUnavailable, setShowUnavailable] = useState(false);
   const [items, setItems] = useState<LibraryItemDTO[]>([]);
+  const [cursor, setCursor] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [selected, setSelected] = useState<Map<string, StagedLibraryItem>>(new Map());
   const stageLibraryItems = useUi((state) => state.stageLibraryItems);
   const { api } = useLibraryRuntime();
@@ -36,12 +39,30 @@ export function LibraryPicker({ threadId, onClose, returnFocus }: { threadId: st
       setError(false);
       const selectedTab = TABS.find((candidate) => candidate.value === tab)!;
       api.listLibrary({ ...(query.trim() ? { q: query.trim() } : {}), ...(selectedTab.kinds ? { kind: selectedTab.kinds } : {}), limit: 50 })
-        .then((result) => { if (live) setItems(result.items); })
+        .then((result) => { if (live) { setItems(result.items); setCursor(result.cursor); } })
         .catch(() => { if (live) setError(true); })
         .finally(() => { if (live) setLoading(false); });
     }, 200);
     return () => { live = false; window.clearTimeout(timer); };
-  }, [api, query, tab]);
+  }, [api, query, retry, tab]);
+
+  const loadMore = async () => {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    const selectedTab = TABS.find((candidate) => candidate.value === tab)!;
+    try {
+      const result = await api.listLibrary({
+        ...(query.trim() ? { q: query.trim() } : {}),
+        ...(selectedTab.kinds ? { kind: selectedTab.kinds } : {}),
+        cursor,
+        limit: 50,
+      });
+      setItems((current) => [...current, ...result.items.filter((item) => !current.some((known) => known.id === item.id))]);
+      setCursor(result.cursor);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const close = () => {
     onClose();
@@ -72,7 +93,7 @@ export function LibraryPicker({ threadId, onClose, returnFocus }: { threadId: st
         </div>
         <label className="library-picker__unavailable"><input type="checkbox" checked={showUnavailable} onChange={(event) => setShowUnavailable(event.target.checked)} /> Show unavailable</label>
         <div className="library-picker__results" aria-busy={loading}>
-          {loading ? <div className="library-picker-skeleton" role="status" aria-label="Loading Library">{Array.from({ length: 5 }, (_, index) => <span key={index} className="library-picker-skeleton__row"><span className="skeleton" /><span><i className="skeleton" /><i className="skeleton" /></span></span>)}</div> : error ? <div className="library-picker__state"><Icon name="alert" /><span>Library couldn’t be loaded.</span></div> : !visible.length ? <div className="library-picker__state"><Icon name="search" /><span>No compatible items found.</span></div> : visible.map((item) => {
+          {loading ? <div className="library-picker-skeleton" role="status" aria-label="Loading Library">{Array.from({ length: 5 }, (_, index) => <span key={index} className="library-picker-skeleton__row"><span className="skeleton" /><span><i className="skeleton" /><i className="skeleton" /></span></span>)}</div> : error ? <div className="library-picker__state"><Icon name="alert" /><span>Library couldn’t be loaded.</span><Button variant="secondary" onClick={() => setRetry((value) => value + 1)}>Retry Library</Button></div> : !visible.length ? <div className="library-picker__state"><Icon name="search" /><span>No compatible items found.</span></div> : <>{visible.map((item) => {
             const usable = canUseLibraryItem(item);
             const active = selected.has(item.id);
             return (
@@ -95,7 +116,7 @@ export function LibraryPicker({ threadId, onClose, returnFocus }: { threadId: st
                 <span className="library-picker__check"><Icon name={active ? 'check-circle' : usable ? 'plus' : 'error'} filled={active} /></span>
               </button>
             );
-          })}
+          })}{cursor && <Button variant="outline" full loading={loadingMore} onClick={loadMore}>Load more</Button>}</>}
         </div>
       </div>
     </Modal>

@@ -365,7 +365,7 @@ export function UserMessage({ message }: { message: Message }) {
     });
   };
   return (
-    <div className="msg-group msg-group--user" data-prompt-id={message.id}>
+    <div className="msg-group msg-group--user" data-prompt-id={message.id} data-message-id={message.id}>
       {message.attachments && message.attachments.length > 0 && (
         <div className="msg-group__attachments">
           <AttachmentList attachments={message.attachments} />
@@ -490,7 +490,7 @@ export function AssistantMessage({
   };
 
   return (
-    <div className="msg-group msg-group--assistant">
+    <div className="msg-group msg-group--assistant" data-message-id={message.id}>
       <div className="assistant">
         <div className="assistant__role">
           <Avatar size="sm" variant="assistant">

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { repo } from '../../data';
 import type { SearchHit } from '../../data/repository';
 import { Icon } from '../../design/icons';
-import { IconButton } from '../../design/ui';
+import { Button, IconButton, InlineAlert } from '../../design/ui';
 
 function highlight(text: string, query: string) {
   const q = query.trim();
@@ -23,6 +23,8 @@ export function SearchView({ onClose }: { onClose?: () => void }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [retry, setRetry] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -30,15 +32,31 @@ export function SearchView({ onClose }: { onClose?: () => void }) {
   }, []);
 
   useEffect(() => {
+    if (!query.trim()) {
+      setHits([]);
+      setStatus('idle');
+      return;
+    }
     let live = true;
+    setHits([]);
+    setStatus('loading');
     const id = setTimeout(() => {
-      repo.search(query).then((h) => live && setHits(h));
+      repo.search(query).then(
+        (nextHits) => {
+          if (!live) return;
+          setHits(nextHits);
+          setStatus('success');
+        },
+        () => {
+          if (live) setStatus('error');
+        },
+      );
     }, 180);
     return () => {
       live = false;
       clearTimeout(id);
     };
-  }, [query]);
+  }, [query, retry]);
 
   return (
     <div className="page">
@@ -58,7 +76,14 @@ export function SearchView({ onClose }: { onClose?: () => void }) {
           {onClose && <IconButton name="close" label="Close search" onClick={onClose} />}
         </div>
 
-        {query && hits.length === 0 && <p className="muted">No matches for "{query}".</p>}
+        {status === 'loading' && <p className="muted" role="status">Searching…</p>}
+        {status === 'error' && (
+          <div className="col" style={{ alignItems: 'flex-start' }}>
+            <InlineAlert tone="danger">Could not search conversations.</InlineAlert>
+            <Button variant="secondary" onClick={() => setRetry((value) => value + 1)}>Retry search</Button>
+          </div>
+        )}
+        {status === 'success' && hits.length === 0 && <p className="muted">No matches for "{query}".</p>}
 
         <div className="col" style={{ gap: 'var(--space-1)' }}>
           {hits.map((h) => (
@@ -66,7 +91,8 @@ export function SearchView({ onClose }: { onClose?: () => void }) {
               key={h.thread.id + h.messageId}
               className="search-result"
               onClick={() => {
-                navigate(`/c/${h.thread.id}`);
+                const target = h.messageId ? `#message-${encodeURIComponent(h.messageId)}` : '';
+                navigate(`/c/${h.thread.id}${target}`);
                 onClose?.();
               }}
             >

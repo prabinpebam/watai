@@ -62,6 +62,7 @@ export const useSkills = create<SkillsState>((set, get) => ({
 
   setEnabled: async (id, enabled) => {
     const prev = get().skills;
+    const priorSkill = prev.find((skill) => skill.id === id);
     set({
       skills: prev.map((s) => (s.id === id ? { ...s, enabled } : s)),
       busy: { ...get().busy, [id]: true },
@@ -71,7 +72,9 @@ export const useSkills = create<SkillsState>((set, get) => ({
       set({ skills: get().skills.map((s) => (s.id === id ? updated : s)) });
       toast(`${updated.name} ${enabled ? 'on' : 'off'}`);
     } catch {
-      set({ skills: prev });
+      if (priorSkill) {
+        set((state) => ({ skills: state.skills.map((skill) => (skill.id === id ? priorSkill : skill)) }));
+      }
       toast("Couldn't update the skill", 'error');
     } finally {
       set((s) => {

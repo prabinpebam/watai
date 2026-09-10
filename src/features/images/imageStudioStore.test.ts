@@ -41,6 +41,11 @@ function img(over: Partial<StudioImage> = {}): StudioImage {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  return { promise: new Promise<T>((done) => { resolve = done; }), resolve };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   useImageStudio.setState({
@@ -54,6 +59,50 @@ beforeEach(() => {
     quality: 'medium',
     remix: null,
     useReference: true,
+    query: '',
+    sizeFilter: '',
+    sort: 'newest',
+    loading: false,
+    loadingMore: false,
+    error: false,
+  });
+});
+
+describe('gallery requests', () => {
+  it('commits only the latest filter when refreshes resolve backwards', async () => {
+    const first = deferred<{ images: StudioImage[]; cursor?: string }>();
+    const second = deferred<{ images: StudioImage[]; cursor?: string }>();
+    mocks.listImages.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    useImageStudio.getState().setQuery('first');
+    useImageStudio.getState().setQuery('second');
+
+    second.resolve({ images: [img({ id: 'second' })] });
+    await second.promise;
+    first.resolve({ images: [img({ id: 'first' })] });
+    await first.promise;
+    await Promise.resolve();
+    expect(useImageStudio.getState().images.map((image) => image.id)).toEqual(['second']);
+  });
+
+  it('does not append a page started for a prior filter', async () => {
+    const oldPage = deferred<{ images: StudioImage[]; cursor?: string }>();
+    mocks.listImages.mockImplementation((query: { q?: string; cursor?: string }) => {
+      if (query.cursor) return oldPage.promise;
+      return Promise.resolve({ images: [img({ id: query.q ?? 'current' })] });
+    });
+    useImageStudio.setState({ images: [img({ id: 'old' })], cursor: 'page-2' });
+    const page = useImageStudio.getState().loadMore();
+    useImageStudio.getState().setQuery('new');
+    await Promise.resolve();
+    oldPage.resolve({ images: [img({ id: 'stale-page' })] });
+    await page;
+    expect(useImageStudio.getState().images.map((image) => image.id)).toEqual(['new']);
+  });
+
+  it('retains a failed refresh as a retryable error state', async () => {
+    mocks.listImages.mockRejectedValueOnce(new Error('offline'));
+    await useImageStudio.getState().refresh();
+    expect(useImageStudio.getState()).toMatchObject({ loading: false, error: true });
   });
 });
 

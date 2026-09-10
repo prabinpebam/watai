@@ -40,6 +40,7 @@ interface ImageStudioState {
   cursor?: string;
   loading: boolean;
   loadingMore: boolean;
+  error: boolean;
   generating: boolean;
   /** null = unknown (not yet probed); false = no image model configured. */
   imageCapable: boolean | null;
@@ -91,12 +92,14 @@ interface ImageStudioState {
 }
 
 let unsubscribeRealtime: (() => void) | null = null;
+let galleryRequestVersion = 0;
 
 export const useImageStudio = create<ImageStudioState>((set, get) => ({
   images: [],
   cursor: undefined,
   loading: false,
   loadingMore: false,
+  error: false,
   generating: false,
   imageCapable: null,
   initialized: false,
@@ -139,7 +142,8 @@ export const useImageStudio = create<ImageStudioState>((set, get) => ({
 
   async refresh() {
     const { query, sizeFilter, sort } = get();
-    set({ loading: true });
+    const requestVersion = ++galleryRequestVersion;
+    set({ loading: true, loadingMore: false, error: false });
     try {
       const res = await cloudApi.listImages({
         ...(query.trim() ? { q: query.trim() } : {}),
@@ -147,15 +151,16 @@ export const useImageStudio = create<ImageStudioState>((set, get) => ({
         sort,
         limit: PAGE_SIZE,
       });
-      set({ images: res.images, cursor: res.cursor, loading: false });
+      if (requestVersion === galleryRequestVersion) set({ images: res.images, cursor: res.cursor, loading: false });
     } catch {
-      set({ loading: false });
+      if (requestVersion === galleryRequestVersion) set({ loading: false, error: true });
     }
   },
 
   async loadMore() {
     const { cursor, loadingMore, query, sizeFilter, sort, images } = get();
     if (!cursor || loadingMore) return;
+    const requestVersion = galleryRequestVersion;
     set({ loadingMore: true });
     try {
       const res = await cloudApi.listImages({
@@ -165,12 +170,13 @@ export const useImageStudio = create<ImageStudioState>((set, get) => ({
         limit: PAGE_SIZE,
         cursor,
       });
+      if (requestVersion !== galleryRequestVersion) return;
       // De-dupe in case a live push already prepended one of these.
       const seen = new Set(images.map((i) => i.id));
       const fresh = res.images.filter((i) => !seen.has(i.id));
       set({ images: [...images, ...fresh], cursor: res.cursor, loadingMore: false });
     } catch {
-      set({ loadingMore: false });
+      if (requestVersion === galleryRequestVersion) set({ loadingMore: false });
     }
   },
 

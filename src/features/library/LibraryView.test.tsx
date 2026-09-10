@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 import type { LibraryItemDTO } from '../../data/cloud/types';
@@ -29,6 +29,22 @@ const image: LibraryItemDTO = {
   image: { prompt: 'A launch poster', provenanceComplete: false },
   url: 'https://blob.test/image.png',
 };
+
+const pdf: LibraryItemDTO = {
+  ...image,
+  id: 'pdf-1',
+  kind: 'pdf',
+  origin: 'chat_upload',
+  name: 'old-filter.pdf',
+  mime: 'application/pdf',
+  image: undefined,
+  url: undefined,
+};
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  return { promise: new Promise<T>((done) => { resolve = done; }), resolve };
+}
 
 function LocationView() {
   return <output data-testid="location">{useLocation().pathname}{useLocation().search}</output>;
@@ -92,5 +108,22 @@ describe('LibraryView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByText('A launch poster')).toBeInTheDocument();
     expect(mocks.listLibrary).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not append an old pagination response after the filter changes', async () => {
+    const oldPage = deferred<{ items: LibraryItemDTO[]; totalApprox: number }>();
+    mocks.listLibrary.mockImplementation((query: { cursor?: string; kind?: string[] }) => {
+      if (query.cursor) return oldPage.promise;
+      if (query.kind?.includes('image')) return Promise.resolve({ items: [image], totalApprox: 1 });
+      return Promise.resolve({ items: [pdf], cursor: 'next-page', totalApprox: 2 });
+    });
+    renderLibrary();
+    await screen.findByText('old-filter.pdf');
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Images' }));
+    await screen.findByRole('img', { name: 'A launch poster' });
+
+    await act(async () => oldPage.resolve({ items: [pdf], totalApprox: 2 }));
+    expect(screen.queryByText('old-filter.pdf')).not.toBeInTheDocument();
   });
 });

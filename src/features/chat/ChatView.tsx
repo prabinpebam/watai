@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useChat } from './useChat';
 import { Composer } from './Composer';
 import { AssistantMessage, UserMessage } from './Message';
@@ -14,6 +15,7 @@ import { greeting } from '../../lib/format';
 import type { ImageRef } from '../../lib/types';
 
 export function ChatView({ threadId, onScrolledChange }: { threadId: string; onScrolledChange?: (v: boolean) => void }) {
+  const location = useLocation();
   const { messages, loading, send, regenerate, stop, streaming, indexing, lockedBy } = useChat(threadId);
   const draft = useUi((s) => s.composerDrafts[threadId] ?? '');
   const memoryNotices = useUi((s) => s.memoryNotices[threadId]);
@@ -81,6 +83,22 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
     roRef.current?.disconnect();
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
   }, []);
+
+  useEffect(() => {
+    if (loading || !location.hash.startsWith('#message-')) return;
+    let messageId: string;
+    try {
+      messageId = decodeURIComponent(location.hash.slice('#message-'.length));
+    } catch {
+      return;
+    }
+    const target = scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`);
+    if (!target) return;
+    stickRef.current = false;
+    target.tabIndex = -1;
+    target.scrollIntoView({ block: 'center' });
+    target.focus({ preventScroll: true });
+  }, [loading, location.hash, messages.length]);
 
   const onScroll = () => {
     const el = scrollRef.current;

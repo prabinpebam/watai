@@ -116,6 +116,7 @@ export function LibraryView() {
   const [loadMoreError, setLoadMoreError] = useState(false);
   const [error, setError] = useState(false);
   const [requestVersion, setRequestVersion] = useState(0);
+  const activeRequestKeyRef = useRef('');
   const headingRef = useRef<HTMLHeadingElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -124,6 +125,8 @@ export function LibraryView() {
   const origin = params.get('origin') ?? 'all';
   const sort = params.get('sort') ?? 'newest';
   const imageMode = kind === 'image';
+  const requestKey = `${params.toString()}|${requestVersion}`;
+  activeRequestKeyRef.current = requestKey;
 
   const updateParam = (name: string, value: string, defaultValue: string) => {
     const next = new URLSearchParams(params);
@@ -161,6 +164,8 @@ export function LibraryView() {
   useEffect(() => {
     let live = true;
     setLoading(true);
+    setLoadingMore(false);
+    setLoadMoreError(false);
     setError(false);
     api.listLibrary(queryFromParams(params)).then((result) => {
       if (!live) return;
@@ -198,17 +203,19 @@ export function LibraryView() {
 
   const loadMore = async () => {
     if (!cursor || loadingMore) return;
+    const startedFor = requestKey;
     setLoadingMore(true);
     setLoadMoreError(false);
     try {
       const result = await api.listLibrary(queryFromParams(params, cursor));
+      if (activeRequestKeyRef.current !== startedFor) return;
       setItems((current) => [...current, ...result.items.filter((item) => !current.some((known) => known.id === item.id))]);
       setCursor(result.cursor);
       setTotal(result.totalApprox ?? total);
     } catch {
-      setLoadMoreError(true);
+      if (activeRequestKeyRef.current === startedFor) setLoadMoreError(true);
     } finally {
-      setLoadingMore(false);
+      if (activeRequestKeyRef.current === startedFor) setLoadingMore(false);
     }
   };
 

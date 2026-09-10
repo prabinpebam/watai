@@ -1,4 +1,4 @@
-import { Spinner } from '../../../design/ui';
+import { Button, Spinner } from '../../../design/ui';
 import { Icon } from '../../../design/icons';
 import { useImageStudio } from '../imageStudioStore';
 import { ImageCard } from './ImageCard';
@@ -14,14 +14,26 @@ export function Gallery() {
   const loading = useImageStudio((s) => s.loading);
   const cursor = useImageStudio((s) => s.cursor);
   const loadingMore = useImageStudio((s) => s.loadingMore);
+  const error = useImageStudio((s) => s.error);
   const query = useImageStudio((s) => s.query);
   const loadMore = useImageStudio((s) => s.loadMore);
+  const refresh = useImageStudio((s) => s.refresh);
   const setPrompt = useImageStudio((s) => s.setPrompt);
 
   if (loading && images.length === 0) {
     return (
       <div className="studio-empty">
         <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (error && images.length === 0) {
+    return (
+      <div className="studio-empty">
+        <Icon name="alert" size={40} className="studio-empty__icon" />
+        <p className="studio-empty__hint">Images couldn’t be loaded.</p>
+        <Button variant="secondary" onClick={() => void refresh()}>Retry images</Button>
       </div>
     );
   }
