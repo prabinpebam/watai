@@ -57,6 +57,7 @@ export interface CapabilityAttestation {
       inputTokens: number;
       outputTokens: number;
       requests: number;
+      aiCredits: number;
     };
   };
   issuer: string;
@@ -188,6 +189,7 @@ function validAttestation(
     Number.isSafeInteger(modelEvaluation.usage.inputTokens) && modelEvaluation.usage.inputTokens >= 0 &&
     Number.isSafeInteger(modelEvaluation.usage.outputTokens) && modelEvaluation.usage.outputTokens >= 0 &&
     Number.isSafeInteger(modelEvaluation.usage.requests) && modelEvaluation.usage.requests >= modelEvaluation.expectedRuns
+    && Number.isFinite(modelEvaluation.usage.aiCredits) && modelEvaluation.usage.aiCredits >= 0
   );
   const workerIsolationValid = attestation.capability !== "worker-isolation" || Boolean(
     workerIsolation &&

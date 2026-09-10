@@ -44,7 +44,7 @@ const attestation = (capability: HarnessCapability): CapabilityAttestation => ({
       requestedModel: "gpt-5.4",
       observedModelVersions: ["gpt-5.4-2026-03-05"],
       reportSha256: "c".repeat(64),
-      usage: { usd: 0, inputTokens: 9000, outputTokens: 900, requests: 9 },
+      usage: { usd: 0, inputTokens: 9000, outputTokens: 900, requests: 9, aiCredits: 9 },
     },
   } : {}),
   issuer: "trusted-capability-verifier",

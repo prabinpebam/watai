@@ -18,7 +18,7 @@
         "maximumErrorRate": 0,
         "maximumP95LatencyMs": 30000
       },
-      "budget": { "usd": 0, "inputTokens": 45000, "outputTokens": 9000, "requests": 9 },
+      "budget": { "usd": 0, "inputTokens": 45000, "outputTokens": 9000, "requests": 9, "aiCredits": 270 },
       "requiresUsageReceipts": true,
       "requiresPortableJsonl": true
     },
@@ -37,7 +37,7 @@
         "maximumErrorRate": 0.05,
         "maximumP95LatencyMs": 10000
       },
-      "budget": { "usd": 5, "inputTokens": 120000, "outputTokens": 18000, "requests": 24 },
+      "budget": { "usd": 5, "inputTokens": 120000, "outputTokens": 18000, "requests": 24, "aiCredits": 0 },
       "requiresUsageReceipts": true,
       "requiresPortableJsonl": true
     },
@@ -61,7 +61,7 @@
         "minimumIndependentNegativeTimelines": 600,
         "requiredArms": ["A", "B", "C", "D"]
       },
-      "budget": { "usd": 75, "inputTokens": 600000, "outputTokens": 120000, "requests": 120 },
+      "budget": { "usd": 75, "inputTokens": 600000, "outputTokens": 120000, "requests": 120, "aiCredits": 0 },
       "requiresUsageReceipts": true,
       "requiresPortableJsonl": true
     },
@@ -80,7 +80,7 @@
         "maximumErrorRate": 0.05,
         "maximumP95LatencyMs": 180000
       },
-      "budget": { "usd": 20, "inputTokens": 180000, "outputTokens": 30000, "requests": 30 },
+      "budget": { "usd": 20, "inputTokens": 180000, "outputTokens": 30000, "requests": 30, "aiCredits": 0 },
       "requiresUsageReceipts": true,
       "requiresPortableJsonl": true
     }

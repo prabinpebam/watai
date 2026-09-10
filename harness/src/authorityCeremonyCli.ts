@@ -123,7 +123,7 @@ const request = buildAuthorityCeremonyRequest({
     dockerServerVersion,
   },
   evaluationBudget: contract.budget,
-  maxAiCredits: contract.budget.requests,
+  maxAiCredits: contract.budget.aiCredits,
   claimLifetimeSeconds: 15 * 60,
 });
 

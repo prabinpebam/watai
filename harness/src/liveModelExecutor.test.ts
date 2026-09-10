@@ -16,7 +16,7 @@ const contract: LiveModelEvaluationContract = {
   caseIds: ["bounded-read"],
   repetitions: 3,
   thresholds: { minimumSemanticPassRate: 1, maximumErrorRate: 0, maximumP95LatencyMs: 30_000 },
-  budget: { usd: 1, inputTokens: 6_000, outputTokens: 600, requests: 3 },
+  budget: { usd: 1, inputTokens: 6_000, outputTokens: 600, requests: 3, aiCredits: 3 },
   requiresUsageReceipts: true,
   requiresPortableJsonl: true,
 };
@@ -60,7 +60,7 @@ describe("live-model executor", () => {
             changedPaths: [],
           },
           latencyMs: 1_000,
-          usage: { usd: 0.1, inputTokens: 1_000, outputTokens: 100, requests: 1 },
+          usage: { usd: 0.1, inputTokens: 1_000, outputTokens: 100, requests: 1, aiCredits: 1 },
           responseSha256: "b".repeat(64),
           resolvedModelVersion: "gpt-5.4-2026-03-05",
           errorCode: null,
@@ -87,6 +87,7 @@ describe("live-model executor", () => {
       inputTokens: 3_000,
       outputTokens: 300,
       requests: 3,
+      aiCredits: 3,
     });
   });
 

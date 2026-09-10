@@ -75,7 +75,8 @@ if (
   contract.budget.usd > authority.grant.billing.maxUsd ||
   contract.budget.inputTokens > authority.grant.billing.maxInputTokens ||
   contract.budget.outputTokens > authority.grant.billing.maxOutputTokens ||
-  contract.budget.requests > authority.grant.billing.maxRequests
+  contract.budget.requests > authority.grant.billing.maxRequests ||
+  contract.budget.aiCredits > authority.grant.billing.maxAiCredits
 ) {
   throw new Error("Live-model contract exceeds the current signed evaluation grant or policy ceiling.");
 }
@@ -133,6 +134,7 @@ try {
     inputTokens: authority.grant.billing.maxInputTokens,
     outputTokens: authority.grant.billing.maxOutputTokens,
     requests: authority.grant.billing.maxRequests,
+    aiCredits: authority.grant.billing.maxAiCredits,
   });
   const result = await executeLiveModelEvaluation({
     contract,

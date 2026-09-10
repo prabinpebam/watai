@@ -16,7 +16,7 @@ const contract: LiveModelEvaluationContract = {
   caseIds: ["plain-response"],
   repetitions: 3,
   thresholds: { minimumSemanticPassRate: 1, maximumErrorRate: 0, maximumP95LatencyMs: 10_000 },
-  budget: { usd: 1, inputTokens: 10_000, outputTokens: 1_000, requests: 3 },
+  budget: { usd: 1, inputTokens: 10_000, outputTokens: 1_000, requests: 3, aiCredits: 0 },
   requiresUsageReceipts: true,
   requiresPortableJsonl: true,
 };
@@ -31,7 +31,7 @@ function script(): string {
     "let data='';process.stdin.setEncoding('utf8');",
     "process.stdin.on('data',c=>data+=c);process.stdin.on('end',()=>{",
     "const r=JSON.parse(data);",
-    "process.stdout.write(JSON.stringify({status:'completed',artifact:{kind:r.definition.oracle.kind,selectedAction:'respond'},latencyMs:10,usage:{usd:0,inputTokens:10,outputTokens:2,requests:1},responseSha256:'b'.repeat(64),resolvedModelVersion:'gpt-5.4-test',errorCode:null,completedAt:'2026-09-10T11:00:00.000Z'}));",
+    "process.stdout.write(JSON.stringify({status:'completed',artifact:{kind:r.definition.oracle.kind,selectedAction:'respond'},latencyMs:10,usage:{usd:0,inputTokens:10,outputTokens:2,requests:1,aiCredits:0},responseSha256:'b'.repeat(64),resolvedModelVersion:'gpt-5.4-test',errorCode:null,completedAt:'2026-09-10T11:00:00.000Z'}));",
     "});",
   ].join('');
 }

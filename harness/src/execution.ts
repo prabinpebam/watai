@@ -5,6 +5,7 @@ export interface BudgetAmount {
   inputTokens: number;
   outputTokens: number;
   requests: number;
+  aiCredits?: number;
 }
 
 export type ReservationStatus =
@@ -46,17 +47,22 @@ function validAmount(amount: BudgetAmount): boolean {
     Number.isSafeInteger(amount.outputTokens) &&
     amount.outputTokens >= 0 &&
     Number.isSafeInteger(amount.requests) &&
-    amount.requests >= 0
+    amount.requests >= 0 &&
+    (amount.aiCredits === undefined || (Number.isFinite(amount.aiCredits) && amount.aiCredits >= 0))
   );
 }
 
 function add(left: BudgetAmount, right: BudgetAmount): BudgetAmount {
-  return {
+  const total: BudgetAmount = {
     usd: left.usd + right.usd,
     inputTokens: left.inputTokens + right.inputTokens,
     outputTokens: left.outputTokens + right.outputTokens,
     requests: left.requests + right.requests,
   };
+  if (left.aiCredits !== undefined || right.aiCredits !== undefined) {
+    total.aiCredits = (left.aiCredits ?? 0) + (right.aiCredits ?? 0);
+  }
+  return total;
 }
 
 function charge(reservation: BudgetReservation): BudgetAmount {
@@ -79,7 +85,8 @@ function exceeds(value: BudgetAmount, limits: BudgetAmount): boolean {
     value.usd > limits.usd ||
     value.inputTokens > limits.inputTokens ||
     value.outputTokens > limits.outputTokens ||
-    value.requests > limits.requests
+    value.requests > limits.requests ||
+    (value.aiCredits ?? 0) > (limits.aiCredits ?? 0)
   );
 }
 

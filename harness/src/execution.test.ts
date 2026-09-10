@@ -1,3 +1,15 @@
+  it("enforces an optional aggregate AI-credit ceiling", () => {
+    const initial: BudgetState = {
+      revision: 0,
+      limits: { usd: 0, inputTokens: 100, outputTokens: 20, requests: 2, aiCredits: 30 },
+      reservations: [],
+    };
+    expect(() => reserveBudget(initial, 0, {
+      reservationId: "credits", runId: "run-1", effectId: "effect-credits", fencingEpoch: 1,
+      worstCase: { usd: 0, inputTokens: 10, outputTokens: 2, requests: 1, aiCredits: 31 },
+      status: "reserved",
+    })).toThrowError(expect.objectContaining({ code: "BUDGET_EXHAUSTED" }));
+  });
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 

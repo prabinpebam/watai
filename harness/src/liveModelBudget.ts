@@ -1,5 +1,6 @@
-import type { BudgetAmount, BudgetReservation } from "./execution.js";
+import type { BudgetReservation } from "./execution.js";
 import type { LiveModelBudgetPort } from "./liveModelExecutor.js";
+import type { LiveModelBudgetAmount } from "./modelEvaluation.js";
 import type { SqliteHarnessStore } from "./sqliteStore.js";
 
 export class SqliteLiveModelBudget implements LiveModelBudgetPort {
@@ -9,14 +10,14 @@ export class SqliteLiveModelBudget implements LiveModelBudgetPort {
     private readonly store: SqliteHarnessStore,
     private readonly ledgerRunId: string,
     private readonly executionRunId: string,
-    limits: BudgetAmount,
+    limits: LiveModelBudgetAmount,
   ) {
     this.store.createBudget(ledgerRunId, limits);
   }
 
   async reserve(input: {
     evaluationId: string;
-    worstCase: BudgetAmount;
+    worstCase: LiveModelBudgetAmount;
     expectedRuns: number;
   }): Promise<{ reservationId: string }> {
     if (!Number.isSafeInteger(input.expectedRuns) || input.expectedRuns < 1) {
@@ -43,7 +44,7 @@ export class SqliteLiveModelBudget implements LiveModelBudgetPort {
     return { reservationId };
   }
 
-  async settle(reservationId: string, actual: BudgetAmount): Promise<void> {
+  async settle(reservationId: string, actual: LiveModelBudgetAmount): Promise<void> {
     const tracked = this.reservations.get(reservationId);
     if (!tracked) throw new Error(`Unknown live-model reservation ${reservationId}.`);
     const state = this.store.transitionReservation(this.ledgerRunId, tracked.revision, reservationId, "settled", actual);

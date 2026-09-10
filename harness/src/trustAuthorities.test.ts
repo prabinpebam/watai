@@ -134,7 +134,7 @@ describe("trust-backed harness authorities", () => {
       receiptId: "usage-1", runId: "run-1", effectId: "effect-1", reservationId: "reservation-1",
       providerId: "github-copilot", model: "gpt-5.4", resolvedModelVersion: "gpt-5.4-test",
       premiumRequestCost: 1, aiCredits: 1,
-      usage: { usd: 0, inputTokens: 100, outputTokens: 20, requests: 1 },
+      usage: { usd: 0, inputTokens: 100, outputTokens: 20, requests: 1, aiCredits: 1 },
       outputSha256: "a".repeat(64), completedAt: "2026-09-10T11:00:00.000Z",
       issuer, issuedAt: "2026-09-10T10:59:00.000Z", expiresAt: "2026-09-10T11:05:00.000Z", signature: "",
     };
@@ -143,7 +143,7 @@ describe("trust-backed harness authorities", () => {
       evaluationId: "implementation-agent-smoke", runId: "model-run", caseId: "bounded-read", repetition: 1,
       providerId: "github-copilot", requestedModel: "gpt-5.4", resolvedModelVersion: "gpt-5.4-test",
       status: "completed", semanticPass: true, latencyMs: 100,
-      usage: { usd: 0, inputTokens: 100, outputTokens: 20, requests: 1 },
+      usage: { usd: 0, inputTokens: 100, outputTokens: 20, requests: 1, aiCredits: 1 },
       usageReceiptSha256: "b".repeat(64), responseSha256: "c".repeat(64),
       caseDefinitionSha256: "d".repeat(64), graderSha256: "e".repeat(64), errorCode: null,
       gradedArtifactSha256: "f".repeat(64), gradeOutputSha256: "1".repeat(64),

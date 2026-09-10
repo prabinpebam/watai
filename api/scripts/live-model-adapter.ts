@@ -40,6 +40,7 @@ interface Usage {
   outputTokens: number;
   requests: number;
   usd: number;
+  aiCredits: number;
 }
 
 function sha256(value: unknown): string {
@@ -62,6 +63,7 @@ function usageFrom(events: ResponsesEvent[], inputRate: number, outputRate: numb
     outputTokens,
     requests,
     usd: (inputTokens * inputRate + outputTokens * outputRate) / 1_000_000,
+    aiCredits: 0,
   };
 }
 

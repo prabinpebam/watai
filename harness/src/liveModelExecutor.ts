@@ -1,4 +1,4 @@
-import type { BudgetAmount } from "./execution.js";
+import type { LiveModelBudgetAmount } from "./modelEvaluation.js";
 import { spawnSync } from "node:child_process";
 import {
   admitLiveModelEvaluation,
@@ -20,7 +20,7 @@ export interface LiveModelAdapterResult {
   status: "completed" | "failed" | "timed-out";
   artifact: ModelCaseArtifact;
   latencyMs: number;
-  usage: BudgetAmount;
+  usage: LiveModelBudgetAmount;
   responseSha256: string | null;
   resolvedModelVersion: string | null;
   errorCode: string | null;
@@ -84,7 +84,7 @@ export class CommandLiveModelProviderAdapter implements LiveModelProviderAdapter
         status: timedOut ? "timed-out" : "failed",
         artifact,
         latencyMs: this.command.timeoutMs,
-        usage: { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0 },
+        usage: { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0, aiCredits: 0 },
         responseSha256: null,
         resolvedModelVersion: null,
         errorCode: timedOut ? "ADAPTER_TIMEOUT" : "ADAPTER_PROCESS_FAILED",
@@ -119,10 +119,10 @@ export interface LiveModelObservationSigner {
 export interface LiveModelBudgetPort {
   reserve(input: {
     evaluationId: string;
-    worstCase: BudgetAmount;
+    worstCase: LiveModelBudgetAmount;
     expectedRuns: number;
   }): Promise<{ reservationId: string }>;
-  settle(reservationId: string, actual: BudgetAmount): Promise<void>;
+  settle(reservationId: string, actual: LiveModelBudgetAmount): Promise<void>;
   markOutcomeUnknown(reservationId: string, reason: string): Promise<void>;
 }
 
@@ -137,12 +137,13 @@ export interface ExecuteLiveModelEvaluationInput {
   createRunId(caseId: string, repetition: number): string;
 }
 
-function add(left: BudgetAmount, right: BudgetAmount): BudgetAmount {
+function add(left: LiveModelBudgetAmount, right: LiveModelBudgetAmount): LiveModelBudgetAmount {
   return {
     usd: left.usd + right.usd,
     inputTokens: left.inputTokens + right.inputTokens,
     outputTokens: left.outputTokens + right.outputTokens,
     requests: left.requests + right.requests,
+    aiCredits: left.aiCredits + right.aiCredits,
   };
 }
 
@@ -171,7 +172,7 @@ export async function executeLiveModelEvaluation(
     expectedRuns,
   });
   const observations: LiveModelRunObservation[] = [];
-  let actual: BudgetAmount = { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0 };
+  let actual: LiveModelBudgetAmount = { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0, aiCredits: 0 };
   try {
     for (const caseId of input.contract.caseIds) {
       const definition = byId.get(caseId)!;

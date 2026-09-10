@@ -28,7 +28,8 @@ const totals = manifest.evaluations.reduce((sum, evaluation) => ({
   inputTokens: sum.inputTokens + evaluation.budget.inputTokens,
   outputTokens: sum.outputTokens + evaluation.budget.outputTokens,
   requests: sum.requests + evaluation.budget.requests,
-}), { evaluations: 0, runs: 0, usd: 0, inputTokens: 0, outputTokens: 0, requests: 0 });
+  aiCredits: sum.aiCredits + evaluation.budget.aiCredits,
+}), { evaluations: 0, runs: 0, usd: 0, inputTokens: 0, outputTokens: 0, requests: 0, aiCredits: 0 });
 const maximumSingleEvaluationUsd = Math.max(...manifest.evaluations.map((evaluation) => evaluation.budget.usd));
 
 console.log(JSON.stringify({

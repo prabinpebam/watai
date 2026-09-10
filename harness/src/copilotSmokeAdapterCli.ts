@@ -130,7 +130,7 @@ async function main(): Promise<void> {
       rollback: "Delete temporary fixture",
       budgets: {
         maxAttempts: 1, maxActiveMinutes: 5, maxAttemptMinutes: 4, maxUsd: 0,
-        maxInputTokens: 15_000, maxOutputTokens: 3_000, maxRequests: 3, maxAiCredits: 3,
+        maxInputTokens: 15_000, maxOutputTokens: 3_000, maxRequests: 3, maxAiCredits: 30,
       },
       preparedAt: new Date().toISOString(),
       deadline: new Date(Date.now() + 4 * 60_000).toISOString(),
@@ -147,7 +147,7 @@ async function main(): Promise<void> {
       runtime: {
         sdkVersion: "1.0.13", bundledCliVersion: "1.0.83", runtimeImageSha256: imageSha256,
         containerDependencyDirectory: "/opt/watai/node_modules",
-        model: request.contract.requestedModel, providerId: "github-copilot", maxAiCredits: 3,
+        model: request.contract.requestedModel, providerId: "github-copilot", maxAiCredits: 30,
         brokerScratchDirectory, brokerHomeDirectory,
         brokerEnvironment: {
           PATH: process.env.PATH ?? "",
@@ -199,6 +199,7 @@ async function main(): Promise<void> {
         inputTokens: attempt.usage.inputTokens,
         outputTokens: attempt.usage.outputTokens,
         requests: attempt.usage.requests,
+        aiCredits: attempt.usage.aiCredits,
       },
       responseSha256: attempt.assistantContent ? sha256(attempt.assistantContent) : null,
       resolvedModelVersion: attempt.usage.currentModel,
@@ -228,7 +229,7 @@ main().catch((error) => {
     status: "failed",
     artifact,
     latencyMs: Date.now() - activeStartedAt,
-    usage: { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0 },
+    usage: { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0, aiCredits: 0 },
     responseSha256: null,
     resolvedModelVersion: null,
     errorCode,

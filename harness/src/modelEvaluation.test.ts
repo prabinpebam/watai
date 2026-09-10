@@ -22,13 +22,13 @@ const contract = (): LiveModelEvaluationContract => ({
   caseIds: ["bounded-read", "bounded-edit"],
   repetitions: 3,
   thresholds: { minimumSemanticPassRate: 1, maximumErrorRate: 0, maximumP95LatencyMs: 30_000 },
-  budget: { usd: 2, inputTokens: 30_000, outputTokens: 6_000, requests: 6 },
+  budget: { usd: 2, inputTokens: 30_000, outputTokens: 6_000, requests: 6, aiCredits: 6 },
   requiresUsageReceipts: true,
   requiresPortableJsonl: true,
 });
 const observations = (): LiveModelRunObservation[] => contract().caseIds.flatMap((caseId) =>
   [1, 2, 3].map((repetition) => {
-    const usage = { usd: 0.1, inputTokens: 1_000, outputTokens: 100, requests: 1 };
+    const usage = { usd: 0.1, inputTokens: 1_000, outputTokens: 100, requests: 1, aiCredits: 1 };
     const responseSha256 = "b".repeat(64);
     const completedAt = "2026-09-10T11:00:00.000Z";
     return {

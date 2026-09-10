@@ -20,7 +20,7 @@ const unsigned = (): Omit<LiveModelRunObservation, "producerIdentity" | "issuedA
   status: "completed",
   semanticPass: true,
   latencyMs: 1000,
-  usage: { usd: 0, inputTokens: 1000, outputTokens: 100, requests: 1 },
+  usage: { usd: 0, inputTokens: 1000, outputTokens: 100, requests: 1, aiCredits: 1 },
   usageReceiptSha256: "a".repeat(64),
   responseSha256: "b".repeat(64),
   caseDefinitionSha256: "c".repeat(64),

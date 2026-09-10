@@ -1,6 +1,8 @@
 import type { BudgetAmount } from "./execution.js";
 import { canonical, sha256 } from "./trust.js";
 
+export type LiveModelBudgetAmount = BudgetAmount & { aiCredits: number };
+
 export interface LiveModelEvaluationContract {
   id: string;
   purpose: "implementation-agent" | "product-behavior" | "memory-quality";
@@ -16,7 +18,7 @@ export interface LiveModelEvaluationContract {
     maximumErrorRate: number;
     maximumP95LatencyMs: number;
   };
-  budget: BudgetAmount;
+  budget: LiveModelBudgetAmount;
   qualityDenominator?: {
     minimumAttemptedEpisodes: number;
     minimumIndependentNegativeTimelines: number;
@@ -44,7 +46,7 @@ export interface LiveModelRunObservation {
   status: "completed" | "failed" | "timed-out";
   semanticPass: boolean;
   latencyMs: number;
-  usage: BudgetAmount;
+  usage: LiveModelBudgetAmount;
   usageReceiptSha256: string;
   responseSha256: string | null;
   caseDefinitionSha256: string;
@@ -77,7 +79,7 @@ export interface LiveModelEvaluationAdmission {
   semanticPassRate: number;
   errorRate: number;
   p95LatencyMs: number;
-  totalUsage: BudgetAmount;
+  totalUsage: LiveModelBudgetAmount;
 }
 
 const digestPattern = /^[a-f0-9]{64}$/;
@@ -95,34 +97,37 @@ export function modelUsageEvidenceSha256(input: {
   providerId: string;
   requestedModel: string;
   resolvedModelVersion: string | null;
-  usage: BudgetAmount;
+  usage: LiveModelBudgetAmount;
   responseSha256: string | null;
   completedAt: string;
 }): string {
   return sha256(canonical(input));
 }
 
-function validAmount(amount: BudgetAmount): boolean {
+function validAmount(amount: LiveModelBudgetAmount): boolean {
   return Number.isFinite(amount.usd) && amount.usd >= 0 &&
     Number.isSafeInteger(amount.inputTokens) && amount.inputTokens >= 0 &&
     Number.isSafeInteger(amount.outputTokens) && amount.outputTokens >= 0 &&
-    Number.isSafeInteger(amount.requests) && amount.requests >= 0;
+    Number.isSafeInteger(amount.requests) && amount.requests >= 0 &&
+    Number.isFinite(amount.aiCredits) && amount.aiCredits >= 0;
 }
 
-function add(left: BudgetAmount, right: BudgetAmount): BudgetAmount {
+  function add(left: LiveModelBudgetAmount, right: LiveModelBudgetAmount): LiveModelBudgetAmount {
   return {
     usd: left.usd + right.usd,
     inputTokens: left.inputTokens + right.inputTokens,
     outputTokens: left.outputTokens + right.outputTokens,
     requests: left.requests + right.requests,
+    aiCredits: left.aiCredits + right.aiCredits,
   };
 }
 
-function exceeds(value: BudgetAmount, limit: BudgetAmount): boolean {
+function exceeds(value: LiveModelBudgetAmount, limit: LiveModelBudgetAmount): boolean {
   return value.usd > limit.usd ||
     value.inputTokens > limit.inputTokens ||
     value.outputTokens > limit.outputTokens ||
-    value.requests > limit.requests;
+    value.requests > limit.requests ||
+    value.aiCredits > limit.aiCredits;
 }
 
 export function validateLiveModelEvaluationManifest(
@@ -183,7 +188,7 @@ export function admitLiveModelEvaluation(
   const expectedRuns = contract.caseIds.length * contract.repetitions;
   const seen = new Set<string>();
   const runIds = new Set<string>();
-  let totalUsage: BudgetAmount = { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0 };
+  let totalUsage: LiveModelBudgetAmount = { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0, aiCredits: 0 };
 
   for (const observation of observations) {
     const identity = `${observation.caseId}:${observation.repetition}`;
