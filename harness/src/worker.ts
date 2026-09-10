@@ -422,6 +422,7 @@ export function createGatewayProxyTools(
   manifest: WorkerLaunchManifest,
   transport: GatewayTransport,
 ): Tool[] {
+  const passedValidationIds = new Set<string>();
   const descriptions: Record<GatewayToolId, string> = {
     watai_read_file: "Read one tracked source-file range through the Watai gateway.",
     watai_search_text: "Search tracked source text through the Watai gateway.",
@@ -436,6 +437,15 @@ export function createGatewayProxyTools(
     parameters: gatewaySchemas[name],
     defer: "never",
     handler: async (args, invocation) => {
+      const validationId = name === "watai_run_validation" &&
+        typeof (args as { commandId?: unknown }).commandId === "string"
+        ? (args as { commandId: string }).commandId
+        : undefined;
+      if (validationId && passedValidationIds.has(validationId)) {
+        throw new Error(
+          `Validation ${validationId} already passed for the current diff. Do not repeat it; call watai_submit_result immediately.`,
+        );
+      }
       if (Buffer.byteLength(canonical(args), "utf8") > 1024 * 1024) {
         throw new Error(`Gateway arguments exceed the one-megabyte ceiling: ${name}`);
       }
@@ -460,6 +470,14 @@ export function createGatewayProxyTools(
       if (response.status !== "success") throw new Error(`Gateway rejected ${name}`);
       if (Buffer.byteLength(canonical(response.result), "utf8") > 1024 * 1024) {
         throw new Error(`Gateway result exceeds the one-megabyte ceiling: ${name}`);
+      }
+      if (
+        validationId &&
+        typeof response.result === "object" &&
+        response.result !== null &&
+        (response.result as { passed?: unknown }).passed === true
+      ) {
+        passedValidationIds.add(validationId);
       }
       return response.result;
     },

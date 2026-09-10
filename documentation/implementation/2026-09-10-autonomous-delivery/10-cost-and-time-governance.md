@@ -40,7 +40,7 @@ The request must include:
   "alternativesConsidered": ["Cheaper alternative and why it is insufficient"],
   "evidenceReuse": ["Existing evidence not rerun"],
   "estimatedMinutes": 4,
-  "ceilings": { "wallClockMinutes": 4, "requests": 4, "aiCredits": 30, "usd": 0 },
+  "ceilings": { "wallClockMinutes": 4, "requests": 5, "aiCredits": 30, "usd": 0 },
   "continueIf": "Objective pass condition",
   "stopIf": "Objective stop condition",
   "rollback": "Recovery without deleting failed evidence",
@@ -54,7 +54,7 @@ A full denominator must additionally provide `canaryReportPath` referencing `CAN
 
 The implementation-agent qualification uses:
 
-- canary: one `bounded-read` run, maximum 4 minutes, 4 provider requests and 30 AI credits;
+- canary: one `bounded-read` run, maximum 4 minutes, 5 provider requests and 30 AI credits; the fifth request is reserved only for deterministic recovery from one rejected duplicate validation;
 - full qualification: three cases by three repetitions, maximum 36 minutes and 270 AI credits;
 - continuation: full qualification only after a fresh canary bound to the same source, smoke image, contract and case passes;
 - stop: any canary provider, oracle, usage, time or budget failure.

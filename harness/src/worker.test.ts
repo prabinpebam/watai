@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { LockedTaskSpec } from "./taskSpec";
+import { canonical, sha256 } from "./trust";
 import {
   buildCopilotConfiguration,
   createGatewayProxyTools,
@@ -287,5 +288,30 @@ describe("worker launch contract", () => {
       toolName: tools[0].name,
       arguments: {},
     })).rejects.toThrow("misbound response");
+  });
+
+  it("rejects duplicate validation after a passing receipt without invoking the gateway twice", async () => {
+    const launch = prepareWorkerLaunch(task(), runtime(), isolation(), broker(), authorities).manifest!;
+    const invoke = vi.fn(async (request): Promise<GatewayResponse> => {
+      const result = { commandId: "fixed", passed: true };
+      return {
+        schemaVersion: "1.0",
+        requestId: request.requestId,
+        runId: request.runId,
+        manifestSha256: request.manifestSha256,
+        status: "success",
+        result,
+        resultSha256: sha256(canonical(result)),
+      };
+    });
+    const tool = createGatewayProxyTools(launch, { invoke, getSubmission: async () => undefined })
+      .find((candidate) => candidate.name === "watai_run_validation")!;
+    await tool.handler?.({ commandId: "fixed" }, {
+      sessionId: launch.runId, toolCallId: "validation-1", toolName: tool.name, arguments: {},
+    });
+    await expect(tool.handler?.({ commandId: "fixed" }, {
+      sessionId: launch.runId, toolCallId: "validation-2", toolName: tool.name, arguments: {},
+    })).rejects.toThrow("call watai_submit_result immediately");
+    expect(invoke).toHaveBeenCalledOnce();
   });
 });
