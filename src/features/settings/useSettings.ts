@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { repo } from '../../data';
+import { loadAccountSettings, repo } from '../../data';
 import { DEFAULT_SETTINGS, type Settings } from '../../lib/types';
 import { useUi } from '../../state/store';
 
@@ -7,13 +7,20 @@ import { useUi } from '../../state/store';
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
+  const [degraded, setDegraded] = useState(false);
   const ui = useUi();
 
   useEffect(() => {
-    repo.getSettings().then((s) => {
-      setSettings(s);
-      setLoaded(true);
-    });
+    loadAccountSettings()
+      .then((s) => {
+        setSettings(s);
+        setLoaded(true);
+        setDegraded(false);
+      })
+      .catch(() => {
+        setLoaded(false);
+        setDegraded(true);
+      });
   }, []);
 
   const save = async (next: Settings) => {
@@ -26,5 +33,5 @@ export function useSettings() {
     ui.setReduceMotion(next.appearance.reduceMotion);
   };
 
-  return { settings, setSettings: save, loaded };
+  return { settings, setSettings: save, loaded, degraded };
 }

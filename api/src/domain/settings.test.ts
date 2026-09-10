@@ -24,10 +24,9 @@ describe('parseSettingsPatch', () => {
     });
   });
 
-  it('accepts a voice patch with the selected voice + input device', () => {
-    expect(parseSettingsPatch({ voice: { voiceId: 'nova', inputDeviceId: 'mic-abc-123' } })).toEqual({
-      voice: { voiceId: 'nova', inputDeviceId: 'mic-abc-123' },
-    });
+  it('accepts account voice choices but rejects the device-only microphone id', () => {
+    expect(parseSettingsPatch({ voice: { voiceId: 'nova' } })).toEqual({ voice: { voiceId: 'nova' } });
+    expect(code(() => parseSettingsPatch({ voice: { inputDeviceId: 'mic-abc-123' } }))).toBe('validation');
   });
 
   it('rejects invalid enum values', () => {

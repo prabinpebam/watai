@@ -14,6 +14,7 @@ import {
 } from '../../lib/types';
 import type {
   AppendMessageBody,
+  AccountSettingsPatch,
   CreateMemoryBody,
   CreateThreadBody,
   CredentialStatus,
@@ -28,6 +29,7 @@ import type {
   RunRecord,
   SasRequestBody,
   SasResult,
+  SettingsSnapshot,
   SubmitRunBody,
   SubmitRunResult,
   ThreadRecord,
@@ -196,6 +198,7 @@ class FakeCloud implements CloudApi {
   memories = new Map<string, MemoryRecord>();
   libraryItems = new Map<string, LibraryItemDTO>();
   serverSettings: Settings | null = null;
+  serverSettingsRevision = 0;
   calls: string[] = [];
   private clock = 0;
 
@@ -345,14 +348,30 @@ class FakeCloud implements CloudApi {
       this.threads.set(threadId, { ...cur, lock: null, updatedAt: this.now() });
     }
   }
-  async getSettings(): Promise<Settings> {
+  async getSettings(): Promise<SettingsSnapshot> {
     this.calls.push('getSettings');
-    return this.serverSettings ?? DEFAULT_SETTINGS;
+    return { ...(this.serverSettings ?? DEFAULT_SETTINGS), revision: this.serverSettingsRevision };
   }
-  async patchSettings(patch: Partial<Settings>): Promise<Settings> {
+  async patchSettings(patch: AccountSettingsPatch, expectedRevision: number): Promise<SettingsSnapshot> {
     this.calls.push('patchSettings');
-    this.serverSettings = patch as Settings;
-    return this.serverSettings;
+    if (expectedRevision !== this.serverSettingsRevision) throw new CloudError('conflict', 'stale settings', 409);
+    const current = this.serverSettings ?? DEFAULT_SETTINGS;
+    const { memory, ...personalization } = patch.personalization ?? {};
+    this.serverSettings = {
+      ...current,
+      personalization: {
+        ...current.personalization,
+        ...personalization,
+        ...(memory
+          ? { memory: { ...(current.personalization.memory ?? DEFAULT_SETTINGS.personalization.memory!), ...memory } }
+          : {}),
+      },
+      appearance: { ...current.appearance, ...patch.appearance },
+      voice: { ...current.voice, ...patch.voice },
+      data: { ...current.data, ...patch.data },
+    };
+    this.serverSettingsRevision += 1;
+    return { ...this.serverSettings!, revision: this.serverSettingsRevision };
   }
   async listMemory(query: ListMemoryQuery = {}): Promise<ListMemoryResponse> {
     this.calls.push('listMemory');
@@ -629,6 +648,33 @@ describe('SyncRepository — memory', () => {
 });
 
 describe('SyncRepository — push', () => {
+  it('hydrates server privacy settings before backfill can push fresh-device defaults', async () => {
+    const { repo, local, cloud } = setup(true);
+    cloud.serverSettings = {
+      ...DEFAULT_SETTINGS,
+      personalization: {
+        ...DEFAULT_SETTINGS.personalization,
+        memoryEnabled: false,
+        memory: {
+          enabled: false,
+          paused: true,
+          referenceSaved: false,
+          referenceHistory: false,
+          autoExtract: false,
+        },
+      },
+      data: { ...DEFAULT_SETTINGS.data, sync: true },
+    };
+
+    await repo.backfill();
+    await repo.sync();
+
+    expect((await local.getSettings()).personalization.memoryEnabled).toBe(false);
+    expect(cloud.serverSettings.personalization.memoryEnabled).toBe(false);
+    expect(cloud.calls).toContain('getSettings');
+    expect(cloud.calls).not.toContain('patchSettings');
+  });
+
   it('creates the thread on the server with the same client id', async () => {
     const { repo, cloud, kv } = setup(true);
     const t = await repo.createThread({ title: 'Trip' });
@@ -727,6 +773,52 @@ describe('SyncRepository — push', () => {
     await repo.saveSettings(s);
     await repo.push();
     expect(cloud.serverSettings?.appearance.theme).toBe('dark');
+  });
+
+  it('retains the stricter privacy policy after a stale offline patch conflicts', async () => {
+    const { repo, local, cloud } = setup(true);
+    cloud.serverSettings = {
+      ...DEFAULT_SETTINGS,
+      personalization: {
+        ...DEFAULT_SETTINGS.personalization,
+        memoryEnabled: false,
+        memory: { enabled: false, paused: true, referenceSaved: false, referenceHistory: false, autoExtract: false },
+      },
+      data: { ...DEFAULT_SETTINGS.data, sync: true, retention: '30d' },
+    };
+    cloud.serverSettingsRevision = 1;
+    await repo.hydrateSettings();
+
+    const hydrated = await local.getSettings();
+    await repo.saveSettings({
+      ...hydrated,
+      personalization: {
+        ...hydrated.personalization,
+        memoryEnabled: true,
+        memory: { enabled: true, paused: false, referenceSaved: true, referenceHistory: true, autoExtract: true },
+      },
+      data: { ...hydrated.data, retention: 'forever' },
+    });
+    cloud.serverSettingsRevision = 2;
+    await repo.push();
+
+    const effective = await local.getSettings();
+    expect(effective.personalization.memoryEnabled).toBe(false);
+    expect(effective.personalization.memory?.paused).toBe(true);
+    expect(effective.data.retention).toBe('30d');
+  });
+
+  it('keeps microphone device selection local and sends no account patch', async () => {
+    const { repo, local, cloud, kv } = setup(true);
+    await repo.hydrateSettings();
+    cloud.calls.length = 0;
+    const current = await local.getSettings();
+    await repo.saveSettings({ ...current, voice: { ...current.voice, inputDeviceId: 'microphone-local' } });
+    await repo.push();
+
+    expect((await local.getSettings()).voice.inputDeviceId).toBe('microphone-local');
+    expect(cloud.calls).not.toContain('patchSettings');
+    expect(await kv.get('sync.queue')).toEqual([]);
   });
 });
 

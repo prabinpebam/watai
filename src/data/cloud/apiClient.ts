@@ -5,6 +5,7 @@
 import { apiBaseUrl } from './env';
 import type {
   AppendMessageBody,
+  AccountSettingsPatch,
   CreateImagesBody,
   CreateThreadBody,
   CredentialStatus,
@@ -30,6 +31,7 @@ import type {
   RunRecord,
   SasRequestBody,
   SasResult,
+  SettingsSnapshot,
   StudioImage,
   SubmitRunBody,
   SubmitRunResult,
@@ -37,7 +39,7 @@ import type {
   ThreadFileRecord,
   UpdateThreadBody,
 } from './types';
-import type { Settings, ThreadLock } from '../../lib/types';
+import type { ThreadLock } from '../../lib/types';
 
 export type TokenProvider = () => Promise<string | null>;
 
@@ -222,12 +224,12 @@ export class WataiApiClient implements CloudApi {
   }
 
   // --- settings ---
-  getSettings(): Promise<Settings> {
+  getSettings(): Promise<SettingsSnapshot> {
     return this.request('GET', '/settings');
   }
 
-  patchSettings(patch: Partial<Settings>): Promise<Settings> {
-    return this.request('PATCH', '/settings', patch);
+  patchSettings(patch: AccountSettingsPatch, expectedRevision: number): Promise<SettingsSnapshot> {
+    return this.request('PATCH', '/settings', { patch, expectedRevision });
   }
 
   // --- memory ---
@@ -508,8 +510,8 @@ export interface CloudApi {
   ): Promise<{ thread: ThreadRecord; lock: ThreadLock }>;
   getThreadLock(threadId: string): Promise<ThreadLock | null>;
   releaseThreadLock(threadId: string, deviceId: string): Promise<void>;
-  getSettings(): Promise<Settings>;
-  patchSettings(patch: Partial<Settings>): Promise<Settings>;
+  getSettings(): Promise<SettingsSnapshot>;
+  patchSettings(patch: AccountSettingsPatch, expectedRevision: number): Promise<SettingsSnapshot>;
   listMemory(query?: ListMemoryQuery): Promise<ListMemoryResponse>;
   getMemoryProfile(): Promise<MemoryProfileView>;
   createMemory(body: CreateMemoryBody): Promise<MemoryRecord>;

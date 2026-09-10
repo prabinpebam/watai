@@ -48,6 +48,19 @@ const baseUrl = 'https://api.test/api';
 const token = async () => 'tok-123';
 
 describe('WataiApiClient', () => {
+  it('sends settings patches with the expected revision', async () => {
+    const { fetchImpl, calls } = stubFetch([{ status: 200, body: { revision: 4 } }]);
+    const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });
+
+    await client.patchSettings({ personalization: { memoryEnabled: false } }, 3);
+
+    expect(calls[0]).toMatchObject({
+      method: 'PATCH',
+      url: 'https://api.test/api/settings',
+      body: { expectedRevision: 3, patch: { personalization: { memoryEnabled: false } } },
+    });
+  });
+
   it('sends the bearer token and parses the threads envelope', async () => {
     const { fetchImpl, calls } = stubFetch([{ status: 200, body: { threads: [{ id: 't1' }] } }]);
     const client = new WataiApiClient({ baseUrl, getToken: token, fetchImpl });

@@ -73,6 +73,11 @@ export function currentAccountKvStore(): KvStore {
   return accountScope.kv;
 }
 
+export async function loadAccountSettings(): Promise<import('../lib/types').Settings> {
+  await accountScope.sync.hydrateSettings();
+  return accountScope.local.getSettings();
+}
+
 /** Push local changes + pull remote deltas (no-op unless sync is on and signed in). Resolves
  *  with the set of thread ids whose local state changed during the pull, so callers can refresh. */
 export async function syncNow(): Promise<Set<string>> {

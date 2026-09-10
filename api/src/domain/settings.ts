@@ -54,12 +54,15 @@ const settingsSchema = z
   })
   .strict();
 
+const accountVoicePatch = voiceBase.omit({ inputDeviceId: true }).partial().strict();
+const accountDataPatch = dataBase.omit({ sync: true }).partial().strict();
+
 const patchSchema = z
   .object({
     personalization: personalizationBase.partial().strict().optional(),
     appearance: appearanceBase.partial().strict().optional(),
-    voice: voiceBase.partial().strict().optional(),
-    data: dataBase.partial().strict().optional(),
+    voice: accountVoicePatch.optional(),
+    data: accountDataPatch.optional(),
   })
   .strict();
 
@@ -86,14 +89,23 @@ export function parseSettingsPatch(input: unknown): SettingsPatch {
   return parseOrThrow(patchSchema, input, 'Invalid settings.');
 }
 
+const revisionedPatchSchema = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+  patch: patchSchema,
+}).strict();
+
+export function parseRevisionedSettingsPatch(input: unknown): { expectedRevision: number; patch: SettingsPatch } {
+  return parseOrThrow(revisionedPatchSchema, input, 'Invalid revisioned settings update.');
+}
+
 export function normalizeSettings(settings: Settings): Settings {
   const legacyVoice = settings.voice as Settings['voice'] & { autoSend?: boolean };
+  const { inputDeviceId: _inputDeviceId, autoSend: _autoSend, ...accountVoice } = legacyVoice;
   const voice = {
     ...DEFAULT_SETTINGS.voice,
-    ...legacyVoice,
+    ...accountVoice,
     autoStopDictation: legacyVoice.autoStopDictation ?? legacyVoice.autoSend ?? false,
   };
-  delete voice.autoSend;
   return { ...DEFAULT_SETTINGS, ...settings, voice };
 }
 

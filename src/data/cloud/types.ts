@@ -2,7 +2,18 @@
 // plus boundary mappers that translate to/from the frontend domain types. The server
 // owns `userId`/`deletedAt` and never sees UI-ephemeral fields (attachments, images,
 // usage, error, or the sending/streaming statuses), so those are stripped/defaulted here.
-import type { MemoryKind, Message, Role, Thread, ThreadLock } from '../../lib/types';
+import type { MemoryKind, Message, Role, Settings, Thread, ThreadLock } from '../../lib/types';
+
+export type SettingsSnapshot = Settings & { revision: number };
+
+export interface AccountSettingsPatch {
+  personalization?: Partial<Omit<Settings['personalization'], 'memory'>> & {
+    memory?: Partial<NonNullable<Settings['personalization']['memory']>>;
+  };
+  appearance?: Partial<Settings['appearance']>;
+  voice?: Partial<Omit<Settings['voice'], 'inputDeviceId'>>;
+  data?: Partial<Omit<Settings['data'], 'sync'>>;
+}
 
 export interface ThreadRecord {
   id: string;

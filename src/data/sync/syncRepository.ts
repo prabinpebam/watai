@@ -4,12 +4,13 @@
 // All of this is gated on Settings.data.sync, so with sync off it is a pure
 // passthrough to the local store. The token provider is injected via the CloudApi,
 // so this whole engine is unit-testable without MSAL.
-import type { Id, ImageRef, Message, Settings, Thread, ThreadLock } from '../../lib/types';
+import { DEFAULT_SETTINGS, type Id, type ImageRef, type Message, type Settings, type Thread, type ThreadLock } from '../../lib/types';
 import type { Repository, RunLockResult, SearchHit, SyncLocalStore } from '../repository';
 import { CloudError, type CloudApi } from '../cloud/apiClient';
 import { getDeviceId, getDeviceLabel } from '../../lib/device';
 import {
   appendBodyFromMessage,
+  type AccountSettingsPatch,
   messageFromRecord,
   threadFromRecord,
   updateBodyFromPatch,
@@ -30,13 +31,100 @@ const QUEUE_KEY = 'sync.queue';
 const THREAD_CURSOR_KEY = 'sync.cursor.threads';
 const MSG_CURSOR_PREFIX = 'sync.cursor.messages.';
 const SYNC_KEY_PREFIX = 'sync.';
+const SETTINGS_HYDRATED_KEY = 'sync.settings.hydrated';
+const SETTINGS_REVISION_KEY = 'sync.settings.revision';
 
 type SyncOp =
   | { kind: 'thread.create'; id: Id; body: CreateThreadBody }
   | { kind: 'thread.update'; id: Id; body: UpdateThreadBody }
   | { kind: 'thread.delete'; id: Id }
   | { kind: 'message.append'; threadId: Id; id: Id; body: AppendMessageBody }
-  | { kind: 'settings.save' };
+  | { kind: 'settings.save'; patch: AccountSettingsPatch; expectedRevision: number };
+
+function objectDiff(current: Record<string, unknown>, next: Record<string, unknown>, excluded = new Set<string>()): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(next)) {
+    if (excluded.has(key)) continue;
+    const previous = current[key];
+    if (value && previous && typeof value === 'object' && typeof previous === 'object' && !Array.isArray(value) && !Array.isArray(previous)) {
+      const nested = objectDiff(previous as Record<string, unknown>, value as Record<string, unknown>);
+      if (Object.keys(nested).length) patch[key] = nested;
+    } else if (JSON.stringify(previous) !== JSON.stringify(value)) {
+      patch[key] = value;
+    }
+  }
+  return patch;
+}
+
+function accountSettingsPatch(current: Settings, next: Settings): AccountSettingsPatch {
+  const personalization = objectDiff(current.personalization as unknown as Record<string, unknown>, next.personalization as unknown as Record<string, unknown>);
+  const appearance = objectDiff(current.appearance as unknown as Record<string, unknown>, next.appearance as unknown as Record<string, unknown>);
+  const voice = objectDiff(current.voice as unknown as Record<string, unknown>, next.voice as unknown as Record<string, unknown>, new Set(['inputDeviceId']));
+  const data = objectDiff(current.data as unknown as Record<string, unknown>, next.data as unknown as Record<string, unknown>, new Set(['sync']));
+  return {
+    ...(Object.keys(personalization).length ? { personalization } : {}),
+    ...(Object.keys(appearance).length ? { appearance } : {}),
+    ...(Object.keys(voice).length ? { voice } : {}),
+    ...(Object.keys(data).length ? { data } : {}),
+  } as AccountSettingsPatch;
+}
+
+function mergeAccountSettings(settings: Settings, patch: AccountSettingsPatch): Settings {
+  const { memory, ...personalization } = patch.personalization ?? {};
+  return {
+    ...settings,
+    personalization: {
+      ...settings.personalization,
+      ...personalization,
+      ...(memory
+        ? { memory: { ...(settings.personalization.memory ?? DEFAULT_SETTINGS.personalization.memory!), ...memory } }
+        : {}),
+    },
+    appearance: { ...settings.appearance, ...patch.appearance },
+    voice: { ...settings.voice, ...patch.voice },
+    data: { ...settings.data, ...patch.data },
+  };
+}
+
+function preserveDeviceSettings(server: Settings, local: Settings): Settings {
+  return {
+    ...server,
+    voice: {
+      ...server.voice,
+      ...(local.voice.inputDeviceId ? { inputDeviceId: local.voice.inputDeviceId } : {}),
+    },
+    data: { ...server.data, sync: local.data.sync },
+    ...(local.tools ? { tools: local.tools } : {}),
+  };
+}
+
+function stricterPrivacySettings(server: Settings, local: Settings): Settings {
+  const serverMemory = server.personalization.memory ?? DEFAULT_SETTINGS.personalization.memory!;
+  const localMemory = local.personalization.memory ?? DEFAULT_SETTINGS.personalization.memory!;
+  const retentionRank: Record<Settings['data']['retention'], number> = { '30d': 0, '90d': 1, forever: 2 };
+  const retention = retentionRank[server.data.retention] <= retentionRank[local.data.retention]
+    ? server.data.retention
+    : local.data.retention;
+  return preserveDeviceSettings({
+    ...server,
+    personalization: {
+      ...server.personalization,
+      memoryEnabled: server.personalization.memoryEnabled && local.personalization.memoryEnabled,
+      memory: {
+        enabled: serverMemory.enabled && localMemory.enabled,
+        paused: serverMemory.paused || localMemory.paused,
+        referenceSaved: serverMemory.referenceSaved && localMemory.referenceSaved,
+        referenceHistory: serverMemory.referenceHistory && localMemory.referenceHistory,
+        autoExtract: serverMemory.autoExtract && localMemory.autoExtract,
+      },
+    },
+    data: {
+      ...server.data,
+      temporaryDefault: server.data.temporaryDefault || local.data.temporaryDefault,
+      retention,
+    },
+  }, local);
+}
 
 /** The syncable thread flags that are currently set (non-default). */
 function flagsPatch(t: Thread): UpdateThreadBody {
@@ -328,8 +416,20 @@ export class SyncRepository implements Repository {
   }
 
   async saveSettings(s: Settings): Promise<void> {
-    await this.local.saveSettings(s);
-    if (s.data.sync) await this.enqueue({ kind: 'settings.save' });
+    const previous = await this.local.getSettings();
+    const patch = accountSettingsPatch(previous, s);
+    let revision = await this.kv.get<number>(SETTINGS_REVISION_KEY);
+    let next = s;
+    if (s.data.sync && revision === undefined) {
+      await this.hydrateSettings();
+      const hydrated = await this.local.getSettings();
+      next = preserveDeviceSettings(mergeAccountSettings(hydrated, patch), s);
+      revision = await this.kv.get<number>(SETTINGS_REVISION_KEY);
+    }
+    await this.local.saveSettings(next);
+    if (s.data.sync && revision !== undefined && Object.keys(patch).length) {
+      await this.enqueueSettingsPatch(patch, revision);
+    }
   }
 
   async deleteAll(): Promise<void> {
@@ -344,8 +444,21 @@ export class SyncRepository implements Repository {
    *  changed during the pull, so the UI can refresh them. No-op when sync is disabled. */
   async sync(): Promise<Set<Id>> {
     if (!(await this.syncEnabled())) return new Set();
+    await this.hydrateSettings();
     await this.push();
     return this.pull();
+  }
+
+  async hydrateSettings(): Promise<void> {
+    if (await this.kv.get<boolean>(SETTINGS_HYDRATED_KEY)) return;
+    const local = await this.local.getSettings();
+    const server = await this.cloud.getSettings();
+    const { revision, ...serverSettings } = server;
+    await this.local.saveSettings(preserveDeviceSettings(serverSettings, local));
+    const queue = await this.loadQueue();
+    await this.saveQueue(queue.filter((operation) => operation.kind !== 'settings.save'));
+    await this.kv.set(SETTINGS_REVISION_KEY, revision);
+    await this.kv.set(SETTINGS_HYDRATED_KEY, true);
   }
 
   /** Enqueue every existing non-temporary local thread, its messages, and settings. */
@@ -364,7 +477,6 @@ export class SyncRepository implements Repository {
         });
       }
     }
-    await this.enqueue({ kind: 'settings.save' });
   }
 
   async push(): Promise<void> {
@@ -426,7 +538,22 @@ export class SyncRepository implements Repository {
         );
         return;
       case 'settings.save':
-        await this.cloud.patchSettings(await this.local.getSettings());
+        {
+          const local = await this.local.getSettings();
+          try {
+            const updated = await this.cloud.patchSettings(op.patch, op.expectedRevision);
+            const { revision, ...updatedSettings } = updated;
+            await this.local.saveSettings(preserveDeviceSettings(updatedSettings, local));
+            await this.kv.set(SETTINGS_REVISION_KEY, updated.revision);
+          } catch (error) {
+            if (!(error instanceof CloudError) || error.code !== 'conflict') throw error;
+            const latest = await this.cloud.getSettings();
+            const { revision, ...latestSettings } = latest;
+            await this.local.saveSettings(stricterPrivacySettings(latestSettings, local));
+            await this.kv.set(SETTINGS_REVISION_KEY, latest.revision);
+            throw error;
+          }
+        }
         return;
     }
   }
@@ -522,6 +649,32 @@ export class SyncRepository implements Repository {
   private async enqueue(op: SyncOp): Promise<void> {
     const queue = await this.loadQueue();
     queue.push(op);
+    await this.saveQueue(queue);
+  }
+
+  private async enqueueSettingsPatch(patch: AccountSettingsPatch, expectedRevision: number): Promise<void> {
+    const queue = await this.loadQueue();
+    const pending = queue.find(
+      (operation): operation is Extract<SyncOp, { kind: 'settings.save' }> =>
+        operation.kind === 'settings.save' && operation.expectedRevision === expectedRevision,
+    );
+    if (pending) {
+      pending.patch = {
+        ...pending.patch,
+        ...patch,
+        personalization: {
+          ...pending.patch.personalization,
+          ...patch.personalization,
+          ...((pending.patch.personalization?.memory || patch.personalization?.memory)
+            ? { memory: { ...pending.patch.personalization?.memory, ...patch.personalization?.memory } }
+            : {}),
+        },
+        appearance: { ...pending.patch.appearance, ...patch.appearance },
+        voice: { ...pending.patch.voice, ...patch.voice },
+        data: { ...pending.patch.data, ...patch.data },
+      };
+    }
+    else queue.push({ kind: 'settings.save', patch, expectedRevision });
     await this.saveQueue(queue);
   }
 

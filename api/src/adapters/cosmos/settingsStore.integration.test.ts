@@ -19,14 +19,16 @@ describe('CosmosSettingsStore (integration)', () => {
     expect(await store.get(userId)).toBeNull();
   });
 
-  it('put + get round-trips and upsert overwrites', async () => {
-    await store.put(userId, DEFAULT_SETTINGS);
+  it('put + get round-trips with compare-and-set revisions', async () => {
+    await store.put(userId, DEFAULT_SETTINGS, null);
     const first = await store.get(userId);
-    expect(first?.appearance.theme).toBe('system');
+    expect(first?.value.appearance.theme).toBe('system');
+    expect(first?.revision).toBe(1);
 
     const updated = { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, theme: 'dark' as const } };
-    await store.put(userId, updated);
+    await store.put(userId, updated, first);
     const second = await store.get(userId);
-    expect(second?.appearance.theme).toBe('dark');
+    expect(second?.value.appearance.theme).toBe('dark');
+    expect(second?.revision).toBe(2);
   });
 });
