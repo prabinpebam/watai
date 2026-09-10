@@ -50,6 +50,7 @@ api/                    Azure Functions backend
 documentation/          Product, architecture, memory, and UI specs
 docs/                   Built frontend for GitHub Pages
 infra/                  Azure Bicep infrastructure
+harness/                Local autonomous-workflow rehearsal and safety checks
 public/                 Static PWA assets
 src/                    React frontend
 spike/                  Small experiments and probes
@@ -90,6 +91,18 @@ Frontend:
 npm test
 npm run build
 ```
+
+Autonomous delivery harness (local rehearsal only):
+
+```powershell
+npm run validate:harness
+npm run harness:status -- implementation
+```
+
+The checked-in policy intentionally blocks unattended implementation and release
+until independently verified authorization, durable infrastructure, worker
+isolation and budget controls exist. See
+[harness/README.md](harness/README.md) for the implemented boundary.
 
 Backend:
 

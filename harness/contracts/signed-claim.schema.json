@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://watai.invalid/harness/signed-claim/1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "kind", "artifactId", "issuerId", "issuedAt",
+    "expiresAt", "payload", "signatureBase64"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "kind": {
+      "enum": [
+        "actor-proof", "authorization-grant", "capability-attestation",
+        "credential-broker-attestation", "dependency-receipt", "deployment-observation", "evidence-check", "evidence-packet",
+        "guard-proof", "impact-assessment", "policy-candidate", "release-permit",
+        "taskspec-lock", "worker-isolation-attestation"
+      ]
+    },
+    "artifactId": { "type": "string", "minLength": 1 },
+    "issuerId": { "type": "string", "minLength": 1 },
+    "issuedAt": { "type": "string", "minLength": 1 },
+    "expiresAt": { "type": "string", "minLength": 1 },
+    "payload": { "type": "object" },
+    "signatureBase64": { "type": "string", "minLength": 1 }
+  }
+}

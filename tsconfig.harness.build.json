@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.harness.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": false,
+    "outDir": ".harness-dist",
+    "rootDir": "harness/src"
+  },
+  "include": ["harness/src/**/*.ts"],
+  "exclude": ["harness/src/**/*.test.ts"]
+}

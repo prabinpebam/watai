@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://watai.invalid/harness/trust-root/1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "status", "rootId", "repositoryId", "epoch",
+    "validFrom", "validUntil", "backlogSha256", "policySha256",
+    "workflowSha256", "planSchemaSha256", "controllerSha256",
+    "evaluatorPackSha256", "testInventorySha256", "fixtureManifestSha256",
+    "toolchainSha256", "dependencyLockSha256", "impactMapSha256",
+    "negativeControlIds", "issuers", "revokedArtifactIds"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "status": { "const": "ACTIVE" },
+    "rootId": { "$ref": "#/$defs/text" },
+    "repositoryId": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" },
+    "epoch": { "type": "integer", "minimum": 1 },
+    "validFrom": { "$ref": "#/$defs/text" },
+    "validUntil": { "$ref": "#/$defs/text" },
+    "backlogSha256": { "$ref": "#/$defs/digest" },
+    "policySha256": { "$ref": "#/$defs/digest" },
+    "workflowSha256": { "$ref": "#/$defs/digest" },
+    "planSchemaSha256": { "$ref": "#/$defs/digest" },
+    "controllerSha256": { "$ref": "#/$defs/digest" },
+    "evaluatorPackSha256": { "$ref": "#/$defs/digest" },
+    "testInventorySha256": { "$ref": "#/$defs/digest" },
+    "fixtureManifestSha256": { "$ref": "#/$defs/digest" },
+    "toolchainSha256": { "$ref": "#/$defs/digest" },
+    "dependencyLockSha256": { "$ref": "#/$defs/digest" },
+    "impactMapSha256": { "$ref": "#/$defs/digest" },
+    "negativeControlIds": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "issuers": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["issuerId", "publicKeySpkiPem", "allowedKinds", "allowedRoles"],
+        "properties": {
+          "issuerId": { "$ref": "#/$defs/text" },
+          "publicKeySpkiPem": { "type": "string", "pattern": "^-----BEGIN PUBLIC KEY-----" },
+          "allowedKinds": {
+            "type": "array", "minItems": 1, "uniqueItems": true,
+            "items": { "$ref": "#/$defs/kind" }
+          },
+          "allowedRoles": {
+            "type": "array", "uniqueItems": true,
+            "items": { "$ref": "#/$defs/text" }
+          }
+        }
+      }
+    },
+    "revokedArtifactIds": {
+      "type": "array", "uniqueItems": true,
+      "items": { "$ref": "#/$defs/text" }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "kind": {
+      "enum": [
+        "actor-proof", "authorization-grant", "capability-attestation",
+        "credential-broker-attestation", "dependency-receipt", "deployment-observation", "evidence-check", "evidence-packet",
+        "guard-proof", "impact-assessment", "policy-candidate", "release-permit",
+        "taskspec-lock", "worker-isolation-attestation"
+      ]
+    }
+  }
+}

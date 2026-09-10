@@ -8,10 +8,18 @@
     "dev": "vite",
     "lint:ds": "node scripts/check-design-system.mjs",
     "build": "npm run lint:ds && tsc -b && vite build",
+    "build:harness": "tsc -p tsconfig.harness.build.json",
     "build:nocheck": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:harness": "vitest run harness/src",
     "test:watch": "vitest",
+    "harness:check-sources": "npm run build:harness --silent && node .harness-dist/sourceCheckCli.js",
+    "harness:doctor": "npm run build:harness --silent && node .harness-dist/doctorCli.js",
+    "harness:preflight": "npm run build:harness --silent && node .harness-dist/preflightCli.js",
+    "harness:status": "npm run build:harness --silent && node .harness-dist/status.js",
+    "typecheck:harness": "tsc -p tsconfig.harness.json",
+    "validate:harness": "node documentation/implementation/2026-09-10-autonomous-delivery/validate-plan.mjs && npm run typecheck:harness && npm run test:harness && npm run build:harness && node .harness-dist/sourceCheckCli.js",
     "test:experience:library": "playwright test tests/e2e/library-experience.spec.ts"
   },
   "dependencies": {
@@ -30,11 +38,13 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@github/copilot-sdk": "1.0.13",
     "@playwright/test": "^1.61.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.20.1",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

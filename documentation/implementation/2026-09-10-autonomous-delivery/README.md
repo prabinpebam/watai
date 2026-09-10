@@ -1,6 +1,6 @@
 # Watai autonomous implementation and delivery plan
 
-**Status: DESIGN, not a running harness or authorization to deploy.**
+**Status: DESIGN plus a local rehearsal controller; not authorization to deploy.**
 Research/access date: **2026-09-10**. Audit document baseline:
 `9b4314ddd537401667d68642c3eeee85e7fabca7`; audited application:
 `f7dc195300c4039aae5b9a7a8fb1691327864ea1`.
@@ -40,6 +40,8 @@ numeric maturity score or a passing subset relabeled complete.
 | [04-implementation-backlog.md](04-implementation-backlog.md) | Milestones, small slices, ordering and finding closure interpretation |
 | [05-research-and-decisions.md](05-research-and-decisions.md) | Fetched primary sources, dated claims, alternatives and caveats |
 | [06-design-validation-and-review.md](06-design-validation-and-review.md) | Local mechanical evidence, adversarial findings and design revisions |
+| [07-harness-implementation-review.md](07-harness-implementation-review.md) | Executable-controller critique, implemented safeguards and remaining blockers |
+| [08-execution-readiness.md](08-execution-readiness.md) | Current DoD readiness, bootstrap ceremony and execution-ready criteria |
 | [contracts/backlog.json](contracts/backlog.json) | Canonical 56-slice execution backlog; each finding has explicit closure slices |
 | [contracts/policy.json](contracts/policy.json) | Proposed gate/authority/budget policy, disabled by default |
 | [contracts/workflow.json](contracts/workflow.json) | Typed transition table and bounded exception paths |
@@ -47,16 +49,19 @@ numeric maturity score or a passing subset relabeled complete.
 | [contracts/plan.schema.json](contracts/plan.schema.json) | Closed JSON contracts for the machine-readable artifacts |
 | [validate-plan.mjs](validate-plan.mjs) | Local, network-free plan/traceability validator and negative controls |
 
-The four JSON inputs are **specifications/examples**, not controller code.
-The only implemented executable here is the audit-only validator. It does not
-authenticate, build Watai, run model calls, enable Actions, create infrastructure,
-promote a release, or prove production safety. Existing audit observations remain
-open. No new tools or dependencies are installed.
+The four JSON inputs remain **specifications/examples**, not trusted authority.
+The audit-only validator is joined by the local rehearsal controller under
+`harness/`, which executes the workflow contract and tests failure paths. It does
+not authenticate a production identity, dispatch an agent, build Watai, run model
+calls, enable Actions, create infrastructure, promote a release, or prove
+production safety. Existing audit observations remain open.
 
 Run from the repository root:
 
 ```powershell
 node documentation\implementation\2026-09-10-autonomous-delivery\validate-plan.mjs
+npm run validate:harness
+npm run harness:status -- implementation
 ```
 
 It checks JSON contracts, exact audit ID coverage, DAG structure, mandatory fields,

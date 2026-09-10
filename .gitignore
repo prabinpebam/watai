@@ -3,6 +3,8 @@ node_modules/
 
 # Build caches (the production build in /docs IS committed for GitHub Pages)
 dist/
+.harness-dist/
+.harness-state/
 *.tsbuildinfo
 .vite/
 
