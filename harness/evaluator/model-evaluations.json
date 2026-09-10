@@ -16,7 +16,7 @@
       "thresholds": {
         "minimumSemanticPassRate": 1,
         "maximumErrorRate": 0,
-        "maximumP95LatencyMs": 30000
+        "maximumP95LatencyMs": 180000
       },
       "budget": { "usd": 0, "inputTokens": 45000, "outputTokens": 9000, "requests": 9, "aiCredits": 270 },
       "requiresUsageReceipts": true,

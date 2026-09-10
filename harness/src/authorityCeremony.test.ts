@@ -27,7 +27,7 @@ describe("authority ceremony request", () => {
       },
       evaluationBudget: { usd: 0, inputTokens: 45_000, outputTokens: 9_000, requests: 9 },
       maxAiCredits: 9,
-      claimLifetimeSeconds: 900,
+      claimLifetimeSeconds: 3_600,
     });
     const grant = request.unsignedClaimRequests.find((claim) => claim.kind === "authorization-grant");
     expect(request.attemptId).toBe("attempt-001");

@@ -124,7 +124,7 @@ const request = buildAuthorityCeremonyRequest({
   },
   evaluationBudget: contract.budget,
   maxAiCredits: contract.budget.aiCredits,
-  claimLifetimeSeconds: 15 * 60,
+  claimLifetimeSeconds: 60 * 60,
 });
 
 const requestedOutputRoot = resolve(
