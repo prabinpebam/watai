@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { MemoryExtractionOutput } from '../domain/memoryExtraction';
 import { parseMemoryExtractionJobRecord } from '../domain/memoryExtraction';
 import { parseMemoryRecord, type MemoryRecord, type MemorySourceRef } from '../domain/memory';
-import { effectiveMemorySettings, type Settings } from '../domain/settings';
+import { effectiveMemoryPolicy, type Settings } from '../domain/settings';
 import type { DecryptedCredentials } from './credentialService';
 import type { MemoryStore } from '../ports/memoryStore';
 import type { MemoryJobStore } from '../ports/memoryJobStore';
@@ -99,9 +99,15 @@ export class MemoryExtractionService {
   private async eligible(userId: string, threadId: string): Promise<ThreadRecord | null> {
     const thread = await this.deps.threadStore.get(userId, threadId);
     if (!thread || thread.deletedAt || thread.temporary) return null;
-    const settings = effectiveMemorySettings(await this.deps.settings.get(userId));
-    if (!settings.enabled || settings.paused || !settings.autoExtract || !settings.referenceHistory) return null;
+    const settings = effectiveMemoryPolicy(await this.deps.settings.get(userId));
+    if (settings.learnChats !== 'automatic') return null;
     return thread;
+  }
+
+  private async learningAllowed(userId: string): Promise<boolean> {
+    const current = await this.deps.settings.get(userId).catch(() => undefined);
+    if (!current) return false;
+    return effectiveMemoryPolicy(current).learnChats === 'automatic';
   }
 
   async enqueueCommand(userId: string, threadId: string, userMessageId: string, runId?: string): Promise<import('../domain/memoryExtraction').MemoryExtractionJobRecord | null> {
@@ -181,6 +187,7 @@ export class MemoryExtractionService {
         messages: messages.map((m) => ({ id: m.id, role: m.role as 'user' | 'assistant', content: m.content.slice(0, 4096), createdAt: chrono(m) })),
         existingMemories: candidates.map((m) => ({ id: m.id, kind: m.kind, status: m.status, text: m.text, entities: m.entities, topics: m.topics, validAt: m.validAt, invalidAt: m.invalidAt })),
       });
+      if (!(await this.learningAllowed(job.userId))) return await this.finish(job, 'ignored', { ignore: 1 }, 0, 0);
       const result = await this.applyOperations(job.userId, job.threadId, job.kind, messages, candidates, out, embedder);
       if (embedder) await this.backfillEmbeddings(job.userId, embedder);
       await this.finish(job, result.accepted > 0 ? 'completed' : 'ignored', result.counts, result.accepted, result.rejected);
@@ -270,6 +277,7 @@ export class MemoryExtractionService {
     for (const op of output.operations) {
       counts[op.op] = (counts[op.op] ?? 0) + 1;
       try {
+        if (!(await this.learningAllowed(userId))) { rejected++; continue; }
         if (op.op === 'ignore') continue;
         const refs = this.sourceRefs(threadId, messages, op.sourceMessageIds);
         if (!refs) { rejected++; continue; }

@@ -1,6 +1,6 @@
 import type { MemoryContextBlock, MemoryRecord } from '../domain/memory';
 import { renderMemoryProfile } from '../domain/memoryProfile';
-import { effectiveMemorySettings, type Settings } from '../domain/settings';
+import { effectiveMemoryPolicy, type Settings } from '../domain/settings';
 import type { MemoryStore } from '../ports/memoryStore';
 import type { Embedder, EmbedCredentials } from '../ports/embedder';
 import type { MemoryRetriever } from '../ports/memoryRetriever';
@@ -96,11 +96,12 @@ export class MemoryContextService {
   }
 
   async buildForRun(input: MemoryContextInput): Promise<MemoryContextBlock> {
-    const settings = input.settings ?? (await this.settings.get(input.userId).catch(() => undefined));
-    if (settings) {
-      const memory = effectiveMemorySettings(settings);
-      if (!memory.enabled || memory.paused || !memory.referenceSaved) return { ...EMPTY, latencyBudgetMs: 250 };
-    }
+    const allowed = async (): Promise<boolean> => {
+      const current = await this.settings.get(input.userId).catch(() => undefined);
+      if (!current) return false;
+      return effectiveMemoryPolicy(current).readSaved;
+    };
+    if (!(await allowed())) return { ...EMPTY, latencyBudgetMs: 250 };
     const retrievalOn = !!(this.embedder && this.retriever && input.creds);
     // Read the active candidate set once and share it between vector ranking and the always-on
     // profile, instead of listing the same (up to 200) records twice per run.
@@ -121,14 +122,15 @@ export class MemoryContextService {
         })
       : null;
     const base = retrievalOn ? await this.buildVector(input, candidates, queryVec) : { ...EMPTY, latencyBudgetMs: 250 };
-    if (!this.profileEnabled) return base;
+    if (!this.profileEnabled) return (await allowed()) ? base : { ...EMPTY, latencyBudgetMs: 250 };
     // Relevance-gate the always-on profile: inject identity grounding only when the query relates to
     // something we know about the user (at least one active fact clears the profile floor). Without an
     // embedder configured we cannot judge relevance, so fall back to always-on (legacy behavior).
     const profileRelevant = queryVec
       ? candidates.some((m) => m.embedding?.length && cosine(queryVec, m.embedding) >= PROFILE_RELEVANCE_FLOOR)
       : true;
-    return profileRelevant ? this.withProfile(base, input, candidates) : base;
+    const result = profileRelevant ? this.withProfile(base, input, candidates) : base;
+    return (await allowed()) ? result : { ...EMPTY, latencyBudgetMs: 250 };
   }
 
   /** Semantic retrieval: vector-rank candidates above a relevance floor against the (pre-computed)

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSettingsPatch, DEFAULT_SETTINGS, effectiveMemorySettings } from './settings';
+import { parseSettingsPatch, DEFAULT_SETTINGS, effectiveMemoryPolicy, effectiveMemorySettings } from './settings';
 import { AppError } from './errors';
 
 function code(fn: () => unknown): string | undefined {
@@ -56,5 +56,23 @@ describe('DEFAULT_SETTINGS', () => {
       autoExtract: false,
       referenceHistory: false,
     });
+  });
+
+  it('derives independent saved-read and learning modes', () => {
+    const withMemory = (memory: NonNullable<typeof DEFAULT_SETTINGS.personalization.memory>) => ({
+      ...DEFAULT_SETTINGS,
+      personalization: { ...DEFAULT_SETTINGS.personalization, memoryEnabled: memory.enabled, memory },
+    });
+    const base = DEFAULT_SETTINGS.personalization.memory!;
+    expect(effectiveMemoryPolicy(withMemory({ ...base, enabled: false, learnChats: 'automatic' })))
+      .toEqual({ readSaved: false, learnChats: 'off' });
+    expect(effectiveMemoryPolicy(withMemory({ ...base, learnChats: 'off', autoExtract: false })))
+      .toEqual({ readSaved: true, learnChats: 'off' });
+    expect(effectiveMemoryPolicy(withMemory({ ...base, learnChats: 'review' })))
+      .toEqual({ readSaved: true, learnChats: 'review' });
+    expect(effectiveMemoryPolicy(withMemory({ ...base, learnChats: 'automatic' })))
+      .toEqual({ readSaved: true, learnChats: 'automatic' });
+    expect(effectiveMemoryPolicy(withMemory({ ...base, paused: true, learnChats: 'automatic' })))
+      .toEqual({ readSaved: true, learnChats: 'off' });
   });
 });

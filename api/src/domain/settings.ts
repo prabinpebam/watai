@@ -14,6 +14,7 @@ const memorySettingsSchema = z.object({
   referenceSaved: z.boolean(),
   referenceHistory: z.boolean(),
   autoExtract: z.boolean(),
+  learnChats: z.enum(['off', 'review', 'automatic']).optional(),
 });
 
 const personalizationBase = z.object({
@@ -76,6 +77,7 @@ export const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
   referenceSaved: true,
   referenceHistory: true,
   autoExtract: true,
+  learnChats: 'automatic',
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -122,11 +124,25 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
 }
 
 export function effectiveMemorySettings(settings: Settings): MemorySettings {
-  return settings.personalization.memory ?? {
+  const memory = settings.personalization.memory ?? {
     enabled: settings.personalization.memoryEnabled,
     paused: false,
     referenceSaved: settings.personalization.memoryEnabled,
     referenceHistory: settings.personalization.memoryEnabled,
     autoExtract: settings.personalization.memoryEnabled,
+  };
+  return {
+    ...memory,
+    learnChats: memory.learnChats ?? (memory.autoExtract && memory.referenceHistory ? 'automatic' : 'off'),
+  };
+}
+
+export function effectiveMemoryPolicy(settings: Settings): { readSaved: boolean; learnChats: 'off' | 'review' | 'automatic' } {
+  const memory = effectiveMemorySettings(settings);
+  return {
+    readSaved: memory.enabled && memory.referenceSaved,
+    learnChats: !memory.enabled || memory.paused || !memory.referenceHistory
+      ? 'off'
+      : memory.learnChats ?? (memory.autoExtract ? 'automatic' : 'off'),
   };
 }

@@ -129,6 +129,49 @@ describe('MemoryContextService — relevance channel', () => {
     const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: "what's my dog's name?", now: NOW, creds: CREDS });
     expect(block.memories).toEqual([]);
   });
+
+  it('keeps saved-memory reads available while learning is paused', async () => {
+    const store = new InMemoryMemoryStore();
+    const paused = { get: async () => ({
+      ...DEFAULT_SETTINGS,
+      personalization: {
+        ...DEFAULT_SETTINGS.personalization,
+        memory: { ...DEFAULT_SETTINGS.personalization.memory!, paused: true, learnChats: 'automatic' as const },
+      },
+    }) };
+    const ctx = new MemoryContextService(store, paused, { embedder: stubEmbedder, retriever: new InProcessRetriever(store) });
+    await store.put(rec({ id: 'saved', text: 'User has a dog named Chopper.', embedding: stubEmbed('dog') }));
+    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: 'my dog', now: NOW, creds: CREDS });
+    expect(block.memories.map((memory) => memory.id)).toEqual(['saved']);
+  });
+
+  it('fails closed to empty context when policy cannot be loaded', async () => {
+    const store = new InMemoryMemoryStore();
+    const unavailable = { get: async () => { throw new Error('settings unavailable'); } };
+    const ctx = new MemoryContextService(store, unavailable, { embedder: stubEmbedder, retriever: new InProcessRetriever(store), profile: true });
+    await store.put(rec({ id: 'secret', text: 'User has a dog named Chopper.', embedding: stubEmbed('dog') }));
+    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: 'my dog', now: NOW, creds: CREDS });
+    expect(block).toMatchObject({ memories: [], instructions: [], retrievalMode: 'empty' });
+    expect(block.profile).toBeUndefined();
+  });
+
+  it('drops assembled context when policy is revoked during retrieval', async () => {
+    const store = new InMemoryMemoryStore();
+    let enabled = true;
+    const reader = { get: async () => ({
+      ...DEFAULT_SETTINGS,
+      personalization: {
+        ...DEFAULT_SETTINGS.personalization,
+        memoryEnabled: enabled,
+        memory: { enabled, paused: false, referenceSaved: enabled, referenceHistory: enabled, autoExtract: enabled },
+      },
+    }) };
+    const embedder: Embedder = { model: 'stub', embed: async () => { enabled = false; return stubEmbed('dog'); } };
+    const ctx = new MemoryContextService(store, reader, { embedder, retriever: new InProcessRetriever(store) });
+    await store.put(rec({ id: 'secret', text: 'User has a dog named Chopper.', embedding: stubEmbed('dog') }));
+    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: 'my dog', now: NOW, creds: CREDS });
+    expect(block.memories).toEqual([]);
+  });
 });
 
 describe('MemoryContextService — profile channel', () => {

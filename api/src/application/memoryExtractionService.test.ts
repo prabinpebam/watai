@@ -8,7 +8,7 @@ import { parseMemoryRecord } from '../domain/memory';
 import type { Embedder } from '../ports/embedder';
 import { MemoryExtractionService, type MemoryExtractorPort, type MemoryQueuePort } from './memoryExtractionService';
 
-function setup(extractor: MemoryExtractorPort, embedder?: Embedder) {
+function setup(extractor: MemoryExtractorPort, embedder?: Embedder, settingsOverride?: { get: () => Promise<typeof DEFAULT_SETTINGS> }) {
   const memoryStore = new InMemoryMemoryStore();
   const jobStore = new InMemoryMemoryJobStore();
   const messageStore = new InMemoryMessageStore();
@@ -18,7 +18,7 @@ function setup(extractor: MemoryExtractorPort, embedder?: Embedder) {
   let n = 0;
   let t = 0;
   const clock = { newId: () => `id_${++n}`, now: () => `2026-01-01T00:00:${String(t++).padStart(2, '0')}Z` };
-  const settings = { get: async () => ({ ...DEFAULT_SETTINGS, data: { ...DEFAULT_SETTINGS.data, sync: true } }) };
+  const settings = settingsOverride ?? { get: async () => ({ ...DEFAULT_SETTINGS, data: { ...DEFAULT_SETTINGS.data, sync: true } }) };
   const credentials = { getDecrypted: async () => ({ baseUrl: 'https://example.com/openai/v1', key: 'k', models: { chat: 'gpt-4.1' } }) };
   const sends: Array<{ target: string; payload: unknown }> = [];
   const signalr = { negotiate: () => ({}) as never, sendToUser: async (_userId: string, target: string, payload: unknown) => void sends.push({ target, payload }) };
@@ -62,6 +62,27 @@ describe('MemoryExtractionService', () => {
     expect(memories[0].sourceRefs[0]).toMatchObject({ type: 'message', threadId: 't1', messageId: 'u1' });
     expect((await ctx.jobStore.get('userA', first!.id))?.status).toBe('completed');
     expect(ctx.sends).toEqual([{ target: 'memory', payload: expect.objectContaining({ acceptedCount: 1, threadId: 't1', assistantMessageId: 'a1' }) }]);
+  });
+
+  it('commits zero memories when learning is revoked while extraction is running', async () => {
+    let enabled = true;
+    const settings = { get: async () => ({
+      ...DEFAULT_SETTINGS,
+      personalization: {
+        ...DEFAULT_SETTINGS.personalization,
+        memoryEnabled: enabled,
+        memory: { enabled, paused: false, referenceSaved: enabled, referenceHistory: enabled, autoExtract: enabled },
+      },
+    }) };
+    const ctx = setup(async () => {
+      enabled = false;
+      return { operations: [{ op: 'add', kind: 'preference', text: 'Must not persist.', confidence: 0.99, salience: 0.99, sourceMessageIds: ['u1'], reason: 'revoked' }] };
+    }, undefined, settings);
+    await seedThread(ctx);
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    await ctx.svc.processJob('userA', job!.id);
+    expect((await ctx.memoryStore.list('userA', { status: 'active' })).memories).toEqual([]);
+    expect((await ctx.jobStore.get('userA', job!.id))?.status).toBe('ignored');
   });
 
   it('records ignored decisions and rejects one-off/low-confidence output', async () => {
@@ -175,6 +196,20 @@ describe('MemoryExtractionService', () => {
   it('does not enqueue for temporary threads', async () => {
     const ctx = setup(async () => ({ operations: [{ op: 'ignore', reason: 'x' }] }));
     await seedThread(ctx, true);
+    await expect(ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1')).resolves.toBeNull();
+    expect(ctx.enqueued).toEqual([]);
+  });
+
+  it('does not auto-commit or enqueue while learning mode is review', async () => {
+    const settings = { get: async () => ({
+      ...DEFAULT_SETTINGS,
+      personalization: {
+        ...DEFAULT_SETTINGS.personalization,
+        memory: { ...DEFAULT_SETTINGS.personalization.memory!, learnChats: 'review' as const },
+      },
+    }) };
+    const ctx = setup(async () => ({ operations: [{ op: 'ignore', reason: 'review' }] }), undefined, settings);
+    await seedThread(ctx);
     await expect(ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1')).resolves.toBeNull();
     expect(ctx.enqueued).toEqual([]);
   });

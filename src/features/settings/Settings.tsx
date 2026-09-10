@@ -731,6 +731,7 @@ export function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
   const pushToast = useUi((s) => s.pushToast);
   const p = settings.personalization;
   const memory = effectiveMemorySettings(settings);
+  const learnMode = memory.paused ? 'off' : memory.learnChats ?? (memory.autoExtract ? 'automatic' : 'off');
   const setMemory = (patch: Partial<MemorySettings>) => {
     const nextMemory = { ...memory, ...patch };
     setSettings({ ...settings, personalization: { ...p, memoryEnabled: nextMemory.enabled, memory: nextMemory } });
@@ -768,7 +769,7 @@ export function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
           <Switch
             checked={memory.enabled}
             onChange={(v) => {
-              setMemory({ enabled: v, referenceSaved: v ? memory.referenceSaved : false, autoExtract: v ? memory.autoExtract : false, referenceHistory: v ? memory.referenceHistory : false });
+              setMemory({ enabled: v, referenceSaved: v ? memory.referenceSaved : false, autoExtract: v ? memory.autoExtract : false, referenceHistory: v ? memory.referenceHistory : false, learnChats: v ? memory.learnChats : 'off' });
               pushToast(v ? 'Memory enabled' : 'Memory disabled');
             }}
             label="Memory"
@@ -786,7 +787,17 @@ export function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
             <div className="setting-row__title">Learn from chats</div>
             <div className="setting-row__sub">After each completed reply, Watai asks your configured model what should become durable memory.</div>
           </div>
-          <Switch checked={memory.enabled && memory.autoExtract && memory.referenceHistory} disabled={!memory.enabled} onChange={(v) => setMemory({ autoExtract: v, referenceHistory: v })} label="Learn from chats" />
+          <Segmented
+            value={learnMode === 'automatic' ? 'automatic' : 'off'}
+            onChange={(value) => setMemory({
+              learnChats: value === 'automatic' ? 'automatic' : 'off',
+              autoExtract: value === 'automatic',
+              referenceHistory: value === 'automatic',
+              paused: false,
+            })}
+            options={[{ value: 'off', label: 'Off' }, { value: 'automatic', label: 'Automatic' }]}
+            disabled={!memory.enabled}
+          />
         </div>
         <div className="setting-row">
           <div className="setting-row__body">

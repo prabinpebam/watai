@@ -243,6 +243,7 @@ export interface MemorySettings {
   referenceSaved: boolean;
   referenceHistory: boolean;
   autoExtract: boolean;
+  learnChats?: 'off' | 'review' | 'automatic';
 }
 
 export interface Settings {
@@ -355,12 +356,16 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export function effectiveMemorySettings(settings: Settings): MemorySettings {
-  return settings.personalization.memory ?? {
+  const memory = settings.personalization.memory ?? {
     enabled: settings.personalization.memoryEnabled,
     paused: false,
     referenceSaved: settings.personalization.memoryEnabled,
     referenceHistory: settings.personalization.memoryEnabled,
     autoExtract: settings.personalization.memoryEnabled,
+  };
+  return {
+    ...memory,
+    learnChats: memory.learnChats ?? (memory.autoExtract && memory.referenceHistory ? 'automatic' : 'off'),
   };
 }
 
