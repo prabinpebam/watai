@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { activateUiOwner, uiStorageNameForOwner, useUi } from './store';
+import { activateUiOwner, clearUiOwnerData, uiStorageNameForOwner, useUi } from './store';
 
 beforeEach(async () => {
   localStorage.clear();
@@ -21,5 +21,18 @@ describe('UI account scope', () => {
     expect(useUi.getState().composerDrafts).toEqual({ shared: 'owner A' });
     expect(localStorage.getItem('watai.ui')).toContain('legacy');
     expect(localStorage.getItem(uiStorageNameForOwner('owner-b'))).toContain('owner B');
+  });
+
+  it('clears persisted drafts for only the active account', async () => {
+    await activateUiOwner('owner-a');
+    useUi.getState().setDraft('thread', 'owner A draft');
+    await activateUiOwner('owner-b');
+    useUi.getState().setDraft('thread', 'owner B draft');
+    clearUiOwnerData();
+
+    expect(useUi.getState().composerDrafts).toEqual({});
+    expect(localStorage.getItem(uiStorageNameForOwner('owner-b'))).not.toContain('owner B draft');
+    await activateUiOwner('owner-a');
+    expect(useUi.getState().composerDrafts).toEqual({ thread: 'owner A draft' });
   });
 });

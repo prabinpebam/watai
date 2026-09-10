@@ -75,9 +75,19 @@ import type { CloudApi } from './cloud/apiClient';
 import { LocalRepository } from './local/localRepository';
 import { SyncRepository } from './sync/syncRepository';
 import { idbKvStore } from './sync/kvStore';
+import { DEFAULT_SETTINGS } from '../lib/types';
 
 function cloud() {
   return { createThread: vi.fn(async () => undefined) } as unknown as CloudApi;
+}
+
+function readBlobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
 }
 
 describe('account-scoped local repository', () => {
@@ -112,5 +122,53 @@ describe('account-scoped local repository', () => {
     await syncA.push();
     expect(cloudA.createThread).toHaveBeenCalledWith(expect.objectContaining({ id: 'same-thread', title: 'Owner A' }));
     await expect(localA2.listOutbox()).resolves.toEqual([]);
+  });
+
+  it('exports a versioned inventory matching included records and cached media bytes', async () => {
+    const local = new LocalRepository('export-owner');
+    await local.createThread({ id: 'thread-1', title: 'Exported' });
+    await local.appendMessage({
+      id: 'message-1', threadId: 'thread-1', role: 'user', content: 'hello',
+      createdAt: '2026-01-01T00:00:00Z', status: 'complete',
+    });
+    await local.putBlob('cached.txt', new Blob(['abc'], { type: 'text/plain' }));
+
+    const exported = JSON.parse(await readBlobText(await local.exportAll()));
+    expect(exported.manifest).toMatchObject({
+      schemaVersion: 1,
+      records: { threads: 1, messages: 1, settings: 1, memory: 0 },
+      cachedMedia: { files: 1, bytes: 3 },
+    });
+    expect(exported.cachedMedia).toEqual([
+      { key: 'cached.txt', mime: 'text/plain', bytes: 3, dataBase64: 'YWJj' },
+    ]);
+  });
+
+  it('clears one owner including outbox/settings and revokes only that owner’s object URLs', async () => {
+    const revoke = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn().mockReturnValueOnce('blob:clear-owner').mockReturnValueOnce('blob:other-owner'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revoke });
+    const local = new LocalRepository('clear-owner');
+    const other = new LocalRepository('other-owner');
+    await local.createThread({ id: 'clear-thread' });
+    await other.createThread({ id: 'other-thread' });
+    await local.mutateOutbox(() => [{ operationId: 'pending', kind: 'thread.create', state: 'pending' }]);
+    await local.saveSettings({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, theme: 'dark' } });
+    await local.putBlob('blob', new Blob(['clear']));
+    await other.putBlob('blob', new Blob(['other']));
+    await local.getBlobUrl('blob');
+    await other.getBlobUrl('blob');
+
+    await local.deleteAll();
+
+    await expect(local.listThreads()).resolves.toEqual([]);
+    await expect(local.listOutbox()).resolves.toEqual([]);
+    await expect(local.getSettings()).resolves.toEqual(DEFAULT_SETTINGS);
+    await expect(other.listThreads()).resolves.toHaveLength(1);
+    expect(revoke).toHaveBeenCalledWith('blob:clear-owner');
+    expect(revoke).not.toHaveBeenCalledWith('blob:other-owner');
   });
 });

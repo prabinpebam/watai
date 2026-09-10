@@ -3,6 +3,7 @@ import type { LocalOutboxRecord, SearchHit, SyncLocalStore, TransactionalSyncLoc
 import { newId } from '../../lib/ids';
 import { DEFAULT_SETTINGS, type Id, type ImageRef, type Message, type Settings, type Thread, type MemoryKind } from '../../lib/types';
 import type { CreateMemoryBody, ListMemoryQuery, MemoryProfileView, MemoryRecord, PatchMemoryBody } from '../cloud/types';
+import { fileToBase64 } from '../../lib/files';
 
 const SETTINGS_KEY = 'settings';
 const MEMORY_KEY = 'memory';
@@ -390,16 +391,35 @@ export class LocalRepository implements TransactionalSyncLocalStore {
 
   async exportAll(): Promise<Blob> {
     const threads = await this.listThreads({ includeArchived: true });
+    const messages: Record<string, Message[]> = {};
+    for (const thread of threads) messages[thread.id] = await this.listMessages(thread.id);
+    const settings = await this.getSettings();
+    const memory = await this.listMemory();
+    const database = await db(this.ownerId);
+    const cachedMedia = await Promise.all((await database.getAllKeys('blobs')).map(async (key) => {
+      const blob = await database.get('blobs', key) as Blob;
+      return { key: String(key), mime: blob.type || 'application/octet-stream', bytes: blob.size, dataBase64: await fileToBase64(blob) };
+    }));
     const data: Record<string, unknown> = {
+      manifest: {
+        schemaVersion: 1,
+        format: 'watai-local-json',
+        records: {
+          threads: threads.length,
+          messages: Object.values(messages).reduce((total, rows) => total + rows.length, 0),
+          settings: 1,
+          memory: memory.length,
+        },
+        cachedMedia: { files: cachedMedia.length, bytes: cachedMedia.reduce((total, item) => total + item.bytes, 0) },
+        excludes: ['server-only Library metadata', 'uncached media', 'credentials', 'composer drafts', 'pending sync operations'],
+      },
       exportedAt: nowIso(),
       threads,
-      messages: {} as Record<string, Message[]>,
-      settings: await this.getSettings(),
-      memory: await this.listMemory(),
+      messages,
+      settings,
+      memory,
+      cachedMedia,
     };
-    for (const t of threads) {
-      (data.messages as Record<string, Message[]>)[t.id] = await this.listMessages(t.id);
-    }
     return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   }
 
@@ -424,9 +444,14 @@ export class LocalRepository implements TransactionalSyncLocalStore {
 
   async deleteAll(): Promise<void> {
     const database = await db(this.ownerId);
-    await database.clear('threads');
-    await database.clear('messages');
-    await database.clear('blobs');
-    await kvSet(MEMORY_KEY, [], this.ownerId);
+    const transaction = database.transaction(['threads', 'messages', 'blobs', 'kv', 'outbox'], 'readwrite');
+    await Promise.all(['threads', 'messages', 'blobs', 'kv', 'outbox'].map((store) => transaction.objectStore(store).clear()));
+    await transaction.done;
+    const prefix = `${this.ownerId}\u0000`;
+    for (const [cacheKey, url] of blobUrlCache) {
+      if (!cacheKey.startsWith(prefix)) continue;
+      URL.revokeObjectURL(url);
+      blobUrlCache.delete(cacheKey);
+    }
   }
 }

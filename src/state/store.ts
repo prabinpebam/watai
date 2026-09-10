@@ -263,6 +263,25 @@ export function uiStorageNameForOwner(ownerId: string | null): string {
   return `watai.ui.account.v2.${encodeURIComponent(ownerId?.trim() || 'signed-out-quarantine')}`;
 }
 
+export function clearUiOwnerData(): void {
+  useUi.setState({
+    ...EMPTY_ACCOUNT_UI,
+    drawerOpen: false,
+    temporaryChat: false,
+    stream: { status: 'idle' },
+    capability: null,
+    toasts: [],
+    threadSyncCount: 0,
+    threadRev: {},
+    threadLocks: {},
+    confirmRequest: null,
+    sourcePane: null,
+    filesPane: null,
+    stagedFiles: [],
+    stagedLibraryByThread: {},
+  });
+}
+
 export async function activateUiOwner(ownerId: string | null): Promise<void> {
   const name = uiStorageNameForOwner(ownerId);
   let persisted: string | null = null;

@@ -8,7 +8,7 @@ import { Avatar, Button, Field, IconButton, InlineAlert, Segmented, SelectMenu, 
 import { Icon } from '../../design/icons';
 import { Logo } from '../../design/Logo';
 import { ConfirmDialog } from '../../design/overlays';
-import { useUi } from '../../state/store';
+import { clearUiOwnerData, useUi } from '../../state/store';
 import { useIsExpanded } from '../../lib/hooks';
 import { formatBytes } from '../../lib/format';
 import { accountLocalStorageKey, repo, cloudApi, realtime } from '../../data';
@@ -1500,6 +1500,15 @@ function DataBody({ ctx }: { ctx: SettingsCtx }) {
           </div>
           <Icon name="check-circle" size={20} style={{ color: 'var(--color-success)' }} />
         </div>
+        <div className="setting-row">
+          <Avatar size="md" variant="assistant">
+            <Icon name="offline" size={18} />
+          </Avatar>
+          <div className="setting-row__body">
+            <div className="setting-row__title">Offline limits</div>
+            <div className="setting-row__sub">Cached chats can remain available after Watai loads. A cold or cleared browser cache, uncached Library files, and Image Studio media require a connection; installation alone doesn’t guarantee offline opening.</div>
+          </div>
+        </div>
       </div>
 
       <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
@@ -1537,8 +1546,8 @@ function DataBody({ ctx }: { ctx: SettingsCtx }) {
             <Icon name="download" size={18} />
           </Avatar>
           <div className="setting-row__body">
-            <div className="setting-row__title">Export all data</div>
-            <div className="setting-row__sub">Download a JSON archive of your chats and settings.</div>
+            <div className="setting-row__title">Export local archive</div>
+            <div className="setting-row__sub">JSON with cached chats, settings, saved memory, and cached media. Server-only Library items and uncached media aren’t included.</div>
           </div>
           <Icon name="chevron-right" size={18} className="muted" />
         </button>
@@ -1548,9 +1557,9 @@ function DataBody({ ctx }: { ctx: SettingsCtx }) {
           </Avatar>
           <div className="setting-row__body">
             <div className="setting-row__title" style={{ color: 'var(--color-danger)' }}>
-              Delete all conversations
+              Clear this device
             </div>
-            <div className="setting-row__sub">Permanently removes local data on this device.</div>
+            <div className="setting-row__sub">Removes this account’s local cache and drafts. Synced server data stays in your account.</div>
           </div>
           <Icon name="chevron-right" size={18} className="muted" />
         </button>
@@ -1558,15 +1567,16 @@ function DataBody({ ctx }: { ctx: SettingsCtx }) {
 
       {confirm && (
         <ConfirmDialog
-          title="Delete all data?"
-          message="All conversations, images, and memory on this device will be permanently deleted."
-          confirmLabel="Delete everything"
+          title="Clear this device?"
+          message="This removes this account’s cached conversations, media, settings, drafts, and pending local changes. It does not delete synced server data."
+          confirmLabel="Clear device"
           danger
           onConfirm={async () => {
             await repo.deleteAll();
+            clearUiOwnerData();
             localStorage.removeItem(accountLocalStorageKey('watai.seeded'));
             bump();
-            pushToast('All data deleted');
+            pushToast('Device data cleared');
             navigate('/new');
           }}
           onClose={() => setConfirm(false)}
