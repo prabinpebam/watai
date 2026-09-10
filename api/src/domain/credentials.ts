@@ -13,10 +13,15 @@ const modelsSchema = z
   })
   .strict();
 
+const chatDefaultsSchema = z.object({
+  reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']),
+}).strict();
+
 const credentialsInputSchema = z
   .object({
     baseUrl: z.string().min(1).max(300),
     models: modelsSchema,
+    chatDefaults: chatDefaultsSchema.optional(),
     /** Optional on update: when omitted, the server keeps the already-stored key. */
     key: z.string().max(400).optional(),
     tavilyKey: z.string().max(400).optional(),
@@ -26,6 +31,7 @@ const credentialsInputSchema = z
   .strict();
 
 export type ModelDeployments = z.infer<typeof modelsSchema>;
+export type ChatDefaults = z.infer<typeof chatDefaultsSchema>;
 export type CredentialsInput = z.infer<typeof credentialsInputSchema>;
 
 /**

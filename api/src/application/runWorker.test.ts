@@ -24,7 +24,7 @@ function processRun(deps: RunWorkerDeps, threadId: string, runId: string): Promi
   return processRunForOwner(deps, 'userA', threadId, runId);
 }
 
-function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string; image?: boolean }) {
+function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string; image?: boolean; reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' }) {
   const runStore = new InMemoryRunStore();
   const messageStore = new InMemoryMessageStore();
   const threadStore = new InMemoryThreadStore();
@@ -40,6 +40,7 @@ function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string;
         baseUrl: 'https://r.services.ai.azure.com/openai/v1',
         key: 'k',
         models: { chat: 'gpt-5.4', ...(opts?.image ? { image: 'gpt-image-1' } : {}) },
+        ...(opts?.reasoningEffort ? { chatDefaults: { reasoningEffort: opts.reasoningEffort } } : {}),
         ...(opts?.tavily ? { tavilyKey: 'tav-key' } : {}),
         ...(opts?.kbStore ? { knowledgeBaseVectorStoreId: opts.kbStore } : {}),
       };
@@ -186,6 +187,14 @@ describe('processRun', () => {
     const run = await ctx.runStore.get('t1', 'r1');
     expect(run?.status).toBe('complete');
     expect((await ctx.threadStore.get('userA', 't1'))?.lastMessagePreview).toBe('Hi there');
+  });
+
+  it('applies the vault reasoning effort to the chat run', async () => {
+    const local = setup({ reasoningEffort: 'high' });
+    await seed(local);
+    const runAgent = vi.fn(script([{ type: 'done' }]));
+    await processRun(local.deps(runAgent), 't1', 'r1');
+    expect(runAgent.mock.calls[0][0].reasoning).toEqual({ effort: 'high' });
   });
 
   it('accumulates deduped web images from the agent onto the assistant message', async () => {

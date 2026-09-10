@@ -1,5 +1,5 @@
 import type { SealedSecret } from '../domain/crypto';
-import type { ModelDeployments } from '../domain/credentials';
+import type { ChatDefaults, ModelDeployments } from '../domain/credentials';
 
 /**
  * Server-side credential document (Cosmos `credentials`, partition key /userId). Holds
@@ -12,6 +12,7 @@ export interface CredentialRecord {
   /** Non-secret config (safe to return to the owner). */
   baseUrl: string;
   models: ModelDeployments;
+  chatDefaults?: ChatDefaults;
   /** Last-4 hint for the UI. */
   keyHint: string;
   /** Envelope-encrypted Azure OpenAI key. */

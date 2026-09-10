@@ -41,6 +41,7 @@ function make() {
 const input = {
   baseUrl: 'my-res',
   models: { chat: 'gpt-5.4', image: 'gpt-image-2' },
+  chatDefaults: { reasoningEffort: 'high' as const },
   key: 'sk-abcdef-1234',
   tavilyKey: 'tvly-zzzz-9999',
 };
@@ -57,6 +58,7 @@ describe('CredentialService.save', () => {
       keyHint: '…1234',
       tavilyConfigured: true,
       tavilyHint: '…9999',
+      chatDefaults: { reasoningEffort: 'high' },
     });
     // The persisted record must not contain the plaintext anywhere.
     const blob = JSON.stringify(ctx.store.byUser.get('userA'));
@@ -113,6 +115,7 @@ describe('CredentialService.getStatus / getDecrypted / delete', () => {
     expect(dec.key).toBe('sk-abcdef-1234');
     expect(dec.tavilyKey).toBe('tvly-zzzz-9999');
     expect(dec.baseUrl).toBe('https://my-res.services.ai.azure.com/openai/v1');
+    expect(dec.chatDefaults).toEqual({ reasoningEffort: 'high' });
   });
 
   it('omits tavily when not configured', async () => {

@@ -1129,6 +1129,7 @@ export async function processRun(
         model,
         turns,
         execute,
+        ...(c.chatDefaults ? { reasoning: { effort: c.chatDefaults.reasoningEffort } } : {}),
         ...(semanticRoute
           ? {
               toolChoice: semanticRoute.action === 'respond' ? 'none' as const : 'required' as const,

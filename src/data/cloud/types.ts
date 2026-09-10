@@ -610,6 +610,7 @@ export interface CredentialStatus {
   configured: boolean;
   baseUrl?: string;
   models?: ModelDeployments;
+  chatDefaults?: ChatDefaults;
   keyHint?: string;
   tavilyConfigured: boolean;
   tavilyHint?: string | null;
@@ -634,11 +635,16 @@ export interface CredentialsInput {
   /** Bare resource name or full base URL; the server normalizes to the `…/openai/v1` base. */
   baseUrl: string;
   models: ModelDeployments;
+  chatDefaults?: ChatDefaults;
   /** Optional on update — omit to keep the already-stored (write-only) key. */
   key?: string;
   tavilyKey?: string;
   /** Account-wide knowledge base store, searched as a fallback alongside per-thread files. */
   knowledgeBaseVectorStoreId?: string;
+}
+
+export interface ChatDefaults {
+  reasoningEffort: 'minimal' | 'low' | 'medium' | 'high';
 }
 
 // --- runs (server-authoritative generation) ---

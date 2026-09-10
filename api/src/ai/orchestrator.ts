@@ -73,6 +73,7 @@ export interface RunAgentParams {
   turns: Turn[];
   tools: ResponsesTool[];
   execute: ToolExecute;
+  reasoning?: ResponsesParams['reasoning'];
   headers?: Record<string, string>;
   signal?: AbortSignal;
   /** Max model<->tool round-trips before stopping (cost guard). */
@@ -118,6 +119,7 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
       input,
       tools: params.tools,
       toolChoice,
+      reasoning: params.reasoning,
       previousResponseId,
       headers: params.headers,
       signal: params.signal,

@@ -1,5 +1,5 @@
 import { AppError } from '../domain/errors';
-import { parseCredentialsInput, type ModelDeployments } from '../domain/credentials';
+import { parseCredentialsInput, type ChatDefaults, type ModelDeployments } from '../domain/credentials';
 import { sealSecret, openSecret, keyHint } from '../domain/crypto';
 import { isFoundryHost } from '../ai/http';
 import type { CredentialRecord, CredentialStore } from '../ports/credentialStore';
@@ -24,6 +24,7 @@ export interface CredentialStatus {
   configured: boolean;
   baseUrl?: string;
   models?: ModelDeployments;
+  chatDefaults?: ChatDefaults;
   keyHint?: string;
   tavilyConfigured: boolean;
   tavilyHint?: string | null;
@@ -35,6 +36,7 @@ export interface CredentialStatus {
 export interface DecryptedCredentials {
   baseUrl: string;
   models: ModelDeployments;
+  chatDefaults?: ChatDefaults;
   key: string;
   tavilyKey?: string;
   knowledgeBaseVectorStoreId?: string;
@@ -67,6 +69,7 @@ export class CredentialService {
       userId,
       baseUrl: parsed.baseUrl,
       models: parsed.models,
+      chatDefaults: parsed.chatDefaults ?? existing?.chatDefaults,
       keyHint: parsed.key ? keyHint(parsed.key) : existing!.keyHint,
       aoai: parsed.key ? await sealSecret(parsed.key, this.wrapper) : existing!.aoai,
       tavily:
@@ -107,6 +110,7 @@ export class CredentialService {
     return {
       baseUrl: rec.baseUrl,
       models: rec.models,
+      chatDefaults: rec.chatDefaults,
       key: await openSecret(rec.aoai, this.wrapper),
       tavilyKey: rec.tavily ? await openSecret(rec.tavily, this.wrapper) : undefined,
       knowledgeBaseVectorStoreId: rec.knowledgeBaseVectorStoreId ?? undefined,
@@ -119,6 +123,7 @@ export class CredentialService {
       configured: true,
       baseUrl: rec.baseUrl,
       models: rec.models,
+      chatDefaults: rec.chatDefaults,
       keyHint: rec.keyHint,
       tavilyConfigured: !!rec.tavily,
       tavilyHint: rec.tavilyHint ?? null,

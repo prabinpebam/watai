@@ -46,6 +46,13 @@ describe('parseCredentialsInput', () => {
     expect(out.models.chatOptions).toEqual(['model-router', 'gpt-5.4']);
   });
 
+  it('accepts only supported reasoning effort values', () => {
+    expect(parseCredentialsInput({ ...ok, chatDefaults: { reasoningEffort: 'high' } }).chatDefaults)
+      .toEqual({ reasoningEffort: 'high' });
+    expect(code(() => parseCredentialsInput({ ...ok, chatDefaults: { reasoningEffort: 'extreme' } })))
+      .toBe('validation');
+  });
+
   it('coerces an empty tavilyKey to undefined', () => {
     expect(parseCredentialsInput({ ...ok, tavilyKey: '   ' }).tavilyKey).toBeUndefined();
     expect(parseCredentialsInput({ ...ok, tavilyKey: 'tvly-9' }).tavilyKey).toBe('tvly-9');

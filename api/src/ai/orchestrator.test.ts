@@ -61,6 +61,23 @@ describe('runAgent', () => {
     ]);
   });
 
+  it('forwards the selected reasoning effort to the provider request', async () => {
+    const requests: ResponsesParams[] = [];
+    await collect(runAgent({
+      ...base,
+      reasoning: { effort: 'high' },
+      turns: [{ role: 'user', text: 'hi' }],
+      tools: [],
+      execute: async () => ({ output: '' }),
+      streamFn: async function* (params) {
+        requests.push(params);
+        yield { type: 'created', responseId: 'r1' };
+        yield { type: 'completed' };
+      },
+    }));
+    expect(requests[0].reasoning).toEqual({ effort: 'high' });
+  });
+
   it('forwards the code-interpreter container id on the tool event', async () => {
     const events = await collect(
       runAgent({

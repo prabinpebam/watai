@@ -66,18 +66,14 @@ function Welcome() {
 type ModelTestStatus = 'idle' | 'testing' | ProbeResult;
 const MODEL_KEYS: ModelKey[] = ['chat', 'transcribe', 'image', 'tts'];
 
-function ModelStatusIcon({ status }: { status: ModelTestStatus }) {
-  if (status === 'testing') return <Spinner />;
-  if (status === 'idle')
-    return (
-      <span className="muted" aria-hidden>
-        —
-      </span>
-    );
+function ModelStatus({ modelKey, model, status }: { modelKey: ModelKey; model: string; status: ModelTestStatus }) {
+  if (!model) return <span className="muted">Not configured</span>;
+  if (status === 'testing') return <span role="status"><Spinner /> Testing {MODEL_LABELS[modelKey]}</span>;
+  if (status === 'idle') return <span className="muted">Not tested</span>;
   return status.ok ? (
-    <Icon name="check" size={20} style={{ color: 'var(--color-success)' }} />
+    <span><Icon name="check" size={20} style={{ color: 'var(--color-success)' }} /> {MODEL_LABELS[modelKey]} tested</span>
   ) : (
-    <Icon name="alert" size={20} style={{ color: 'var(--color-danger)' }} />
+    <span><Icon name="alert" size={20} style={{ color: 'var(--color-danger)' }} /> Failed</span>
   );
 }
 
@@ -120,6 +116,7 @@ function KeyWizard() {
       ...(image ? { image } : {}),
       ...(tts ? { tts } : {}),
     },
+    chatDefaults: { reasoningEffort: effort },
     key: apiKey.trim(),
   });
 
@@ -135,7 +132,8 @@ function KeyWizard() {
     }
   };
 
-  // Store the keys server-side, then confirm the chat model responds.
+  // Store the keys server-side, then confirm only the chat model responds. Optional model probes
+  // are user-triggered in their feature flows so onboarding never creates surprise paid requests.
   const runTest = async () => {
     setTesting(true);
     setStatuses({ chat: 'testing', transcribe: 'idle', image: 'idle', tts: 'idle' });
@@ -163,7 +161,7 @@ function KeyWizard() {
   };
 
   const modelNames: Record<ModelKey, string> = { chat, transcribe: transcribeModel, image, tts };
-  const allTested = MODEL_KEYS.every((k) => typeof statuses[k] === 'object');
+  const chatTested = typeof statuses.chat === 'object';
 
   return (
     <div className="onboard">
@@ -248,9 +246,9 @@ function KeyWizard() {
       {step === 2 && (
         <>
           <div>
-            <h1 className="onboard__title">Test your models</h1>
+            <h1 className="onboard__title">Test chat</h1>
             <p className="onboard__sub">
-              We send one tiny request per model to confirm each deployment is reachable.
+              We send one tiny chat request. Optional models are tested only when you use those features.
             </p>
           </div>
           <div className="onboard__form">
@@ -270,7 +268,7 @@ function KeyWizard() {
                         {errored ? shortError((st as ProbeResult).detail) : modelNames[key] || 'Not set'}
                       </div>
                     </div>
-                    <ModelStatusIcon status={st} />
+                    <ModelStatus modelKey={key} model={modelNames[key]} status={st} />
                   </div>
                 );
               })}
@@ -282,7 +280,7 @@ function KeyWizard() {
               disabled={!baseUrl || !apiKey}
               onClick={runTest}
             >
-              {testing ? 'Testing…' : allTested ? 'Re-test all models' : 'Test all models'}
+              {testing ? 'Testing…' : chatTested ? 'Re-test chat' : 'Test chat'}
             </Button>
           </div>
           <div className="onboard__actions">
