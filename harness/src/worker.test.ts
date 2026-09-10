@@ -263,8 +263,11 @@ describe("worker launch contract", () => {
       enableManagedSettings: true,
       sessionLimits: { maxAiCredits: 2 },
     });
-    expect(configuration.session.tools?.find((tool) => tool.name === "watai_run_validation")?.description)
-      .toContain("Never repeat");
+    const validationTool = configuration.session.tools?.find((tool) => tool.name === "watai_run_validation");
+    expect(validationTool?.description).toContain("Never repeat");
+    expect(validationTool?.parameters).toMatchObject({
+      properties: { commandId: { enum: runtime().validationCommands.map((command) => command.id) } },
+    });
   });
 
   it("rejects a gateway response that is not bound to the launch manifest", async () => {
