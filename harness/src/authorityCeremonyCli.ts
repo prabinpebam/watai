@@ -68,7 +68,7 @@ const probeScript = [
   "const status=fs.readFileSync('/proc/self/status','utf8');",
   "const cap=/^CapEff:\\s*([0-9a-f]+)/mi.exec(status)?.[1]||'';",
   "const write=p=>{try{fs.writeFileSync(p,'x');return true}catch{return false}};",
-  "console.log(JSON.stringify({uid:process.getuid(),gid:process.getgid(),capEff:cap,rootWritable:write('/probe'),sourceWritable:write('/workspace/source/probe'),interfaces:fs.readdirSync('/sys/class/net').sort(),dependencies:fs.existsSync('/opt/watai/node_modules'),dockerSocket:fs.existsSync('/var/run/docker.sock')}));",
+  "console.log(JSON.stringify({uid:process.getuid(),gid:process.getgid(),capEff:cap,rootWritable:write('/probe'),sourceWritable:write('/workspace/source/probe'),interfaces:fs.readdirSync('/sys/class/net').sort(),dependencies:fs.existsSync('/opt/watai/node_modules'),apiDependencies:fs.existsSync('/opt/watai/api/node_modules'),dockerSocket:fs.existsSync('/var/run/docker.sock')}));",
 ].join("");
 const probe = execute("docker", [
   "run", "--rm", "--network", "none", "--read-only", "--user", "1000:1000",
@@ -79,7 +79,7 @@ const probe = execute("docker", [
 ]);
 const probeResult = JSON.parse(probe) as {
   uid: number; gid: number; capEff: string; rootWritable: boolean; sourceWritable: boolean;
-  interfaces: string[]; dependencies: boolean; dockerSocket: boolean;
+  interfaces: string[]; dependencies: boolean; apiDependencies: boolean; dockerSocket: boolean;
 };
 if (
   probeResult.uid !== 1000 || probeResult.gid !== 1000 || !/^0+$/.test(probeResult.capEff) ||
@@ -87,6 +87,29 @@ if (
   !probeResult.dependencies || probeResult.dockerSocket
 ) {
   throw new Error("Smoke worker isolation probe failed.");
+}
+
+const candidateImageReference = process.env.WATAI_CANDIDATE_WORKER_IMAGE?.trim() || "watai-harness-worker:local";
+const candidateImageId = execute("docker", ["image", "inspect", candidateImageReference, "--format", "{{.Id}}"]);
+if (!/^sha256:[a-f0-9]{64}$/.test(candidateImageId)) {
+  throw new Error("Candidate worker image is not bound by an immutable SHA-256.");
+}
+const candidateWorkerImageSha256 = candidateImageId.slice("sha256:".length);
+const candidateProbe = execute("docker", [
+  "run", "--rm", "--network", "none", "--read-only", "--user", "1000:1000",
+  "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "256",
+  "--memory", "3072m", "--cpus", "2",
+  "--mount", `type=bind,src=${repositoryMount},dst=/workspace/source,readonly`,
+  "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m", candidateImageId, "node", "-e", probeScript,
+]);
+const candidateProbeResult = JSON.parse(candidateProbe) as typeof probeResult;
+if (
+  candidateProbeResult.uid !== 1000 || candidateProbeResult.gid !== 1000 || !/^0+$/.test(candidateProbeResult.capEff) ||
+  candidateProbeResult.rootWritable || candidateProbeResult.sourceWritable ||
+  candidateProbeResult.interfaces.some((name) => name !== "lo") || !candidateProbeResult.dependencies ||
+  !candidateProbeResult.apiDependencies || candidateProbeResult.dockerSocket
+) {
+  throw new Error("Candidate worker isolation probe failed.");
 }
 
 const ghStatus = spawnSync("gh", ["auth", "status", "--hostname", "github.com"], {
@@ -117,6 +140,8 @@ const request = buildAuthorityCeremonyRequest({
     rootInputs,
     smokeWorkerImageSha256,
     smokeWorkerProbeSha256: digest(probe),
+    candidateWorkerImageSha256,
+    candidateWorkerProbeSha256: digest(candidateProbe),
     validationOutputSha256: digest(validation),
     npmRegistry,
     gitHubCliAuthenticated: true,
@@ -146,6 +171,9 @@ await Promise.all([
   writeFile(resolve(outputDirectory, "smoke-worker-probe.json"), `${JSON.stringify(probeResult, null, 2)}\n`, {
     encoding: "utf8", flag: "wx", mode: 0o600,
   }),
+  writeFile(resolve(outputDirectory, "candidate-worker-probe.json"), `${JSON.stringify(candidateProbeResult, null, 2)}\n`, {
+    encoding: "utf8", flag: "wx", mode: 0o600,
+  }),
   writeFile(resolve(outputDirectory, "OWNER-REVIEW.md"), [
     "# Independent authority review",
     "",
@@ -168,6 +196,7 @@ console.log(JSON.stringify({
   sourceSha,
   attemptId,
   smokeWorkerImageSha256,
+  candidateWorkerImageSha256,
   evidenceSha256: request.evidenceSha256,
   outputDirectory,
   next: "An independent owner reviews this package, creates the root, signs approved claim requests, and supplies an external runtime evidence signer.",

@@ -20,6 +20,8 @@ describe("authority ceremony request", () => {
         },
         smokeWorkerImageSha256: digest("c"),
         smokeWorkerProbeSha256: digest("d"),
+        candidateWorkerImageSha256: digest("f"),
+        candidateWorkerProbeSha256: digest("0"),
         validationOutputSha256: digest("e"),
         npmRegistry: "https://packagefeedproxy.microsoft.io/npm/",
         gitHubCliAuthenticated: true,
@@ -34,12 +36,17 @@ describe("authority ceremony request", () => {
     expect(grant?.artifactId).toContain("attempt-001");
     expect(grant?.payload).toMatchObject({ modes: ["evaluation"], billing: { kind: "subscription", maxUsd: 0 } });
     expect(request.unsignedClaimRequests.filter((claim) => claim.kind === "capability-attestation")).toHaveLength(
-      implementationAgentBootstrapCapabilities.length,
+      implementationAgentBootstrapCapabilities.length + 1,
     );
     const isolation = request.unsignedClaimRequests.find((claim) =>
       claim.artifactId.endsWith("worker-isolation"));
     expect(isolation?.payload).toMatchObject({
       workerIsolation: { scope: "implementation-agent-smoke", runtimeImageSha256: digest("c") },
+    });
+    const candidateIsolation = request.unsignedClaimRequests.find((claim) =>
+      claim.artifactId.endsWith("candidate-worker-isolation"));
+    expect(candidateIsolation?.payload).toMatchObject({
+      workerIsolation: { scope: "candidate-validation", runtimeImageSha256: digest("f") },
     });
     expect(request.requiredIssuers.find((issuer) => issuer.purpose === "runtime-evidence")?.allowedKinds)
       .toEqual(["model-evaluation-observation", "provider-usage-receipt", "worker-isolation-attestation"]);

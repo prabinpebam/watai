@@ -21,6 +21,8 @@ export interface AuthorityCeremonyEvidence {
   rootInputs: AuthorityContractDigests;
   smokeWorkerImageSha256: string;
   smokeWorkerProbeSha256: string;
+  candidateWorkerImageSha256: string;
+  candidateWorkerProbeSha256: string;
   validationOutputSha256: string;
   npmRegistry: string;
   gitHubCliAuthenticated: boolean;
@@ -89,6 +91,26 @@ export function buildAuthorityCeremonyRequest(input: {
       } : {}),
     },
   }));
+  capabilityRequests.push({
+    kind: "capability-attestation",
+    artifactId: `bootstrap-${prefix}-candidate-worker-isolation`,
+    maximumLifetimeSeconds: input.claimLifetimeSeconds,
+    payload: {
+      attestationId: `bootstrap-${prefix}-candidate-worker-isolation`,
+      capability: "worker-isolation",
+      repositoryId: input.repositoryId,
+      policySha256: input.evidence.rootInputs.policySha256,
+      evidenceSha256: sha256(canonical({
+        capability: "worker-isolation",
+        scope: "candidate-validation",
+        evidenceSha256,
+      })),
+      workerIsolation: {
+        scope: "candidate-validation",
+        runtimeImageSha256: input.evidence.candidateWorkerImageSha256,
+      },
+    },
+  });
   return {
     schemaVersion: "1.0",
     status: "READY_FOR_INDEPENDENT_REVIEW",

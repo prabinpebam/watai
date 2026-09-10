@@ -80,13 +80,17 @@ The repository does not provision or sign that authority.
 
 After committing a validated bootstrap change, `harness:authority-ceremony`
 revalidates the harness, checks the approved npm registry, GitHub CLI and Docker,
-probes the exact smoke-worker image, and writes an unsigned owner-review package
-outside the repository. It never creates a private key, signature or authority.
+probes the exact smoke and full candidate-worker images, and writes an unsigned
+owner-review package outside the repository. It never creates a private key,
+signature or authority.
 
 `Dockerfile.smoke-worker` is limited to the frozen implementation-agent fixture,
 which validates with Node only. It is not the full candidate validation image.
 `Dockerfile.worker` installs both lockfile dependency trees through the approved
 Microsoft npm feed and remains the required image for real candidate execution.
+The npm registry remains `packagefeedproxy.microsoft.io`; host replacement is
+disabled so npm can follow the Microsoft Azure Artifacts tarball URLs returned
+by that proxy instead of rewriting them into invalid proxy paths.
 
 ## Trust boundary
 

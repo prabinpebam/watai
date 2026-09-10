@@ -30,8 +30,8 @@
         "nanoCpus": 500000000
       },
       "approvedSmokeWorkerImage": "sha256:1ffafcc172d5e1db61250510a33c861a48be513c88f7e0cb58e84c743e369141",
-      "approvedCandidateWorkerImage": false,
-      "reason": "A source-bound smoke-only image is proven. The full candidate image remains blocked by missing approved-feed tarballs."
+      "approvedCandidateWorkerImage": "sha256:ebb26a557b2117517e3b985f2929fda0d9d332e0d02fb0e856175eb31e62cb45",
+      "reason": "Both images are digest-pinned. The full image passed frontend and API test/build gates under no network, read-only source/root, non-root UID, dropped capabilities, and an explicit 256-PID ceiling."
     },
     "durableLocalStore": {
       "engine": "SQLite 3.50.4 via Node built-in node:sqlite",
@@ -104,11 +104,8 @@
   "dependencyState": {
     "apiAudit": "0 vulnerabilities",
     "rootAudit": "1 critical, 1 high, 5 moderate; 2 moderate production-only",
-    "approvedFeedBlockers": [
-      "zwitch@2.0.0 through 2.0.4 tarballs missing",
-      "@esbuild/linux-x64@0.21.5 tarball missing",
-      "@rollup/rollup-linux-x64-gnu@4.62.2 tarball missing"
-    ]
+    "approvedFeedBlockers": [],
+    "approvedFeedResolution": "replace-registry-host=never preserves Microsoft Azure Artifacts tarball URLs returned by packagefeedproxy.microsoft.io metadata"
   },
   "signatures": [],
   "decision": "READY_FOR_INDEPENDENT_REVIEW_NOT_A_CAPABILITY_ATTESTATION"
