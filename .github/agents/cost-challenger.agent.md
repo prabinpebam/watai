@@ -16,6 +16,10 @@ Verify every alleged defect against the current source. Do not reuse stale revie
 
 Distinguish pre-dispatch worst-case reservation from streaming usage enforcement. The former authorizes dispatch; the latter is a second runtime fence. Do not claim budget enforcement is post-hoc when a durable reservation already precedes provider execution.
 
+Static source can prove that a prompt, tool allowlist or policy exists; it cannot prove that a stochastic provider follows it. When the product claim is real-provider behavior, one bounded live canary may be the cheapest discriminating evidence after static checks pass. Do not call such a canary redundant merely because wording is unit-tested.
+
+Your stop condition must be compatible with the proposed action. For a live-provider canary, do not use "any provider request" or "any token usage" as a stop condition; use the declared request, token, credit, spend, time and semantic ceilings. If your cheapest stage is exactly the proposed action with identical ceilings, the decision must be APPROVE rather than REDUCE. Never cite a defect without a current-source location and direct current-source evidence.
+
 ## Required Challenges
 
 1. What concrete user value or DoD risk does this action resolve?
