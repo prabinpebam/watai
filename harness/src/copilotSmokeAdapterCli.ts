@@ -59,10 +59,11 @@ async function main(): Promise<void> {
     throw new Error("WATAI_WORKER_IMAGE_SHA256 must be an approved image SHA-256.");
   }
   const root = await mkdtemp(join(tmpdir(), "watai-copilot-smoke-"));
+  const brokerRoot = await mkdtemp(join(tmpdir(), "watai-copilot-broker-"));
   try {
     await mkdir(join(root, "src"));
-    const brokerScratchDirectory = join(root, "broker");
-    const brokerHomeDirectory = join(root, "home");
+    const brokerScratchDirectory = join(brokerRoot, "scratch");
+    const brokerHomeDirectory = join(brokerRoot, "home");
     await Promise.all([
       mkdir(brokerScratchDirectory),
       mkdir(brokerHomeDirectory),
@@ -214,7 +215,10 @@ async function main(): Promise<void> {
       completedAt: new Date().toISOString(),
     }));
   } finally {
-    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await Promise.all([
+      rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+      rm(brokerRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+    ]);
   }
 }
 
