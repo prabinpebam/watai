@@ -28,6 +28,8 @@ interface Request {
 
 let activeRequest: Request | undefined;
 let activeStartedAt = Date.now();
+let activeReceipts: MemoryGatewayReceiptStore | undefined;
+let activeRunId: string | undefined;
 
 async function stdin(): Promise<string> {
   let value = "";
@@ -70,6 +72,8 @@ async function main(): Promise<void> {
     git(root, ["-c", "user.name=watai-evaluator", "-c", "user.email=evaluator@invalid", "commit", "-qm", "fixture"]);
     const sourceSha = git(root, ["rev-parse", "HEAD"]);
     const runId = `copilot-smoke-${request.definition.id}-${request.repetition}-${randomUUID()}`;
+    activeRunId = runId;
+    const requiredTools = [...new Set(request.definition.oracle.requiredTools)];
     const taskSpecSha256 = sha256({ runId, sourceSha, input: request.definition.input });
     const validationCommands = [{
       id: "fixture-validation",
@@ -113,7 +117,7 @@ async function main(): Promise<void> {
       dependencyReceipts: [],
       allowedPaths: ["src"],
       nonGoals: ["No repository, cloud, deployment or release effects"],
-      allowedTools: ["watai_read_file", "watai_search_text", "watai_apply_patch", "watai_run_validation", "watai_git_diff", "watai_submit_result"],
+      allowedTools: requiredTools,
       agentRuntime: { providerId: "github-copilot", model: request.contract.requestedModel },
       validationCommands,
       modelNetworkHosts: ["api.githubcopilot.com"],
@@ -173,6 +177,7 @@ async function main(): Promise<void> {
       manifestSha256: "6".repeat(64),
     } as WorkerLaunchManifest;
     const receipts = new MemoryGatewayReceiptStore();
+    activeReceipts = receipts;
     const gateway = await GatewayService.create({ workspaceRoot: root, task, manifest, receiptStore: receipts });
     const startedAt = Date.now();
     const attempt = await runAgentAttempt({
@@ -214,15 +219,17 @@ async function main(): Promise<void> {
 
 main().then(() => {
   process.exit(0);
-}).catch((error) => {
+}).catch(async (error) => {
   if (!activeRequest) {
     process.stderr.write(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
     return;
   }
   const oracle = activeRequest.definition.oracle;
+  const stored = activeReceipts && activeRunId ? await activeReceipts.list(activeRunId) : [];
+  const attemptedToolIds = stored.map((receipt) => receipt.tool);
   const artifact = oracle.kind === "gateway-contract"
-    ? { kind: "gateway-contract" as const, toolIds: [], submitted: false, changedPaths: [] }
+    ? { kind: "gateway-contract" as const, toolIds: attemptedToolIds, submitted: false, changedPaths: [] }
     : { kind: "gateway-contract" as const, toolIds: [], submitted: false, changedPaths: [] };
   const candidateCode = (error as { code?: unknown }).code;
   const message = error instanceof Error ? error.message : String(error);
