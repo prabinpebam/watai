@@ -1,0 +1,567 @@
+{
+  "schemaVersion":"1.0",
+  "status":"SPECIFIED",
+  "auditCommit":"9b4314ddd537401667d68642c3eeee85e7fabca7",
+  "sourceBaseline":"f7dc195300c4039aae5b9a7a8fb1691327864ea1",
+  "auditRegister":"documentation\\audits\\2026-09-10-implementation-audit\\evidence\\findings.md",
+  "findings":[
+    {"id":"MEM-01","closureSlices":["S06","S12"]},
+    {"id":"MEM-02","closureSlices":["S13","S29","S34"]},
+    {"id":"MEM-03","closureSlices":["S18"]},
+    {"id":"MEM-04","closureSlices":["S20","S22"]},
+    {"id":"MEM-05","closureSlices":["S19"]},
+    {"id":"MEM-06","closureSlices":["S22","S23"]},
+    {"id":"MEM-07","closureSlices":["S14","S23"]},
+    {"id":"MEM-08","closureSlices":["S14","S21"]},
+    {"id":"MEM-09","closureSlices":["S15"]},
+    {"id":"MEM-10","closureSlices":["S01","S16"]},
+    {"id":"MEM-11","closureSlices":["S01","S17"]},
+    {"id":"MEM-12","closureSlices":["E01","S24"]},
+    {"id":"BE-01","closureSlices":["S02"]},
+    {"id":"BE-02","closureSlices":["S03"]},
+    {"id":"BE-03","closureSlices":["S07"]},
+    {"id":"BE-04","closureSlices":["S08"]},
+    {"id":"BE-05","closureSlices":["S09","S29"]},
+    {"id":"BE-06","closureSlices":["S10"]},
+    {"id":"BE-07","closureSlices":["S26"]},
+    {"id":"BE-08","closureSlices":["S25"]},
+    {"id":"BE-09","closureSlices":["S27"]},
+    {"id":"BE-10","closureSlices":["S01","S29","S34","S49"]},
+    {"id":"BE-11","closureSlices":["S30"]},
+    {"id":"BE-12","closureSlices":["S35","S45"]},
+    {"id":"BE-13","closureSlices":["S31","S43"]},
+    {"id":"BE-14","closureSlices":["S33"]},
+    {"id":"BE-15","closureSlices":["S35","S43"]},
+    {"id":"BE-16","closureSlices":["S28"]},
+    {"id":"BE-17","closureSlices":["S32"]},
+    {"id":"FE-01","closureSlices":["S04"]},
+    {"id":"FE-02","closureSlices":["S05"]},
+    {"id":"FE-03","closureSlices":["S11"]},
+    {"id":"FE-04","closureSlices":["S01","S49"]},
+    {"id":"FE-05","closureSlices":["S36"]},
+    {"id":"FE-06","closureSlices":["S41"]},
+    {"id":"FE-07","closureSlices":["S42"]},
+    {"id":"FE-08","closureSlices":["S37"]},
+    {"id":"FE-09","closureSlices":["S38"]},
+    {"id":"FE-10","closureSlices":["S32","S39"]},
+    {"id":"FE-11","closureSlices":["S43"]},
+    {"id":"FE-12","closureSlices":["S40","S41"]},
+    {"id":"FE-13","closureSlices":["S06"]},
+    {"id":"OPS-01","closureSlices":["H01","H05"]},
+    {"id":"OPS-02","closureSlices":["H01","H05"]},
+    {"id":"OPS-03","closureSlices":["H02","H03","H04","H05","H06"]},
+    {"id":"OPS-04","closureSlices":["S44"]},
+    {"id":"OPS-05","closureSlices":["S34"]},
+    {"id":"OPS-06","closureSlices":["S43","S44"]},
+    {"id":"OPS-07","closureSlices":["S44","S45"]},
+    {"id":"OPS-08","closureSlices":["S46"]},
+    {"id":"OPS-09","closureSlices":["H01","H05"]},
+    {"id":"OPS-10","closureSlices":["H04"]}
+  ],
+  "slices":[
+    {
+      "id":"H01","title":"Observed baseline and unattended preflight","milestone":"M0","ownerAgent":"planner","dependsOn":[],"findings":["OPS-01","OPS-02","OPS-09"],"risk":"critical",
+      "scope":["Read-only deployment and repository capability inventory","Versioned authorization and baseline manifests; no secret values"],
+      "visibleChange":"Honest release/capability status instead of an unproved validated label.",
+      "acceptance":[{"id":"H01-A","gate":"G00","check":"Record deployed source or explicit unknown, runtime, region, infra/config/dependency revisions and all missing machine permissions."},{"id":"H01-B","gate":"G01","check":"Missing auth, refresh, budget or immutable baseline cannot produce a permit; demonstrate with fake expired credentials and unknown deployment SHA."}],
+      "gates":["G00","G01"],"evidence":["contract","traceability","adversarial"],
+      "rollout":{"profile":"control-plane","steps":["Read-only inventory first","No mutation until a separate preauthorization record exists"]},
+      "rollback":"Remove no product resources; revoke only newly scoped harness sessions and retain observed baseline."
+    },
+    {
+      "id":"H02","title":"Independent policy and evidence trust root","milestone":"M0","ownerAgent":"policy-maintainer","dependsOn":["H01"],"findings":["OPS-03"],"risk":"critical",
+      "scope":["Future harness trust-root/evaluator-pack namespace","Signed subjects, protected paths, policy-evolution and permit verifier"],
+      "visibleChange":"Every future release has a verifiable explanation and cannot self-approve.",
+      "acceptance":[{"id":"H02-A","gate":"G01","check":"Reject forged producer, changed artifact/config, stale policy, missing test and builder-written success report."},{"id":"H02-B","gate":"G12","check":"Old immutable root rejects a policy candidate removing a failing test or increasing authority; prospective valid update invalidates old permits."}],
+      "gates":["G01","G12"],"evidence":["contract","adversarial","traceability"],
+      "rollout":{"profile":"control-plane","steps":["Offline verifier with synthetic signatures","Separate old-root validation before activation"]},
+      "rollback":"Restore previous signed policy/verifier; never reactivate permits invalidated by revocation."
+    },
+    {
+      "id":"H03","title":"Durable bounded controller and isolated workers","milestone":"M0","ownerAgent":"policy-maintainer","dependsOn":["H02"],"findings":["OPS-03"],"risk":"critical",
+      "scope":["Future TypeScript controller reducer, ledger and outbox ports","Worker sandbox, watchdog, leases, fencing, cost reservations"],
+      "visibleChange":"Engineering work survives interruption without duplicate release or unbounded agent loops.",
+      "acceptance":[{"id":"H03-A","gate":"G05","check":"Crash at every event/outbox/effect boundary and race two coordinators; one current epoch, replayed receipts and bounded terminal state."},{"id":"H03-B","gate":"G08","check":"Malicious tool cannot read host secret/home, call production, widen tools or exceed reserved cost; resume preserves deny policy."}],
+      "gates":["G01","G05","G08","G12"],"evidence":["contract","regression","adversarial","observability"],
+      "rollout":{"profile":"control-plane","steps":["Fake adapters and failure corpus","One isolated dry-run worker before any product queue"]},
+      "rollback":"Watchdog loads prior compatible controller artifact, fences old effects and reconciles journal before dispatch."
+    },
+    {
+      "id":"H04","title":"Trusted CI and complete browser baseline","milestone":"M0","ownerAgent":"evaluator","dependsOn":["H02","H03"],"findings":["OPS-03","OPS-10"],"risk":"high",
+      "scope":["Future protected GitHub validation workflows and fixed runner pack","Existing test/build commands and tests\\e2e readiness/locators"],
+      "visibleChange":"A complete browser release gate replaces cherry-picked passing reruns.",
+      "acceptance":[{"id":"H04-A","gate":"G02","check":"Three clean complete browser-matrix runs execute fixed inventory with zero required skip/failure; preserve real failures as regressions."},{"id":"H04-B","gate":"G01","check":"Alter npm script, test count, workflow SHA and artifact between jobs; all reject. App/dispatch automation never waits for human workflow approval."}],
+      "gates":["G00","G01","G02","G07"],"evidence":["regression","browser","adversarial","traceability"],
+      "rollout":{"profile":"control-plane","steps":["Validation-only workflows under independent authority","No publisher credentials in candidate runners"]},
+      "rollback":"Disable new dispatch adapter and retain previous valid evaluator; no candidate can use a missing CI gate as pass."
+    },
+    {
+      "id":"H05","title":"Supported runtime and immutable release plane","milestone":"M0","ownerAgent":"policy-maintainer","dependsOn":["H01","H04"],"findings":["OPS-01","OPS-02","OPS-03","OPS-09"],"risk":"critical",
+      "scope":["infra and api build/runtime configuration","Future Pages artifact publication, runtime config, release router and versioned queues"],
+      "visibleChange":"A supported reproducible environment and independently reachable release replace manual in-place updates.",
+      "acceptance":[{"id":"H05-A","gate":"G00","check":"Select supported Functions Node runtime by target-region probe; clean build, isolated provision/no-op redeploy and full advertised capability contract pass."},{"id":"H05-B","gate":"G09","check":"Exact frontend/API bytes with attested config stage and roll back; candidate origin and queue remain unreachable even when every public origin is unhealthy."}],
+      "gates":["G00","G01","G02","G05","G09"],"evidence":["contract","regression","release","adversarial"],
+      "rollout":{"profile":"control-plane","steps":["Preserve existing Pages assets/source before publishing-mode change","Stage independent apps/data/queues; never assume Flex slots"]},
+      "rollback":"Restore eligible old route/config tuple and retained Pages directory; keep new privacy epochs and drain version-pinned jobs."
+    },
+    {
+      "id":"H06","title":"First minimally validated last-known-good release","milestone":"M0","ownerAgent":"release-broker","dependsOn":["H05","S01","S02","S04","S06"],"findings":["OPS-03"],"risk":"critical",
+      "scope":["R0 exposed-capability contract and release receipts","Independent synthetic canary, rollback and coordinator-recovery rehearsal"],
+      "visibleChange":"A restricted owner-isolated read-only product has a demonstrated safety envelope while chat repairs proceed independently.",
+      "acceptance":[{"id":"H06-A","gate":"G09","check":"R0 owner-isolated history/local-draft/control envelope passes on exact artifacts; all generation, raw assets, sync writes and memory use are server/worker-disabled, never skipped as tests."},{"id":"H06-B","gate":"G10","check":"Kill publisher after cohort or full route update and recover by receipt; each phase has its own permit; revoked LKG is never selected for rollback."}],
+      "gates":["G00","G01","G02","G03","G04","G05","G07","G08","G09","G10"],"evidence":["release","adversarial","observability","traceability"],
+      "rollout":{"profile":"contain-disabled","steps":["Establish R0 only after dependency closure","Complete prescribed synthetic/cohort/observation stages"]},
+      "rollback":"Use only an admissible retained tuple; absent one, retain safe UI/read access and block unsafe operations rather than restore known exposure."
+    },
+    {
+      "id":"E01","title":"Freeze memory baselines and synthetic truth","milestone":"M1","ownerAgent":"evaluator","dependsOn":["H02","H04"],"findings":["MEM-12"],"risk":"high",
+      "scope":["Future immutable evaluation generator, datasets and runner pack","Audited source arm C; A/B/D service-level adapter contracts"],
+      "visibleChange":"Memory improvements will be measured against actual saved-profile and no-memory behavior.",
+      "acceptance":[{"id":"E01-A","gate":"G02","check":"Freeze 40 smoke, 80 development and 240 held-out episodes by persona/template; preserve audited SHA and deterministic event/claim truth before tuning."},{"id":"E01-B","gate":"G01","check":"Builder cannot read hidden labels or replace dataset/rubric; altered or memorized-answer negative controls fail; paid execution remains disabled without reservation."}],
+      "gates":["G01","G02","G08"],"evidence":["contract","regression","adversarial","traceability"],
+      "rollout":{"profile":"control-plane","steps":["Offline synthetic runner first","Precommit expanded negative timelines and judge calibration pack"]},
+      "rollback":"Keep frozen datasets/results; revert runner only with compatible schema and independent old-pack validation."
+    },
+    {
+      "id":"S01","title":"Truthful privacy and unsafe-control containment","milestone":"M0","ownerAgent":"builder","dependsOn":["H03","H04"],"findings":["FE-04","MEM-10","MEM-11","BE-10"],"risk":"critical",
+      "scope":["src\\features\\settings and memory management UI","API/worker capability gates for temporary, retention, rebuild and memory containment"],
+      "visibleChange":"Unsupported temporary/retention promises and destructive raw replacement disappear; unavailable actions never pretend success.",
+      "acceptance":[{"id":"S01-A","gate":"G07","check":"Normal/sidebar/voice/Library creation offers no unsupported temporary promise; rebuild and raw replacement cannot return fictional success."},{"id":"S01-B","gate":"G04","check":"R0 server/worker memory containment prevents read/write despite stale UI or queued jobs; inventory remains manageable and retained-data copy is accurate."}],
+      "gates":["G04","G07"],"evidence":["regression","browser","adversarial"],
+      "rollout":{"profile":"contain-disabled","steps":["Disable unsupported paths at authority boundary","Ship explicit effective status and retained-data explanation"]},
+      "rollback":"Keep unsafe operations disabled even on UI rollback; never restore misleading privacy copy or old consent."
+    },
+    {
+      "id":"S02","title":"Owner-qualified threads and child records","milestone":"M0","ownerAgent":"builder","dependsOn":["H04"],"findings":["BE-01"],"risk":"critical",
+      "scope":["api\\src\\application thread/message/run services","api\\src\\adapters\\cosmos owner-bearing stores and migration"],
+      "visibleChange":"Accounts with identical public IDs cannot see, delete or block each other's conversations.",
+      "acceptance":[{"id":"S02-A","gate":"G03","check":"Two owners share thread/message/run public IDs; read/write/delete/admission remain isolated through real store adapters."},{"id":"S02-B","gate":"G09","check":"Legacy ambiguous child ownership quarantines without guessing; compatible migration preserves positive same-owner histories and rollback safety."}],
+      "gates":["G03","G09"],"evidence":["regression","adversarial","migration"],
+      "rollout":{"profile":"schema-expand","steps":["Reject ambiguous namespace requests","Backfill only proven owner-qualified records; switch readers before writers"]},
+      "rollback":"Retain owner-qualified mediation and quarantines; never re-enable unqualified child readers."
+    },
+    {
+      "id":"S03","title":"Canonical owner-verified asset grants","milestone":"M0","ownerAgent":"builder","dependsOn":["S02"],"findings":["BE-02"],"risk":"critical",
+      "scope":["api\\src\\application message/Library DTO and worker asset resolution","api\\src\\ports and Azure SAS boundary"],
+      "visibleChange":"Attachments remain usable without accepting foreign raw blob paths.",
+      "acceptance":[{"id":"S03-A","gate":"G03","check":"Foreign/malformed/mismatched raw paths fail before persistence and signing; synthetic grant spy observes zero calls."},{"id":"S03-B","gate":"G03","check":"Same-owner upload reservation and Library reuse succeed across message, image and DTO grant paths, including verified legacy records."}],
+      "gates":["G03"],"evidence":["regression","adversarial","migration"],
+      "rollout":{"profile":"compatible-api","steps":["Resolve opaque canonical references","Keep only ownership-proven legacy adapter"]},
+      "rollback":"Keep grant mediation mandatory; unsupported legacy references remain visibly unavailable, not raw-path fallback."
+    },
+    {
+      "id":"S04","title":"Account-scoped local data and drafts","milestone":"M0","ownerAgent":"builder","dependsOn":["H04"],"findings":["FE-01"],"risk":"critical",
+      "scope":["src\\data\\db.ts and local repository namespace","src\\auth, src\\state and account-switch teardown"],
+      "visibleChange":"Switching accounts never exposes another account's drafts, cache or pending work.",
+      "acceptance":[{"id":"S04-A","gate":"G03","check":"A/B login, logout, reload, offline and two-tab schedules show zero cross-owner rows/drafts/requests."},{"id":"S04-B","gate":"G07","check":"Legacy unowned local work is quarantined recoverably and never assigned to whichever account signs in first."}],
+      "gates":["G03","G07"],"evidence":["regression","browser","migration","adversarial"],
+      "rollout":{"profile":"schema-expand","steps":["Freeze old outbox during identity switch","Migrate only verified local ownership"]},
+      "rollback":"Do not reopen the global database as an authenticated account; preserve quarantined drafts."
+    },
+    {
+      "id":"S05","title":"Transactional offline outbox","milestone":"M0","ownerAgent":"builder","dependsOn":["S04","S07"],"findings":["FE-02"],"risk":"high",
+      "scope":["src\\data\\sync\\syncRepository.ts","IndexedDB operation table and cross-tab drain lease"],
+      "visibleChange":"Offline edits survive overlapping synchronization and browser crashes.",
+      "acceptance":[{"id":"S05-A","gate":"G05","check":"Delayed push A plus enqueue B, overlapping deletes and two-tab drains preserve every unrelated operation with ID-based acknowledgements."},{"id":"S05-B","gate":"G05","check":"Crash/reopen after entity/outbox transaction and after remote acceptance converges without duplicate paid run or silent drop."}],
+      "gates":["G03","G05"],"evidence":["regression","browser","adversarial"],
+      "rollout":{"profile":"schema-expand","steps":["Per-operation migration with owner IDs","Single-flight cross-tab drain and inspectable permanent failures"]},
+      "rollback":"Keep operation IDs and acknowledgements; never replace operation table with whole-queue snapshots."
+    },
+    {
+      "id":"S06","title":"Authoritative revisioned account settings","milestone":"M0","ownerAgent":"builder","dependsOn":["S02","S04"],"findings":["FE-13","MEM-01"],"risk":"critical",
+      "scope":["src\\data\\sync settings hydration/backfill","API settings revision and account-policy field patches"],
+      "visibleChange":"A fresh device preserves opt-out and shows actual account preferences.",
+      "acceptance":[{"id":"S06-A","gate":"G04","check":"Fresh-device defaults never overwrite server privacy choices; stale offline patch returns conflict and retains stricter effective policy."},{"id":"S06-B","gate":"G07","check":"Device-only microphone setting never writes account consent; failed settings load shows unknown/degraded rather than invented enabled state."}],
+      "gates":["G03","G04","G07"],"evidence":["regression","browser","adversarial"],
+      "rollout":{"profile":"schema-expand","steps":["Add revisioned server reads/patches","Hydrate before backfill; preserve stricter consent on migration"]},
+      "rollback":"Retain revision enforcement and server authority; old clients cannot overwrite policy with full default documents."
+    },
+    {
+      "id":"S07","title":"Atomic idempotent run acceptance","milestone":"M0","ownerAgent":"builder","dependsOn":["S02"],"findings":["BE-03"],"risk":"critical",
+      "scope":["api\\src\\application\\runService.ts","Run slot/idempotency receipt aggregate in actual atomic partition"],
+      "visibleChange":"Double-send and retries return one accepted run instead of duplicate charges.",
+      "acceptance":[{"id":"S07-A","gate":"G05","check":"Simultaneous same/different submissions yield one active slot; identical retries before/after completion return original run; payload mismatch conflicts."},{"id":"S07-B","gate":"G05","check":"Fast worker progress before enqueue acknowledgement cannot be overwritten back to queued; all writes are revision/state conditional."}],
+      "gates":["G03","G05"],"evidence":["contract","regression","adversarial","migration"],
+      "rollout":{"profile":"schema-expand","steps":["Add execution aggregate and compatible receipts","Switch admission only after collision/race tests"]},
+      "rollback":"Retain idempotency receipts and slot ownership; refuse legacy unsafe admission rather than duplicate effects."
+    },
+    {
+      "id":"S08","title":"Recoverable dispatch and worker fencing","milestone":"M0","ownerAgent":"builder","dependsOn":["S07"],"findings":["BE-04"],"risk":"critical",
+      "scope":["api\\src\\application run/image dispatch and workers","Outbox/change-feed reconciliation, claims, poison and provider receipts"],
+      "visibleChange":"Accepted chat/image work recovers or ends visibly instead of remaining invisible forever.",
+      "acceptance":[{"id":"S08-A","gate":"G05","check":"Kill at persistence/enqueue/provider/finalize boundaries; duplicated queue delivery has one valid lease and all accepted work becomes terminal or explicitly reconciling."},{"id":"S08-B","gate":"G05","check":"Release-specific queue/worker mismatch and stale fencing epochs cannot execute; ambiguous paid effect is not blindly repeated."}],
+      "gates":["G05","G08","G09"],"evidence":["regression","adversarial","observability"],
+      "rollout":{"profile":"schema-expand","steps":["Receipt/reconciler compatibility first","New claims/writers then drain or fence old workers"]},
+      "rollback":"Fence new admissions, drain eligible versioned attempts and retain provider ambiguity receipts."
+    },
+    {
+      "id":"S09","title":"Cancellation and deletion preserve intent","milestone":"M0","ownerAgent":"builder","dependsOn":["S08"],"findings":["BE-05"],"risk":"critical",
+      "scope":["api\\src\\application run cancellation/finalization","Thread tombstones, versioned patches and tool/upload checkpoints"],
+      "visibleChange":"Cancel stops new effects and deleting a running chat cannot bring it back.",
+      "acceptance":[{"id":"S09-A","gate":"G05","check":"Cancel at stream/tool/upload/title boundaries acknowledges only after fence; no replacement worker overlaps valid old authority."},{"id":"S09-B","gate":"G04","check":"Deletion, rename and pin during generation survive stale finalizer; no thread/message/asset resurrection."}],
+      "gates":["G04","G05"],"evidence":["regression","adversarial","browser"],
+      "rollout":{"profile":"compatible-api","steps":["Expose cancel-requested versus cancelled","Conditional finalization and propagated aborts"]},
+      "rollback":"Never restore stale full-thread upsert or free active slot before fencing."
+    },
+    {
+      "id":"S10","title":"Bounded truthful streaming completion","milestone":"M0","ownerAgent":"builder","dependsOn":["S08"],"findings":["BE-06"],"risk":"high",
+      "scope":["api\\src\\ai\\http.ts and responses.ts","Orchestrator terminal validation and worker deadline ownership"],
+      "visibleChange":"Hung or truncated replies show a bounded error, never fake complete.",
+      "acceptance":[{"id":"S10-A","gate":"G05","check":"Stall after headers or during reader.read; connect/idle/total budgets abort the underlying stream and release resources."},{"id":"S10-B","gate":"G02","check":"Generic error, failed, incomplete, failed tool item and EOF without terminal event never persist complete; valid completion control succeeds."}],
+      "gates":["G02","G05"],"evidence":["regression","adversarial","browser"],
+      "rollout":{"profile":"compatible-api","steps":["Normalize explicit provider outcomes","Expose partial/error recovery without discarding useful text"]},
+      "rollback":"Retain strict terminal validation even if transport implementation reverts."
+    },
+    {
+      "id":"S11","title":"Drafts clear only after durable acceptance","milestone":"M1","ownerAgent":"builder","dependsOn":["S05","S07"],"findings":["FE-03"],"risk":"high",
+      "scope":["src\\features\\chat\\Composer.tsx","useChat send result and attachment/draft revision handling"],
+      "visibleChange":"Failed sends keep text and attachments ready to retry.",
+      "acceptance":[{"id":"S11-A","gate":"G07","check":"Inject each storage failure and double submit; input/selection survives rejection and one synchronous admission guard prevents duplicates."},{"id":"S11-B","gate":"G05","check":"Clear only the accepted draft revision after local entity/outbox commit; later typed text and attachment previews remain."}],
+      "gates":["G05","G07"],"evidence":["regression","browser","adversarial"],
+      "rollout":{"profile":"frontend-only","steps":["Explicit accepted/rejected promise","Preserve existing generation-outside-view behavior"]},
+      "rollback":"Keep durable acceptance guard; retain unsent draft revisions and selected file references."
+    },
+    {
+      "id":"S12","title":"Independent memory use and learning policy","milestone":"M1","ownerAgent":"builder","dependsOn":["S06","S09"],"findings":["MEM-01"],"risk":"critical",
+      "scope":["api\\src\\application memory context/extraction policy","Revisioned account mode API and settings effective-state UI"],
+      "visibleChange":"Stop learning without losing saved-memory use; off and unknown policy mean no personalization.",
+      "acceptance":[{"id":"S12-A","gate":"G04","check":"Full off/saved/review/automatic truth table rechecks current epoch at context assembly and mutation commit."},{"id":"S12-B","gate":"G04","check":"Revoke while queued/running, policy outage and stale-device writes cause zero unauthorized memory context/commits with truthful degraded state."}],
+      "gates":["G03","G04","G07"],"evidence":["contract","regression","adversarial","browser"],
+      "rollout":{"profile":"contain-disabled","steps":["Preserve stricter old choices","Enable Saved-only path only after S13-S14; learning remains off"]},
+      "rollback":"Current policy epoch remains authoritative; return to contained memory-off, never broad profile fallback."
+    },
+    {
+      "id":"S13","title":"Immediate forget and replay exclusion","milestone":"M1","ownerAgent":"builder","dependsOn":["S12","S08"],"findings":["MEM-02"],"risk":"critical",
+      "scope":["api\\src\\application memory delete and mutation ledger","Minimal owner/source-lineage exclusion and purge status UI"],
+      "visibleChange":"Forgotten memory stops influencing new replies immediately and cannot reappear from old jobs.",
+      "acceptance":[{"id":"S13-A","gate":"G04","check":"Delete acknowledgement atomically excludes serving; replayed job, paraphrase from same excluded lineage, rebuild/import cannot restore it."},{"id":"S13-B","gate":"G04","check":"Residual history/provider/backup scope and purge state are explicit; exclusion retains no unnecessary forgotten payload and reauthorization is never inferred."}],
+      "gates":["G04","G05","G07"],"evidence":["regression","adversarial","migration","browser"],
+      "rollout":{"profile":"schema-expand","steps":["Serving exclusion before asynchronous purge","Persist latest deletion ledger outside rollback generation"]},
+      "rollback":"Preserve all exclusions and purge receipts; legacy readers cannot serve excluded records."
+    },
+    {
+      "id":"S14","title":"Accurate approved Saved-only profile","milestone":"M1","ownerAgent":"builder","dependsOn":["S12","S13"],"findings":["MEM-07","MEM-08"],"risk":"high",
+      "scope":["api\\src\\domain memory/profile and deterministic serving","Saved item create/correct UI and reply context manifest"],
+      "visibleChange":"Explicitly saved preferences work on the next eligible reply with source/version disclosure and no automatic inference.",
+      "acceptance":[{"id":"S14-A","gate":"G04","check":"Save/correct while learning off is immediately eligible under current policy; concurrent automatic/stale writes cannot override correction."},{"id":"S14-B","gate":"G07","check":"Only approved profile items within total 800-token context appear, each in manifest; legacy uncertain/age/time facts are not converted into timeless truth."}],
+      "gates":["G04","G07"],"evidence":["regression","browser","adversarial"],
+      "rollout":{"profile":"saved-only","steps":["Default new enabled users to Saved-only without broadening stricter consent","Independent profile flag; automatic learning stays off"]},
+      "rollback":"Return to off or prior approved profile version while retaining corrections, exclusions and explicit records."
+    },
+    {
+      "id":"S15","title":"Complete lossless saved-memory inventory","milestone":"M1","ownerAgent":"builder","dependsOn":["S02","S06"],"findings":["MEM-09"],"risk":"medium",
+      "scope":["Memory list API stable pagination","Saved/Suggestions/Activity management UI"],
+      "visibleChange":"All saved items are findable with honest partial, stale and effective-state labels.",
+      "acceptance":[{"id":"S15-A","gate":"G07","check":"101/201/1000 items including equal timestamps and uncategorized records paginate with no silent omissions or destructive interpretation."},{"id":"S15-B","gate":"G04","check":"Accepted, proposed, excluded and outdated states are distinguished; offline/partial snapshot cannot be mistaken for authoritative entire inventory."}],
+      "gates":["G04","G07"],"evidence":["regression","browser"],
+      "rollout":{"profile":"frontend-only","steps":["Lossless list first, grouping secondary","Explicit continuation and refresh consistency contract"]},
+      "rollback":"Retain complete-list endpoint and uncategorized items; no lossy profile-only management fallback."
+    },
+    {
+      "id":"S16","title":"Revision-safe memory edits and batch preview","milestone":"M1","ownerAgent":"builder","dependsOn":["S15"],"findings":["MEM-10"],"risk":"high",
+      "scope":["Memory update/batch API expected revisions","Safe explicit UI edit/preview replacing raw JSON replacement"],
+      "visibleChange":"Changing a filter or editing from another device cannot delete or overwrite the wrong memory set.",
+      "acceptance":[{"id":"S16-A","gate":"G04","check":"Status/filter switch invalidates or reconciles draft; commit requires same snapshot digest and explicit operation IDs."},{"id":"S16-B","gate":"G04","check":"Stale revisions conflict; paginated omissions never imply deletion; malformed replacement cannot cause partial mutation."}],
+      "gates":["G04","G07"],"evidence":["regression","browser","adversarial"],
+      "rollout":{"profile":"compatible-api","steps":["Keep raw replacement disabled","Ship explicit edit and optional bounded batch preview"]},
+      "rollback":"Disable batch commit, preserve single-record revisioned editing and stored drafts."
+    },
+    {
+      "id":"S17","title":"Versioned memory transfer and honest rebuild jobs","milestone":"M2","ownerAgent":"builder","dependsOn":["S16","S22"],"findings":["MEM-11"],"risk":"high",
+      "scope":["Memory export/import schema and dry-run endpoint","Persisted rebuild job/status and UI continuation"],
+      "visibleChange":"Export/import preserves supported memory semantics and rebuild reports a real job or an explicit failure.",
+      "acceptance":[{"id":"S17-A","gate":"G04","check":"Round-trip 1000 records retains origin/status/time/scope and exclusions; schema mismatch/quarantined ownership cannot activate memory."},{"id":"S17-B","gate":"G05","check":"Rebuild acknowledgement includes persisted job ID; enqueue failure/retry/restart has visible terminal status and zero resurrected records."}],
+      "gates":["G04","G05","G07"],"evidence":["regression","migration","browser","adversarial"],
+      "rollout":{"profile":"schema-expand","steps":["Versioned export then import preview","Rebuild only with durable indexing worker"]},
+      "rollback":"Reject unsupported import versions; preserve original exports and job/exclusion receipts."
+    },
+    {
+      "id":"S18","title":"Durable idempotent memory extraction","milestone":"M2","ownerAgent":"builder","dependsOn":["S08","S12","S13"],"findings":["MEM-03"],"risk":"critical",
+      "scope":["api\\src\\application memory scheduling/extraction","Source-revision event ledger and fenced mutation receipts"],
+      "visibleChange":"Learning activity survives retries and reports blocked or failed processing honestly.",
+      "acceptance":[{"id":"S18-A","gate":"G05","check":"Crash source-write/enqueue/extract/commit boundaries and overlap duplicate jobs; one logical operation per source revision."},{"id":"S18-B","gate":"G04","check":"Policy/source deletion epoch changes at commit reject stale learning; skipped/poison jobs have durable reasons not success-shaped acknowledgements."}],
+      "gates":["G04","G05"],"evidence":["regression","adversarial","observability"],
+      "rollout":{"profile":"shadow-learning","steps":["Synthetic/shadow proposals only","Reuse proven execution ledger contract, not cross-container assumptions"]},
+      "rollback":"Stop new learning and fence pending jobs; keep receipts and policy epochs for safe replay."
+    },
+    {
+      "id":"S19","title":"Verified evidence and conservative attribution","milestone":"M2","ownerAgent":"builder","dependsOn":["S18","E01"],"findings":["MEM-05"],"risk":"critical",
+      "scope":["api\\src\\ai memory extractor operation schema","Evidence span/owner/source validation and assertion origin/sensitivity"],
+      "visibleChange":"Suggestions show real supporting evidence and never silently turn quoted or third-party content into user facts.",
+      "acceptance":[{"id":"S19-A","gate":"G04","check":"Verify quoted spans and owner/source revisions; invented provenance, quoted injection and unknown speaker reject or remain unaccepted."},{"id":"S19-B","gate":"G02","check":"Legacy sensitivity/origin unknown stays unknown; manual/import confidence is not default proof and sensitive inferred items cannot auto-promote."}],
+      "gates":["G03","G04","G02"],"evidence":["regression","adversarial","migration"],
+      "rollout":{"profile":"shadow-learning","steps":["Dry-run legacy classifications","Accept only deterministic evidence-valid proposals into review"]},
+      "rollback":"Keep unknown records unverified; revert extractor without promoting its old unverified outputs."
+    },
+    {
+      "id":"S20","title":"Atomic memory reconciliation and deduplication","milestone":"M2","ownerAgent":"builder","dependsOn":["S19"],"findings":["MEM-04"],"risk":"high",
+      "scope":["api\\src\\application\\memoryExtractionService.ts","Per-owner mutation aggregate and prepared-generation publication"],
+      "visibleChange":"Valid memories are not lost when replacement or embedding fails.",
+      "acceptance":[{"id":"S20-A","gate":"G04","check":"Validate replacement before invalidation; embedding/storage failure retains old accepted assertion and yields explicit failure."},{"id":"S20-B","gate":"G05","check":"Duplicate adds within one batch and overlapping corrections create one versioned logical result; stale expected revision never overwrites explicit correction."}],
+      "gates":["G04","G05"],"evidence":["regression","adversarial","migration"],
+      "rollout":{"profile":"schema-expand","steps":["Shadow prepared generations","CAS publish within proven atomic boundary"]},
+      "rollback":"Read prior admissible generation without lowering current correction/exclusion head."
+    },
+    {
+      "id":"S21","title":"Temporal and subject-aware memory semantics","milestone":"M2","ownerAgent":"builder","dependsOn":["S20"],"findings":["MEM-08"],"risk":"high",
+      "scope":["api\\src\\domain memory assertion/entity/validity","Retrieval eligibility and restore/correction semantics"],
+      "visibleChange":"Past residence, approximate ages and similarly named people no longer become misleading current user facts.",
+      "acceptance":[{"id":"S21-A","gate":"G02","check":"Fixed timeline/subject cases preserve reported and validity time, qualifiers and identity; no birthday inference from approximate age."},{"id":"S21-B","gate":"G04","check":"Outdated historical values differ from excluded values; restore is an explicit new revision and cannot bypass exclusion."}],
+      "gates":["G04","G02"],"evidence":["regression","adversarial","migration"],
+      "rollout":{"profile":"shadow-retrieval","steps":["Compatible optional fields and conservative unknowns","Synthetic temporal comparisons before serving"]},
+      "rollback":"Keep qualifiers/lineage; omit uncertain temporal context rather than flatten it into timeless facts."
+    },
+    {
+      "id":"S22","title":"Revisioned vectors and independent indexing","milestone":"M2","ownerAgent":"builder","dependsOn":["S14","S20"],"findings":["MEM-04","MEM-06"],"risk":"high",
+      "scope":["Memory projection/index jobs and vector adapters","Manual-save/edit indexing triggers and lexical fallback"],
+      "visibleChange":"Manual saves and corrections are recallable without waiting for later automatic learning.",
+      "acceptance":[{"id":"S22-A","gate":"G04","check":"Content edit immediately invalidates old vector; model/dimension/hash mismatch never participates in similarity."},{"id":"S22-B","gate":"G05","check":"Learning-off save indexes independently; failed/repeated index jobs converge and deterministic approved fallback remains truthful."}],
+      "gates":["G04","G05"],"evidence":["regression","adversarial","migration"],
+      "rollout":{"profile":"schema-expand","steps":["Versioned projection identity","Resumable backfill of eligible records only"]},
+      "rollback":"Mark incompatible vectors ineligible; continue approved lexical/profile serving without losing saves."
+    },
+    {
+      "id":"S23","title":"Whole-inventory bounded recall and disclosure","milestone":"M2","ownerAgent":"builder","dependsOn":["S21","S22","S15"],"findings":["MEM-06","MEM-07"],"risk":"high",
+      "scope":["api\\src\\adapters\\memory\\inProcessRetriever.ts and memoryContextService","Complete reply context manifest across profile/retrieval"],
+      "visibleChange":"Older relevant memories can be found and every supplied item is inspectable within one context budget.",
+      "acceptance":[{"id":"S23-A","gate":"G02","check":"50/200/201/1000 eligible records, old pinned item, tie pagination and temporal/subject filters run before final top-k without silent newest-window truncation."},{"id":"S23-B","gate":"G08","check":"Combined profile/retrieval/delimiter budget never exceeds 800 tokens; 500ms deadline cancels recall with explicit degraded status and complete manifest."}],
+      "gates":["G04","G02","G08"],"evidence":["regression","adversarial","browser","observability"],
+      "rollout":{"profile":"shadow-retrieval","steps":["Synthetic paired shadow reads","No live hybrid enablement before S24/S47"]},
+      "rollback":"Disable hybrid retrieval and retain approved Saved-only with current policy/corrections."
+    },
+    {
+      "id":"S24","title":"Calibrated shipped-pipeline memory evaluation","milestone":"M2","ownerAgent":"evaluator","dependsOn":["E01","S23","S44"],"findings":["MEM-12"],"risk":"high",
+      "scope":["Protected service-level evaluation runner and held-out results","A/B/C/D comparison, judge calibration, uncertainty and complete usage"],
+      "visibleChange":"Release decisions report demonstrated memory value, errors and cost rather than retrieval-only scores.",
+      "acceptance":[{"id":"S24-A","gate":"G01","check":"Run exact shipped pipeline with pinned code/data/prompt/model; errors and degraded cases stay in denominators; baseline and holdout leakage controls reject tampering."},{"id":"S24-B","gate":"G02","check":"Runner correctly accepts known-good and rejects known-bad metric fixtures for every threshold/interval; actual D promotion requires separate S47 G06 evidence including untouched final bank."}],
+      "gates":["G01","G02","G08"],"evidence":["model-eval","regression","adversarial","traceability"],
+      "rollout":{"profile":"control-plane","steps":["40-case smoke and budget estimate","Reserved held-out run; evaluator validity is distinct from D passing utility"]},
+      "rollback":"Retain all failed/comparison results; restore prior runner under independent pack validation, not relabel failed D."
+    },
+    {
+      "id":"S25","title":"Immutable authorization identity","milestone":"M1","ownerAgent":"builder","dependsOn":["S02","H05"],"findings":["BE-08"],"risk":"critical",
+      "scope":["api\\src\\application accessService and invitation redemption","api\\src\\adapters\\auth and actual CIAM token policy"],
+      "visibleChange":"Account access and admin privileges do not depend on mutable email claims.",
+      "acceptance":[{"id":"S25-A","gate":"G03","check":"Wrong immutable principal, audience, tenant/scope or mutable-email alias cannot gain access/admin; valid configured principal works."},{"id":"S25-B","gate":"G03","check":"Legacy invitations migrate only through verified redemption; unknown identity is not guessed and actual synthetic auth integration is exercised."}],
+      "gates":["G00","G03"],"evidence":["regression","adversarial","migration"],
+      "rollout":{"profile":"compatible-api","steps":["Shadow authorization diff","Verified identity migration and explicit denied state"]},
+      "rollback":"Retain immutable deny/revocation rules; never restore mutable email as administrative authority."
+    },
+    {
+      "id":"S26","title":"Approved endpoints and bound credentials","milestone":"M1","ownerAgent":"builder","dependsOn":["S03","H05"],"findings":["BE-07"],"risk":"critical",
+      "scope":["api\\src\\domain credentials/webImage","Provider HTTP and web fetch egress boundary"],
+      "visibleChange":"Changing a provider origin cannot silently send the old key to a different destination.",
+      "acceptance":[{"id":"S26-A","gate":"G03","check":"HTTP, unapproved origin/port, private resolved address, redirect and DNS rebinding controls reject before credentialed fetch."},{"id":"S26-B","gate":"G07","check":"Endpoint identity change requires new correctly scoped credential or disables capability; valid approved Azure endpoint remains functional."}],
+      "gates":["G03","G07","G08"],"evidence":["regression","adversarial","browser"],
+      "rollout":{"profile":"compatible-api","steps":["Canonical approved endpoint mode","Explicit separately authorized compatible-provider mode"]},
+      "rollback":"Keep origin-key binding and egress deny rules; unsupported endpoint remains visibly disabled."
+    },
+    {
+      "id":"S27","title":"Owner-scoped provider resources and skills","milestone":"M3","ownerAgent":"builder","dependsOn":["S03","S25","S26"],"findings":["BE-09"],"risk":"critical",
+      "scope":["Provider file registry/delete service","Skill cache key by owner/content/version and tool membership"],
+      "visibleChange":"Users cannot delete unrelated provider files or receive another user's same-named custom skill.",
+      "acceptance":[{"id":"S27-A","gate":"G03","check":"Unrelated provider ID and colliding skill name across owners fail membership checks; valid owned resources remain usable."},{"id":"S27-B","gate":"G04","check":"Deletion receipt and provider uncertainty are recorded; cache invalidation tracks content/version instead of name alone."}],
+      "gates":["G03","G04"],"evidence":["regression","adversarial","migration"],
+      "rollout":{"profile":"asset-lifecycle","steps":["Shadow provider ownership inventory","Only verified registry resources may delete or execute"]},
+      "rollback":"Retain registry and exclusions; quarantine unowned provider IDs rather than use legacy broad delete."
+    },
+    {
+      "id":"S28","title":"Credential clearing and wrapping-key refresh","milestone":"M1","ownerAgent":"builder","dependsOn":["S26"],"findings":["BE-16"],"risk":"high",
+      "scope":["api\\src\\application\\credentialService.ts","KeyVault wrapper cache and explicit null/clear API/UI"],
+      "visibleChange":"Removing an optional integration stays removed and valid key rotation recovers predictably.",
+      "acceptance":[{"id":"S28-A","gate":"G04","check":"Explicit clear differs from omitted field, persists across reload and never restores old secret during merge/retry."},{"id":"S28-B","gate":"G02","check":"Simulated current wrapping-key rotation/failure refreshes within bounded retry while old referenced key versions still decrypt."}],
+      "gates":["G04","G02","G08"],"evidence":["regression","adversarial","browser"],
+      "rollout":{"profile":"compatible-api","steps":["Explicit clear contract","Bounded current-key refresh without secret logging"]},
+      "rollback":"Keep credential clear tombstone and required old key versions; no secret-value restoration from repo."
+    },
+    {
+      "id":"S29","title":"Unified asset references and deletion ledger","milestone":"M3","ownerAgent":"builder","dependsOn":["S09","S13","S27"],"findings":["BE-05","BE-10","MEM-02"],"risk":"critical",
+      "scope":["Library/thread/studio/provider reference lifecycle","Source-memory exclusion integration and durable purge inventory"],
+      "visibleChange":"Delete explains what is retained, tracks actual cleanup and does not revive in-flight images.",
+      "acceptance":[{"id":"S29-A","gate":"G04","check":"Thread-reference removal versus Library object purge follows declared ownership; deleted in-flight artifact cannot become active on any surface."},{"id":"S29-B","gate":"G04","check":"Purge inventory covers governed source copies, memory projections, provider assets and retention receipts; unsupported provider erasure is not marked done."}],
+      "gates":["G03","G04","G05"],"evidence":["regression","adversarial","migration","browser"],
+      "rollout":{"profile":"asset-lifecycle","steps":["Shadow reference counts and deletion dry-run","Serving exclusion before resumable payload purge"]},
+      "rollback":"Preserve cleanup/exclusion identifiers and newest deletion ledger; never resurrect already purged bytes."
+    },
+    {
+      "id":"S30","title":"Resumable document and artifact ingestion","milestone":"M3","ownerAgent":"builder","dependsOn":["S08","S29"],"findings":["BE-11"],"risk":"high",
+      "scope":["Library/document/artifact ingestion services","Readiness, retry, compensation and UI state"],
+      "visibleChange":"Interrupted uploads resume or fail visibly instead of leaving broken active Library items.",
+      "acceptance":[{"id":"S30-A","gate":"G05","check":"Parallel/slow/failed ingestion at each blob/provider/store boundary converges to one ready item or explicit terminal failure."},{"id":"S30-B","gate":"G04","check":"Compensation respects references/deletion epoch and never deletes still-owned shared bytes; only verified complete artifacts activate."},{"id":"S30-C","gate":"G07","check":"Generated artifacts and webImages survive message append, server projection, replay and fresh-device reload with canonical owned references and all supported DTO fields."}],
+      "gates":["G04","G05","G07"],"evidence":["regression","adversarial","browser"],
+      "rollout":{"profile":"asset-lifecycle","steps":["Persist phase receipts","Activate immutable object only after verification"]},
+      "rollback":"Drain/reconcile ingestion ledger; keep incomplete items nonactive and retryable where safe."
+    },
+    {
+      "id":"S31","title":"Early byte limits and content verification","milestone":"M3","ownerAgent":"builder","dependsOn":["S30"],"findings":["BE-13"],"risk":"high",
+      "scope":["Upload/archive/preview ingestion byte streams","Actual MIME/hash verification and immutable activation"],
+      "visibleChange":"Oversized or mislabeled files fail before expensive allocation with actionable limits.",
+      "acceptance":[{"id":"S31-A","gate":"G08","check":"Bound bytes while streaming/decompressing, including lying length/archive bombs; no full allocation before cap enforcement."},{"id":"S31-B","gate":"G03","check":"Actual MIME/hash mismatch cannot activate trusted object; valid boundary-sized uploads and generated artifacts succeed."}],
+      "gates":["G03","G08"],"evidence":["regression","adversarial","observability"],
+      "rollout":{"profile":"compatible-api","steps":["Reject before decode/activation","Expose exact supported limits without silent truncation"]},
+      "rollback":"Retain early limits/content verification; do not reactivate unverified stored payloads."
+    },
+    {
+      "id":"S32","title":"Reliable grants and legacy asset addressing","milestone":"M3","ownerAgent":"builder","dependsOn":["S03","S29"],"findings":["BE-17","FE-10"],"risk":"high",
+      "scope":["Azure SAS signing-key expiry and canonical Library IDs","Client/server attachment DTO and verified legacy enrichment"],
+      "visibleChange":"Fresh-device attachments and older valid assets resolve consistently without unsafe raw-path shortcuts.",
+      "acceptance":[{"id":"S32-A","gate":"G03","check":"SAS expiry never exceeds usable signing-key validity; rotated/expired key behavior is bounded and ownership-checked."},{"id":"S32-B","gate":"G07","check":"Ordinary enriched attachment positive control and uncached legacy repair retain artifact/web-image fields across append/projection/reload; foreign legacy refs reject."}],
+      "gates":["G03","G07"],"evidence":["regression","browser","migration"],
+      "rollout":{"profile":"compatible-api","steps":["Canonical DTO compatibility","Backfill only proven legacy references"]},
+      "rollback":"Keep canonical IDs and key-expiry checks; display unavailable for unresolved legacy ownership."
+    },
+    {
+      "id":"S33","title":"Durable replay cursor and history order","milestone":"M3","ownerAgent":"builder","dependsOn":["S08","S05"],"findings":["BE-14"],"risk":"high",
+      "scope":["Server message/run revisions and sync cursor","src\\data\\sync and logical history order"],
+      "visibleChange":"Reconnect and offline history converge even when timestamps collide or events arrive late.",
+      "acceptance":[{"id":"S33-A","gate":"G05","check":"Equal timestamps, delayed/out-of-order progress and reconnect after terminal use monotone cursor/order with no lost event."},{"id":"S33-B","gate":"G07","check":"Current/previous supported clients converge without duplicating messages or regressing terminal state; invalid cursor requests explicit resync."}],
+      "gates":["G05","G07"],"evidence":["regression","browser","adversarial","migration"],
+      "rollout":{"profile":"schema-expand","steps":["Versioned cursor compatibility","Logical order projection then client adoption"]},
+      "rollback":"Retain revision receipts and compatible replay adapter, not timestamp-only delta fallback."
+    },
+    {
+      "id":"S34","title":"Coherent restore without forgotten-data revival","milestone":"M3","ownerAgent":"builder","dependsOn":["S29","S28","H06"],"findings":["OPS-05","MEM-02","BE-10"],"risk":"critical",
+      "scope":["Versioned restore/retention configuration and isolated recovery runner","Data/blob/key/provider reconciliation with independent consent/deletion ledger"],
+      "visibleChange":"Recovery can restore usable history/assets without bringing back revoked or forgotten memory.",
+      "acceptance":[{"id":"S34-A","gate":"G09","check":"Two isolated restores meet <=60min RTO and <=24h ordinary-content RPO; referenced keys/assets resolve and later consent/deletion records reapply before serving."},{"id":"S34-B","gate":"G04","check":"Delete then backup restore/import/projection rebuild yields zero active resurrection; no acknowledged revocation lost and unsupported provider copies remain disclosed."}],
+      "gates":["G04","G09","G10"],"evidence":["migration","release","adversarial","observability"],
+      "rollout":{"profile":"control-plane","steps":["Synthetic restore only first","Publish retention/recovery capability after measured drills"]},
+      "rollback":"Do not replace live data from unverified restore; retain newest independent revocation/deletion ledger."
+    },
+    {
+      "id":"S35","title":"Bounded tool capabilities and worker seams","milestone":"M3","ownerAgent":"builder","dependsOn":["S10","S27","S44"],"findings":["BE-12","BE-15"],"risk":"high",
+      "scope":["api\\src\\ai orchestrator and provider/tool policy","Worker/provider/notification ports and total execution budget"],
+      "visibleChange":"Offered tools match actual authorization and failures cannot hang completion or spend without bounds.",
+      "acceptance":[{"id":"S35-A","gate":"G08","check":"Disallowed/unsupported tool never executes even if model selects it; total tokens/time/tool calls bound nested and failed iterations."},{"id":"S35-B","gate":"G05","check":"Notification failure/deadline does not regress durable terminal outcome; provider capability matrix distinguishes tested, unsupported and unavailable."}],
+      "gates":["G05","G08","G07"],"evidence":["regression","adversarial","observability"],
+      "rollout":{"profile":"compatible-api","steps":["Extract proven ports without microservice rewrite","Deterministic authorization before each tool side effect"]},
+      "rollback":"Retain tool allowlist/budget enforcement; disable newly unavailable capabilities truthfully."
+    },
+    {
+      "id":"S36","title":"Voice mute and delayed-capture cancellation","milestone":"M1","ownerAgent":"builder","dependsOn":["H04"],"findings":["FE-05"],"risk":"high",
+      "scope":["src\\features\\voice\\VoiceMode.tsx","Shared capture lifecycle and transcribing/error states"],
+      "visibleChange":"Mute stops capture and leaving the screen cannot start or send delayed recording.",
+      "acceptance":[{"id":"S36-A","gate":"G07","check":"Mute during recording, repeated taps and delayed permission after unmount release every synthetic media track with zero post-cancel send."},{"id":"S36-B","gate":"G07","check":"Navigation during transcription/device removal gives bounded truthful state; native-device unsupported cells are recorded, not called physical validation."}],
+      "gates":["G07"],"evidence":["regression","browser","adversarial"],
+      "rollout":{"profile":"frontend-only","steps":["Reuse lifecycle-safe capture controller","Preserve dictation retry/audio alternatives"]},
+      "rollback":"Disable unsafe voice-start capability if needed; never revert mute to visual-only state."
+    },
+    {
+      "id":"S37","title":"Honest onboarding capability tests","milestone":"M1","ownerAgent":"builder","dependsOn":["H04"],"findings":["FE-08"],"risk":"medium",
+      "scope":["src\\features\\onboarding\\Onboarding.tsx","Capability status labels and reasoning-effort persistence"],
+      "visibleChange":"Test chat means chat; optional models clearly say not tested and saved effort survives reload.",
+      "acceptance":[{"id":"S37-A","gate":"G07","check":"Every claimed test produces its corresponding request; unconfigured/untested capabilities never show passed."},{"id":"S37-B","gate":"G02","check":"Supported effort setting round-trips; no automatic paid all-model test without explicit preauthorized capability budget."}],
+      "gates":["G07","G02","G08"],"evidence":["regression","browser"],
+      "rollout":{"profile":"frontend-only","steps":["Accurate chat-only labeling first","Optional machine-budgeted capability probes only when supported"]},
+      "rollback":"Keep truthful Not tested/Not configured states and persisted preference."
+    },
+    {
+      "id":"S38","title":"Race-safe collections and exact search targets","milestone":"M3","ownerAgent":"builder","dependsOn":["H04"],"findings":["FE-09"],"risk":"medium",
+      "scope":["Image studio, Library pagination/picker and skills optimistic state","History search request states and matched-message navigation"],
+      "visibleChange":"Changing filters cannot show stale results; search opens the exact matched turn.",
+      "acceptance":[{"id":"S38-A","gate":"G07","check":"Resolve requests backwards and change filters during loadMore; only current-key results commit, including item-scoped skill rollback."},{"id":"S38-B","gate":"G07","check":"Initial error is not empty, pagination has retry, and old-message search scrolls to exact match in long thread."}],
+      "gates":["G07"],"evidence":["regression","browser","adversarial"],
+      "rollout":{"profile":"frontend-only","steps":["Request-key/cancellation helper","Preserve labeled stale results and explicit retry"]},
+      "rollback":"Retain request identity/version guards; preserve data rather than replacing errors with empty lists."
+    },
+    {
+      "id":"S39","title":"Truthful offline export and clear-device behavior","milestone":"M3","ownerAgent":"builder","dependsOn":["S04"],"findings":["FE-10"],"risk":"high",
+      "scope":["Settings offline/install/export copy and local repository","Device clear across IndexedDB/drafts/assets and export manifest"],
+      "visibleChange":"Export states exactly what it includes and clearing a device also clears its drafts.",
+      "acceptance":[{"id":"S39-A","gate":"G07","check":"Export inventory matches bytes/records actually included; uncached Library/media and cold-offline shell limits are stated without promising unsupported persistence."},{"id":"S39-B","gate":"G03","check":"Clear-device removes account cache/drafts and owned object URLs without deleting server data; no accidental dispatch of cleared outbox."}],
+      "gates":["G03","G07"],"evidence":["regression","browser","adversarial"],
+      "rollout":{"profile":"frontend-only","steps":["Precise existing-capability language","Scoped clear and explicit versioned export manifest"]},
+      "rollback":"Preserve truthful copy and clear markers; do not revive cleared local drafts from legacy storage."
+    },
+    {
+      "id":"S40","title":"Bounded loading error and completion states","milestone":"M3","ownerAgent":"builder","dependsOn":["S10","S11"],"findings":["FE-12"],"risk":"medium",
+      "scope":["App bootstrap/chunk/render error boundary","Chat/settings reads, asset loading and completion/voice status"],
+      "visibleChange":"Failed loading offers recovery instead of a blank screen or endless spinner; completion is announced.",
+      "acceptance":[{"id":"S40-A","gate":"G07","check":"Auth/bootstrap/read/chunk/asset failure yields named actionable error or retry without losing draft or active run."},{"id":"S40-B","gate":"G07","check":"Assistant completion/transcription/status changes have nonduplicated accessible live announcements and bounded loading transitions."}],
+      "gates":["G07"],"evidence":["regression","browser","adversarial"],
+      "rollout":{"profile":"frontend-only","steps":["Shared recovery/status primitives","Per-surface adoption preserving existing Library good states"]},
+      "rollback":"Retain explicit error boundary and bounded loading; recover from cached admissible frontend only."
+    },
+    {
+      "id":"S41","title":"Shared keyboard focus and accessible names","milestone":"M1","ownerAgent":"builder","dependsOn":["H04"],"findings":["FE-06","FE-12"],"risk":"high",
+      "scope":["src\\design\\overlays.tsx and ui.tsx","AppShell navigation, lightboxes and shared dialog consumers"],
+      "visibleChange":"Keyboard users can name, navigate and exit dialogs and return to the initiating control.",
+      "acceptance":[{"id":"S41-A","gate":"G07","check":"Critical keyboard journeys verify dialog name, inert background, initial/return focus, nested overlay, Escape and composite keys."},{"id":"S41-B","gate":"G07","check":"Collapsed navigation and image expansion have accessible names/keyboard action; exact accessibility-tree/assistive automation scope is recorded without WCAG certification."}],
+      "gates":["G07"],"evidence":["regression","browser"],
+      "rollout":{"profile":"frontend-only","steps":["Central primitives before screen patches","Preserve browser-native semantics where feasible"]},
+      "rollback":"Keep correct labels/focus containment; disable broken custom composite rather than revert to inaccessible roles."
+    },
+    {
+      "id":"S42","title":"Readable contrast and narrow-screen controls","milestone":"M1","ownerAgent":"builder","dependsOn":["H04"],"findings":["FE-07"],"risk":"medium",
+      "scope":["src\\design\\tokens.css and informative text consumers","320px controls, coarse-pointer targets and zoom/reflow behavior"],
+      "visibleChange":"Light-theme information is readable and important controls remain reachable on narrow screens.",
+      "acceptance":[{"id":"S42-A","gate":"G07","check":"Rendered informative text pairs meet 4.5:1 ordinary/3:1 large-text contrast in both themes; no muted-token blanket exception."},{"id":"S42-B","gate":"G07","check":"320px, long labels, 200% text/zoom, landscape and emulated keyboard-open tasks retain controls; target-size exceptions explicit and pinch zoom preserved."}],
+      "gates":["G07"],"evidence":["regression","browser"],
+      "rollout":{"profile":"frontend-only","steps":["Readable information tokens","Measured overflow/hit-area changes without visual rewrite"]},
+      "rollback":"Keep passing contrast tokens; revert only geometry changes that preserve accessible controls."
+    },
+    {
+      "id":"S43","title":"Bounded history rendering and asset growth","milestone":"M4","ownerAgent":"builder","dependsOn":["S31","S33","S44"],"findings":["FE-11","BE-13","BE-15","OPS-06"],"risk":"medium",
+      "scope":["Local history/search/drafts and ChatView rendering","Object URL lifecycle, image preview and streamed text preview","Bounded server-side Library filtering and stable continuation queries"],
+      "visibleChange":"Large histories and galleries stay responsive without downloading or retaining everything.",
+      "acceptance":[{"id":"S43-A","gate":"G08","check":"Profile fixed 100/1000/10000-turn histories and 100/1000 assets; bound reads/render window/preview bytes, revoke unused URLs and persist only changed drafts."},{"id":"S43-B","gate":"G07","check":"Critical journeys remain correct/accessible and measured p95 interaction <=200ms under declared test device; compare same workload including failures and memory usage."},{"id":"S43-C","gate":"G08","check":"Library owner/filter query applies server-side before page materialization; 1000/10000-row equal-sort-key and changing-filter fixtures paginate without full inventory fetch or missing/duplicate rows; report per-page RU and scanned rows."}],
+      "gates":["G07","G08"],"evidence":["regression","browser","observability"],
+      "rollout":{"profile":"measured-optimization","steps":["Baseline stage/resource measurement","One reversible optimization lever per candidate"]},
+      "rollback":"Revert optimization without dropping pagination/caps or erasing drafts; retain measured baseline evidence."
+    },
+    {
+      "id":"S44","title":"Content-safe health and complete usage telemetry","milestone":"M1","ownerAgent":"builder","dependsOn":["S08","H05"],"findings":["OPS-04","OPS-06","OPS-07"],"risk":"high",
+      "scope":["API/worker/memory stage metrics and synthetic health probes","Run-cost ledger for model/tools/retries/RU/fixed capacity"],
+      "visibleChange":"Degradation and cost are observable without logging private memory or keys.",
+      "acceptance":[{"id":"S44-A","gate":"G08","check":"Synthetic keys/SAS/fact text never enter default logs; failures/retries/unknown usage count toward totals and correlate by safe IDs."},{"id":"S44-B","gate":"G10","check":"Queue age, terminal outcomes, memory degradation and cold/warm latency probes detect injected faults; missing telemetry fails observation, not health."}],
+      "gates":["G08","G10"],"evidence":["regression","adversarial","observability"],
+      "rollout":{"profile":"compatible-api","steps":["Content exclusion before metrics rollout","Cheap independent health separate from budgeted provider probes"]},
+      "rollback":"Retain privacy filters and critical monitors; stop new promotion if observability is lost."
+    },
+    {
+      "id":"S45","title":"Atomic user and system spending limits","milestone":"M3","ownerAgent":"builder","dependsOn":["S35","S44"],"findings":["OPS-07","BE-12"],"risk":"high",
+      "scope":["Per-user run/tool reservations and accounting","Concurrency, token/time/cost admission and visible budget status"],
+      "visibleChange":"Concurrent requests cannot spend the same budget twice and exhausted limits are explained.",
+      "acceptance":[{"id":"S45-A","gate":"G08","check":"Concurrent nested/failed/retried runs reserve worst-case provider/tool cost atomically; unknown outcomes retain reservation and block double-spend."},{"id":"S45-B","gate":"G08","check":"Cap rejection is explicit; actual overhead includes RU/storage/warm allocation; concurrency cap alone is never represented as a financial cap."}],
+      "gates":["G05","G08","G07"],"evidence":["regression","adversarial","observability"],
+      "rollout":{"profile":"compatible-api","steps":["Shadow accounting with proven upper bounds","Enforce declared caps without silently raising them"]},
+      "rollback":"Retain existing reservations and hard caps; freeze new costly work if trustworthy accounting unavailable."
+    },
+    {
+      "id":"S46","title":"Current architecture and capability documentation","milestone":"M3","ownerAgent":"builder","dependsOn":["H06","S34","S39","S44"],"findings":["OPS-08"],"risk":"medium",
+      "scope":["documentation current runtime/config/deployment/recovery contracts","Historical proposal/benchmark labels and generated capability manifest"],
+      "visibleChange":"Product documentation describes deployed behavior, limits and recovery rather than superseded promises.",
+      "acceptance":[{"id":"S46-A","gate":"G01","check":"Every implemented claim links to release/source/config evidence; proposals and old benchmark dates are explicit, not mixed with current contract."},{"id":"S46-B","gate":"G07","check":"Runtime/capability/retention/offline/temporary descriptions agree with generated deployed manifest; unsupported claims fail documentation drift check."}],
+      "gates":["G01","G07"],"evidence":["traceability","regression"],
+      "rollout":{"profile":"frontend-only","steps":["One current contract index","Retain historical docs with status/date links"]},
+      "rollback":"Restore only documentation matching the actual admissible deployment; preserve historical evidence."
+    },
+    {
+      "id":"S47","title":"Earned hybrid and review-learning promotion","milestone":"M4","ownerAgent":"release-broker","dependsOn":["S24","S17","S34","S45"],"findings":[],"risk":"critical",
+      "scope":["Independent profile/retrieval/learning feature-policy flags","User-visible Saved/Suggestions/Activity and bounded live observation"],
+      "visibleChange":"Better recall and evidence-backed suggestions become available only when they outperform Saved-only without privacy regression.",
+      "acceptance":[{"id":"S47-A","gate":"G06","check":"D meets every frozen utility/nonregression/rare-error/latency/cost threshold against A/B/C with adequate uncertainty; inconclusive remains disabled."},{"id":"S47-B","gate":"G04","check":"Review-learning proposals never serve before account acceptance; automatic promotion is separately consented low-risk only, and rollback retains exclusions/corrections."}],
+      "gates":["G04","G06","G07","G08","G09","G10"],"evidence":["model-eval","browser","release","adversarial"],
+      "rollout":{"profile":"saved-only","steps":["Synthetic-only then authorized deterministic cohorts","Independent retrieval and learning flags; Saved-only remains fallback"]},
+      "rollback":"Disable hybrid/automatic promotion to approved Saved-only; do not discard explicit saves or roll back policy epochs."
+    },
+    {
+      "id":"S48","title":"All-finding closure and sustained operational goal","milestone":"M4","ownerAgent":"release-verifier","dependsOn":["H01","H02","H03","H04","H05","H06","E01","S01","S02","S03","S04","S05","S06","S07","S08","S09","S10","S11","S12","S13","S14","S15","S16","S17","S18","S19","S20","S21","S22","S23","S24","S25","S26","S27","S28","S29","S30","S31","S32","S33","S34","S35","S36","S37","S38","S39","S40","S41","S42","S43","S44","S45","S46","S47","S49"],"findings":[],"risk":"critical",
+      "scope":["Independent finding-closure evidence DAG and final compatible release","28-day operational window, recovery rehearsals and unsupported-claim register"],
+      "visibleChange":"A demonstrably improved maintained product, not a list of merged patches or inflated maturity scores.",
+      "acceptance":[{"id":"S48-A","gate":"G11","check":"All 52 finding closure slices released and acceptance conditions evidenced together; no containment-only or required unsupported gate counts as passed."},{"id":"S48-B","gate":"G10","check":"28-day >=99.5% synthetic journey SLO with 80640 scheduled observations, no critical incident, two passing restore drills and complete failures/cost/uncertainty record."}],
+      "gates":["G00","G01","G02","G03","G04","G05","G06","G07","G08","G09","G10","G11"],"evidence":["traceability","release","observability","model-eval"],
+      "rollout":{"profile":"final-observation","steps":["Full compatible release regression","Accumulate uninterrupted eligible observation window; no gate skipping"]},
+      "rollback":"Reopen affected finding closure and retain prior admissible release; do not erase failure history or claim program done."
+    },
+    {
+      "id":"S49","title":"Server-enforced temporary-run lifecycle","milestone":"M3","ownerAgent":"builder","dependsOn":["S11","S12","S29","S34","S45"],"findings":["FE-04","BE-10"],"risk":"critical",
+      "scope":["Owner-scoped ephemeral run admission, recovery and expiry","Every new-chat entry point, local persistence boundary, provider/asset retention contract"],
+      "visibleChange":"Temporary chat becomes a real supported mode with no cross-session memory or ordinary history and explicit bounded recovery/provider retention.",
+      "acceptance":[{"id":"S49-A","gate":"G04","check":"Normal/sidebar/voice/Library entry points use one temporary policy; read/write memory disabled at assembly/commit, no ordinary history or persistent local outbox content, including restart and delayed jobs."},{"id":"S49-B","gate":"G09","check":"Ephemeral run payload/results/assets purge within declared <=24h recovery window and never revive on restore; provider retention is supported/disclosed, unsupported provider modes cannot be offered as private."}],
+      "gates":["G03","G04","G05","G07","G08","G09"],"evidence":["contract","regression","browser","adversarial","migration"],
+      "rollout":{"profile":"contain-disabled","steps":["Synthetic ephemeral lifecycle and crash/replay tests","Enable only proven capability/provider combinations; S01 remains containment until this ships"]},
+      "rollback":"Disable new temporary admissions while draining/fencing eligible ephemeral runs and preserving purge deadlines; never convert temporary content into ordinary history."
+    }
+  ]
+}
