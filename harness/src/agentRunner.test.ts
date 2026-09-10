@@ -79,7 +79,13 @@ const transport: GatewayTransport = {
     completedAt: "2026-09-10T11:00:30.000Z",
   }),
 };
-const broker = { gitHubTokenProvider: vi.fn() };
+const broker = {
+  gitHubTokenProvider: vi.fn().mockResolvedValue({
+    kind: "token",
+    accessToken: "synthetic-test-token",
+    expiresIn: 3_900,
+  }),
+};
 
 function fakeClient(): { client: AgentClientPort; session: AgentSessionPort } {
   const session: AgentSessionPort = {
@@ -153,6 +159,21 @@ describe("agent attempt runner", () => {
       task, manifest, credentialBroker: broker, gatewayTransport: transport,
       now: () => Date.parse("2026-09-10T11:00:00.000Z"), createClient: () => fake.client,
     })).rejects.toMatchObject({ code: "AGENT_USAGE_UNAVAILABLE" });
+  });
+
+  it("fails before client construction when the credential cannot cover the attempt", async () => {
+    const createClient = vi.fn();
+    await expect(runAgentAttempt({
+      task, manifest, credentialBroker: {
+        gitHubTokenProvider: vi.fn().mockResolvedValue({
+          kind: "token", accessToken: "short-token", expiresIn: 60,
+        }),
+      },
+      gatewayTransport: transport,
+      now: () => Date.parse("2026-09-10T11:00:00.000Z"),
+      createClient,
+    })).rejects.toMatchObject({ code: "AGENT_CREDENTIAL_UNAVAILABLE" });
+    expect(createClient).not.toHaveBeenCalled();
   });
 
   it("fails closed when the agent never submits a validated result", async () => {

@@ -233,13 +233,7 @@ describe("worker launch contract", () => {
 
   it("builds empty-mode SDK configuration with no ambient auth or tools", () => {
     const launch = prepareWorkerLaunch(task(), runtime(), isolation(), broker(), authorities).manifest!;
-    const configuration = buildCopilotConfiguration(launch, {
-      gitHubTokenProvider: async () => ({
-        kind: "token",
-        accessToken: "synthetic-test-token",
-        expiresIn: 300,
-      }),
-    }, {
+    const configuration = buildCopilotConfiguration(launch, "synthetic-test-token", {
       invoke: async (request): Promise<GatewayResponse> => {
         const result = { ok: true };
         return {
@@ -255,7 +249,10 @@ describe("worker launch contract", () => {
       getSubmission: async () => undefined,
     });
 
-    expect(configuration.client).toMatchObject({ mode: "empty", useLoggedInUser: false });
+    expect(configuration.client).toMatchObject({
+      mode: "empty", useLoggedInUser: false, gitHubToken: "synthetic-test-token",
+    });
+    expect(configuration.session).not.toHaveProperty("gitHubTokenProvider");
     expect(configuration.session).toMatchObject({
       enableSessionStore: false,
       enableHostGitOperations: false,

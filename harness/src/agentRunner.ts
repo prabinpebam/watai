@@ -141,9 +141,26 @@ export async function runAgentAttempt(input: AgentAttemptInput): Promise<AgentAt
     throw new AgentRunnerError("TASK_PROMPT_TOO_LARGE", "Task prompt exceeds the 32 KiB control-plane limit.");
   }
 
+  const credential = await Promise.resolve(input.credentialBroker.gitHubTokenProvider({
+    host: "https://github.com",
+    sessionId: input.task.runId,
+    reason: "initial",
+  })).catch(() => ({ kind: "cancelled" as const }));
+  if (
+    credential.kind !== "token" ||
+    !credential.accessToken ||
+    /\s/.test(credential.accessToken) ||
+    !Number.isFinite(credential.expiresIn) ||
+    credential.expiresIn * 1_000 <= timeoutMs + 60_000
+  ) {
+    throw new AgentRunnerError(
+      "AGENT_CREDENTIAL_UNAVAILABLE",
+      "Credential broker did not supply a valid token for the complete bounded attempt.",
+    );
+  }
   const configuration = buildCopilotConfiguration(
     input.manifest,
-    input.credentialBroker,
+    credential.accessToken,
     input.gatewayTransport,
   );
   const createClient = input.createClient ?? ((options) => new CopilotClient(options) as AgentClientPort);

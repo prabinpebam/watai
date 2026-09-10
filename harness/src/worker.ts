@@ -460,7 +460,7 @@ export function createGatewayProxyTools(
 
 export function buildCopilotConfiguration(
   manifest: WorkerLaunchManifest,
-  credentialBroker: SessionCredentialBroker,
+  gitHubToken: string,
   gatewayTransport: GatewayTransport,
 ): { client: CopilotClientOptions; session: SessionConfig } {
   const tools = createGatewayProxyTools(manifest, gatewayTransport);
@@ -470,6 +470,7 @@ export function buildCopilotConfiguration(
     workingDirectory: manifest.runtime.brokerScratchDirectory,
     baseDirectory: manifest.runtime.brokerHomeDirectory,
     env: { ...manifest.runtime.brokerEnvironment },
+    gitHubToken,
     useLoggedInUser: false,
     logLevel: "warning",
   };
@@ -487,7 +488,6 @@ export function buildCopilotConfiguration(
       },
     },
     enableManagedSettings: true,
-    gitHubTokenProvider: credentialBroker.gitHubTokenProvider,
     enableConfigDiscovery: false,
     enableExperimentalMode: false,
     enableSessionStore: false,
