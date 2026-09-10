@@ -314,4 +314,30 @@ describe("worker launch contract", () => {
     })).rejects.toThrow("call watai_submit_result immediately");
     expect(invoke).toHaveBeenCalledOnce();
   });
+
+  it("rejects concurrent duplicate validation before it reaches the gateway", async () => {
+    const launch = prepareWorkerLaunch(task(), runtime(), isolation(), broker(), authorities).manifest!;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const invoke = vi.fn(async (request): Promise<GatewayResponse> => {
+      await pending;
+      const result = { commandId: "fixed", passed: false };
+      return {
+        schemaVersion: "1.0", requestId: request.requestId, runId: request.runId,
+        manifestSha256: request.manifestSha256, status: "success", result,
+        resultSha256: sha256(canonical(result)),
+      };
+    });
+    const tool = createGatewayProxyTools(launch, { invoke, getSubmission: async () => undefined })
+      .find((candidate) => candidate.name === "watai_run_validation")!;
+    const first = tool.handler?.({ commandId: "fixed" }, {
+      sessionId: launch.runId, toolCallId: "validation-1", toolName: tool.name, arguments: {},
+    });
+    await expect(tool.handler?.({ commandId: "fixed" }, {
+      sessionId: launch.runId, toolCallId: "validation-2", toolName: tool.name, arguments: {},
+    })).rejects.toThrow("already running");
+    release();
+    await first;
+    expect(invoke).toHaveBeenCalledOnce();
+  });
 });

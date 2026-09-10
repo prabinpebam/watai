@@ -423,6 +423,7 @@ export function createGatewayProxyTools(
   transport: GatewayTransport,
 ): Tool[] {
   const passedValidationIds = new Set<string>();
+  const activeValidationIds = new Set<string>();
   const descriptions: Record<GatewayToolId, string> = {
     watai_read_file: "Read one tracked source-file range through the Watai gateway.",
     watai_search_text: "Search tracked source text through the Watai gateway.",
@@ -446,6 +447,11 @@ export function createGatewayProxyTools(
           `Validation ${validationId} already passed for the current diff. Do not repeat it; call watai_submit_result immediately.`,
         );
       }
+      if (validationId && activeValidationIds.has(validationId)) {
+        throw new Error(
+          `Validation ${validationId} is already running. Do not start a duplicate; wait for its result.`,
+        );
+      }
       if (Buffer.byteLength(canonical(args), "utf8") > 1024 * 1024) {
         throw new Error(`Gateway arguments exceed the one-megabyte ceiling: ${name}`);
       }
@@ -459,7 +465,13 @@ export function createGatewayProxyTools(
         tool: name,
         arguments: args,
       };
-      const response = await transport.invoke(request, invocation.signal);
+      if (validationId) activeValidationIds.add(validationId);
+      let response: GatewayResponse;
+      try {
+        response = await transport.invoke(request, invocation.signal);
+      } finally {
+        if (validationId) activeValidationIds.delete(validationId);
+      }
       const valid =
         response.schemaVersion === "1.0" &&
         response.requestId === request.requestId &&
