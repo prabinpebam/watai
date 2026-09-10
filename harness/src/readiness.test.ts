@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import policyJson from "../../documentation/implementation/2026-09-10-autonomous-delivery/contracts/policy.json";
 import {
+  assessImplementationAgentEvaluationReadiness,
   assessReadiness,
   type CapabilityAttestation,
   type HarnessCapability,
@@ -26,6 +27,12 @@ const attestation = (capability: HarnessCapability): CapabilityAttestation => ({
   repositoryId: "prabinpebam/watai",
   policySha256,
   evidenceSha256: "a".repeat(64),
+  ...(capability === "worker-isolation" ? {
+    workerIsolation: {
+      scope: "candidate-validation" as const,
+      runtimeImageSha256: "d".repeat(64),
+    },
+  } : {}),
   ...(capability === "agent-model-evaluation" ? {
     modelEvaluation: {
       evaluationId: "implementation-agent-smoke",
@@ -246,5 +253,83 @@ describe("harness readiness", () => {
     });
     expect(result.blockers.map((blocker) => blocker.code)).not.toContain("CAPABILITY_MISSING:agent-model-evaluation");
     expect(result.ready).toBe(true);
+  });
+
+  it("bootstraps implementation-agent evidence without release-grade evaluation capabilities", () => {
+    const policy: HarnessPolicySummary = {
+      schemaVersion: "1.0", status: "SPECIFIED", authorizationGranted: true, effectiveSpendUsd: 20,
+    };
+    const required: HarnessCapability[] = [
+      "agent-provider", "authorization-root", "budget-reservation", "credential-broker",
+      "durable-ledger", "evaluator-pack", "live-model-evaluator", "provider-usage",
+      "tool-gateway", "trusted-build", "worker-isolation",
+    ];
+    const result = assessImplementationAgentEvaluationReadiness(
+      policy,
+      policySha256,
+      required.map((capability) => capability === "worker-isolation"
+        ? {
+            ...attestation(capability),
+            workerIsolation: {
+              scope: "implementation-agent-smoke" as const,
+              runtimeImageSha256: "e".repeat(64),
+            },
+          }
+        : attestation(capability)),
+      authorities,
+      { ...context, authorizationGrant: { ...authorizationGrant(), modes: ["evaluation"] } },
+      "e".repeat(64),
+    );
+    expect(result.ready).toBe(true);
+    expect(result.blockers).toEqual([]);
+    expect(result.verifiedCapabilities).toEqual(expect.arrayContaining(required));
+  });
+
+  it("rejects smoke isolation evidence for a different worker image", () => {
+    const policy: HarnessPolicySummary = {
+      schemaVersion: "1.0", status: "SPECIFIED", authorizationGranted: true, effectiveSpendUsd: 20,
+    };
+    const required: HarnessCapability[] = [
+      "agent-provider", "authorization-root", "budget-reservation", "credential-broker",
+      "durable-ledger", "evaluator-pack", "live-model-evaluator", "provider-usage",
+      "tool-gateway", "trusted-build", "worker-isolation",
+    ];
+    const attestations = required.map((capability) => capability === "worker-isolation"
+      ? {
+          ...attestation(capability),
+          workerIsolation: {
+            scope: "implementation-agent-smoke" as const,
+            runtimeImageSha256: "e".repeat(64),
+          },
+        }
+      : attestation(capability));
+    const result = assessImplementationAgentEvaluationReadiness(
+      policy,
+      policySha256,
+      attestations,
+      authorities,
+      { ...context, authorizationGrant: { ...authorizationGrant(), modes: ["evaluation"] } },
+      "f".repeat(64),
+    );
+    expect(result.blockers.map((blocker) => blocker.code)).toContain("CAPABILITY_MISSING:worker-isolation");
+  });
+
+  it("does not let smoke worker isolation authorize candidate validation", () => {
+    const policy: HarnessPolicySummary = {
+      schemaVersion: "1.0", status: "SPECIFIED", authorizationGranted: true, effectiveSpendUsd: 20,
+    };
+    const attestations = implementationCapabilities.map(attestation);
+    const index = attestations.findIndex((item) => item.capability === "worker-isolation");
+    attestations[index] = {
+      ...attestations[index],
+      workerIsolation: {
+        scope: "implementation-agent-smoke",
+        runtimeImageSha256: "e".repeat(64),
+      },
+    };
+    const result = assessReadiness(policy, policySha256, "implementation", attestations, authorities, {
+      ...context, authorizationGrant: authorizationGrant(),
+    });
+    expect(result.blockers.map((blocker) => blocker.code)).toContain("CAPABILITY_MISSING:worker-isolation");
   });
 });

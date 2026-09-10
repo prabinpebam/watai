@@ -54,6 +54,7 @@ npm run validate:harness
 npm run harness:preflight
 npm run harness:doctor
 npm run harness:model-eval-plan
+npm run harness:authority-ceremony
 npm run harness:controller-apply
 npm run harness:probe-worker
 npm run harness:evaluate-live -- <evaluation-id>
@@ -76,6 +77,16 @@ implementation/evaluation/release must report `BLOCKED_SAFE`.
 Operational public authority can be supplied only through an external directory
 named by `WATAI_HARNESS_AUTHORITY_DIR`; see [contracts/README.md](contracts/README.md).
 The repository does not provision or sign that authority.
+
+After committing a validated bootstrap change, `harness:authority-ceremony`
+revalidates the harness, checks the approved npm registry, GitHub CLI and Docker,
+probes the exact smoke-worker image, and writes an unsigned owner-review package
+outside the repository. It never creates a private key, signature or authority.
+
+`Dockerfile.smoke-worker` is limited to the frozen implementation-agent fixture,
+which validates with Node only. It is not the full candidate validation image.
+`Dockerfile.worker` installs both lockfile dependency trees through the approved
+Microsoft npm feed and remains the required image for real candidate execution.
 
 ## Trust boundary
 

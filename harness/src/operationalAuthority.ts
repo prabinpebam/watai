@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { loadAuthorityBundle, type LoadedAuthorityBundle } from "./authorityBundle.js";
 import { collectAuthorityContractDigests } from "./authorityInputs.js";
 import {
+  assessImplementationAgentEvaluationReadiness,
   assessReadiness,
   type HarnessMode,
   type ReadinessResult,
@@ -67,6 +68,30 @@ export async function loadTrustedAuthority(
     maxEffectLifetimeMs: policy.limits.validationMinutes * 60_000,
   });
   return { policy, policySha256, repositoryId, bundle, authorities };
+}
+
+export async function loadImplementationAgentEvaluationAuthority(
+  root: string,
+  runtimeImageSha256: string,
+): Promise<OperationalAuthorityContext> {
+  if (!/^[a-f0-9]{64}$/.test(runtimeImageSha256)) {
+    throw new Error("Implementation-agent smoke image must be bound by SHA-256.");
+  }
+  const trusted = await loadTrustedAuthority(root);
+  const grant = trusted.bundle.authorizationGrants.find((candidate) => candidate.modes.includes("evaluation"));
+  if (!grant) throw new Error("No current signed evaluation grant exists.");
+  const readiness = assessImplementationAgentEvaluationReadiness(
+    trusted.policy,
+    trusted.policySha256,
+    trusted.bundle.capabilityAttestations,
+    trusted.authorities,
+    { repositoryId: trusted.repositoryId, authorizationGrant: grant },
+    runtimeImageSha256,
+  );
+  if (!readiness.ready) {
+    throw new Error(`Implementation-agent evaluation authority is blocked: ${readiness.blockers.map((blocker) => blocker.code).join(", ")}`);
+  }
+  return { ...trusted, grant, readiness };
 }
 
 export async function loadOperationalAuthority(

@@ -38,6 +38,10 @@ export interface CapabilityAttestation {
   repositoryId: string;
   policySha256: string;
   evidenceSha256: string;
+  workerIsolation?: {
+    scope: "implementation-agent-smoke" | "candidate-validation";
+    runtimeImageSha256: string;
+  };
   modelEvaluation?: {
     evaluationId: string;
     manifestSha256: string;
@@ -135,6 +139,20 @@ const evaluationCapabilities: HarnessCapability[] = [
   "trusted-build",
 ];
 
+const implementationAgentEvaluationCapabilities = new Set<HarnessCapability>([
+  "agent-provider",
+  "authorization-root",
+  "budget-reservation",
+  "credential-broker",
+  "durable-ledger",
+  "evaluator-pack",
+  "live-model-evaluator",
+  "provider-usage",
+  "tool-gateway",
+  "trusted-build",
+  "worker-isolation",
+]);
+
 const releaseCapabilities: HarnessCapability[] = [
   ...evaluationCapabilities,
   "release-broker",
@@ -153,6 +171,7 @@ function validAttestation(
   const now = authorities.now();
   const digestPattern = /^[a-f0-9]{64}$/;
   const modelEvaluation = attestation.modelEvaluation;
+  const workerIsolation = attestation.workerIsolation;
   const modelEvaluationValid = attestation.capability !== "agent-model-evaluation" || Boolean(
     modelEvaluation &&
     modelEvaluation.evaluationId === "implementation-agent-smoke" &&
@@ -170,12 +189,18 @@ function validAttestation(
     Number.isSafeInteger(modelEvaluation.usage.outputTokens) && modelEvaluation.usage.outputTokens >= 0 &&
     Number.isSafeInteger(modelEvaluation.usage.requests) && modelEvaluation.usage.requests >= modelEvaluation.expectedRuns
   );
+  const workerIsolationValid = attestation.capability !== "worker-isolation" || Boolean(
+    workerIsolation &&
+    (workerIsolation.scope === "implementation-agent-smoke" || workerIsolation.scope === "candidate-validation") &&
+    digestPattern.test(workerIsolation.runtimeImageSha256)
+  );
   return (
     attestation.policySha256 === policySha256 &&
     attestation.repositoryId === repositoryId &&
     attestation.attestationId.trim().length > 0 &&
     digestPattern.test(attestation.evidenceSha256) &&
     modelEvaluationValid &&
+    workerIsolationValid &&
     attestation.issuer.trim().length > 0 &&
     attestation.signature.trim().length > 0 &&
     Number.isFinite(issuedAt) &&
@@ -286,7 +311,10 @@ export function assessReadiness(
       : implementationCapabilities;
   const verified = new Set<HarnessCapability>();
   for (const attestation of attestations) {
-    if (validAttestation(attestation, policySha256, authorities, context.repositoryId)) {
+    if (
+      validAttestation(attestation, policySha256, authorities, context.repositoryId) &&
+      (attestation.capability !== "worker-isolation" || attestation.workerIsolation?.scope === "candidate-validation")
+    ) {
       verified.add(attestation.capability);
     }
   }
@@ -312,5 +340,44 @@ export function assessReadiness(
     blockers,
     warnings,
     verifiedCapabilities: [...verified].filter((capability) => required.includes(capability)),
+  };
+}
+
+export function assessImplementationAgentEvaluationReadiness(
+  policy: HarnessPolicySummary,
+  policySha256: string,
+  attestations: CapabilityAttestation[],
+  authorities: ReadinessAuthorities,
+  context: ReadinessContext,
+  runtimeImageSha256: string,
+): ReadinessResult {
+  const full = assessReadiness(policy, policySha256, "evaluation", attestations, authorities, context);
+  const blockers = full.blockers.filter((blocker) => {
+    const capability = blocker.code.startsWith("CAPABILITY_MISSING:")
+      ? blocker.code.slice("CAPABILITY_MISSING:".length) as HarnessCapability
+      : undefined;
+    return !capability || implementationAgentEvaluationCapabilities.has(capability);
+  });
+  const smokeIsolationReady = attestations.some((attestation) =>
+    attestation.capability === "worker-isolation" &&
+    attestation.workerIsolation?.scope === "implementation-agent-smoke" &&
+    attestation.workerIsolation.runtimeImageSha256 === runtimeImageSha256 &&
+    validAttestation(attestation, policySha256, authorities, context.repositoryId));
+  const withoutCandidateIsolation = blockers.filter((blocker) => blocker.code !== "CAPABILITY_MISSING:worker-isolation");
+  if (!smokeIsolationReady) {
+    withoutCandidateIsolation.push({
+      code: "CAPABILITY_MISSING:worker-isolation",
+      message: "No current trusted attestation proves implementation-agent smoke worker isolation.",
+    });
+  }
+  return {
+    ...full,
+    ready: withoutCandidateIsolation.length === 0,
+    blockers: withoutCandidateIsolation,
+    verifiedCapabilities: [
+      ...full.verifiedCapabilities
+        .filter((capability) => implementationAgentEvaluationCapabilities.has(capability)),
+      ...(smokeIsolationReady ? ["worker-isolation" as const] : []),
+    ],
   };
 }

@@ -86,6 +86,8 @@ export async function collectAuthorityContractDigests(root: string): Promise<Aut
       "api/tsconfig.json",
       "api/vitest.config.ts",
       "api/vitest.integration.config.ts",
+      "harness/Dockerfile.smoke-worker",
+      "harness/Dockerfile.worker",
       "package.json",
       "playwright.config.ts",
       "tsconfig.harness.build.json",

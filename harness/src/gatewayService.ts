@@ -91,7 +91,7 @@ export function buildDockerValidationArgs(
     `sha256:${manifest.runtime.runtimeImageSha256}`,
     "/bin/sh",
     "-c",
-    "cp -a /workspace/source/. /workspace/run/ && test -d \"$2\" && if [ ! -e /workspace/run/node_modules ]; then ln -s \"$2\" /workspace/run/node_modules; fi && cd \"$1\" && shift 2 && exec \"$@\"",
+    "cp -a /workspace/source/. /workspace/run/ && test -d \"$2\" && if [ ! -e /workspace/run/node_modules ]; then ln -s \"$2\" /workspace/run/node_modules; fi && if [ -d \"$2/../api/node_modules\" ] && [ -d /workspace/run/api ] && [ ! -e /workspace/run/api/node_modules ]; then ln -s \"$2/../api/node_modules\" /workspace/run/api/node_modules; fi && cd \"$1\" && shift 2 && exec \"$@\"",
     "watai-validation",
     workdir,
     manifest.runtime.containerDependencyDirectory,

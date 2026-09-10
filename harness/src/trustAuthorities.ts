@@ -122,6 +122,7 @@ export function capabilityAttestationClaim(attestation: CapabilityAttestation): 
       repositoryId: attestation.repositoryId,
       policySha256: attestation.policySha256,
       evidenceSha256: attestation.evidenceSha256,
+      workerIsolation: attestation.workerIsolation,
       modelEvaluation: attestation.modelEvaluation,
     },
     attestation.signature,

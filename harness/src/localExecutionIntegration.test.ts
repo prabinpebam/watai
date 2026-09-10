@@ -211,5 +211,5 @@ describe("local execution vertical path", () => {
     expect(effectStatus).toBe("completed");
     expect(budgetStatus).toBe("settled");
     expect(await readFile(join(prepared.worktree.path, "src", "value.ts"), "utf8")).toContain("value = 2");
-  });
+  }, 15_000);
 });

@@ -17,6 +17,7 @@
     "harness:check-sources": "npm run build:harness --silent && node .harness-dist/sourceCheckCli.js",
     "harness:controller-apply": "npm run build:harness --silent && node .harness-dist/controllerApplyCli.js",
     "harness:authority-inputs": "npm run build:harness --silent && node .harness-dist/authorityInputsCli.js",
+    "harness:authority-ceremony": "npm run build:harness --silent && node .harness-dist/authorityCeremonyCli.js",
     "harness:doctor": "npm run build:harness --silent && node .harness-dist/doctorCli.js",
     "harness:execute": "npm run build:harness --silent && node .harness-dist/durableExecutorCli.js",
     "harness:evaluate-local": "npm run build:harness --silent && node .harness-dist/localEvaluatorCli.js",

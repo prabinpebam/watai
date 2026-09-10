@@ -1,0 +1,16 @@
+FROM node@sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94
+
+ENV npm_config_registry=https://packagefeedproxy.microsoft.io/npm/ \
+    npm_config_replace_registry_host=always \
+    npm_config_omit_lockfile_registry_resolved=true
+
+WORKDIR /opt/watai
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci --ignore-scripts && npm cache clean --force
+
+COPY api/package.json api/package-lock.json api/.npmrc ./api/
+RUN npm ci --prefix api --ignore-scripts && npm cache clean --force \
+    && test -d /opt/watai/node_modules \
+    && test -d /opt/watai/api/node_modules
+
+USER 1000:1000

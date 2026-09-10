@@ -19,7 +19,10 @@ import {
 } from "./modelCases.js";
 import { writeModelObservationClaims, writePortableModelObservations } from "./modelObservationWriter.js";
 import { canonical, sha256 } from "./trust.js";
-import { loadOperationalAuthority } from "./operationalAuthority.js";
+import {
+  loadImplementationAgentEvaluationAuthority,
+  loadOperationalAuthority,
+} from "./operationalAuthority.js";
 import { SqliteHarnessStore } from "./sqliteStore.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -63,7 +66,10 @@ const contract = manifest.evaluations.find((candidate) => candidate.id === evalu
 const caseSet = caseManifest.evaluations.find((candidate) => candidate.evaluationId === evaluationId);
 if (!contract || !caseSet) throw new Error(`Unknown live-model evaluation ${evaluationId}.`);
 
-const authority = await loadOperationalAuthority(root, "evaluation");
+const smokeWorkerImageSha256 = process.env.WATAI_WORKER_IMAGE_SHA256?.trim() ?? "";
+const authority = contract.purpose === "implementation-agent"
+  ? await loadImplementationAgentEvaluationAuthority(root, smokeWorkerImageSha256)
+  : await loadOperationalAuthority(root, "evaluation");
 if (
   contract.budget.usd > authority.policy.limits.evaluationRunUsd ||
   contract.budget.usd > authority.grant.billing.maxUsd ||
@@ -116,7 +122,10 @@ const adapter = new CommandLiveModelProviderAdapter(contract.providerId, {
 });
 
 const runId = `model-${evaluationId}-${randomUUID()}`;
-const stateDirectory = resolve(root, ".harness-state", "live-model", runId);
+const evidenceRoot = process.env.WATAI_MODEL_EVIDENCE_ROOT?.trim()
+  ? resolve(process.env.WATAI_MODEL_EVIDENCE_ROOT.trim())
+  : resolve(root, "..", "watai-harness-evidence");
+const stateDirectory = resolve(evidenceRoot, runId);
 const store = new SqliteHarnessStore(resolve(root, ".harness-state", "live-model", "evaluation-budget.sqlite"));
 try {
   const budget = new SqliteLiveModelBudget(store, `evaluation-grant:${authority.grant.grantId}`, runId, {

@@ -103,6 +103,7 @@ describe("gateway service", () => {
       "PATH=/opt/watai/node_modules/.bin:/usr/local/bin:/usr/bin:/bin",
       "npm_config_registry=https://packagefeedproxy.microsoft.io/npm/",
     ]);
+    expect(args.join(" ")).toContain("$2/../api/node_modules");
   });
   it("reads and searches only tracked workspace files with bounded output", async () => {
     const { service } = await fixture();
