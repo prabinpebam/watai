@@ -93,6 +93,8 @@ describe("local preflight", () => {
     report.packageSources.compliant = false;
     report.toolchain.dockerServer = { available: false, reason: "not running" };
     report.deployment.sourceSha = null;
+    report.deployment.frontendArtifactSha256 = null;
+    report.deployment.apiArtifactSha256 = null;
     report.deployment.runtime = null;
     report.deployment.region = null;
     report.deployment.configRevision = null;
@@ -104,10 +106,19 @@ describe("local preflight", () => {
       "SOURCE_DIRTY",
       "NPM_FEED_NONCOMPLIANT",
       "WORKER_ISOLATION_UNAVAILABLE",
-      "DEPLOYED_SOURCE_UNKNOWN",
+      "DEPLOYED_IDENTITY_INCOMPLETE",
       "DEPLOYMENT_RUNTIME_UNKNOWN",
       "DEPLOYMENT_CONFIG_UNKNOWN",
     ]));
+  });
+
+  it("accepts exact deployed artifact bindings with an explicitly unknown source commit", () => {
+    const report = complete();
+    report.deployment.sourceSha = null;
+    const result = evaluatePreflight(report);
+    expect(result.blockers.map((blocker) => blocker.code)).not.toContain(
+      "DEPLOYED_IDENTITY_INCOMPLETE",
+    );
   });
 
   it("rejects a noncompliant scoped registry even when the default is approved", () => {

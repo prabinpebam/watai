@@ -9,7 +9,7 @@
       "executable": "npm",
       "args": ["run", "validate:harness"],
       "expectedTestFiles": 21,
-      "expectedTests": 138,
+      "expectedTests": 139,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },
@@ -19,7 +19,7 @@
       "executable": "npm",
       "args": ["test"],
       "expectedTestFiles": 53,
-      "expectedTests": 369,
+      "expectedTests": 370,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },

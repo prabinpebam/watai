@@ -43,8 +43,8 @@ preserving the architecture and DoD.
 - Docker: Linux engine available; probe proves UID/GID 1000, read-only root,
   network none, no-new-privileges, zero effective capabilities, PID 64, memory
   256 MiB and CPU 0.5. No approved Watai base image/registry exists yet.
-- Harness: 21 files / 138 tests pass.
-- Root: 53 files / 369 tests pass.
+- Harness: 21 files / 139 tests expected.
+- Root: 53 files / 370 tests expected.
 - API: 76 files / 557 unit tests pass with zero skips; typecheck/build pass.
 - Browser: three consecutive complete runs, each 44/44 with zero skips/retries.
 - Isolated cloud integration: 5 files / 11 tests pass against

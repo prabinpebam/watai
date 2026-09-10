@@ -313,8 +313,14 @@ export function evaluatePreflight(
   if (!report.toolchain.dockerServer.available) {
     block("WORKER_ISOLATION_UNAVAILABLE", "The configured Docker server is not reachable.");
   }
-  if (!report.deployment.sourceSha) {
-    block("DEPLOYED_SOURCE_UNKNOWN", "The deployed source identity has not been observed.");
+  if (
+    !report.deployment.sourceSha &&
+    (!report.deployment.frontendArtifactSha256 || !report.deployment.apiArtifactSha256)
+  ) {
+    block(
+      "DEPLOYED_IDENTITY_INCOMPLETE",
+      "A source commit or exact frontend and API artifact digests must be observed.",
+    );
   }
   if (!report.deployment.runtime || !report.deployment.region) {
     block("DEPLOYMENT_RUNTIME_UNKNOWN", "The deployed runtime and region have not been observed.");

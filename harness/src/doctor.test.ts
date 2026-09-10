@@ -15,7 +15,7 @@ const readiness = (mode: ReadinessResult["mode"], ready: boolean): ReadinessResu
 
 const preflight = (ready: boolean) => ({
   status: ready ? "OBSERVED_LOCAL_COMPLETE" : "OBSERVED_PARTIAL",
-  blockers: ready ? [] : [{ code: "DEPLOYED_SOURCE_UNKNOWN", message: "Unknown" }],
+  blockers: ready ? [] : [{ code: "DEPLOYED_IDENTITY_INCOMPLETE", message: "Unknown" }],
   observations: [],
 } as unknown as LocalPreflightReport);
 

@@ -13,6 +13,8 @@
       "httpsEnforced": true
     },
     "sourceSha": "f7dc195300c4039aae5b9a7a8fb1691327864ea1",
+    "verifiedFileCount": 91,
+    "artifactSha256": "93fa85f76f3c328848c374be77ef4870c3e4fb302d512d7fef12d5dc3f1ae2b0",
     "verifiedFiles": [
       {
         "path": "docs/index.html",

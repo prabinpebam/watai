@@ -67,7 +67,7 @@ npm run harness:status -- implementation
 
 The combined validation runs the original plan validator, strict harness
 typechecking, all harness tests, a standalone Node ESM build and approved package
-source checks. Latest inventory: 138 harness tests and 369 root tests;
+source checks. Latest expected inventory: 139 harness tests and 370 root tests;
 the API passed 557 unit and 11 isolated integration tests with zero skips, then
 typecheck/build passed; three browser runs passed 44/44 each. These are local
 observations, not independent gate attestations.
