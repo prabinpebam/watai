@@ -112,7 +112,7 @@ describe('MessageService.append', () => {
     const msg = await ctx.messages.append('userA', thread.id, { role: 'assistant', content: '', images: [img] });
     expect(msg.images).toEqual([{ ...img, libraryItemId: libraryItemIdFor('userA', 'chat_generated_image', 'img_1') }]);
 
-    const stored = await ctx.messageStore.get(thread.id, msg.id);
+    const stored = await ctx.messageStore.get('userA', thread.id, msg.id);
     expect(stored?.images).toEqual([{ ...img, libraryItemId: libraryItemIdFor('userA', 'chat_generated_image', 'img_1') }]);
     expect((await ctx.threads.get('userA', thread.id)).lastMessagePreview).toBe('Image');
   });

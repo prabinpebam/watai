@@ -12,8 +12,8 @@ export interface MemoryExtractionScheduler {
 
 /**
  * Application service for messages. Ownership is enforced via the parent thread
- * (a message is reachable only if the caller owns its thread), so cross-user reads
- * and writes fail closed even though the message store is partitioned by threadId.
+ * and every child-record operation is owner-qualified so public thread/message IDs may collide
+ * across accounts without exposing or overwriting another owner's data.
  */
 export class MessageService {
   constructor(
@@ -36,7 +36,7 @@ export class MessageService {
     const thread = await this.requireOwnThread(userId, threadId);
 
     const id = input.id ?? this.clock.newId();
-    const existing = await this.messageStore.get(threadId, id);
+    const existing = await this.messageStore.get(userId, threadId, id);
     if (existing) return existing; // idempotent append (sync retry safe)
 
     const ts = this.clock.now();
@@ -134,6 +134,6 @@ export class MessageService {
 
   async list(userId: string, threadId: string, opts?: MessageListOptions): Promise<MessageRecord[]> {
     await this.requireOwnThread(userId, threadId);
-    return this.messageStore.list(threadId, opts);
+    return this.messageStore.list(userId, threadId, opts);
   }
 }

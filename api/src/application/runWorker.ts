@@ -689,12 +689,12 @@ async function* streamAgentWithRetry(
  * this runs in a queue worker (not the request), closing the app cannot interrupt it. Idempotent:
  * a redelivered message that finds a terminal/canceled run is a no-op.
  */
-export async function processRun(deps: RunWorkerDeps, threadId: string, runId: string): Promise<void> {
+export async function processRun(deps: RunWorkerDeps, userId: string, threadId: string, runId: string): Promise<void> {
   const { runStore, messageStore, threadStore, credentials, clock } = deps;
   const runAgent = deps.runAgent ?? defaultRunAgent;
   const flushMs = deps.flushIntervalMs ?? DEFAULT_FLUSH_MS;
 
-  const run = await runStore.get(threadId, runId);
+  const run = await runStore.get(userId, threadId, runId);
   if (!run || !isActive(run.status)) return; // already finalized / canceled — idempotent
 
   await runStore.put({ ...run, status: 'running', startedAt: clock.now(), heartbeatAt: clock.now() });
@@ -916,7 +916,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
       : undefined;
     const [settings, history] = await Promise.all([
       settingsPromise,
-      messageStore.list(threadId),
+      messageStore.list(userId, threadId),
     ]);
     const imageReferencePromises = new Map<string, Promise<ImageReference[]>>();
     const getImageReferences = (ids: string[]): Promise<ImageReference[]> => {
@@ -1242,7 +1242,7 @@ export async function processRun(deps: RunWorkerDeps, threadId: string, runId: s
   }
 
   // A cancel may have landed while we streamed — re-read the run before finalizing.
-  const current = await runStore.get(threadId, runId);
+  const current = await runStore.get(userId, threadId, runId);
   const canceled = current?.status === 'canceled';
 
   // Auto-name the thread from the first exchange while the message is still 'streaming', so the

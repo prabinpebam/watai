@@ -107,7 +107,7 @@ export class MemoryExtractionService {
   async enqueueCommand(userId: string, threadId: string, userMessageId: string, runId?: string): Promise<import('../domain/memoryExtraction').MemoryExtractionJobRecord | null> {
     const thread = await this.eligible(userId, threadId);
     if (!thread) return null;
-    const msg = await this.deps.messageStore.get(threadId, userMessageId);
+    const msg = await this.deps.messageStore.get(userId, threadId, userMessageId);
     if (!msg || msg.userId !== userId || msg.role !== 'user' || msg.content.trim().length < MIN_MEANINGFUL_CHARS) return null;
     return this.enqueueJob(userId, threadId, 'command', commandDedupe(userMessageId), { userMessageId, runId });
   }
@@ -115,9 +115,9 @@ export class MemoryExtractionService {
   async enqueueTurn(userId: string, threadId: string, assistantMessageId: string, runId?: string): Promise<import('../domain/memoryExtraction').MemoryExtractionJobRecord | null> {
     const thread = await this.eligible(userId, threadId);
     if (!thread) return null;
-    const msg = await this.deps.messageStore.get(threadId, assistantMessageId);
+    const msg = await this.deps.messageStore.get(userId, threadId, assistantMessageId);
     if (!msg || msg.userId !== userId || msg.role !== 'assistant' || msg.status !== 'complete') return null;
-    const window = await this.messagesAround(threadId, assistantMessageId);
+    const window = await this.messagesAround(userId, threadId, assistantMessageId);
     if (!window.some((message) => message.role === 'user' && message.content.trim().length >= MIN_MEANINGFUL_CHARS)) return null;
     return this.enqueueJob(userId, threadId, 'turn', turnDedupe(assistantMessageId), { assistantMessageId, runId });
   }
@@ -229,11 +229,11 @@ export class MemoryExtractionService {
   }
 
   private async windowFor(job: import('../domain/memoryExtraction').MemoryExtractionJobRecord): Promise<MessageRecord[]> {
-    return this.messagesAround(job.threadId, job.assistantMessageId ?? job.userMessageId);
+    return this.messagesAround(job.userId, job.threadId, job.assistantMessageId ?? job.userMessageId);
   }
 
-  private async messagesAround(threadId: string, targetId?: string): Promise<MessageRecord[]> {
-    const all = (await this.deps.messageStore.list(threadId))
+  private async messagesAround(userId: string, threadId: string, targetId?: string): Promise<MessageRecord[]> {
+    const all = (await this.deps.messageStore.list(userId, threadId))
       .filter((m) => !m.deletedAt && (m.role === 'user' || m.role === 'assistant'))
       .sort((a, b) => chrono(a).localeCompare(chrono(b)));
     const index = all.findIndex((m) => m.id === targetId);

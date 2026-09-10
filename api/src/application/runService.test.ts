@@ -72,19 +72,36 @@ describe('RunService.submit', () => {
     expect(run.instanceId).toBe(`inst_${run.id}`);
     expect(ctx.started).toHaveLength(1);
 
-    const msgs = await ctx.messageStore.list('t1');
+    const msgs = await ctx.messageStore.list('userA', 't1');
     expect(msgs.find((m) => m.role === 'user')?.content).toBe('hello there');
   });
 
   it('uses the client message id (idempotent user message)', async () => {
     await ctx.svc.submit('userA', 't1', { text: 'hi', clientMessageId: 'cm1' });
-    const msgs = await ctx.messageStore.list('t1');
+    const msgs = await ctx.messageStore.list('userA', 't1');
     expect(msgs.some((m) => m.id === 'cm1')).toBe(true);
   });
 
   it('rejects a second concurrent run on the same thread (409)', async () => {
     await ctx.svc.submit('userA', 't1', { text: 'first' });
     expect(await code(() => ctx.svc.submit('userA', 't1', { text: 'second' }))).toBe('conflict');
+  });
+
+  it('isolates active runs and client message ids for owners sharing a public thread id', async () => {
+    await seedThread(ctx.threadStore, 'userB', 't1');
+
+    await ctx.svc.submit('userA', 't1', { text: 'owner A', clientMessageId: 'cm1' });
+    await ctx.svc.submit('userB', 't1', { text: 'owner B', clientMessageId: 'cm1' });
+
+    expect((await ctx.svc.listActive('userA', 't1')).map((run) => run.userId)).toEqual(['userA']);
+    expect((await ctx.svc.listActive('userB', 't1')).map((run) => run.userId)).toEqual(['userB']);
+    expect([
+      ...(await ctx.messageStore.list('userA', 't1')),
+      ...(await ctx.messageStore.list('userB', 't1')),
+    ].map((message) => `${message.userId}:${message.content}`).sort()).toEqual([
+      'userA:owner A',
+      'userB:owner B',
+    ]);
   });
 
   it('allows a new run once the previous one is terminal', async () => {
@@ -119,7 +136,7 @@ describe('RunService.submit', () => {
     await seedThread(failing.threadStore);
     expect(await code(() => failing.svc.submit('userA', 't1', { text: 'x' }))).toBe('internal');
     // No active run remains → the thread is not locked forever.
-    expect(await failing.runStore.listActive('t1')).toHaveLength(0);
+    expect(await failing.runStore.listActive('userA', 't1')).toHaveLength(0);
   });
 });
 
@@ -142,7 +159,7 @@ describe('RunService.get / cancel', () => {
     expect(canceled.status).toBe('canceled');
     expect(ctx.canceled).toHaveLength(1);
     // Cancellation frees the thread for a new run.
-    expect(await ctx.runStore.listActive('t1')).toHaveLength(0);
+    expect(await ctx.runStore.listActive('userA', 't1')).toHaveLength(0);
   });
 
   it('cancel is idempotent on a terminal run', async () => {

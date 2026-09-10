@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { processRun, type RunWorkerDeps } from './runWorker';
+import { processRun as processRunForOwner, type RunWorkerDeps } from './runWorker';
 import { InMemoryRunStore } from '../adapters/memory/runStore';
 import { InMemoryMessageStore } from '../adapters/memory/messageStore';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
@@ -19,6 +19,10 @@ import type { LibraryItemRecord } from '../domain/library';
 import type { LibraryStore } from '../ports/libraryStore';
 
 type RunAgentFn = NonNullable<RunWorkerDeps['runAgent']>;
+
+function processRun(deps: RunWorkerDeps, threadId: string, runId: string): Promise<void> {
+  return processRunForOwner(deps, 'userA', threadId, runId);
+}
 
 function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string; image?: boolean }) {
   const runStore = new InMemoryRunStore();
@@ -50,7 +54,19 @@ function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string;
     clock,
     flushIntervalMs: 0,
   });
-  return { runStore, messageStore, threadStore, clock, credentials, deps };
+  const testRunStore = {
+    get: (threadId: string, runId: string) => runStore.get('userA', threadId, runId),
+    put: (record: RunRecord) => runStore.put(record),
+    listActive: (threadId: string) => runStore.listActive('userA', threadId),
+    deleteByThread: (threadId: string) => runStore.deleteByThread('userA', threadId),
+  };
+  const testMessageStore = {
+    get: (threadId: string, id: string) => messageStore.get('userA', threadId, id),
+    list: (threadId: string) => messageStore.list('userA', threadId),
+    append: (record: MessageRecord) => messageStore.append(record),
+    deleteByThread: (threadId: string) => messageStore.deleteByThread('userA', threadId),
+  };
+  return { runStore: testRunStore, messageStore: testMessageStore, workerMessageStore: messageStore, threadStore, clock, credentials, deps };
 }
 
 async function seed(ctx: ReturnType<typeof setup>, runStatus: RunStatus = 'queued', tools: string[] = [], userText = 'hello'): Promise<RunRecord> {
@@ -1330,7 +1346,7 @@ describe('processRun', () => {
 
   it('writes a streaming message before the final one (incremental upserts)', async () => {
     await seed(ctx);
-    const spy = vi.spyOn(ctx.messageStore, 'append');
+    const spy = vi.spyOn(ctx.workerMessageStore, 'append');
     await processRun(
       ctx.deps(script([{ type: 'text', delta: 'a' }, { type: 'text', delta: 'b' }, { type: 'done' }])),
       't1',

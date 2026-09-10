@@ -42,10 +42,10 @@ export interface MessageListOptions {
 }
 
 export interface MessageStore {
-  get(threadId: string, id: string): Promise<MessageRecord | null>;
-  list(threadId: string, opts?: MessageListOptions): Promise<MessageRecord[]>;
+  get(userId: string, threadId: string, id: string): Promise<MessageRecord | null>;
+  list(userId: string, threadId: string, opts?: MessageListOptions): Promise<MessageRecord[]>;
   append(record: MessageRecord): Promise<MessageRecord>;
   /** Hard-delete every message in a thread. Used when the thread itself is permanently deleted, so
    *  no message records are left orphaned behind the thread's tombstone. */
-  deleteByThread(threadId: string): Promise<void>;
+  deleteByThread(userId: string, threadId: string): Promise<void>;
 }

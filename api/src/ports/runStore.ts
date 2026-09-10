@@ -28,8 +28,9 @@ export interface RunRecord {
 }
 
 export interface RunStore {
-  get(threadId: string, runId: string): Promise<RunRecord | null>;
+  get(userId: string, threadId: string, runId: string): Promise<RunRecord | null>;
   put(record: RunRecord): Promise<RunRecord>;
   /** Active (queued|running) runs for a thread — enforces one run per thread. */
-  listActive(threadId: string): Promise<RunRecord[]>;
+  listActive(userId: string, threadId: string): Promise<RunRecord[]>;
+  deleteByThread(userId: string, threadId: string): Promise<void>;
 }

@@ -38,8 +38,8 @@
       "cwd": "api",
       "executable": "npm",
       "args": ["test"],
-      "expectedTestFiles": 76,
-      "expectedTests": 560,
+      "expectedTestFiles": 77,
+      "expectedTests": 564,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },

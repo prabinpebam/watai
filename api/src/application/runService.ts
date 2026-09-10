@@ -37,7 +37,7 @@ export class RunService {
     const parsed = parseRunInput(input);
 
     // One run per thread (server-authoritative lock).
-    if ((await this.runStore.listActive(threadId)).length > 0) {
+    if ((await this.runStore.listActive(userId, threadId)).length > 0) {
       throw new AppError('conflict', 'A response is already being generated in this thread.');
     }
 
@@ -87,14 +87,14 @@ export class RunService {
 
   async get(userId: string, threadId: string, runId: string): Promise<RunRecord> {
     await this.requireOwnThread(userId, threadId);
-    const run = await this.runStore.get(threadId, runId);
+    const run = await this.runStore.get(userId, threadId, runId);
     if (!run || run.userId !== userId) throw new AppError('not_found', 'Run not found.');
     return run;
   }
 
   async listActive(userId: string, threadId: string): Promise<RunRecord[]> {
     await this.requireOwnThread(userId, threadId);
-    return this.runStore.listActive(threadId);
+    return this.runStore.listActive(userId, threadId);
   }
 
   async cancel(userId: string, threadId: string, runId: string): Promise<RunRecord> {

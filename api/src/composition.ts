@@ -232,7 +232,8 @@ export function container(): ApiContainer {
         // swallows its own errors so one failure never blocks the others.
         await threadFilesService.cleanup(userId, id).catch(() => {});
         await threadAssetStore.deleteThreadAssets(userId, id).catch(() => {});
-        await messageStore.deleteByThread(id).catch(() => {});
+        await messageStore.deleteByThread(userId, id).catch(() => {});
+        await runStore.deleteByThread(userId, id).catch(() => {});
       },
     ),
     threadLock: createThreadLockController(new ThreadLockService(threadStore, clock)),
