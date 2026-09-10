@@ -26,6 +26,8 @@ For initiatives expected to exceed 30 minutes or contain three or more expensive
 
 Optimize total quality throughput, not isolated command efficiency. Track elapsed setup time versus delivered product value. Setup and governance are enabling work: once the minimum safe control plane exists, prefer delivering the next DoD slice over adding more harness sophistication. Keep at most one setup/improvement thread active alongside product work.
 
+Process is overhead until it proves otherwise. Every process step must justify its cost through a concrete delivery, risk reduction, or reusable time saving. If polishing, refining, documenting, or governing the process consumes more time than the actual product work it enables, stop immediately: the approach is on the wrong path. Remove or collapse the process before continuing delivery.
+
 At each 30-minute program checkpoint, or after two failed attempts at the same stage, challenge the whole approach. Ignore sunk cost. Remove unnecessary prerequisites, collapse repeated ceremonies, reuse compatible evidence, and move non-critical qualification to the latest responsible gate. A checkpoint must end with a concrete delivery action, a materially changed approach, or a verified external blocker.
 
 A full qualification may be necessary for a DoD claim, but repeated qualification is forbidden unless source, runtime image, contract, or relevant behavior changed.

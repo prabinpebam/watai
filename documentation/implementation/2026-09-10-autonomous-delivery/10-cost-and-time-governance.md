@@ -24,6 +24,8 @@ An initiative expected to exceed 30 minutes or contain three expensive stages re
 
 Program success is quality-adjusted delivered value per elapsed hour. Passing checks, adding controls, writing plans and generating evidence are inputs, not delivered value. If setup consumes its budget without reaching the first delivery milestone, ignore sunk cost and simplify the architecture or sequencing.
 
+Process is overhead until its benefit is demonstrated. Each process step must pay for itself with a concrete delivery, material risk reduction, or reusable reduction in future work. When cumulative process polishing and refinement exceeds the product implementation effort it enables, the process has failed its economic test: stop it, preserve only the minimum safety controls, and resume the smallest product delivery path.
+
 The checkpoint cannot merely stop necessary work. It must choose one of: deliver the next slice, adopt a materially cheaper changed approach, or record a verified external blocker with the fastest available parallel work.
 
 ## Required sequence
