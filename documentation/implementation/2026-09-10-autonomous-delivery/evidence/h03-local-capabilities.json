@@ -11,7 +11,8 @@
       "installedCliVersion": "1.0.84-1",
       "explicitTokenAuthentication": true,
       "modelCount": 21,
-      "modelRequestExecuted": false
+      "modelRequestAttempted": true,
+      "modelUsageObserved": false
     },
     "dockerEngine": {
       "serverVersion": "29.6.2",
@@ -28,8 +29,9 @@
         "memoryBytes": 268435456,
         "nanoCpus": 500000000
       },
-      "approvedWorkerImage": false,
-      "reason": "Controls were probed with an existing unapproved local image. No approved registry/base artifact is available."
+      "approvedSmokeWorkerImage": "sha256:1ffafcc172d5e1db61250510a33c861a48be513c88f7e0cb58e84c743e369141",
+      "approvedCandidateWorkerImage": false,
+      "reason": "A source-bound smoke-only image is proven. The full candidate image remains blocked by missing approved-feed tarballs."
     },
     "durableLocalStore": {
       "engine": "SQLite 3.50.4 via Node built-in node:sqlite",
@@ -67,9 +69,9 @@
     },
     "credentialBroker": {
       "source": "GitHub CLI token command",
-      "allowedHosts": ["github.com", "api.github.com"],
+      "allowedHosts": ["https://github.com", "github.com", "api.github.com"],
       "storage": "memory-only",
-      "cacheSeconds": 300,
+      "cacheSeconds": 3900,
       "tokenLogged": false
     },
     "executionCoordinator": {
@@ -87,12 +89,13 @@
       "precallBudgetReservation": true,
       "externalSigningRequired": true,
       "portableWriteOnceJsonl": true,
-      "realModelRunsExecuted": false
+      "realModelRunsExecuted": true,
+      "passingModelRunAdmitted": false
     }
   },
   "evaluation": {
-    "harness": "32 files / 197 tests expected",
-    "root": "64 files / 428 tests expected",
+    "harness": "33 files / 205 tests expected",
+    "root": "65 files / 436 tests expected",
     "apiUnit": "76 files / 560 tests expected, zero skipped",
     "browser": "3 consecutive runs x 44 tests passed, zero skipped, retries 0",
     "apiIntegration": "5 files / 11 tests passed against isolated stage",
@@ -102,9 +105,9 @@
     "apiAudit": "0 vulnerabilities",
     "rootAudit": "1 critical, 1 high, 5 moderate; 2 moderate production-only",
     "approvedFeedBlockers": [
-      "@oxc-project/types@0.148.0 tarball missing",
-      "cookie@1.0.1/1.0.2/1.1.0/1.1.1 tarballs missing",
-      "@remix-run/router@1.23.3/1.23.4 tarballs missing"
+      "zwitch@2.0.0 through 2.0.4 tarballs missing",
+      "@esbuild/linux-x64@0.21.5 tarball missing",
+      "@rollup/rollup-linux-x64-gnu@4.62.2 tarball missing"
     ]
   },
   "signatures": [],
