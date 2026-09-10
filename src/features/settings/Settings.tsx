@@ -180,7 +180,7 @@ export function Settings() {
   const me = useMe();
   const account = useCloudAccount();
   const stats = useUsageStats();
-  const { settings, setSettings, loaded, degraded } = useSettings();
+  const { settings, setSettings, loaded, degraded, retry } = useSettings();
   const [chatModel, setChatModel] = useState<string | null>(null);
   const [tavilyConfigured, setTavilyConfigured] = useState(false);
   useEffect(() => {
@@ -196,9 +196,12 @@ export function Settings() {
   if (!loaded) {
     return (
       <div className="center-screen">
-        {degraded
-          ? <InlineAlert tone="danger">Account settings are unavailable. Privacy and memory choices are not assumed.</InlineAlert>
-          : <Spinner size="xl" />}
+        {degraded ? (
+          <div className="col" style={{ alignItems: 'center' }}>
+            <InlineAlert tone="danger">Account settings are unavailable. Privacy and memory choices are not assumed.</InlineAlert>
+            <Button variant="secondary" onClick={retry}>Retry settings</Button>
+          </div>
+        ) : <Spinner size="xl" />}
       </div>
     );
   }

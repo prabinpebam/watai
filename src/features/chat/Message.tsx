@@ -401,8 +401,23 @@ export function AssistantMessage({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const audioOperationRef = useRef(0);
+  const wasStreamingRef = useRef(false);
+  const [completionAnnouncement, setCompletionAnnouncement] = useState('');
   const pushToast = useUi((s) => s.pushToast);
   const isStreamingThis = streaming && message.status === 'streaming';
+
+  useEffect(() => {
+    if (wasStreamingRef.current && !isStreamingThis) {
+      setCompletionAnnouncement(
+        message.status === 'error'
+          ? 'Assistant reply failed.'
+          : message.status === 'interrupted'
+            ? 'Assistant reply stopped.'
+            : 'Assistant reply complete.',
+      );
+    }
+    wasStreamingRef.current = isStreamingThis;
+  }, [isStreamingThis, message.status]);
 
   // An image tool call that is still running renders as an aspect-correct placeholder (optimistic
   // preview) rather than a tool card; once the image lands the placeholder yields to the real one.
@@ -491,6 +506,7 @@ export function AssistantMessage({
 
   return (
     <div className="msg-group msg-group--assistant" data-message-id={message.id}>
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{completionAnnouncement}</span>
       <div className="assistant">
         <div className="assistant__role">
           <Avatar size="sm" variant="assistant">

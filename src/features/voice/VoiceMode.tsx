@@ -290,7 +290,7 @@ export function VoiceMode() {
       </div>
 
       <div className="col" style={{ alignItems: 'center', gap: 'var(--space-7)' }}>
-        <div className="voice__status">{PHASE_LABEL[phase]}</div>
+        <div className="voice__status" role="status" aria-live="polite" aria-atomic="true">{PHASE_LABEL[phase]}</div>
         <button className={orbClass} onClick={onOrbTap} aria-label={listening ? 'Stop and send' : 'Tap to speak'}>
           {phase === 'thinking' && <Spinner size="lg" />}
         </button>

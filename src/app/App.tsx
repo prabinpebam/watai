@@ -10,6 +10,7 @@ import { isSignedIn, signOut } from '../auth/cloudAuth';
 import { loadMe, cachedMe } from '../auth/access';
 import { newId } from '../lib/ids';
 import { ScreenBar } from './ScreenBar';
+import { AppErrorBoundary } from './AppErrorBoundary';
 
 const ChatScreen = lazy(() => import('../features/chat/ChatScreen').then((module) => ({ default: module.ChatScreen })));
 const SearchView = lazy(() => import('../features/history/SearchView').then((module) => ({ default: module.SearchView })));
@@ -34,10 +35,13 @@ const LibraryPickerExperienceFixture = import.meta.env.DEV
  *  beyond it, a fresh empty chat opens instead. */
 const RESUME_WINDOW_MS = 5 * 60 * 1000;
 
-function RootRedirect() {
+export function RootRedirect() {
   const navigate = useNavigate();
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
+    setError(false);
     repo.listThreads().then((threads) => {
       if (!live) return;
       // threads[0] is the most recently active chat (listThreads sorts by updatedAt desc). Resume
@@ -46,11 +50,21 @@ function RootRedirect() {
       const recent = threads[0];
       const fresh = recent && Date.now() - new Date(recent.updatedAt).getTime() < RESUME_WINDOW_MS;
       navigate(fresh ? `/c/${recent.id}` : '/new', { replace: true });
-    });
+    }).catch(() => { if (live) setError(true); });
     return () => {
       live = false;
     };
-  }, [navigate]);
+  }, [attempt, navigate]);
+  if (error) {
+    return (
+      <div className="center-screen" role="alert">
+        <div className="col" style={{ alignItems: 'center' }}>
+          <p>Conversations couldn’t be loaded.</p>
+          <Button variant="secondary" onClick={() => setAttempt((value) => value + 1)}>Retry conversations</Button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="center-screen">
       <Spinner size="xl" />
@@ -66,7 +80,18 @@ function NewChatRedirect() {
   return <Navigate to={`/c/${id}`} replace />;
 }
 
-type SetupState = 'loading' | 'no-session' | 'no-access' | 'no-config' | 'ready';
+type SetupState = 'loading' | 'error' | 'no-session' | 'no-access' | 'no-config' | 'ready';
+const BOOTSTRAP_TIMEOUT_MS = 15_000;
+
+function boundedBootstrap<T>(operation: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error('Setup timed out.')), BOOTSTRAP_TIMEOUT_MS);
+    operation.then(
+      (value) => { window.clearTimeout(timer); resolve(value); },
+      (error) => { window.clearTimeout(timer); reject(error); },
+    );
+  });
+}
 
 // Remember the last *confirmed* "endpoint configured" result so a transient status-check failure
 // (token refresh, function cold start, a network blip) never forces a configured account back
@@ -88,42 +113,41 @@ function wasConfigured(): boolean {
   }
 }
 
-function useSetupState(): SetupState {
+function useSetupState(): { state: SetupState; retry: () => void } {
   // Optimistic boot: a browser that was configured before shows the app immediately while we
   // re-verify in the background, so the home page never waits on an auth/credentials round-trip.
   // Only a definitive negative (signed out / empty vault) corrects it.
   const [state, setState] = useState<SetupState>(() => (wasConfigured() ? 'ready' : 'loading'));
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
     (async () => {
-      // Cloud-account-only: a signed-in Entra account is required.
-      if (!(await isSignedIn())) {
-        if (live) setState('no-session');
-        return;
+      try {
+        // Cloud-account-only: a signed-in Entra account is required.
+        if (!(await boundedBootstrap(isSignedIn()))) {
+          if (live) setState('no-session');
+          return;
+        }
+        const me = await boundedBootstrap(loadMe(attempt > 0));
+        if (!me) throw new Error('Access status unavailable.');
+        if (!me.isInvited) {
+          if (live) setState('no-access');
+          return;
+        }
+        // Credentials live in the server vault now; wipe anything a pre-cloud build stored locally.
+        void clearApiCredentials();
+        const configured = (await boundedBootstrap(cloudApi.getCredentialStatus())).configured;
+        rememberConfigured(configured);
+        if (live) setState(configured ? 'ready' : 'no-config');
+      } catch {
+        if (live) setState(wasConfigured() ? 'ready' : 'error');
       }
-      // Invite-only: a definitive "not invited" blocks the UI. Transient API/network errors
-      // fall through (the backend still enforces access on every call).
-      const me = await loadMe();
-      if (me && !me.isInvited) {
-        if (live) setState('no-access');
-        return;
-      }
-      // Credentials live in the server vault now; wipe anything a pre-cloud build stored locally.
-      void clearApiCredentials();
-      // `configured`: true (vault has keys), false (definitely empty), null (couldn't verify — do
-      // not downgrade a previously-configured account over a transient failure).
-      const configured = await cloudApi
-        .getCredentialStatus()
-        .then((s) => s.configured)
-        .catch(() => null);
-      if (configured !== null) rememberConfigured(configured);
-      if (live) setState((configured ?? wasConfigured()) ? 'ready' : 'no-config');
     })();
     return () => {
       live = false;
     };
-  }, []);
-  return state;
+  }, [attempt]);
+  return { state, retry: () => { setState('loading'); setAttempt((value) => value + 1); } };
 }
 
 /** Signed in, but the account isn't on the invite allowlist. */
@@ -148,12 +172,23 @@ function NotInvited() {
   );
 }
 
-function Protected({ children }: { children: ReactNode }) {
-  const state = useSetupState();
+export function Protected({ children }: { children: ReactNode }) {
+  const { state, retry } = useSetupState();
   if (state === 'loading') {
     return (
       <div className="center-screen">
         <Spinner size="xl" />
+      </div>
+    );
+  }
+  if (state === 'error') {
+    return (
+      <div className="center-screen" role="alert">
+        <div className="onboard" style={{ maxWidth: 440 }}>
+          <h1 className="onboard__title">Watai couldn’t finish starting</h1>
+          <p className="onboard__sub">Check your connection and try the account check again.</p>
+          <div className="onboard__actions"><Button variant="primary" full onClick={retry}>Retry startup</Button></div>
+        </div>
       </div>
     );
   }
@@ -301,6 +336,7 @@ export function App() {
   }, []);
 
   return (
+    <AppErrorBoundary>
     <Suspense fallback={<div className="center-screen"><Spinner size="xl" /></div>}>
     <Routes>
       <Route path="/onboarding/*" element={<Onboarding />} />
@@ -374,5 +410,6 @@ export function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </Suspense>
+    </AppErrorBoundary>
   );
 }

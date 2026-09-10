@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { repo } from '../../data';
 import { Icon } from '../../design/icons';
-import { IconButton } from '../../design/ui';
+import { Button, IconButton } from '../../design/ui';
 import { ImagePrompt, Lightbox, type GalleryImage } from './Lightbox';
 import { formatBytes } from '../../lib/format';
 import { prepareFile, saveFile } from '../../lib/saveFile';
@@ -12,22 +12,51 @@ function isDirectUrl(s?: string): s is string {
 }
 
 /** Resolve an attachment to a usable object URL: local cache, direct URL, or cloud blob (SAS). */
-function useAttachmentUrl(att: Attachment): string | null {
+function useAttachmentUrl(att: Attachment): { url: string | null; error: boolean; retry: () => void } {
   const [url, setUrl] = useState<string | null>(isDirectUrl(att.blobPath) ? att.blobPath! : null);
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
+    let settled = false;
+    setError(false);
+    const timer = window.setTimeout(() => {
+      settled = true;
+      if (live) setError(true);
+    }, 15_000);
     repo
       .resolveAssetUrl(att)
-      .then((u) => live && setUrl(u || null))
-      .catch(() => undefined);
+      .then((resolved) => {
+        if (!live || settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        if (resolved) setUrl(resolved);
+        else setError(true);
+      })
+      .catch(() => {
+        if (!live || settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        setError(true);
+      });
     return () => {
       live = false;
+      window.clearTimeout(timer);
     };
-  }, [att.id, att.blobPath, att.localBlobKey]);
+  }, [att.id, att.blobPath, att.localBlobKey, attempt]);
   useEffect(() => {
     if (url) void prepareFile(url)?.catch(() => undefined);
   }, [url]);
-  return url;
+  return { url, error, retry: () => setAttempt((value) => value + 1) };
+}
+
+function AttachmentUnavailable({ name, retry }: { name?: string; retry: () => void }) {
+  return (
+    <div className="file-card" role="alert">
+      <div className="file-card__name">{name || 'Attachment'} couldn’t be loaded.</div>
+      <Button size="sm" variant="secondary" onClick={retry}>Retry attachment</Button>
+    </div>
+  );
 }
 
 function download(url: string, name?: string) {
@@ -50,8 +79,9 @@ function iconForMime(mime: string, name = ''): string {
 }
 
 function ImageAttachment({ att }: { att: Attachment }) {
-  const url = useAttachmentUrl(att);
+  const { url, error, retry } = useAttachmentUrl(att);
   const [open, setOpen] = useState(false);
+  if (error && !url) return <AttachmentUnavailable name={att.name} retry={retry} />;
   if (!url)
     return (
       <div className="attach-thumb attach-thumb--loading" role="img" aria-label="Loading image">
@@ -76,7 +106,7 @@ function ImageAttachment({ att }: { att: Attachment }) {
 }
 
 function PdfAttachment({ att }: { att: Attachment }) {
-  const url = useAttachmentUrl(att);
+  const { url, error, retry } = useAttachmentUrl(att);
   const [preview, setPreview] = useState(false);
   // data: URLs can't be opened top-level and some viewers won't embed them,
   // so resolve a blob: URL for both the inline <object> and the open/download links.
@@ -103,6 +133,7 @@ function PdfAttachment({ att }: { att: Attachment }) {
     };
   }, [url]);
 
+  if (error && !url) return <AttachmentUnavailable name={att.name} retry={retry} />;
   return (
     <div className="file-card">
       <div className="file-card__row">
@@ -146,7 +177,8 @@ function PdfAttachment({ att }: { att: Attachment }) {
 }
 
 function MediaAttachment({ att }: { att: Attachment }) {
-  const url = useAttachmentUrl(att);
+  const { url, error, retry } = useAttachmentUrl(att);
+  if (error && !url) return <AttachmentUnavailable name={att.name} retry={retry} />;
   if (!url) return <div className="file-card file-card--loading skeleton" />;
   return (
     <div className="file-card file-card--media">
@@ -161,7 +193,8 @@ function MediaAttachment({ att }: { att: Attachment }) {
 }
 
 function FileChip({ att }: { att: Attachment }) {
-  const url = useAttachmentUrl(att);
+  const { url, error, retry } = useAttachmentUrl(att);
+  if (error && !url) return <AttachmentUnavailable name={att.name} retry={retry} />;
   return (
     <div className="file-card">
       <div className="file-card__row">

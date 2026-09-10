@@ -28,6 +28,15 @@ describe('useSettings', () => {
     expect(result.current.loaded).toBe(false);
   });
 
+  it('retries the authoritative read from the degraded state', async () => {
+    data.loadAccountSettings.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(DEFAULT_SETTINGS);
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.degraded).toBe(true));
+    result.current.retry();
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(data.loadAccountSettings).toHaveBeenCalledTimes(2);
+  });
+
   it('reports ready only after authoritative settings load', async () => {
     data.loadAccountSettings.mockResolvedValueOnce({
       ...DEFAULT_SETTINGS,

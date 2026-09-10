@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { loadAccountSettings, repo } from '../../data';
 import { DEFAULT_SETTINGS, type Settings } from '../../lib/types';
 import { useUi } from '../../state/store';
@@ -8,6 +8,7 @@ export function useSettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
   const [degraded, setDegraded] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const ui = useUi();
 
   useEffect(() => {
@@ -21,6 +22,11 @@ export function useSettings() {
         setLoaded(false);
         setDegraded(true);
       });
+  }, [loadAttempt]);
+
+  const retry = useCallback(() => {
+    setDegraded(false);
+    setLoadAttempt((value) => value + 1);
   }, []);
 
   const save = async (next: Settings) => {
@@ -33,5 +39,5 @@ export function useSettings() {
     ui.setReduceMotion(next.appearance.reduceMotion);
   };
 
-  return { settings, setSettings: save, loaded, degraded };
+  return { settings, setSettings: save, loaded, degraded, retry };
 }

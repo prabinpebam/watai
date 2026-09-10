@@ -106,6 +106,8 @@ async function persistAttachments(files: File[]): Promise<Attachment[]> {
 export function useChat(threadId: string, temporary = false) {
   const [persisted, setPersisted] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [indexing, setIndexing] = useState(false);
   const busyRef = useRef(false);
   const loadedThreadRef = useRef<string | null>(null);
@@ -126,17 +128,25 @@ export function useChat(threadId: string, temporary = false) {
       setPersisted([]);
       setLoading(true);
     }
+    setLoadError(false);
     repo.listMessages(threadId).then((m) => {
       if (live) {
         setPersisted(m);
         loadedThreadRef.current = threadId;
         setLoading(false);
       }
+    }).catch(() => {
+      if (live) {
+        setLoadError(true);
+        setLoading(false);
+      }
     });
     return () => {
       live = false;
     };
-  }, [threadId, threadRev]);
+  }, [loadAttempt, threadId, threadRev]);
+
+  const retryLoad = useCallback(() => setLoadAttempt((value) => value + 1), []);
 
   // Proactively reflect another device generating in this thread: poll the authoritative run lock
   // while the thread is open and visible, so the composer locks/unlocks promptly (a crashed holder
@@ -348,5 +358,5 @@ export function useChat(threadId: string, temporary = false) {
 
   const stop = useCallback(() => useRuns.getState().stop(threadId), [threadId]);
 
-  return { messages, loading, send, regenerate, stop, streaming: !!run || indexing, indexing, lockedBy };
+  return { messages, loading, loadError, retryLoad, send, regenerate, stop, streaming: !!run || indexing, indexing, lockedBy };
 }

@@ -109,6 +109,19 @@ describe('useChat refresh loading', () => {
     );
   });
 
+  it('exposes retry after an initial read failure without clearing the draft', async () => {
+    mocks.listMessages.mockRejectedValueOnce(new Error('IndexedDB unavailable')).mockResolvedValueOnce([message()]);
+    useUi.setState({ composerDrafts: { t1: 'keep draft' } });
+    const { result } = renderHook(() => useChat('t1'));
+
+    await waitFor(() => expect(result.current.loadError).toBe(true));
+    expect(result.current.loading).toBe(false);
+    act(() => result.current.retryLoad());
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    expect(result.current.loadError).toBe(false);
+    expect(useUi.getState().composerDrafts.t1).toBe('keep draft');
+  });
+
   it('rejects acceptance when transactional message persistence fails', async () => {
     mocks.listMessages.mockResolvedValue([]);
     mocks.appendMessage.mockRejectedValueOnce(new Error('IndexedDB unavailable'));

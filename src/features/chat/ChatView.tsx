@@ -9,14 +9,14 @@ import { SourcePane } from './SourcePane';
 import { ThreadFilesPane } from './ThreadFilesPane';
 import { Icon } from '../../design/icons';
 import { Logo } from '../../design/Logo';
-import { Avatar, Spinner } from '../../design/ui';
+import { Avatar, Button, InlineAlert, Spinner } from '../../design/ui';
 import { useUi } from '../../state/store';
 import { greeting } from '../../lib/format';
 import type { ImageRef } from '../../lib/types';
 
 export function ChatView({ threadId, onScrolledChange }: { threadId: string; onScrolledChange?: (v: boolean) => void }) {
   const location = useLocation();
-  const { messages, loading, send, regenerate, stop, streaming, indexing, lockedBy } = useChat(threadId);
+  const { messages, loading, loadError, retryLoad, send, regenerate, stop, streaming, indexing, lockedBy } = useChat(threadId);
   const draft = useUi((s) => s.composerDrafts[threadId] ?? '');
   const memoryNotices = useUi((s) => s.memoryNotices[threadId]);
   const setDraft = useUi((s) => s.setDraft);
@@ -165,8 +165,16 @@ export function ChatView({ threadId, onScrolledChange }: { threadId: string; onS
           <div className="center-screen">
             <Spinner size="xl" />
           </div>
+        ) : loadError && isEmpty ? (
+          <div className="center-screen">
+            <div className="col" style={{ alignItems: 'center' }}>
+              <InlineAlert tone="danger">Conversation couldn’t be loaded.</InlineAlert>
+              <Button variant="secondary" onClick={retryLoad}>Retry conversation</Button>
+            </div>
+          </div>
         ) : isEmpty ? null : (
           <div className="chat__column" ref={setColumnRef}>
+            {loadError && <InlineAlert tone="warning">Couldn’t refresh this conversation. Showing the last loaded messages.</InlineAlert>}
             {messages.map((message) =>
               message.role === 'user' ? (
                 <UserMessage key={message.id} message={message} />

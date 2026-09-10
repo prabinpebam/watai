@@ -67,6 +67,8 @@ describe('VoiceMode capture lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mute microphone' }));
     expect(recorder.cancel).toHaveBeenCalledOnce();
     expect(screen.getByText('Muted')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Muted');
+    expect(screen.getAllByRole('status')).toHaveLength(1);
   });
 
   it('mute aborts transcription and prevents sending', async () => {
