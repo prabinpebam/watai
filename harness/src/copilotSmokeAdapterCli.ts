@@ -222,9 +222,18 @@ main().catch((error) => {
     ? { kind: "gateway-contract" as const, toolIds: [], submitted: false, changedPaths: [] }
     : { kind: "gateway-contract" as const, toolIds: [], submitted: false, changedPaths: [] };
   const candidateCode = (error as { code?: unknown }).code;
+  const message = error instanceof Error ? error.message : String(error);
   const errorCode = typeof candidateCode === "string" && /^[A-Z][A-Z0-9_]{2,80}$/.test(candidateCode)
     ? candidateCode
-    : "COPILOT_SMOKE_FAILED";
+    : /not authenticated|credential|token/i.test(message)
+      ? "COPILOT_AUTHENTICATION_FAILED"
+      : /minimum session limit/i.test(message)
+        ? "COPILOT_SESSION_LIMIT_INVALID"
+        : /model.*(unknown|unavailable|not found|unsupported)/i.test(message)
+          ? "COPILOT_MODEL_UNAVAILABLE"
+          : typeof candidateCode === "number"
+            ? `COPILOT_RPC_${Math.abs(candidateCode)}`
+            : "COPILOT_SMOKE_FAILED";
   process.stdout.write(JSON.stringify({
     status: "failed",
     artifact,

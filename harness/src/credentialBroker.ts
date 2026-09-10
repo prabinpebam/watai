@@ -38,7 +38,26 @@ export function createLocalGhTokenProvider(
 ): GitHubTokenProvider {
   let cached: { token: string; expiresAt: number } | undefined;
   return async ({ host }) => {
-    const normalizedHost = host.toLowerCase();
+    let normalizedHost = host.toLowerCase();
+    if (normalizedHost.includes(":")) {
+      try {
+        const parsed = new URL(normalizedHost);
+        if (
+          parsed.protocol !== "https:" ||
+          parsed.username ||
+          parsed.password ||
+          parsed.port ||
+          (parsed.pathname !== "/" && parsed.pathname !== "") ||
+          parsed.search ||
+          parsed.hash
+        ) {
+          return { kind: "cancelled", reason: "Unsupported GitHub host." };
+        }
+        normalizedHost = parsed.hostname;
+      } catch {
+        return { kind: "cancelled", reason: "Unsupported GitHub host." };
+      }
+    }
     if (normalizedHost !== "github.com" && normalizedHost !== "api.github.com") {
       return { kind: "cancelled", reason: "Unsupported GitHub host." };
     }

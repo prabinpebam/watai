@@ -7,7 +7,7 @@ describe("local GitHub credential broker", () => {
   it("returns a short-lived in-memory token only for GitHub", async () => {
     const executor: TokenExecutor = { execute: vi.fn().mockReturnValue("synthetic-token\n") };
     const provider = createLocalGhTokenProvider(executor);
-    const first = await provider({ host: "github.com", reason: "initial", sessionId: "session" });
+    const first = await provider({ host: "https://github.com", reason: "initial", sessionId: "session" });
     const second = await provider({ host: "github.com", reason: "refresh", sessionId: "session" });
     expect(first).toMatchObject({ kind: "token", accessToken: "synthetic-token", expiresIn: 300 });
     expect(second).toMatchObject({ kind: "token", accessToken: "synthetic-token" });
@@ -16,12 +16,11 @@ describe("local GitHub credential broker", () => {
 
   it("rejects unsupported hosts without executing gh", async () => {
     const executor: TokenExecutor = { execute: vi.fn() };
-    const result = await createLocalGhTokenProvider(executor)({
-      host: "example.com",
-      reason: "initial",
-      sessionId: "session",
-    });
-    expect(result).toMatchObject({ kind: "cancelled" });
+    const provider = createLocalGhTokenProvider(executor);
+    for (const host of ["example.com", "http://github.com", "https://github.com/owner/repo", "https://github.com:8443"]) {
+      await expect(provider({ host, reason: "initial", sessionId: "session" }))
+        .resolves.toMatchObject({ kind: "cancelled" });
+    }
     expect(executor.execute).not.toHaveBeenCalled();
   });
 
