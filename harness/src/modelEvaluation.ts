@@ -200,8 +200,8 @@ export function admitLiveModelEvaluation(
       observation.providerId === contract.providerId &&
       observation.requestedModel === contract.requestedModel;
     const resolvedVersionValid = contract.resolvedVersionPolicy === "exact"
-      ? observation.resolvedModelVersion === contract.expectedResolvedVersion
-      : Boolean(observation.resolvedModelVersion?.trim());
+      ? observation.status !== "completed" || observation.resolvedModelVersion === contract.expectedResolvedVersion
+      : observation.status !== "completed" || Boolean(observation.resolvedModelVersion?.trim());
     const outcomeValid = observation.status === "completed"
       ? observation.responseSha256 !== null && observation.errorCode === null
       : observation.semanticPass === false && Boolean(observation.errorCode?.trim());
@@ -217,8 +217,8 @@ export function admitLiveModelEvaluation(
       Number.isFinite(Date.parse(observation.completedAt)) &&
       Number.isFinite(Date.parse(observation.issuedAt)) &&
       Number.isFinite(Date.parse(observation.expiresAt)) &&
-      Date.parse(observation.issuedAt) <= Date.parse(observation.completedAt) &&
-      Date.parse(observation.completedAt) < Date.parse(observation.expiresAt) &&
+      Date.parse(observation.completedAt) <= Date.parse(observation.issuedAt) &&
+      Date.parse(observation.issuedAt) < Date.parse(observation.expiresAt) &&
       Boolean(observation.producerIdentity.trim()) &&
       Boolean(observation.signature.trim()) &&
       outcomeValid &&

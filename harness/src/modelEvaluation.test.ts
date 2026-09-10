@@ -97,9 +97,29 @@ describe("live-model evaluation", () => {
 
   it("counts timeouts and missing repetitions as failures instead of dropping them", () => {
     const runs = observations().slice(0, -1);
-    runs[0] = { ...runs[0], status: "timed-out", semanticPass: false, errorCode: "PROVIDER_TIMEOUT" };
+    runs[0] = {
+      ...runs[0],
+      status: "timed-out",
+      semanticPass: false,
+      errorCode: "PROVIDER_TIMEOUT",
+      resolvedModelVersion: null,
+      issuedAt: "2026-09-10T11:00:01.000Z",
+      gradeOutputSha256: sha256(canonical({ semanticPass: false })),
+      usageReceiptSha256: modelUsageEvidenceSha256({
+        evaluationId: runs[0].evaluationId,
+        caseId: runs[0].caseId,
+        repetition: runs[0].repetition,
+        providerId: runs[0].providerId,
+        requestedModel: runs[0].requestedModel,
+        resolvedModelVersion: null,
+        usage: runs[0].usage,
+        responseSha256: runs[0].responseSha256,
+        completedAt: runs[0].completedAt,
+      }),
+    };
     const result = admitLiveModelEvaluation(contract(), runs, authorities);
     expect(result.outcome).toBe("FAILED");
+    expect(result.blockers.map((blocker) => blocker.code)).not.toContain("MODEL_RUN_INVALID");
     expect(result.blockers.map((blocker) => blocker.code)).toEqual(expect.arrayContaining([
       "MODEL_RUN_MISSING",
       "MODEL_DENOMINATOR_INCOMPLETE",

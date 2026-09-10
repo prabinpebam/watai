@@ -134,6 +134,18 @@ describe("agent attempt runner", () => {
     expect(fake.client.stop).toHaveBeenCalledOnce();
   });
 
+  it("force-stops ephemeral sessions without graceful RPC teardown", async () => {
+    const fake = fakeClient();
+    await runAgentAttempt({
+      task, manifest, credentialBroker: broker, gatewayTransport: transport,
+      now: () => Date.parse("2026-09-10T11:00:00.000Z"), createClient: () => fake.client,
+      forceStopOnCleanup: true,
+    });
+    expect(fake.client.forceStop).toHaveBeenCalledOnce();
+    expect(fake.client.stop).not.toHaveBeenCalled();
+    expect(fake.session.disconnect).not.toHaveBeenCalled();
+  });
+
   it("fails closed when session usage cannot be observed", async () => {
     const fake = fakeClient();
     vi.mocked(fake.session.rpc.usage.getMetrics).mockRejectedValue(new Error("usage unavailable"));

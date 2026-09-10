@@ -69,6 +69,7 @@ export interface AgentAttemptInput {
   onSessionStarted?(sessionId: string): Promise<void>;
   renewLease?(): Promise<void>;
   heartbeatIntervalMs?: number;
+  forceStopOnCleanup?: boolean;
   now(): number;
   createClient?: (options: ConstructorParameters<typeof CopilotClient>[0]) => AgentClientPort;
 }
@@ -279,11 +280,19 @@ export async function runAgentAttempt(input: AgentAttemptInput): Promise<AgentAt
     unsubscribeLimit?.();
     unsubscribeUsage?.();
     const cleanupErrors: Error[] = [];
-    try {
-      cleanupErrors.push(...await bounded(client.stop(), 5_000, "Copilot client stop timed out."));
-    } catch (error) {
-      cleanupErrors.push(error instanceof Error ? error : new Error(String(error)));
-      await client.forceStop().catch(() => undefined);
+    if (input.forceStopOnCleanup) {
+      try {
+        await bounded(client.forceStop(), 5_000, "Copilot client force-stop timed out.");
+      } catch (error) {
+        cleanupErrors.push(error instanceof Error ? error : new Error(String(error)));
+      }
+    } else {
+      try {
+        cleanupErrors.push(...await bounded(client.stop(), 5_000, "Copilot client stop timed out."));
+      } catch (error) {
+        cleanupErrors.push(error instanceof Error ? error : new Error(String(error)));
+        await client.forceStop().catch(() => undefined);
+      }
     }
     if (!primaryError && cleanupErrors.length > 0) {
       throw new AgentRunnerError(

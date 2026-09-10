@@ -25,6 +25,9 @@ interface Request {
   repetition: number;
 }
 
+let activeRequest: Request | undefined;
+let activeStartedAt = Date.now();
+
 async function stdin(): Promise<string> {
   let value = "";
   process.stdin.setEncoding("utf8");
@@ -42,6 +45,8 @@ function sha256(value: unknown): string {
 
 async function main(): Promise<void> {
   const request = JSON.parse(await stdin()) as Request;
+  activeRequest = request;
+  activeStartedAt = Date.now();
   if (request.contract.id !== "implementation-agent-smoke" || request.contract.providerId !== "github-copilot") {
     throw new Error("Copilot smoke adapter accepts only implementation-agent-smoke.");
   }
@@ -162,6 +167,7 @@ async function main(): Promise<void> {
       credentialBroker: { gitHubTokenProvider: createLocalGhTokenProvider() },
       gatewayTransport: gateway,
       now: Date.now,
+      forceStopOnCleanup: true,
     });
     const stored = await receipts.list(runId);
     const toolIds = stored.filter((receipt) => receipt.status === "completed" && receipt.response?.status === "success")
@@ -187,11 +193,32 @@ async function main(): Promise<void> {
       completedAt: new Date().toISOString(),
     }));
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 
 main().catch((error) => {
-  process.stderr.write(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
+  if (!activeRequest) {
+    process.stderr.write(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+    return;
+  }
+  const oracle = activeRequest.definition.oracle;
+  const artifact = oracle.kind === "gateway-contract"
+    ? { kind: "gateway-contract" as const, toolIds: [], submitted: false, changedPaths: [] }
+    : { kind: "gateway-contract" as const, toolIds: [], submitted: false, changedPaths: [] };
+  const candidateCode = (error as { code?: unknown }).code;
+  const errorCode = typeof candidateCode === "string" && /^[A-Z][A-Z0-9_]{2,80}$/.test(candidateCode)
+    ? candidateCode
+    : "COPILOT_SMOKE_FAILED";
+  process.stdout.write(JSON.stringify({
+    status: "failed",
+    artifact,
+    latencyMs: Date.now() - activeStartedAt,
+    usage: { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0 },
+    responseSha256: null,
+    resolvedModelVersion: null,
+    errorCode,
+    completedAt: new Date().toISOString(),
+  }));
 });
