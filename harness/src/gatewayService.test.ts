@@ -95,6 +95,8 @@ describe("gateway service", () => {
       "--network", "none", "--read-only", "--user", "1000:1000",
       "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
       "--mount", expect.stringContaining("dst=/workspace/source,readonly"),
+      "--tmpfs", "/workspace/run:rw,nosuid,mode=1777,size=1024m",
+      "--tmpfs", "/opt/watai/api/node_modules/.vite-temp:rw,nosuid,mode=1777,size=64m",
       "--workdir", "/workspace/run",
       "sha256:" + digest("9"),
     ]));
@@ -103,7 +105,9 @@ describe("gateway service", () => {
       "PATH=/opt/watai/node_modules/.bin:/usr/local/bin:/usr/bin:/bin",
       "npm_config_registry=https://packagefeedproxy.microsoft.io/npm/",
     ]);
-    expect(args.join(" ")).toContain("$2/../api/node_modules");
+    expect(args.join(" ")).toContain("$dependency_root/../api/node_modules");
+    expect(args.join(" ")).toContain("cp -R /workspace/source/. /workspace/run/");
+    expect(args.join(" ")).toContain("find \"$1\" -mindepth 1 -maxdepth 1");
   });
   it("reads and searches only tracked workspace files with bounded output", async () => {
     const { service } = await fixture();
