@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { compiledRuntimeSha256 } from "./authorityInputs.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const contracts = resolve(root, "documentation", "implementation", "2026-09-10-autonomous-delivery", "contracts");
@@ -21,24 +23,11 @@ async function aggregateDigest(paths: string[]): Promise<string> {
   return hash.digest("hex");
 }
 
-async function compiledRuntimeFiles(directory: string): Promise<string[]> {
-  const result: string[] = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = resolve(directory, entry.name);
-    if (entry.isDirectory()) result.push(...await compiledRuntimeFiles(path));
-    else if (entry.isFile() && entry.name.endsWith(".js")) {
-      result.push(relative(root, path).replaceAll("\\", "/"));
-    }
-  }
-  return result;
-}
-
 const status = execFileSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
   cwd: root,
   encoding: "utf8",
 }).trim();
 const sourceSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-const runtimeFiles = await compiledRuntimeFiles(resolve(root, ".harness-dist"));
 const negativeControls = JSON.parse(
   await readFile(resolve(root, "harness", "evaluator", "negative-controls.json"), "utf8"),
 ) as { ids: string[] };
@@ -48,7 +37,7 @@ const rootInputs = {
   policySha256: await fileDigest(relative(root, resolve(contracts, "policy.json"))),
   workflowSha256: await fileDigest(relative(root, resolve(contracts, "workflow.json"))),
   planSchemaSha256: await fileDigest(relative(root, resolve(contracts, "plan.schema.json"))),
-  controllerSha256: await aggregateDigest(runtimeFiles),
+  controllerSha256: await compiledRuntimeSha256(root),
   evaluatorPackSha256: await aggregateDigest([
     "harness/evaluator/impact-map.json",
     "harness/evaluator/inventory.json",

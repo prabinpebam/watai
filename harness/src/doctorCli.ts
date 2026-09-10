@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadAuthorityBundle } from "./authorityBundle.js";
+import { compiledRuntimeSha256 } from "./authorityInputs.js";
 import { buildDoctorReport } from "./doctor.js";
 import { collectLocalPreflight } from "./preflight.js";
 import { assessReadiness, type ReadinessAuthorities, type RuntimeAuthorizationGrant } from "./readiness.js";
@@ -13,12 +14,12 @@ import { TrustBackedAuthorities } from "./trustAuthorities.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const contracts = resolve(root, "documentation", "implementation", "2026-09-10-autonomous-delivery", "contracts");
-const [policyText, workflowText, backlogText, schemaText, controllerBytes, rootLock, apiLock, localPreflight] = await Promise.all([
+const [policyText, workflowText, backlogText, schemaText, controllerSha256, rootLock, apiLock, localPreflight] = await Promise.all([
   readFile(resolve(contracts, "policy.json"), "utf8"),
   readFile(resolve(contracts, "workflow.json"), "utf8"),
   readFile(resolve(contracts, "backlog.json"), "utf8"),
   readFile(resolve(contracts, "plan.schema.json"), "utf8"),
-  readFile(resolve(root, ".harness-dist", "controller.js")),
+  compiledRuntimeSha256(root),
   readFile(resolve(root, "package-lock.json")),
   readFile(resolve(root, "api", "package-lock.json")),
   collectLocalPreflight(root),
@@ -35,7 +36,6 @@ const policySha256 = createHash("sha256").update(policyText).digest("hex");
 const workflowSha256 = createHash("sha256").update(workflowText).digest("hex");
 const backlogSha256 = createHash("sha256").update(backlogText).digest("hex");
 const planSchemaSha256 = createHash("sha256").update(schemaText).digest("hex");
-const controllerSha256 = createHash("sha256").update(controllerBytes).digest("hex");
 const dependencyLockSha256 = createHash("sha256")
   .update(rootLock)
   .update("\0")
