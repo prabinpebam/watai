@@ -1,3 +1,4 @@
+import { isOwnerBlobPath } from '../domain/asset';
 import { isActive } from '../domain/run';
 import type { ServiceClock } from './threadService';
 import type { DecryptedCredentials } from './credentialService';
@@ -98,7 +99,7 @@ export interface RunWorkerDeps {
   ) => Promise<string>;
   /** Mint a short-lived READ url for an uploaded attachment blob so a vision model can fetch it.
    *  Without it, user-uploaded images are omitted from the prompt (text-only history). */
-  resolveImageUrl?: (blobPath: string) => Promise<string | null>;
+  resolveImageUrl?: (blobPath: string, userId: string, threadId: string) => Promise<string | null>;
   /** Provisions canonical skills (zips + bootstrap) onto the user's Azure endpoint and returns the
    *  file_ids to mount + the discovery info. Absent ⇒ no canonical skills this run (tests). */
   skillProvisioner?: SkillProvisioner;
@@ -204,7 +205,9 @@ function imageLibraryItemIds(history: MessageRecord[], userId: string, imageIds:
 async function resolveImageReferences(
   history: MessageRecord[],
   requestedIds: string[],
-  resolveImageUrl?: (blobPath: string) => Promise<string | null>,
+  userId: string,
+  threadId: string,
+  resolveImageUrl?: (blobPath: string, userId: string, threadId: string) => Promise<string | null>,
   fetchImpl?: typeof fetch,
 ): Promise<ImageReference[]> {
   if (!resolveImageUrl) return [];
@@ -234,7 +237,8 @@ async function resolveImageReferences(
   for (const id of [...new Set(ids)]) {
     const source = sources.get(id);
     if (!source) continue;
-    const url = await resolveImageUrl(source.blobPath).catch(() => null);
+    if (!isOwnerBlobPath(userId, source.blobPath, threadId)) continue;
+    const url = await resolveImageUrl(source.blobPath, userId, threadId).catch(() => null);
     if (!url) continue;
     try {
       const res = await (fetchImpl ?? fetch)(url);
@@ -309,7 +313,9 @@ async function buildTurns(
   system: string,
   messages: MessageRecord[],
   assistantMessageId: string,
-  resolveImageUrl?: (blobPath: string) => Promise<string | null>,
+  userId: string,
+  threadId: string,
+  resolveImageUrl?: (blobPath: string, userId: string, threadId: string) => Promise<string | null>,
 ): Promise<Turn[]> {
   const turns: Turn[] = [{ role: 'system', text: system }];
   for (const m of messages) {
@@ -337,7 +343,8 @@ async function buildTurns(
       const urls: string[] = [];
       for (const att of m.attachments) {
         if (att.kind !== 'image' || !att.blobPath) continue;
-        const url = await resolveImageUrl(att.blobPath).catch(() => null);
+        if (!isOwnerBlobPath(userId, att.blobPath, threadId)) continue;
+        const url = await resolveImageUrl(att.blobPath, userId, threadId).catch(() => null);
         if (url) urls.push(url);
       }
       if (urls.length) turn.images = urls;
@@ -923,7 +930,7 @@ export async function processRun(deps: RunWorkerDeps, userId: string, threadId: 
       const key = ids.join('\u0000');
       const existing = imageReferencePromises.get(key);
       if (existing) return existing;
-      const pending = resolveImageReferences(history, ids, deps.resolveImageUrl, deps.fetchImpl);
+      const pending = resolveImageReferences(history, ids, run.userId, threadId, deps.resolveImageUrl, deps.fetchImpl);
       imageReferencePromises.set(key, pending);
       return pending;
     };
@@ -963,6 +970,8 @@ export async function processRun(deps: RunWorkerDeps, userId: string, threadId: 
         semanticRouterSystemPrompt(availableActions),
         history,
         run.assistantMessageId,
+        run.userId,
+        threadId,
         deps.resolveImageUrl,
       );
       semanticRoute = await withTimeout(
@@ -1053,7 +1062,7 @@ export async function processRun(deps: RunWorkerDeps, userId: string, threadId: 
     );
     const turns = conversationTurns
       ? [{ role: 'system' as const, text: mainSystem }, ...conversationTurns.slice(1)]
-      : await buildTurns(mainSystem, history, run.assistantMessageId, deps.resolveImageUrl);
+      : await buildTurns(mainSystem, history, run.assistantMessageId, run.userId, threadId, deps.resolveImageUrl);
     const fullTools = semanticRoute?.action === 'respond'
       ? []
       : assembleTools(c, { ...run, tools: offeredToolNames }, thread, skillFileIds);

@@ -96,7 +96,7 @@
   "evaluation": {
     "harness": "35 files / 212 tests expected",
     "root": "70 files / 448 tests expected",
-      "apiUnit": "77 files / 564 tests expected, zero skipped",
+      "apiUnit": "78 files / 570 tests expected, zero skipped",
     "browser": "3 consecutive runs x 44 tests passed, zero skipped, retries 0",
     "apiIntegration": "5 files / 11 tests passed against isolated stage",
     "independentlyAttested": false

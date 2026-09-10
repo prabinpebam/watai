@@ -84,6 +84,16 @@ describe('ImageService.create', () => {
     await expect(svc.create('userA', { prompt: 'x', sourceImageId: 'nope' })).rejects.toMatchObject({ code: 'not_found' });
   });
 
+  it('rejects a remix whose persisted source path belongs to another owner', async () => {
+    const store = new InMemoryImageStore();
+    await store.put({
+      id: 'src', userId: 'userA', batchId: 'b', status: 'ready', prompt: 'orig', size: '1024x1024',
+      outputFormat: 'png', model: 'gpt-image-1', blobPath: 'userB/images/src.png', createdAt: '2026', updatedAt: '2026',
+    });
+    const svc = new ImageService(store, creds('gpt-image-1'), starter(), minter, makeClock());
+    await expect(svc.create('userA', { prompt: 'x', sourceImageId: 'src', useReference: true })).rejects.toMatchObject({ code: 'validation' });
+  });
+
   it('marks the record error when the job cannot be enqueued', async () => {
     const store = new InMemoryImageStore();
     const failing: ImageJobStarter = { start: async () => { throw new Error('queue down'); } };

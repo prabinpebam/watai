@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isOwnerBlobPath } from './domain/asset';
 import { CosmosThreadStore } from './adapters/cosmos/threadStore';
 import { CosmosMessageStore } from './adapters/cosmos/messageStore';
 import { CosmosSettingsStore } from './adapters/cosmos/settingsStore';
@@ -308,7 +309,8 @@ function makeUploadImage(assets: AssetService, sourceKind: LibrarySourceKind) {
 /** Mint a short-lived READ url for an attachment blob so a vision model can fetch the bytes during
  *  a run. Returns null on failure so the prompt simply omits the image rather than failing. */
 function makeResolveImageUrl(minter: AzureSasMinter) {
-  return async (blobPath: string): Promise<string | null> => {
+  return async (blobPath: string, userId: string, threadId: string): Promise<string | null> => {
+    if (!isOwnerBlobPath(userId, blobPath, threadId)) return null;
     try {
       const { url } = await minter.mint({ blobPath, op: 'read', ttlSeconds: 600 });
       return url;

@@ -8,6 +8,7 @@ import {
   type ImageResult,
 } from '../ai/image';
 import type { ImageError } from '../domain/imageGen';
+import { isOwnerBlobPath } from '../domain/asset';
 import type { ImageGenRecord, ImageStore } from '../ports/imageStore';
 import type { SasMinter } from '../ports/sasMinter';
 import type { SignalRSender } from '../adapters/azure/signalr';
@@ -138,7 +139,7 @@ export async function processImageJob(
     let results: ImageResult[];
     if (rec.sourceImageId && rec.useReference) {
       const source = await imageStore.get(userId, rec.sourceImageId);
-      if (!source?.blobPath) {
+      if (!source?.blobPath || !isOwnerBlobPath(userId, source.blobPath)) {
         await finalizeError(deps, generating, {
           code: 'source_missing',
           message: 'The source image is no longer available.',

@@ -7,6 +7,7 @@ import type { ServiceClock } from './threadService';
 import type { CredentialReader } from './imageWorker';
 import { toImageDto, type ImageDTO } from './imageDto';
 import { libraryItemIdFor } from '../domain/library';
+import { isOwnerBlobPath } from '../domain/asset';
 
 /**
  * Creates and tracks server-side image generations. `create` persists queued records and enqueues
@@ -35,6 +36,9 @@ export class ImageService {
     if (parsed.sourceImageId) {
       source = await this.imageStore.get(userId, parsed.sourceImageId);
       if (!source) throw new AppError('not_found', 'Source image not found.');
+      if (!source.blobPath || !isOwnerBlobPath(userId, source.blobPath)) {
+        throw new AppError('validation', 'Source image ownership could not be verified.');
+      }
     }
 
     const size = parsed.size ?? '1024x1024';
@@ -103,7 +107,7 @@ export class ImageService {
   async remove(userId: string, id: string): Promise<void> {
     const rec = await this.imageStore.get(userId, id);
     if (!rec) return; // idempotent
-    if (rec.blobPath) {
+    if (rec.blobPath && isOwnerBlobPath(userId, rec.blobPath)) {
       try {
         const { url } = await this.minter.mint({ blobPath: rec.blobPath, op: 'delete', ttlSeconds: 120 });
         await this.fetchImpl(url, { method: 'DELETE' });

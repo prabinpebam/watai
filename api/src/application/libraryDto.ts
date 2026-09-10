@@ -1,5 +1,6 @@
 import type { LibraryItemRecord } from '../domain/library';
 import type { SasMinter } from '../ports/sasMinter';
+import { isOwnerBlobPath } from '../domain/asset';
 
 const READ_TTL_SECONDS = 3600;
 
@@ -26,21 +27,22 @@ export async function toLibraryItemDto(minter: SasMinter, record: LibraryItemRec
       : {}),
   };
   const readable = record.state === 'active' || record.state === 'trashed';
-  if (!readable || !record.blobPath) {
+  if (!readable || !record.blobPath || !isOwnerBlobPath(record.userId, record.blobPath, record.source.threadId)) {
     return dto;
   }
+  const thumbnail = record.derivatives?.find((derivative) => derivative.kind === 'thumbnail');
   try {
-    const [{ url }, thumbnail] = await Promise.all([
+    const [{ url }, thumbnailGrant] = await Promise.all([
       minter.mint({
         blobPath: record.blobPath,
         op: 'read',
         contentType: record.mime,
         ttlSeconds: READ_TTL_SECONDS,
       }),
-      record.derivatives?.find((derivative) => derivative.kind === 'thumbnail')
+      thumbnail && isOwnerBlobPath(record.userId, thumbnail.blobPath, record.source.threadId)
         ? minter
             .mint({
-              blobPath: record.derivatives.find((derivative) => derivative.kind === 'thumbnail')!.blobPath,
+              blobPath: thumbnail.blobPath,
               op: 'read',
               ttlSeconds: READ_TTL_SECONDS,
             })
@@ -50,7 +52,7 @@ export async function toLibraryItemDto(minter: SasMinter, record: LibraryItemRec
     return {
       ...dto,
       url,
-      ...(thumbnail?.url ? { thumbnailUrl: thumbnail.url } : {}),
+      ...(thumbnailGrant?.url ? { thumbnailUrl: thumbnailGrant.url } : {}),
     };
   } catch {
     return dto;

@@ -719,6 +719,24 @@ describe('processRun', () => {
     expect(turn?.text).toContain('[Uploaded image id="a1"]');
   });
 
+  it('does not resolve a foreign persisted image path', async () => {
+    await seed(ctx);
+    await ctx.messageStore.append({
+      id: 'um2', threadId: 't1', userId: 'userA', role: 'user', content: 'foreign', status: 'complete',
+      attachments: [{ id: 'a1', kind: 'image', blobPath: 'userB/t1/a1.png', mime: 'image/png', bytes: 10 }],
+      createdAt: '2026-06-01T00:00:03Z', orderAt: '2026-06-01T00:00:03Z', deletedAt: null,
+    });
+    const resolveImageUrl = vi.fn(async () => 'https://blob/foreign');
+    const seen: RunAgentParams[] = [];
+    const runAgent: RunAgentFn = (params) => {
+      seen.push(params);
+      return script([{ type: 'text', delta: 'ok' }, { type: 'done' }])(params);
+    };
+    await processRun({ ...ctx.deps(runAgent), resolveImageUrl }, 't1', 'r1');
+    expect(resolveImageUrl).not.toHaveBeenCalled();
+    expect(seen[0].turns.find((turn) => turn.text.startsWith('foreign'))?.images).toBeUndefined();
+  });
+
   it('omits images when no resolver is wired (history stays text-only)', async () => {
     await seed(ctx);
     await ctx.messageStore.append({

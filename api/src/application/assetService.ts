@@ -1,5 +1,5 @@
 import { AppError } from '../domain/errors';
-import { extForContentType, type SasRequestInput } from '../domain/asset';
+import { canonicalAttachmentBlobPath, extForContentType, type SasRequestInput } from '../domain/asset';
 import type { SasMinter } from '../ports/sasMinter';
 import type { ThreadStore } from '../ports/threadStore';
 import { libraryItemIdFor, type LibrarySourceKind } from '../domain/library';
@@ -28,9 +28,8 @@ export class AssetService {
       throw new AppError('not_found', 'Thread not found.');
     }
     const ext = extForContentType(input.contentType);
-    const libraryId = libraryItemIdFor(userId, 'chat_attachment', input.assetId);
-    const blobPath = input.op === 'write' && !thread.temporary
-      ? `${userId}/library/${libraryId}.${ext}`
+    const blobPath = input.op === 'write'
+      ? canonicalAttachmentBlobPath(userId, input.threadId, input.assetId, input.contentType, thread.temporary)
       : `${userId}/${input.threadId}/${input.assetId}.${ext}`;
     const grant = await this.minter.mint({
       blobPath,

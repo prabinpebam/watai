@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseOrThrow } from './validate';
+import { libraryItemIdFor } from './library';
 
 export const ALLOWED_CONTENT_TYPES = [
   'image/png',
@@ -43,6 +44,26 @@ const EXT: Record<AllowedContentType, string> = {
 
 export function extForContentType(ct: AllowedContentType): string {
   return EXT[ct];
+}
+
+export function canonicalAttachmentBlobPath(
+  userId: string,
+  threadId: string,
+  assetId: string,
+  contentType: AllowedContentType,
+  temporary: boolean,
+): string {
+  const ext = extForContentType(contentType);
+  if (temporary) return `${userId}/${threadId}/${assetId}.${ext}`;
+  return `${userId}/library/${libraryItemIdFor(userId, 'chat_attachment', assetId)}.${ext}`;
+}
+
+export function isOwnerBlobPath(userId: string, blobPath: string, threadId?: string): boolean {
+  if (!userId || !blobPath || blobPath.includes('\\')) return false;
+  const segments = blobPath.split('/');
+  if (segments.length < 3 || segments.some((segment) => !segment || segment === '.' || segment === '..')) return false;
+  if (segments[0] !== userId) return false;
+  return segments[1] === 'library' || segments[1] === 'images' || (!!threadId && segments[1] === threadId);
 }
 
 const sasSchema = z

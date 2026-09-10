@@ -119,12 +119,34 @@ describe('MessageService.append', () => {
 
   it('assigns deterministic Library ids to durable attachments', async () => {
     const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const libraryItemId = libraryItemIdFor('userA', 'chat_attachment', 'att-1');
     const msg = await ctx.messages.append('userA', thread.id, {
       role: 'user',
       content: '',
-      attachments: [{ id: 'att-1', kind: 'file', blobPath: 'userA/t/att-1.pdf', mime: 'application/pdf', bytes: 12 }],
+      attachments: [{ id: 'att-1', kind: 'file', blobPath: `userA/library/${libraryItemId}.pdf`, mime: 'application/pdf', bytes: 12 }],
     });
-    expect(msg.attachments?.[0].libraryItemId).toBe(libraryItemIdFor('userA', 'chat_attachment', 'att-1'));
+    expect(msg.attachments?.[0].libraryItemId).toBe(libraryItemId);
+  });
+
+  it('rejects a foreign raw attachment path before persistence', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+
+    await expect(ctx.messages.append('userA', thread.id, {
+      role: 'user',
+      content: 'Read this',
+      attachments: [{ id: 'att-foreign', kind: 'file', blobPath: 'userB/library/foreign.pdf', mime: 'application/pdf', bytes: 12 }],
+    })).rejects.toMatchObject({ code: 'validation' });
+    await expect(ctx.messages.list('userA', thread.id)).resolves.toEqual([]);
+  });
+
+  it('rejects a foreign generated-image path before persistence', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    await expect(ctx.messages.append('userA', thread.id, {
+      role: 'assistant',
+      content: '',
+      images: [{ id: 'img-foreign', blobPath: 'userB/images/img.png', prompt: 'x', size: '1024x1024', outputFormat: 'png', createdAt: '2026' }],
+    })).rejects.toMatchObject({ code: 'validation' });
+    await expect(ctx.messages.list('userA', thread.id)).resolves.toEqual([]);
   });
 
   it('resolves an active Library attachment server-side without copying its blob', async () => {

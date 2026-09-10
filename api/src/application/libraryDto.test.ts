@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { toLibraryItemDto } from './libraryDto';
 import { libraryFixture } from '../test/libraryFixtures';
 import type { SasMinter } from '../ports/sasMinter';
@@ -52,5 +52,18 @@ describe('Library DTO', () => {
     const dto = await toLibraryItemDto(failing, libraryFixture({ id: 'a', kind: 'pdf', origin: 'code_artifact', state: 'active' }));
     expect(dto.url).toBeUndefined();
     expect(dto.id).toBe('a');
+  });
+
+  it('does not mint a grant for a foreign persisted path', async () => {
+    const mint = vi.fn(async () => ({ url: 'should-not-exist', expiresAt: '2026' }));
+    const dto = await toLibraryItemDto({ mint }, libraryFixture({
+      id: 'foreign',
+      kind: 'pdf',
+      origin: 'chat_upload',
+      state: 'active',
+      blobPath: 'user-2/library/foreign.pdf',
+    }));
+    expect(dto.url).toBeUndefined();
+    expect(mint).not.toHaveBeenCalled();
   });
 });

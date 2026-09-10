@@ -1,5 +1,6 @@
 import type { SasMinter } from '../ports/sasMinter';
 import type { ImageGenRecord } from '../ports/imageStore';
+import { isOwnerBlobPath } from '../domain/asset';
 
 /** An image record enriched with a short-lived read URL (present only when `ready`). */
 export interface ImageDTO extends ImageGenRecord {
@@ -18,7 +19,7 @@ function contentTypeFor(format: ImageGenRecord['outputFormat']): string {
  * record is returned without a url rather than failing the whole response.
  */
 export async function toImageDto(minter: SasMinter, rec: ImageGenRecord): Promise<ImageDTO> {
-  if (rec.status !== 'ready' || !rec.blobPath) return rec;
+  if (rec.status !== 'ready' || !rec.blobPath || !isOwnerBlobPath(rec.userId, rec.blobPath)) return rec;
   try {
     const { url } = await minter.mint({
       blobPath: rec.blobPath,

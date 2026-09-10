@@ -5,6 +5,7 @@ import type { ThreadRecord, ThreadStore } from '../ports/threadStore';
 import type { ServiceClock } from './threadService';
 import { libraryIngestionKey, libraryItemIdFor, libraryKindForMime, type LibraryItemRecord } from '../domain/library';
 import type { LibraryStore } from '../ports/libraryStore';
+import { ALLOWED_CONTENT_TYPES, canonicalAttachmentBlobPath, isOwnerBlobPath, type AllowedContentType } from '../domain/asset';
 
 export interface MemoryExtractionScheduler {
   enqueueAfterMessage(record: MessageRecord, thread: ThreadRecord): Promise<void>;
@@ -40,9 +41,27 @@ export class MessageService {
     if (existing) return existing; // idempotent append (sync retry safe)
 
     const ts = this.clock.now();
+    if (input.images?.some((image) => !isOwnerBlobPath(userId, image.blobPath, threadId))) {
+      throw new AppError('validation', 'Image path does not belong to this account.');
+    }
     const attachments = input.attachments?.length
       ? await Promise.all(input.attachments.map(async (attachment) => {
-          if (!attachment.libraryItemId) return attachment;
+          if (!attachment.libraryItemId) {
+            if (!attachment.blobPath || !ALLOWED_CONTENT_TYPES.includes(attachment.mime as AllowedContentType)) {
+              throw new AppError('validation', 'Attachment does not reference a supported upload.');
+            }
+            const expectedPath = canonicalAttachmentBlobPath(
+              userId,
+              threadId,
+              attachment.id,
+              attachment.mime as AllowedContentType,
+              thread.temporary,
+            );
+            if (attachment.blobPath !== expectedPath) {
+              throw new AppError('validation', 'Attachment path does not belong to this account and upload.');
+            }
+            return attachment;
+          }
           if (!this.libraryStore) throw new AppError('conflict', 'Library reuse is unavailable.');
           const item = await this.libraryStore.get(userId, attachment.libraryItemId);
           if (!item) throw new AppError('not_found', 'Library item not found.');
