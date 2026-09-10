@@ -4,24 +4,13 @@ import { readFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { compiledRuntimeSha256 } from "./authorityInputs.js";
+import { aggregateFilesSha256, compiledRuntimeSha256 } from "./authorityInputs.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const contracts = resolve(root, "documentation", "implementation", "2026-09-10-autonomous-delivery", "contracts");
 
 const fileDigest = async (path: string) =>
   createHash("sha256").update(await readFile(resolve(root, path))).digest("hex");
-
-async function aggregateDigest(paths: string[]): Promise<string> {
-  const hash = createHash("sha256");
-  for (const path of [...paths].sort()) {
-    hash.update(path.replaceAll("\\", "/"));
-    hash.update("\0");
-    hash.update(await readFile(resolve(root, path)));
-    hash.update("\0");
-  }
-  return hash.digest("hex");
-}
 
 const status = execFileSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
   cwd: root,
@@ -38,7 +27,7 @@ const rootInputs = {
   workflowSha256: await fileDigest(relative(root, resolve(contracts, "workflow.json"))),
   planSchemaSha256: await fileDigest(relative(root, resolve(contracts, "plan.schema.json"))),
   controllerSha256: await compiledRuntimeSha256(root),
-  evaluatorPackSha256: await aggregateDigest([
+  evaluatorPackSha256: await aggregateFilesSha256(root, [
     "harness/evaluator/impact-map.json",
     "harness/evaluator/inventory.json",
     "harness/evaluator/negative-controls.json",
@@ -47,7 +36,7 @@ const rootInputs = {
   ]),
   testInventorySha256: await fileDigest("harness/evaluator/inventory.json"),
   fixtureManifestSha256: await fileDigest("documentation/implementation/2026-09-10-autonomous-delivery/contracts/examples.json"),
-  toolchainSha256: await aggregateDigest([
+  toolchainSha256: await aggregateFilesSha256(root, [
     ".npmrc",
     "api/.npmrc",
     "api/package.json",
@@ -60,7 +49,7 @@ const rootInputs = {
     "tsconfig.harness.json",
     "vitest.config.ts",
   ]),
-  dependencyLockSha256: await aggregateDigest(["api/package-lock.json", "package-lock.json"]),
+  dependencyLockSha256: await aggregateFilesSha256(root, ["api/package-lock.json", "package-lock.json"]),
   impactMapSha256: await fileDigest("harness/evaluator/impact-map.json"),
   negativeControlIds: negativeControls.ids,
 };

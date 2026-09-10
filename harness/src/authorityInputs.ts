@@ -2,6 +2,17 @@ import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 
+export async function aggregateFilesSha256(root: string, paths: string[]): Promise<string> {
+  const hash = createHash("sha256");
+  for (const path of [...paths].sort()) {
+    hash.update(path.replaceAll("\\", "/"));
+    hash.update("\0");
+    hash.update(await readFile(resolve(root, path)));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
 async function compiledRuntimeFiles(root: string, directory: string): Promise<string[]> {
   const result: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -15,13 +26,6 @@ async function compiledRuntimeFiles(root: string, directory: string): Promise<st
 }
 
 export async function compiledRuntimeSha256(root: string): Promise<string> {
-  const hash = createHash("sha256");
   const paths = await compiledRuntimeFiles(root, resolve(root, ".harness-dist"));
-  for (const path of paths.sort()) {
-    hash.update(path);
-    hash.update("\0");
-    hash.update(await readFile(resolve(root, path)));
-    hash.update("\0");
-  }
-  return hash.digest("hex");
+  return aggregateFilesSha256(root, paths);
 }
