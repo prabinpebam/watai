@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUi } from '../state/store';
 import { Icon } from '../design/icons';
 import { Button } from '../design/ui';
-import { seedMockDataIfEmpty, repo } from '../data';
+import { accountLocalStorageKey, seedMockDataIfEmpty, repo } from '../data';
 
 /** Lightweight dev menu: mock AI toggle, reseed demo data, theme jump. Dev builds only. */
 export function DevMenu() {
@@ -35,7 +35,7 @@ export function DevMenu() {
                 className="menu__item"
                 onClick={async () => {
                   await repo.deleteAll();
-                  localStorage.removeItem('watai.seeded');
+                  localStorage.removeItem(accountLocalStorageKey('watai.seeded'));
                   await seedMockDataIfEmpty();
                   bump();
                   pushToast('Demo data reseeded');
@@ -48,7 +48,7 @@ export function DevMenu() {
                 className="menu__item menu__item--danger"
                 onClick={async () => {
                   await repo.deleteAll();
-                  localStorage.removeItem('watai.seeded');
+                  localStorage.removeItem(accountLocalStorageKey('watai.seeded'));
                   bump();
                   pushToast('Local data cleared');
                   setOpen(false);

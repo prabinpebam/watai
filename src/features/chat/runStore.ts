@@ -4,8 +4,7 @@
 // of the in-progress message is kept in IndexedDB so a browser close mid-stream is not fully
 // lost — orphaned snapshots are restored as `interrupted` messages on next load.
 import { create } from 'zustand';
-import { repo, cloudApi, syncNow, saveServerMessage, realtime } from '../../data';
-import { idbKvStore } from '../../data/sync/kvStore';
+import { repo, cloudApi, syncNow, saveServerMessage, realtime, currentAccountKvStore } from '../../data';
 import { newId } from '../../lib/ids';
 import { runOnServer } from './serverRun';
 import { useUi } from '../../state/store';
@@ -16,7 +15,6 @@ import type { Message } from '../../lib/types';
 
 export const DEFAULT_CHAT_MODEL = AUTO_CHAT_MODEL;
 
-const kv = idbKvStore();
 const SNAPSHOT_PREFIX = 'run.active.';
 
 /** Threads whose run is mid-acquire (lock pending) — guards the async gap before `runs` is
@@ -63,6 +61,7 @@ export const useRuns = create<RunsStore>((set, get) => ({
   startServerRun: async (threadId, body, prepare) => {
     if (get().isRunning(threadId) || startingThreads.has(threadId)) return; // one run per thread
     const ctrl = new AbortController();
+    const kv = currentAccountKvStore();
     const snapshotKey = `${SNAPSHOT_PREFIX}${threadId}`;
     let latestSnapshot: Message | null = null;
     let snapshotTimer: ReturnType<typeof setTimeout> | null = null;
@@ -232,12 +231,24 @@ export const useRuns = create<RunsStore>((set, get) => ({
   },
 }));
 
+export async function stopAllRunsForAccountTransition(): Promise<void> {
+  const runs = Object.values(useRuns.getState().runs);
+  startingThreads.clear();
+  for (const run of runs) run.controller.abort();
+  await Promise.all(runs.map((run) => run.runId
+    ? cloudApi.cancelRun(run.threadId, run.runId).catch(() => undefined)
+    : Promise.resolve()));
+  useRuns.setState({ runs: {} });
+  useUi.getState().setStream({ status: 'idle' });
+}
+
 /**
  * Restore assistant runs that were interrupted by a browser close: any orphaned snapshot is
  * saved as an `interrupted` message (whatever streamed before the close is kept) and cleared.
  * Call once on app startup.
  */
 export async function restoreInterruptedRuns(): Promise<void> {
+  const kv = currentAccountKvStore();
   let keys: string[];
   try {
     keys = await kv.keys();

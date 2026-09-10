@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const auth = vi.hoisted(() => ({
   acquireTokenSilent: vi.fn(),
   loginPopup: vi.fn(),
+  logoutRedirect: vi.fn(),
 }));
 
 vi.mock('@azure/msal-browser', () => {
@@ -17,7 +18,7 @@ vi.mock('@azure/msal-browser', () => {
     acquireTokenRedirect = vi.fn();
     loginPopup = auth.loginPopup;
     loginRedirect = vi.fn();
-    logoutRedirect = vi.fn();
+    logoutRedirect = auth.logoutRedirect;
   }
   return {
     CacheLookupPolicy: { AccessTokenAndRefreshToken: 2 },
@@ -26,13 +27,15 @@ vi.mock('@azure/msal-browser', () => {
   };
 });
 
-import { clearStaleAuthCacheOnce, getCloudToken, signIn } from './cloudAuth';
+import { clearStaleAuthCacheOnce, getCloudToken, setBeforeSignOut, signIn, signOut } from './cloudAuth';
 
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   auth.acquireTokenSilent.mockClear();
   auth.loginPopup.mockReset();
+  auth.logoutRedirect.mockReset();
+  setBeforeSignOut(async () => {});
 });
 
 describe('clearStaleAuthCacheOnce', () => {
@@ -68,6 +71,11 @@ describe('getCloudToken', () => {
     await expect(first).resolves.toBe('token');
     await expect(second).resolves.toBe('token');
   });
+
+  it('never mints a token for a different active account', async () => {
+    await expect(getCloudToken('other-account')).resolves.toBeNull();
+    expect(auth.acquireTokenSilent).not.toHaveBeenCalled();
+  });
 });
 
 describe('signIn', () => {
@@ -78,5 +86,17 @@ describe('signIn', () => {
     await signIn();
 
     expect(sessionStorage.getItem('watai.reauth')).toBeNull();
+  });
+});
+
+describe('signOut', () => {
+  it('finishes application teardown before starting account logout', async () => {
+    const order: string[] = [];
+    setBeforeSignOut(async () => void order.push('teardown'));
+    auth.logoutRedirect.mockImplementationOnce(async () => void order.push('logout'));
+
+    await signOut();
+
+    expect(order).toEqual(['teardown', 'logout']);
   });
 });

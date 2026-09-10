@@ -15,8 +15,13 @@ const API_SCOPE =
   (import.meta.env.VITE_WATAI_API_SCOPE as string) || `api://${CLIENT_ID}/access_as_user`;
 
 let pcaPromise: Promise<IPublicClientApplication> | null = null;
-let tokenPromise: Promise<string | null> | null = null;
+const tokenPromises = new Map<string, Promise<string | null>>();
 const REAUTH_FLAG = 'watai.reauth';
+let beforeSignOut: () => Promise<void> = async () => {};
+
+export function setBeforeSignOut(handler: () => Promise<void>): void {
+  beforeSignOut = handler;
+}
 
 function isAuthResponseHash(hash: string): boolean {
   return /^#(?:code|error)=/.test(hash);
@@ -115,8 +120,8 @@ export function clearStaleAuthCacheOnce(): void {
 
 /** Initialise MSAL and complete any returning sign-in redirect. Must run BEFORE the
  *  HashRouter mounts so the auth response in the URL hash is consumed first. */
-export async function initAuth(): Promise<void> {
-  await getPca();
+export async function initAuth(): Promise<AccountInfo | null> {
+  return activeAccount(await getPca());
 }
 
 /** Guard so a stale session triggers at most ONE automatic recovery redirect per browsing
@@ -154,10 +159,11 @@ function emitAuthState(state: AuthState): void {
  *  recover with a top-level interactive redirect. `AccessTokenAndRefreshToken` deliberately
  *  disables MSAL's final prompt=none iframe fallback: it is unreliable when third-party cookies
  *  are blocked and previously booted this SPA recursively at the redirect URI. */
-async function acquireCloudToken(): Promise<string | null> {
+async function acquireCloudToken(expectedHomeAccountId?: string): Promise<string | null> {
   const pca = await getPca();
   const account = activeAccount(pca);
   if (!account) return null;
+  if (expectedHomeAccountId && account.homeAccountId !== expectedHomeAccountId) return null;
   try {
     if (sessionStorage.getItem(REAUTH_FLAG) === '1') {
       emitAuthState('reauth-required');
@@ -213,13 +219,16 @@ async function acquireCloudToken(): Promise<string | null> {
 
 /** De-duplicate callers at startup (setup gate, sync, realtime, settings) so one expired
  *  session produces one recovery decision rather than several competing auth operations. */
-export function getCloudToken(): Promise<string | null> {
-  if (!tokenPromise) {
-    tokenPromise = acquireCloudToken().finally(() => {
-      tokenPromise = null;
+export function getCloudToken(expectedHomeAccountId?: string): Promise<string | null> {
+  const ownerId = expectedHomeAccountId ?? '';
+  let promise = tokenPromises.get(ownerId);
+  if (!promise) {
+    promise = acquireCloudToken(expectedHomeAccountId).finally(() => {
+      tokenPromises.delete(ownerId);
     });
+    tokenPromises.set(ownerId, promise);
   }
-  return tokenPromise;
+  return promise;
 }
 
 /** Interactive sign-in / sign-up via the Entra External ID user flow (popup). */
@@ -250,6 +259,7 @@ export async function signInRedirect(): Promise<void> {
 export async function signOut(): Promise<void> {
   const pca = await getPca();
   const account = activeAccount(pca);
+  await beforeSignOut();
   await pca.logoutRedirect({ account: account ?? undefined });
 }
 

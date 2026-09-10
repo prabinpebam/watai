@@ -11,7 +11,7 @@ import { ConfirmDialog } from '../../design/overlays';
 import { useUi } from '../../state/store';
 import { useIsExpanded } from '../../lib/hooks';
 import { formatBytes } from '../../lib/format';
-import { repo, cloudApi, realtime } from '../../data';
+import { accountLocalStorageKey, repo, cloudApi, realtime } from '../../data';
 import { kvGet } from '../../data/db';
 import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import { useMe } from '../../auth/access';
@@ -1659,7 +1659,7 @@ function DataBody({ ctx }: { ctx: SettingsCtx }) {
           danger
           onConfirm={async () => {
             await repo.deleteAll();
-            localStorage.removeItem('watai.seeded');
+            localStorage.removeItem(accountLocalStorageKey('watai.seeded'));
             bump();
             pushToast('All data deleted');
             navigate('/new');

@@ -1,7 +1,7 @@
 // Tiny key/value persistence port for the sync engine's queue + delta cursors.
 // The production implementation is backed by the same IndexedDB `kv` store the
 // rest of the app uses; tests inject an in-memory implementation.
-import { db, kvGet, kvSet } from '../db';
+import { activeLocalDataOwner, db, kvGet, kvSet } from '../db';
 
 export interface KvStore {
   get<T>(key: string): Promise<T | undefined>;
@@ -10,15 +10,15 @@ export interface KvStore {
   keys(): Promise<string[]>;
 }
 
-export function idbKvStore(): KvStore {
+export function idbKvStore(ownerId = activeLocalDataOwner()): KvStore {
   return {
-    get: <T>(key: string) => kvGet<T>(key),
-    set: (key: string, value: unknown) => kvSet(key, value),
+    get: <T>(key: string) => kvGet<T>(key, ownerId),
+    set: (key: string, value: unknown) => kvSet(key, value, ownerId),
     async delete(key: string): Promise<void> {
-      await (await db()).delete('kv', key);
+      await (await db(ownerId)).delete('kv', key);
     },
     async keys(): Promise<string[]> {
-      return (await (await db()).getAllKeys('kv')) as string[];
+      return (await (await db(ownerId)).getAllKeys('kv')) as string[];
     },
   };
 }

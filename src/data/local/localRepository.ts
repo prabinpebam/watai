@@ -61,15 +61,17 @@ function emptyProfile(userId = 'local'): MemoryProfileView {
 }
 
 export class LocalRepository implements SyncLocalStore {
+  constructor(private readonly ownerId: string) {}
+
   async listThreads(opts?: { includeArchived?: boolean }): Promise<Thread[]> {
-    const all = (await (await db()).getAll('threads')) as Thread[];
+    const all = (await (await db(this.ownerId)).getAll('threads')) as Thread[];
     return all
       .filter((t) => !t.deletedAt && (opts?.includeArchived || !t.archived))
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }
 
   async getThread(id: Id): Promise<Thread | null> {
-    return ((await (await db()).get('threads', id)) as Thread) ?? null;
+    return ((await (await db(this.ownerId)).get('threads', id)) as Thread) ?? null;
   }
 
   async createThread(init?: Partial<Thread>): Promise<Thread> {
@@ -85,7 +87,7 @@ export class LocalRepository implements SyncLocalStore {
       messageCount: 0,
       ...init,
     };
-    await (await db()).put('threads', t);
+    await (await db(this.ownerId)).put('threads', t);
     return t;
   }
 
@@ -93,27 +95,27 @@ export class LocalRepository implements SyncLocalStore {
     const existing = await this.getThread(id);
     if (!existing) throw new Error('thread not found');
     const merged = { ...existing, ...patch, updatedAt: patch.updatedAt ?? nowIso() };
-    await (await db()).put('threads', merged);
+    await (await db(this.ownerId)).put('threads', merged);
     return merged;
   }
 
   async deleteThread(id: Id): Promise<void> {
     await this.updateThread(id, { deletedAt: nowIso() });
     const msgs = await this.listMessages(id);
-    const tx = (await db()).transaction('messages', 'readwrite');
+    const tx = (await db(this.ownerId)).transaction('messages', 'readwrite');
     await Promise.all(msgs.map((m) => tx.store.delete(m.id)));
     await tx.done;
-    await (await db()).delete('threads', id);
+    await (await db(this.ownerId)).delete('threads', id);
   }
 
   async listMessages(threadId: Id): Promise<Message[]> {
-    const idx = (await db()).transaction('messages').store.index('byThread');
+    const idx = (await db(this.ownerId)).transaction('messages').store.index('byThread');
     const msgs = (await idx.getAll(threadId)) as Message[];
     return msgs.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
   async appendMessage(m: Message): Promise<Message> {
-    await (await db()).put('messages', m);
+    await (await db(this.ownerId)).put('messages', m);
     const t = await this.getThread(m.threadId);
     if (t) {
       await this.updateThread(m.threadId, {
@@ -126,10 +128,10 @@ export class LocalRepository implements SyncLocalStore {
   }
 
   async updateMessage(id: Id, patch: Partial<Message>): Promise<Message> {
-    const existing = (await (await db()).get('messages', id)) as Message | undefined;
+    const existing = (await (await db(this.ownerId)).get('messages', id)) as Message | undefined;
     if (!existing) throw new Error('message not found');
     const merged = { ...existing, ...patch };
-    await (await db()).put('messages', merged);
+    await (await db(this.ownerId)).put('messages', merged);
     if (patch.content !== undefined) {
       await this.updateThread(merged.threadId, {
         lastMessagePreview: merged.content.slice(0, 120),
@@ -139,7 +141,7 @@ export class LocalRepository implements SyncLocalStore {
   }
 
   async deleteMessage(id: Id): Promise<void> {
-    await (await db()).delete('messages', id);
+    await (await db(this.ownerId)).delete('messages', id);
   }
 
   /** Local-only store: a single device, so there is never lock contention. */
@@ -153,24 +155,25 @@ export class LocalRepository implements SyncLocalStore {
 
   /** Sync-only: insert/replace a server message verbatim, without bumping the thread. */
   async putMessageRaw(message: Message): Promise<void> {
-    await (await db()).put('messages', message);
+    await (await db(this.ownerId)).put('messages', message);
   }
 
   async putBlob(key: string, blob: Blob): Promise<void> {
-    await (await db()).put('blobs', blob, key);
+    await (await db(this.ownerId)).put('blobs', blob, key);
   }
 
   async getBlobUrl(key: string): Promise<string> {
-    if (blobUrlCache.has(key)) return blobUrlCache.get(key)!;
-    const blob = (await (await db()).get('blobs', key)) as Blob | undefined;
+    const cacheKey = `${this.ownerId}\u0000${key}`;
+    if (blobUrlCache.has(cacheKey)) return blobUrlCache.get(cacheKey)!;
+    const blob = (await (await db(this.ownerId)).get('blobs', key)) as Blob | undefined;
     if (!blob) return '';
     const url = URL.createObjectURL(blob);
-    blobUrlCache.set(key, url);
+    blobUrlCache.set(cacheKey, url);
     return url;
   }
 
   async getBlob(key: string): Promise<Blob | null> {
-    return ((await (await db()).get('blobs', key)) as Blob) ?? null;
+    return ((await (await db(this.ownerId)).get('blobs', key)) as Blob) ?? null;
   }
 
   /** Local-only resolution: use the cached blob, or a direct-URL blobPath. A cloud
@@ -189,7 +192,7 @@ export class LocalRepository implements SyncLocalStore {
   }
 
   async getSettings(): Promise<Settings> {
-    const s = await kvGet<Settings & { voice?: Settings['voice'] & { autoSend?: boolean } }>(SETTINGS_KEY);
+    const s = await kvGet<Settings & { voice?: Settings['voice'] & { autoSend?: boolean } }>(SETTINGS_KEY, this.ownerId);
     if (!s) return DEFAULT_SETTINGS;
     return {
       ...DEFAULT_SETTINGS,
@@ -206,11 +209,11 @@ export class LocalRepository implements SyncLocalStore {
   }
 
   async saveSettings(s: Settings): Promise<void> {
-    await kvSet(SETTINGS_KEY, s);
+    await kvSet(SETTINGS_KEY, s, this.ownerId);
   }
 
   async listMemory(query: ListMemoryQuery = {}): Promise<MemoryRecord[]> {
-    const list = ((await kvGet<unknown[]>(MEMORY_KEY)) ?? []).map(asMemoryRecord).filter((m): m is MemoryRecord => !!m);
+    const list = ((await kvGet<unknown[]>(MEMORY_KEY, this.ownerId)) ?? []).map(asMemoryRecord).filter((m): m is MemoryRecord => !!m);
     const q = query.q?.trim().toLowerCase();
     return list
       .filter((m) => (query.status ? m.status === query.status : m.status === 'active'))
@@ -257,12 +260,12 @@ export class LocalRepository implements SyncLocalStore {
       useCount: 0,
     };
     const list = await this.listMemory({ status: 'active' });
-    await kvSet(MEMORY_KEY, [record, ...list]);
+    await kvSet(MEMORY_KEY, [record, ...list], this.ownerId);
     return record;
   }
 
   async updateMemory(id: Id, patch: PatchMemoryBody): Promise<MemoryRecord> {
-    const all = ((await kvGet<unknown[]>(MEMORY_KEY)) ?? []).map(asMemoryRecord).filter((m): m is MemoryRecord => !!m);
+    const all = ((await kvGet<unknown[]>(MEMORY_KEY, this.ownerId)) ?? []).map(asMemoryRecord).filter((m): m is MemoryRecord => !!m);
     const current = all.find((m) => m.id === id);
     if (!current) throw new Error('memory not found');
     const next: MemoryRecord = {
@@ -275,13 +278,13 @@ export class LocalRepository implements SyncLocalStore {
       ...(patch.salience !== undefined ? { salience: patch.salience } : {}),
       updatedAt: nowIso(),
     };
-    await kvSet(MEMORY_KEY, all.map((m) => (m.id === id ? next : m)));
+    await kvSet(MEMORY_KEY, all.map((m) => (m.id === id ? next : m)), this.ownerId);
     return next;
   }
 
   async removeMemory(id: Id): Promise<void> {
-    const all = ((await kvGet<unknown[]>(MEMORY_KEY)) ?? []).map(asMemoryRecord).filter((m): m is MemoryRecord => !!m);
-    await kvSet(MEMORY_KEY, all.map((m) => (m.id === id ? { ...m, status: 'deleted', deletedAt: nowIso(), updatedAt: nowIso() } : m)));
+    const all = ((await kvGet<unknown[]>(MEMORY_KEY, this.ownerId)) ?? []).map(asMemoryRecord).filter((m): m is MemoryRecord => !!m);
+    await kvSet(MEMORY_KEY, all.map((m) => (m.id === id ? { ...m, status: 'deleted', deletedAt: nowIso(), updatedAt: nowIso() } : m)), this.ownerId);
   }
 
   async search(query: string): Promise<SearchHit[]> {
@@ -324,7 +327,7 @@ export class LocalRepository implements SyncLocalStore {
    *  the local store. Production calls this to clear placeholder chats left in a returning
    *  user's browser by an earlier build. Real user data (non-`seed-` ids) is never touched. */
   async purgeSeedThreads(): Promise<number> {
-    const database = await db();
+    const database = await db(this.ownerId);
     const all = (await database.getAll('threads')) as Thread[];
     const seeds = all.filter((t) => typeof t.id === 'string' && t.id.startsWith('seed-'));
     for (const t of seeds) {
@@ -340,10 +343,10 @@ export class LocalRepository implements SyncLocalStore {
   }
 
   async deleteAll(): Promise<void> {
-    const database = await db();
+    const database = await db(this.ownerId);
     await database.clear('threads');
     await database.clear('messages');
     await database.clear('blobs');
-    await kvSet(MEMORY_KEY, []);
+    await kvSet(MEMORY_KEY, [], this.ownerId);
   }
 }

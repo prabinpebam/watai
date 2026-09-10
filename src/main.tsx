@@ -10,8 +10,17 @@ import { ToastHost } from './app/ToastHost';
 import { ConnectionBanner } from './app/ConnectionBanner';
 import { ConfirmHost } from './app/ConfirmHost';
 import { DevMenu } from './mocks/DevMenu';
-import { clearStaleAuthCacheOnce, initAuth } from './auth/cloudAuth';
+import { clearStaleAuthCacheOnce, initAuth, setBeforeSignOut } from './auth/cloudAuth';
 import { installViewportFrame } from './app/viewportFrame';
+import { activateAccountData } from './data';
+import { activateUiOwner } from './state/store';
+import { stopAllRunsForAccountTransition } from './features/chat/runStore';
+
+setBeforeSignOut(async () => {
+  await stopAllRunsForAccountTransition();
+  await activateAccountData(null);
+  await activateUiOwner(null);
+});
 
 function mount() {
   createRoot(document.getElementById('root')!).render(
@@ -39,5 +48,14 @@ if (window.self === window.top) {
   clearStaleAuthCacheOnce();
   // Complete any returning sign-in redirect BEFORE the HashRouter mounts (so the auth
   // response in the URL hash isn't clobbered by the router), then render either way.
-  void initAuth().finally(mount);
+  void (async () => {
+    let ownerId: string | null = null;
+    try {
+      ownerId = (await initAuth())?.homeAccountId ?? null;
+    } finally {
+      await activateAccountData(ownerId);
+      await activateUiOwner(ownerId);
+      mount();
+    }
+  })();
 }

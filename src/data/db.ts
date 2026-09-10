@@ -1,8 +1,8 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type { Message, Settings, Thread, MemoryItem, ApiConfig } from '../lib/types';
 
-const DB_NAME = 'watai';
 const DB_VERSION = 1;
+export const LOCAL_QUARANTINE_OWNER = 'signed-out-quarantine';
 
 interface Schema {
   threads: Thread;
@@ -11,11 +11,28 @@ interface Schema {
   kv: unknown;
 }
 
-let dbPromise: Promise<IDBPDatabase> | null = null;
+const dbPromises = new Map<string, Promise<IDBPDatabase>>();
+let activeOwnerId = LOCAL_QUARANTINE_OWNER;
 
-export function db(): Promise<IDBPDatabase> {
-  if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, DB_VERSION, {
+export function activateLocalDataOwner(ownerId: string | null): string {
+  activeOwnerId = ownerId?.trim() || LOCAL_QUARANTINE_OWNER;
+  return activeOwnerId;
+}
+
+export function activeLocalDataOwner(): string {
+  return activeOwnerId;
+}
+
+export function localDatabaseName(ownerId: string): string {
+  const owner = ownerId.trim() || LOCAL_QUARANTINE_OWNER;
+  return `watai.account.v2.${encodeURIComponent(owner)}`;
+}
+
+export function db(ownerId = activeOwnerId): Promise<IDBPDatabase> {
+  const name = localDatabaseName(ownerId);
+  let promise = dbPromises.get(name);
+  if (!promise) {
+    promise = openDB(name, DB_VERSION, {
       upgrade(database) {
         if (!database.objectStoreNames.contains('threads')) {
           database.createObjectStore('threads', { keyPath: 'id' });
@@ -32,16 +49,17 @@ export function db(): Promise<IDBPDatabase> {
         }
       },
     });
+    dbPromises.set(name, promise);
   }
-  return dbPromise;
+  return promise;
 }
 
-export async function kvGet<T>(key: string): Promise<T | undefined> {
-  return (await db()).get('kv', key) as Promise<T | undefined>;
+export async function kvGet<T>(key: string, ownerId = activeOwnerId): Promise<T | undefined> {
+  return (await db(ownerId)).get('kv', key) as Promise<T | undefined>;
 }
 
-export async function kvSet(key: string, value: unknown): Promise<void> {
-  await (await db()).put('kv', value, key);
+export async function kvSet(key: string, value: unknown, ownerId = activeOwnerId): Promise<void> {
+  await (await db(ownerId)).put('kv', value, key);
 }
 
 export type { Settings, MemoryItem, ApiConfig };

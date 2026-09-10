@@ -3,7 +3,7 @@ import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { Spinner, Button } from '../design/ui';
 import { useUi } from '../state/store';
-import { repo, cloudApi, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync, realtime } from '../data';
+import { accountLocalStorageKey, repo, cloudApi, seedMockDataIfEmpty, purgeDemoData, syncNow, backfillSync, realtime } from '../data';
 import { restoreInterruptedRuns } from '../features/chat/runStore';
 import { clearApiCredentials } from '../data/secureStore';
 import { isSignedIn, signOut } from '../auth/cloudAuth';
@@ -266,6 +266,7 @@ export function App() {
   // Also retry the sync whenever the network returns, so a chat composed while offline (or a
   // sync that failed during a transient drop) reconciles without a manual reload.
   useEffect(() => {
+    const backfillKey = accountLocalStorageKey('watai.backfilled.v2');
     const runSync = () =>
       syncNow()
         .then((changed) => {
@@ -282,13 +283,13 @@ export function App() {
       if (!settings.data.sync) {
         await repo.saveSettings({ ...settings, data: { ...settings.data, sync: true } });
         // Sync was off before, so existing local data was never queued — force a re-backfill.
-        localStorage.removeItem('watai.backfilled.v2');
+        localStorage.removeItem(backfillKey);
       }
       // v2: earlier builds dropped queued ops on a 403 (not-invited) before invite access
       // was sorted out, so existing chats never reached the cloud. Re-enqueue everything once.
-      if (!localStorage.getItem('watai.backfilled.v2')) {
+      if (!localStorage.getItem(backfillKey)) {
         await backfillSync().catch((e) => console.warn('[sync] backfill failed', e));
-        localStorage.setItem('watai.backfilled.v2', '1');
+        localStorage.setItem(backfillKey, '1');
       }
       await runSync();
       onOnline = () => void runSync();

@@ -217,8 +217,9 @@ export const useUi = create<UiState>()(
         }),
     }),
     {
-      name: 'watai.ui',
+      name: 'watai.ui.account.v2.signed-out-quarantine',
       version: 1,
+      skipHydration: true,
       // v0 stored one MemoryNotice per thread; v1 stores an array per thread. Coerce any
       // legacy single-object value into an array so the chat timeline never iterates a non-array.
       migrate: (persisted: unknown, _version: number) => {
@@ -246,3 +247,53 @@ export const useUi = create<UiState>()(
     },
   ),
 );
+
+const EMPTY_ACCOUNT_UI = {
+  theme: 'system' as Theme,
+  textScale: 1.0 as TextScale,
+  density: 'comfortable' as Density,
+  reduceMotion: 'system' as const,
+  sidebarCollapsed: false,
+  composerDrafts: {},
+  activeModelByThread: {},
+  memoryNotices: {},
+};
+
+export function uiStorageNameForOwner(ownerId: string | null): string {
+  return `watai.ui.account.v2.${encodeURIComponent(ownerId?.trim() || 'signed-out-quarantine')}`;
+}
+
+export async function activateUiOwner(ownerId: string | null): Promise<void> {
+  const name = uiStorageNameForOwner(ownerId);
+  let persisted: string | null = null;
+  try {
+    persisted = localStorage.getItem(name);
+  } catch {
+    /* storage unavailable */
+  }
+  useUi.persist.setOptions({ name });
+  useUi.setState({
+    ...EMPTY_ACCOUNT_UI,
+    drawerOpen: false,
+    temporaryChat: false,
+    stream: { status: 'idle' },
+    capability: null,
+    toasts: [],
+    threadSyncCount: 0,
+    threadRev: {},
+    threadLocks: {},
+    confirmRequest: null,
+    sourcePane: null,
+    filesPane: null,
+    stagedFiles: [],
+    stagedLibraryByThread: {},
+  });
+  if (persisted !== null) {
+    try {
+      localStorage.setItem(name, persisted);
+    } catch {
+      /* storage unavailable */
+    }
+  }
+  await useUi.persist.rehydrate();
+}
