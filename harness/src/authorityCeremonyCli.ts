@@ -45,9 +45,17 @@ if (status) throw new Error("Source is dirty. Commit and revalidate bootstrap ch
 const sourceSha = execute("git", ["rev-parse", "HEAD"]);
 const npmEntryPoint = process.env.npm_execpath?.trim();
 if (!npmEntryPoint) throw new Error("npm_execpath is required to invoke the pinned npm CLI portably.");
-const npm = (args: string[]) => execute(process.execPath, [npmEntryPoint, ...args]);
-const validation = npm(["run", "validate:harness"]);
-const npmRegistry = npm(["config", "get", "registry"]);
+const validationSteps: Array<[string, string[]]> = [
+  [process.execPath, [resolve(root, "documentation/implementation/2026-09-10-autonomous-delivery/validate-plan.mjs")]],
+  [process.execPath, [resolve(root, "node_modules/typescript/bin/tsc"), "-p", resolve(root, "tsconfig.harness.json")]],
+  [process.execPath, [resolve(root, "node_modules/vitest/vitest.mjs"), "run", "harness/src"]],
+  [process.execPath, [resolve(root, "node_modules/typescript/bin/tsc"), "-p", resolve(root, "tsconfig.harness.build.json")]],
+  [process.execPath, [resolve(root, ".harness-dist/sourceCheckCli.js")]],
+];
+const validation = validationSteps
+  .map(([executable, args]) => `$ ${executable} ${args.join(" ")}\n${execute(executable, args)}`)
+  .join("\n\n");
+const npmRegistry = execute(process.execPath, [npmEntryPoint, "config", "get", "registry"]);
 if (npmRegistry !== approvedRegistry) throw new Error(`Effective npm registry is not approved: ${npmRegistry}`);
 
 const imageReference = process.env.WATAI_SMOKE_WORKER_IMAGE?.trim() || "watai-harness-smoke-worker:local";
