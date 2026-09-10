@@ -946,7 +946,9 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
         for (const id of ids) next.add(id);
         return next;
       });
-      pushToast(ids.length > 1 ? `Deleted ${ids.length} memories` : 'Deleted memory', 'success');
+      pushToast(ids.length > 1
+        ? `Excluded ${ids.length} memories from future replies; source chats and backups may remain.`
+        : 'Excluded from future replies; the source chat and backups may remain.', 'success');
     } catch (e) {
       pushToast(e instanceof Error ? e.message : 'Could not delete memory.', 'error');
     }

@@ -86,6 +86,20 @@ describe('MemoryService', () => {
     expect((await service.list('userA', { status: 'deleted' })).memories.map((m) => m.id)).toEqual([active.id]);
   });
 
+  it('does not restore an excluded memory through import', async () => {
+    const { service } = makeService();
+    const sourceRef = { type: 'message' as const, threadId: 't1', messageId: 'm1', createdAt: '2026-01-01T00:00:00Z' };
+    const memory = await service.createManual('userA', { text: 'User prefers concise plans.', kind: 'preference', sourceRef });
+    await service.delete('userA', memory.id);
+    const result = await service.import('userA', {
+      version: 1,
+      mode: 'commit',
+      memories: [{ text: 'User prefers concise plans.', kind: 'preference', sourceRefs: [sourceRef], visibility: 'normal', pinned: false }],
+    });
+    expect(result).toMatchObject({ added: 0, skipped: 1 });
+    expect((await service.list('userA', {})).memories).toEqual([]);
+  });
+
   it('invalidates with invalidAt and rejects patching deleted memories', async () => {
     const { service } = makeService();
     const record = await service.createManual('userA', { text: 'Old fact.' });

@@ -286,6 +286,7 @@ export class MemoryExtractionService {
           const minSalience = mode === 'command' ? 0.4 : 0.65;
           if (op.confidence < minConfidence || op.salience < minSalience) { rejected++; continue; }
           const hash = sourceHash(op.text, op.kind, op.entities);
+          if (await this.deps.memoryStore.isExcluded(userId, hash, refs)) { rejected++; continue; }
           const duplicate = candidates.find((m) => m.sourceHash === hash && m.status === 'active');
           if (duplicate) {
             await this.mergeMemory(duplicate, refs, op.confidence, op.salience, undefined, undefined, undefined, op.target, embedder);

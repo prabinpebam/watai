@@ -31,12 +31,23 @@ export interface MemoryImportResponse {
   preview?: MemoryRecord[];
 }
 
+export interface MemoryDeleteReceipt {
+  memoryId: string;
+  servingExcluded: true;
+  purgeState: 'logical_exclusion_complete';
+  retained: Array<'exclusion_receipt' | 'deleted_tombstone' | 'source_conversation' | 'provider_or_backup_copies'>;
+}
+
 function normalizeText(text: string): string {
   return text.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 function sourceHash(text: string, kind: string, entities: string[] = []): string {
   return createHash('sha256').update(`${normalizeText(text)}\n${kind}\n${[...entities].sort().join('|')}`).digest('hex');
+}
+
+function sourceKeys(memory: MemoryRecord): string[] {
+  return [...new Set(memory.sourceRefs.map((ref) => `${ref.type}:${ref.threadId ?? ''}:${ref.messageId ?? ''}:${ref.runId ?? ''}`))];
 }
 
 export class MemoryService {
@@ -109,12 +120,27 @@ export class MemoryService {
     return this.store.put(next);
   }
 
-  async delete(userId: string, memoryId: string): Promise<void> {
+  async delete(userId: string, memoryId: string): Promise<MemoryDeleteReceipt> {
     const current = await this.store.get(userId, memoryId);
     if (!current) throw new AppError('not_found', 'Memory not found.');
-    if (current.status === 'deleted') return;
-    const ts = this.clock.now();
-    await this.store.put(parseMemoryRecord({ ...current, status: 'deleted', deletedAt: ts, updatedAt: ts }));
+    if (current.status !== 'deleted') {
+      const ts = this.clock.now();
+      const deleted = parseMemoryRecord({ ...current, status: 'deleted', deletedAt: ts, updatedAt: ts });
+      await this.store.exclude(deleted, {
+        id: `memory-exclusion-${current.id}`,
+        userId,
+        memoryId: current.id,
+        ...(current.sourceHash ? { sourceHash: current.sourceHash } : {}),
+        sourceKeys: sourceKeys(current),
+        excludedAt: ts,
+      });
+    }
+    return {
+      memoryId,
+      servingExcluded: true,
+      purgeState: 'logical_exclusion_complete',
+      retained: ['exclusion_receipt', 'deleted_tombstone', 'source_conversation', 'provider_or_backup_copies'],
+    };
   }
 
   getSummary(userId: string): Promise<MemorySummaryRecord | null> {
@@ -179,8 +205,16 @@ export class MemoryService {
       }
     }
     if (input.mode === 'commit') {
-      for (const memory of preview) await this.store.put(memory);
-      return { added: preview.length, skipped: 0, rejected };
+      let added = 0;
+      let skipped = 0;
+      for (const memory of preview) {
+        if (await this.store.isExcluded(userId, memory.sourceHash, memory.sourceRefs)) skipped++;
+        else {
+          await this.store.put(memory);
+          added++;
+        }
+      }
+      return { added, skipped, rejected };
     }
     return { added: 0, skipped: 0, rejected, preview };
   }

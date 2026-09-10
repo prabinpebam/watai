@@ -1,6 +1,6 @@
-import type { Container, SqlQuerySpec } from '@azure/cosmos';
+import type { Container, OperationInput, SqlQuerySpec } from '@azure/cosmos';
 import type { MemoryRecord, MemorySummaryRecord } from '../../domain/memory';
-import type { MemoryListPage, MemoryStore, MemoryStoreListOptions } from '../../ports/memoryStore';
+import type { MemoryExclusion, MemoryListPage, MemoryStore, MemoryStoreListOptions } from '../../ports/memoryStore';
 import { getCosmosDatabase } from './cosmosClient';
 
 function encodeCursor(record: MemoryRecord): string {
@@ -81,6 +81,40 @@ export class CosmosMemoryStore implements MemoryStore {
   async put(record: MemoryRecord): Promise<MemoryRecord> {
     await this.container.items.upsert(record);
     return record;
+  }
+
+  async exclude(record: MemoryRecord, exclusion: MemoryExclusion): Promise<void> {
+    const exclusionDocument = { ...exclusion, recordType: 'memory-exclusion' };
+    const operations = [record, exclusionDocument]
+      .map((resourceBody) => ({ operationType: 'Upsert' as const, resourceBody })) as unknown as OperationInput[];
+    const { result } = await this.container.items.batch(operations, record.userId);
+    if (!result || !result.every((operation) => operation.statusCode >= 200 && operation.statusCode < 300)) {
+      throw new Error(`Memory exclusion batch failed (${result?.map((operation) => operation.statusCode).join(',') ?? 'no-result'}).`);
+    }
+  }
+
+  async isExcluded(userId: string, sourceHash: string | undefined, sourceRefs: MemoryRecord['sourceRefs']): Promise<boolean> {
+    const sourceKeys = [...new Set(sourceRefs.map((ref) => `${ref.type}:${ref.threadId ?? ''}:${ref.messageId ?? ''}:${ref.runId ?? ''}`))];
+    const matches: string[] = [];
+    const parameters: SqlQuerySpec['parameters'] = [
+      { name: '@userId', value: userId },
+      { name: '@recordType', value: 'memory-exclusion' },
+    ];
+    if (sourceHash) {
+      matches.push('c.sourceHash = @sourceHash');
+      parameters.push({ name: '@sourceHash', value: sourceHash });
+    }
+    sourceKeys.forEach((sourceKey, index) => {
+      const name = `@sourceKey${index}`;
+      matches.push(`ARRAY_CONTAINS(c.sourceKeys, ${name})`);
+      parameters.push({ name, value: sourceKey });
+    });
+    if (!matches.length) return false;
+    const { resources } = await this.container.items.query<{ id: string }>({
+      query: `SELECT TOP 1 c.id FROM c WHERE c.userId = @userId AND c.recordType = @recordType AND (${matches.join(' OR ')})`,
+      parameters,
+    }, { partitionKey: userId }).fetchAll();
+    return resources.length > 0;
   }
 
   async getSummary(userId: string): Promise<MemorySummaryRecord | null> {

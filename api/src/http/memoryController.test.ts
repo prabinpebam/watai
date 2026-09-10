@@ -32,7 +32,8 @@ describe('memoryController', () => {
     expect((patched.body as any).status).toBe('suppressed');
 
     const removed = await ctrl.remove({ claims: { sub: 'userA' }, params: { memoryId: id } });
-    expect(removed.status).toBe(204);
+    expect(removed.status).toBe(200);
+    expect(removed.body).toMatchObject({ servingExcluded: true, purgeState: 'logical_exclusion_complete' });
   });
 
   it('maps auth, validation, and cross-user failures to envelopes', async () => {

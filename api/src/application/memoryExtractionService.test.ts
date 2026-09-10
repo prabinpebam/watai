@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS } from '../domain/settings';
 import { parseMemoryRecord } from '../domain/memory';
 import type { Embedder } from '../ports/embedder';
 import { MemoryExtractionService, type MemoryExtractorPort, type MemoryQueuePort } from './memoryExtractionService';
+import { MemoryService } from './memoryService';
 
 function setup(extractor: MemoryExtractorPort, embedder?: Embedder, settingsOverride?: { get: () => Promise<typeof DEFAULT_SETTINGS> }) {
   const memoryStore = new InMemoryMemoryStore();
@@ -23,7 +24,7 @@ function setup(extractor: MemoryExtractorPort, embedder?: Embedder, settingsOver
   const sends: Array<{ target: string; payload: unknown }> = [];
   const signalr = { negotiate: () => ({}) as never, sendToUser: async (_userId: string, target: string, payload: unknown) => void sends.push({ target, payload }) };
   const svc = new MemoryExtractionService({ memoryStore, jobStore, messageStore, threadStore, queue, settings, credentials, extractor, embedder, signalr: signalr as never, clock });
-  return { svc, memoryStore, jobStore, messageStore, threadStore, enqueued, sends };
+  return { svc, memoryStore, jobStore, messageStore, threadStore, enqueued, sends, clock };
 }
 
 async function seedThread(ctx: ReturnType<typeof setup>, temporary = false, userContent = 'I prefer concise implementation plans.') {
@@ -62,6 +63,26 @@ describe('MemoryExtractionService', () => {
     expect(memories[0].sourceRefs[0]).toMatchObject({ type: 'message', threadId: 't1', messageId: 'u1' });
     expect((await ctx.jobStore.get('userA', first!.id))?.status).toBe('completed');
     expect(ctx.sends).toEqual([{ target: 'memory', payload: expect.objectContaining({ acceptedCount: 1, threadId: 't1', assistantMessageId: 'a1' }) }]);
+  });
+
+  it('does not recreate a deleted memory when extraction is replayed with a paraphrase from the same source', async () => {
+    let invocation = 0;
+    const ctx = setup(async () => ({
+      operations: [{
+        op: 'add', kind: 'preference',
+        text: invocation++ === 0 ? 'User prefers concise implementation plans.' : 'Keep implementation plans brief.',
+        confidence: 0.95, salience: 0.9, sourceMessageIds: ['u1'], reason: 'same lineage',
+      }],
+    }));
+    await seedThread(ctx);
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    await ctx.svc.processJob('userA', job!.id);
+    const [created] = (await ctx.memoryStore.list('userA', { status: 'active' })).memories;
+    await new MemoryService(ctx.memoryStore, ctx.clock).delete('userA', created.id);
+
+    await ctx.svc.processJob('userA', job!.id);
+
+    expect((await ctx.memoryStore.list('userA', { status: 'active' })).memories).toEqual([]);
   });
 
   it('commits zero memories when learning is revoked while extraction is running', async () => {

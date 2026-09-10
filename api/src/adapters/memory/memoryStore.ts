@@ -1,5 +1,5 @@
 import type { MemoryRecord, MemorySummaryRecord } from '../../domain/memory';
-import type { MemoryListPage, MemoryStore, MemoryStoreListOptions } from '../../ports/memoryStore';
+import type { MemoryExclusion, MemoryListPage, MemoryStore, MemoryStoreListOptions } from '../../ports/memoryStore';
 
 function key(userId: string, id: string): string {
   return `${userId}\u0000${id}`;
@@ -39,6 +39,7 @@ function afterCursor(memory: MemoryRecord, cursor: { updatedAt: string; id: stri
 export class InMemoryMemoryStore implements MemoryStore {
   private readonly memories = new Map<string, MemoryRecord>();
   private readonly summaries = new Map<string, MemorySummaryRecord>();
+  private readonly exclusions = new Map<string, MemoryExclusion>();
 
   async list(userId: string, opts?: MemoryStoreListOptions): Promise<MemoryListPage> {
     const limit = opts?.limit ?? 50;
@@ -65,6 +66,18 @@ export class InMemoryMemoryStore implements MemoryStore {
   async put(record: MemoryRecord): Promise<MemoryRecord> {
     this.memories.set(key(record.userId, record.id), { ...record, sourceRefs: record.sourceRefs.map((ref) => ({ ...ref })) });
     return record;
+  }
+
+  async exclude(record: MemoryRecord, exclusion: MemoryExclusion): Promise<void> {
+    this.memories.set(key(record.userId, record.id), { ...record, sourceRefs: record.sourceRefs.map((ref) => ({ ...ref })) });
+    this.exclusions.set(key(exclusion.userId, exclusion.id), { ...exclusion, sourceKeys: [...exclusion.sourceKeys] });
+  }
+
+  async isExcluded(userId: string, sourceHash: string | undefined, sourceRefs: MemoryRecord['sourceRefs']): Promise<boolean> {
+    const sourceKeys = new Set(sourceRefs.map((ref) => `${ref.type}:${ref.threadId ?? ''}:${ref.messageId ?? ''}:${ref.runId ?? ''}`));
+    return [...this.exclusions.values()].some((exclusion) =>
+      exclusion.userId === userId &&
+      ((!!sourceHash && exclusion.sourceHash === sourceHash) || exclusion.sourceKeys.some((sourceKey) => sourceKeys.has(sourceKey))));
   }
 
   async getSummary(userId: string): Promise<MemorySummaryRecord | null> {

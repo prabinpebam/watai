@@ -38,9 +38,9 @@ export function createMemoryController(memory: MemoryService) {
       }),
 
     remove: (req: ApiRequest): Promise<HttpResult> =>
-      respond(204, async () => {
+      respond(200, async () => {
         const { userId } = identityFromClaims(req.claims);
-        await memory.delete(userId, req.params!.memoryId);
+        return memory.delete(userId, req.params!.memoryId);
       }),
 
     getSummary: (req: ApiRequest): Promise<HttpResult> =>

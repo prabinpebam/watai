@@ -13,10 +13,21 @@ export interface MemoryListPage {
   cursor?: string;
 }
 
+export interface MemoryExclusion {
+  id: string;
+  userId: string;
+  memoryId: string;
+  sourceHash?: string;
+  sourceKeys: string[];
+  excludedAt: string;
+}
+
 export interface MemoryStore {
   list(userId: string, opts?: MemoryStoreListOptions): Promise<MemoryListPage>;
   get(userId: string, memoryId: string): Promise<MemoryRecord | null>;
   put(record: MemoryRecord): Promise<MemoryRecord>;
+  exclude(record: MemoryRecord, exclusion: MemoryExclusion): Promise<void>;
+  isExcluded(userId: string, sourceHash: string | undefined, sourceRefs: MemoryRecord['sourceRefs']): Promise<boolean>;
   getSummary(userId: string): Promise<MemorySummaryRecord | null>;
   putSummary(record: MemorySummaryRecord): Promise<MemorySummaryRecord>;
 }
