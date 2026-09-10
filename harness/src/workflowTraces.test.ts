@@ -134,6 +134,9 @@ function commandFor(
     effectDeadline: transition.effect === "none"
       ? undefined
       : "2026-09-10T11:10:00.000Z",
+    effectProvider: transition.effect === "worker"
+      ? { providerId: "github-copilot", model: "gpt-5.4" }
+      : undefined,
     permit,
   };
 }

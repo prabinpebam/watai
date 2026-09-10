@@ -9,6 +9,11 @@ import {
   type EvaluatorCommand,
   type EvaluatorInventory,
 } from "./evaluatorInventory.js";
+import {
+  validateLiveModelEvaluationManifest,
+  type LiveModelEvaluationManifest,
+} from "./modelEvaluation.js";
+import { validateModelCaseManifest, type ModelCaseManifest } from "./modelCases.js";
 
 interface CommandResult {
   commandId: string;
@@ -29,6 +34,20 @@ const inventoryPath = resolve(root, "harness", "evaluator", "inventory.json");
 const inventory = JSON.parse(await readFile(inventoryPath, "utf8")) as EvaluatorInventory;
 const validation = validateEvaluatorInventory(inventory);
 if (!validation.valid) throw new Error(`Evaluator inventory is invalid: ${JSON.stringify(validation.blockers)}`);
+const modelManifest = JSON.parse(
+  await readFile(resolve(root, inventory.liveModelEvaluation.manifestPath), "utf8"),
+) as LiveModelEvaluationManifest;
+const modelManifestBlockers = validateLiveModelEvaluationManifest(modelManifest);
+if (modelManifestBlockers.length > 0) {
+  throw new Error(`Live-model manifest is invalid: ${JSON.stringify(modelManifestBlockers)}`);
+}
+const modelCaseManifest = JSON.parse(
+  await readFile(resolve(root, inventory.liveModelEvaluation.caseManifestPath), "utf8"),
+) as ModelCaseManifest;
+const modelCaseBlockers = validateModelCaseManifest(modelCaseManifest, modelManifest);
+if (modelCaseBlockers.length > 0) {
+  throw new Error(`Live-model case manifest is invalid: ${JSON.stringify(modelCaseBlockers)}`);
+}
 
 const runId = `local-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
 const outputDirectory = resolve(root, ".harness-state", "evaluator", runId);
@@ -121,7 +140,14 @@ const report = {
   sourceSha: spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim(),
   dirty: Boolean(spawnSync("git", ["status", "--porcelain=v1"], { cwd: root, encoding: "utf8" }).stdout.trim()),
   results,
-  note: "Local supervisor evidence is builder-visible and mutable; it cannot satisfy independent release gates.",
+  liveModelEvaluation: {
+    status: "NOT_RUN",
+    manifestPath: inventory.liveModelEvaluation.manifestPath,
+    caseManifestPath: inventory.liveModelEvaluation.caseManifestPath,
+    evaluationIds: modelManifest.evaluations.map((evaluation) => evaluation.id),
+    reason: "Paid live-provider evaluation is a separate receipt-backed gate and cannot be replaced by local deterministic tests.",
+  },
+  note: "Local supervisor evidence is builder-visible and mutable; it cannot satisfy independent release or live-model gates.",
 };
 await writeFile(resolve(outputDirectory, "report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
 console.log(JSON.stringify({ ...report, outputDirectory }, null, 2));

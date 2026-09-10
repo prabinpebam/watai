@@ -7,8 +7,12 @@ import type { RuntimeAuthorizationGrant } from "./readiness";
 import {
   actorProofClaim,
   authorizationGrantClaim,
+  modelEvaluationObservationClaim,
+  providerUsageReceiptClaim,
   TrustBackedAuthorities,
 } from "./trustAuthorities";
+import type { ProviderUsageReceipt } from "./executionCoordinator";
+import type { LiveModelRunObservation } from "./modelEvaluation";
 import {
   claimSigningBytes,
   TrustVerifier,
@@ -33,9 +37,11 @@ const kinds: TrustedArtifactKind[] = [
   "guard-proof",
   "impact-assessment",
   "policy-candidate",
+  "provider-usage-receipt",
   "release-permit",
   "taskspec-lock",
   "value-assessment",
+  "model-evaluation-observation",
   "worker-isolation-attestation",
 ];
 const root: TrustRootManifest = {
@@ -111,6 +117,7 @@ function grant(): RuntimeAuthorizationGrant {
       maxInputTokens: 100_000,
       maxOutputTokens: 10_000,
       maxRequests: 20,
+      maxAiCredits: 20,
     },
     issuer,
     issuedAt: "2026-09-10T10:59:00.000Z",
@@ -122,6 +129,32 @@ function grant(): RuntimeAuthorizationGrant {
 }
 
 describe("trust-backed harness authorities", () => {
+  it("verifies signed usage receipts and live-model observations", () => {
+    const usage: ProviderUsageReceipt = {
+      receiptId: "usage-1", runId: "run-1", effectId: "effect-1", reservationId: "reservation-1",
+      providerId: "github-copilot", model: "gpt-5.4", resolvedModelVersion: "gpt-5.4-test",
+      premiumRequestCost: 1, aiCredits: 1,
+      usage: { usd: 0, inputTokens: 100, outputTokens: 20, requests: 1 },
+      outputSha256: "a".repeat(64), completedAt: "2026-09-10T11:00:00.000Z",
+      issuer, issuedAt: "2026-09-10T10:59:00.000Z", expiresAt: "2026-09-10T11:05:00.000Z", signature: "",
+    };
+    usage.signature = signature(providerUsageReceiptClaim(usage));
+    const observation: LiveModelRunObservation = {
+      evaluationId: "implementation-agent-smoke", runId: "model-run", caseId: "bounded-read", repetition: 1,
+      providerId: "github-copilot", requestedModel: "gpt-5.4", resolvedModelVersion: "gpt-5.4-test",
+      status: "completed", semanticPass: true, latencyMs: 100,
+      usage: { usd: 0, inputTokens: 100, outputTokens: 20, requests: 1 },
+      usageReceiptSha256: "b".repeat(64), responseSha256: "c".repeat(64),
+      caseDefinitionSha256: "d".repeat(64), graderSha256: "e".repeat(64), errorCode: null,
+      gradedArtifactSha256: "f".repeat(64), gradeOutputSha256: "1".repeat(64),
+      completedAt: "2026-09-10T11:00:00.000Z", producerIdentity: issuer,
+      issuedAt: "2026-09-10T10:59:00.000Z", expiresAt: "2026-09-10T11:05:00.000Z", signature: "",
+    };
+    observation.signature = signature(modelEvaluationObservationClaim(observation));
+    expect(authorities.verifyProviderUsage(usage)).toBe(true);
+    expect(authorities.verifyObservation(observation)).toBe(true);
+  });
+
   it("verifies controller and runtime authorization through the pinned root", () => {
     expect(authorities.verifyActor(actor())).toBe(true);
     expect(authorities.verifyAuthorization(grant())).toBe(true);

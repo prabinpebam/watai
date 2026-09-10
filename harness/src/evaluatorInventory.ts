@@ -16,6 +16,15 @@ export interface EvaluatorInventory {
   status: string;
   releaseEligible: boolean;
   commands: EvaluatorCommand[];
+  liveModelEvaluation: {
+    manifestPath: "harness/evaluator/model-evaluations.json";
+    caseManifestPath: "harness/evaluator/model-cases.json";
+    execution: "separate-paid-gate";
+    requiredPurposes: Array<"implementation-agent" | "product-behavior" | "memory-quality">;
+    minimumRepetitions: number;
+    usageReceiptsRequired: true;
+    portableJsonlRequired: true;
+  };
   requiredProperties: {
     zeroFailures: boolean;
     zeroSkipped: boolean;
@@ -89,6 +98,20 @@ export function validateEvaluatorInventory(inventory: EvaluatorInventory): Inven
   if (!integration || !integration.requiresIsolatedStage || integration.expectedTests !== 11) {
     block("INTEGRATION_INVENTORY_INVALID", "All 11 API integrations require an isolated stage target.");
   }
+  const live = inventory.liveModelEvaluation;
+  if (
+    live?.manifestPath !== "harness/evaluator/model-evaluations.json" ||
+    live.caseManifestPath !== "harness/evaluator/model-cases.json" ||
+    live.execution !== "separate-paid-gate" ||
+    new Set(live.requiredPurposes).size !== 3 ||
+    !["implementation-agent", "product-behavior", "memory-quality"].every((purpose) =>
+      live.requiredPurposes.includes(purpose as typeof live.requiredPurposes[number])) ||
+    live.minimumRepetitions < 3 ||
+    live.usageReceiptsRequired !== true ||
+    live.portableJsonlRequired !== true
+  ) {
+    block("LIVE_MODEL_INVENTORY_INVALID", "Live-model evaluation must remain a separate paid gate with repeated, receipt-backed portable results.");
+  }
   const properties = inventory.requiredProperties;
   if (
     !properties.zeroFailures ||
@@ -111,6 +134,10 @@ export function validateEvaluatorInventory(inventory: EvaluatorInventory): Inven
 export interface ImpactMap {
   schemaVersion: string;
   status: string;
+  modelSensitiveRoots: Array<{
+    root: string;
+    evaluationIds: string[];
+  }>;
   domains: Array<{
     id: string;
     allowedRoots: string[];
@@ -128,6 +155,17 @@ export function validateImpactMap(map: ImpactMap): InventoryValidation {
   }
   if (new Set(ids).size !== ids.length || expectedDomains.some((id) => !ids.includes(id))) {
     blockers.push({ code: "IMPACT_DOMAIN_MISSING", message: "Impact map domains are incomplete or duplicated." });
+  }
+  if (
+    map.modelSensitiveRoots.length === 0 ||
+    new Set(map.modelSensitiveRoots.map((entry) => entry.root)).size !== map.modelSensitiveRoots.length ||
+    map.modelSensitiveRoots.some((entry) =>
+      !entry.root || entry.root.startsWith("/") || entry.root.includes("..") ||
+      entry.evaluationIds.length === 0 ||
+      new Set(entry.evaluationIds).size !== entry.evaluationIds.length ||
+      entry.evaluationIds.some((id) => !/^[a-z][a-z0-9-]+$/.test(id)))
+  ) {
+    blockers.push({ code: "MODEL_IMPACT_MAP_INVALID", message: "Model-sensitive roots and evaluation IDs must be explicit and unique." });
   }
   for (const domain of map.domains) {
     if (
@@ -175,4 +213,20 @@ export function validateNegativeControls(registry: NegativeControlRegistry): Inv
     sha256: createHash("sha256").update(canonical(registry)).digest("hex"),
     blockers,
   };
+}
+
+function normalizedImpactPath(value: string): string {
+  return value.trim().replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+$/, "");
+}
+
+function impactPathsOverlap(left: string, right: string): boolean {
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+}
+
+export function deriveModelEvaluationIds(map: ImpactMap, plannedPaths: string[]): string[] {
+  const normalizedPaths = plannedPaths.map(normalizedImpactPath);
+  return [...new Set(map.modelSensitiveRoots.flatMap((entry) => {
+    const root = normalizedImpactPath(entry.root);
+    return normalizedPaths.some((path) => impactPathsOverlap(path, root)) ? entry.evaluationIds : [];
+  }))].sort();
 }

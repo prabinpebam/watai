@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  deriveModelEvaluationIds,
+  validateImpactMap,
+  type ImpactMap,
+} from "./evaluatorInventory.js";
 
 import {
   assessReadiness,
@@ -73,6 +78,7 @@ export interface ExecutionPolicy extends HarnessPolicySummary {
     candidateUsd: number;
     candidateInputTokens: number;
     candidateOutputTokens: number;
+    candidateAiCredits: number;
     permitTtlSeconds: number;
   };
 }
@@ -125,6 +131,7 @@ export interface ImpactAssessment {
   authorizedRoots: string[];
   plannedPaths: string[];
   gateIds: string[];
+  modelEvaluationIds: string[];
   issuer: string;
   issuedAt: string;
   expiresAt: string;
@@ -148,6 +155,15 @@ export type ExecutionDomain =
 
 export type MutationClass = "read-only" | "candidate" | "control-plane" | "policy";
 
+export interface TaskValidationCommand {
+  id: string;
+  executable: string;
+  args: string[];
+  cwd: string;
+  timeoutMs: number;
+  maxOutputBytes: number;
+}
+
 export interface PrepareTaskInput {
   mode: "rehearsal" | "implementation";
   sliceId: string;
@@ -159,9 +175,12 @@ export interface PrepareTaskInput {
   authorizationGrant?: RuntimeAuthorizationGrant;
   dependencyReceipts: DependencyReceipt[];
   impactAssessment?: ImpactAssessment;
+  impactMap: ImpactMap;
   exactAllowedPaths: string[];
   nonGoals: string[];
   allowedTools: string[];
+  agentRuntime: { providerId: string; model: string } | null;
+  validationCommands: TaskValidationCommand[];
   modelNetworkHosts: string[];
   toolNetworkHosts: string[];
   preparedAt: string;
@@ -188,6 +207,8 @@ export interface TaskSpecDraft {
   allowedPaths: string[];
   nonGoals: string[];
   allowedTools: string[];
+  agentRuntime: { providerId: string; model: string } | null;
+  validationCommands: TaskValidationCommand[];
   modelNetworkHosts: string[];
   toolNetworkHosts: string[];
   deniedAuthorities: string[];
@@ -195,6 +216,7 @@ export interface TaskSpecDraft {
   requiredAcceptanceIds: string[];
   requiredAcceptance: AcceptanceDefinition[];
   requiredEvidenceKinds: string[];
+  requiredModelEvaluationIds: string[];
   negativeControlIds: string[];
   visibleOutcome: string;
   rolloutProfile: string;
@@ -208,6 +230,7 @@ export interface TaskSpecDraft {
     maxInputTokens: number;
     maxOutputTokens: number;
     maxRequests: number;
+    maxAiCredits: number;
   };
   preparedAt: string;
   deadline: string;
@@ -297,6 +320,15 @@ function normalizedPath(value: string): string | undefined {
     /^[A-Za-z]:/.test(path) ||
     path.split("/").some((segment) => segment === ".." || segment === ".")
   ) {
+    return undefined;
+  }
+  return path;
+}
+
+function normalizedValidationDirectory(value: string): string | undefined {
+  const path = value.trim().replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+$/, "");
+  if (path === "" || path === ".") return ".";
+  if (path.startsWith("/") || /^[A-Za-z]:/.test(path) || path.split("/").some((segment) => segment === ".." || segment === ".")) {
     return undefined;
   }
   return path;
@@ -411,6 +443,9 @@ export function prepareTaskSpec(
       "NEGATIVE_CONTROLS_MISSING",
       "The independently pinned evaluator pack must name negative controls.",
     );
+  }
+  if (input.bindings.negativeControlIds.some((id) => !/^NC-[a-z0-9-]+$/.test(id))) {
+    addBlocker(blockers, "NEGATIVE_CONTROL_ID_INVALID", "Negative-control IDs must use the canonical NC-name format.");
   }
   if (new Set(input.bindings.negativeControlIds).size !== input.bindings.negativeControlIds.length) {
     addBlocker(blockers, "NEGATIVE_CONTROLS_DUPLICATE", "Negative control IDs must be unique.");
@@ -551,6 +586,39 @@ export function prepareTaskSpec(
   if (input.allowedTools.length === 0 || input.allowedTools.some((tool) => !tool.trim() || tool.includes("*"))) {
     addBlocker(blockers, "TOOL_ALLOWLIST_INVALID", "Tools require a non-wildcard allowlist.");
   }
+  const agentRuntime = input.agentRuntime
+    ? { providerId: input.agentRuntime.providerId.trim(), model: input.agentRuntime.model.trim() }
+    : null;
+  if (
+    mutation !== "read-only" &&
+    (!agentRuntime || !agentRuntime.providerId || !agentRuntime.model || agentRuntime.providerId.includes("*") || agentRuntime.model.includes("*"))
+  ) {
+    addBlocker(blockers, "AGENT_RUNTIME_UNBOUND", "Mutation TaskSpecs must bind an exact provider and model.");
+  }
+  if (mutation === "read-only" && agentRuntime !== null) {
+    addBlocker(blockers, "READ_ONLY_AGENT_RUNTIME", "Read-only TaskSpecs cannot authorize a model runtime.");
+  }
+  const validationIds = new Set<string>();
+  for (const command of input.validationCommands) {
+    const cwd = normalizedValidationDirectory(command.cwd);
+    const invalid =
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{1,80}$/.test(command.id) ||
+      validationIds.has(command.id) ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{1,80}$/.test(command.executable) ||
+      command.args.some((argument) => /[\r\n\0]/.test(argument)) ||
+      !cwd ||
+      !Number.isSafeInteger(command.timeoutMs) || command.timeoutMs < 1 ||
+      command.timeoutMs > policy.limits.builderAttemptMinutes * 60_000 ||
+      !Number.isSafeInteger(command.maxOutputBytes) || command.maxOutputBytes < 1 || command.maxOutputBytes > 10 * 1024 * 1024;
+    if (invalid) addBlocker(blockers, "VALIDATION_COMMAND_INVALID", `Validation command ${command.id || "<unnamed>"} is unsafe.`);
+    validationIds.add(command.id);
+  }
+  if (mutation !== "read-only" && input.validationCommands.length === 0) {
+    addBlocker(blockers, "VALIDATION_COMMANDS_MISSING", "Mutation TaskSpecs require fixed validation commands.");
+  }
+  if (mutation === "read-only" && input.validationCommands.length > 0) {
+    addBlocker(blockers, "READ_ONLY_VALIDATION_COMMAND", "Read-only TaskSpecs cannot authorize validation execution.");
+  }
   const allNetworkHosts = [...input.modelNetworkHosts, ...input.toolNetworkHosts];
   if (allNetworkHosts.some((host) => !host.trim() || host.includes("*") || host.includes("/"))) {
     addBlocker(blockers, "NETWORK_ALLOWLIST_INVALID", "Network hosts must be explicit hostnames without wildcards or paths.");
@@ -573,7 +641,18 @@ export function prepareTaskSpec(
     !readiness.blockers.some((blocker) => blocker.code === "AUTHORIZATION_NOT_GRANTED");
   const grantedBilling = input.authorizationGrant?.billing;
 
+  const impactMapValidation = validateImpactMap(input.impactMap);
+  if (!impactMapValidation.valid || impactMapValidation.sha256 !== input.bindings.impactMapSha256) {
+    addBlocker(blockers, "IMPACT_MAP_BINDING_INVALID", "Model-impact rules do not match the pinned impact-map digest.");
+  }
   const impactGates = impact?.gateIds ?? [];
+  const requiredModelEvaluationIds = deriveModelEvaluationIds(input.impactMap, impact?.plannedPaths ?? []);
+  if ((impact?.modelEvaluationIds ?? []).some((id) => !/^[a-z][a-z0-9-]+$/.test(id))) {
+    addBlocker(blockers, "MODEL_EVALUATION_ID_INVALID", "Impact assessment contains an invalid live-model evaluation ID.");
+  }
+  if (canonical([...(impact?.modelEvaluationIds ?? [])].sort()) !== canonical(requiredModelEvaluationIds)) {
+    addBlocker(blockers, "MODEL_EVALUATION_SCOPE_MISMATCH", "Signed model-evaluation IDs do not match the pinned path-impact rules.");
+  }
   const requiredGates = [...new Set([
     ...policy.mandatoryGates,
     ...(slice.id.startsWith("S") ? policy.productMandatoryGates : []),
@@ -586,6 +665,7 @@ export function prepareTaskSpec(
   ])].sort();
   const requiredEvidenceKinds = [...new Set([
     ...slice.evidence,
+    ...(requiredModelEvaluationIds.length > 0 ? ["model-eval"] : []),
     ...requiredGates.flatMap((gate) => gateEvidence[gate] ?? []),
   ])].sort();
   for (const kind of requiredEvidenceKinds) {
@@ -634,6 +714,8 @@ export function prepareTaskSpec(
     allowedPaths,
     nonGoals: input.nonGoals.map((value) => value.trim()),
     allowedTools: [...new Set(input.allowedTools)].sort(),
+    agentRuntime,
+    validationCommands: [...input.validationCommands].sort((left, right) => left.id.localeCompare(right.id)),
     modelNetworkHosts: [...new Set(input.modelNetworkHosts.map((host) => host.toLowerCase()))].sort(),
     toolNetworkHosts: [...new Set(input.toolNetworkHosts.map((host) => host.toLowerCase()))].sort(),
     deniedAuthorities: [
@@ -649,6 +731,7 @@ export function prepareTaskSpec(
     requiredAcceptanceIds: slice.acceptance.map((acceptance) => acceptance.id).sort(),
     requiredAcceptance: [...slice.acceptance].sort((left, right) => left.id.localeCompare(right.id)),
     requiredEvidenceKinds,
+    requiredModelEvaluationIds,
     negativeControlIds: [...input.bindings.negativeControlIds].sort(),
     visibleOutcome: slice.visibleChange,
     rolloutProfile: slice.rollout.profile,
@@ -668,6 +751,9 @@ export function prepareTaskSpec(
         ? Math.min(policy.limits.candidateOutputTokens, grantedBilling?.maxOutputTokens ?? policy.limits.candidateOutputTokens)
         : 0,
       maxRequests: executionAuthorized ? grantedBilling?.maxRequests ?? 1 : 0,
+      maxAiCredits: executionAuthorized
+        ? Math.min(policy.limits.candidateAiCredits, grantedBilling?.maxAiCredits ?? policy.limits.candidateAiCredits)
+        : 0,
     },
     preparedAt: input.preparedAt,
     deadline,
@@ -726,4 +812,32 @@ export function lockTaskSpec(
     dispatchAuthorized: preparation.outcome === "READY_FOR_DISPATCH",
     lock: proof,
   };
+}
+
+export function verifyLockedTaskSpec(
+  task: LockedTaskSpec,
+  policy: ExecutionPolicy,
+  authorities: TaskSpecAuthorities,
+): boolean {
+  if (task.status !== "SPEC_LOCKED") return false;
+  const {
+    status: _status,
+    dispatchAuthorized,
+    lock,
+    ...draftFields
+  } = task;
+  const draft: TaskSpecDraft = { ...draftFields, status: "DRAFT" };
+  const { taskSpecSha256: _claimedDigest, ...withoutDigest } = draft;
+  if (digest(withoutDigest) !== task.taskSpecSha256) return false;
+  try {
+    const verified = lockTaskSpec({
+      outcome: dispatchAuthorized ? "READY_FOR_DISPATCH" : "READY_FOR_REHEARSAL",
+      draft,
+      blockers: [],
+      warnings: [],
+    }, lock, policy, authorities);
+    return canonical(verified) === canonical(task);
+  } catch {
+    return false;
+  }
 }

@@ -19,6 +19,8 @@
     "library:backfill": "npx --yes tsx scripts/library-backfill.ts",
     "library:migrate": "npx --yes tsx scripts/library-migrate.ts",
     "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node20 --packages=external --outfile=dist/index.cjs",
+    "build:live-model-adapter": "esbuild scripts/live-model-adapter.ts --bundle --platform=node --format=esm --target=node20 --packages=external --outfile=dist/live-model-adapter.mjs",
+    "live-model-adapter": "npm run build:live-model-adapter --silent && node dist/live-model-adapter.mjs",
     "prestart": "npm run build",
     "start": "func start"
   },

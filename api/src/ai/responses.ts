@@ -62,7 +62,12 @@ export type ResponsesEvent =
       containerId?: string;
     }
   | { type: 'citation'; citation: ResponsesCitation }
-  | { type: 'completed' }
+  | {
+      type: 'completed';
+      responseId?: string;
+      resolvedModelVersion?: string;
+      usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
+    }
   | { type: 'error'; message: string };
 
 export interface ResponsesCitation {
@@ -80,7 +85,14 @@ export interface ResponsesCitation {
 interface RawEvent {
   type?: string;
   delta?: string;
-  response?: { id?: string };
+  response?: {
+    id?: string;
+    model?: string;
+    status?: string;
+    error?: { message?: string };
+    incomplete_details?: { reason?: string };
+    usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+  };
   error?: { message?: string };
   item?: {
     type?: string;
@@ -216,10 +228,32 @@ export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
       const b64 = ev.partial_image_b64 ?? ev.b64_json;
       return b64 ? { type: 'image', b64, partial: true } : null;
     }
-    case 'response.completed':
-      return { type: 'completed' };
+    case 'response.completed': {
+      const usage = ev.response?.usage;
+      return {
+        type: 'completed',
+        ...(ev.response?.id ? { responseId: ev.response.id } : {}),
+        ...(ev.response?.model ? { resolvedModelVersion: ev.response.model } : {}),
+        ...(usage ? {
+          usage: {
+            inputTokens: usage.input_tokens ?? 0,
+            outputTokens: usage.output_tokens ?? 0,
+            totalTokens: usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+          },
+        } : {}),
+      };
+    }
     case 'response.error':
       return { type: 'error', message: ev.error?.message ?? 'The response failed.' };
+    case 'response.failed':
+      return { type: 'error', message: ev.response?.error?.message ?? 'The response failed.' };
+    case 'response.incomplete':
+      return {
+        type: 'error',
+        message: ev.response?.incomplete_details?.reason
+          ? `The response was incomplete: ${ev.response.incomplete_details.reason}`
+          : 'The response was incomplete.',
+      };
     default:
       return null;
   }

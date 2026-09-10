@@ -8,8 +8,8 @@
       "cwd": ".",
       "executable": "npm",
       "args": ["run", "validate:harness"],
-      "expectedTestFiles": 21,
-      "expectedTests": 139,
+      "expectedTestFiles": 32,
+      "expectedTests": 197,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },
@@ -18,8 +18,8 @@
       "cwd": ".",
       "executable": "npm",
       "args": ["test"],
-      "expectedTestFiles": 53,
-      "expectedTests": 370,
+      "expectedTestFiles": 64,
+      "expectedTests": 428,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },
@@ -39,7 +39,7 @@
       "executable": "npm",
       "args": ["test"],
       "expectedTestFiles": 76,
-      "expectedTests": 557,
+      "expectedTests": 560,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },
@@ -84,6 +84,15 @@
       "requiresIsolatedStage": true
     }
   ],
+  "liveModelEvaluation": {
+    "manifestPath": "harness/evaluator/model-evaluations.json",
+    "caseManifestPath": "harness/evaluator/model-cases.json",
+    "execution": "separate-paid-gate",
+    "requiredPurposes": ["implementation-agent", "product-behavior", "memory-quality"],
+    "minimumRepetitions": 3,
+    "usageReceiptsRequired": true,
+    "portableJsonlRequired": true
+  },
   "requiredProperties": {
     "zeroFailures": true,
     "zeroSkipped": true,

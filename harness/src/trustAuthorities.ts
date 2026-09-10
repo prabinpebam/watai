@@ -21,6 +21,8 @@ import type {
   WorkerAuthorities,
   WorkerIsolationAttestation,
 } from "./worker.js";
+import type { ExecutionCoordinatorAuthorities, ProviderUsageReceipt } from "./executionCoordinator.js";
+import type { LiveModelEvaluationAuthorities, LiveModelRunObservation } from "./modelEvaluation.js";
 import type { CandidateEvidencePacket, EvidenceAuthorities, EvidenceCheck } from "./evidence.js";
 
 type TrustLimits = HarnessAuthorities["limits"];
@@ -120,6 +122,7 @@ export function capabilityAttestationClaim(attestation: CapabilityAttestation): 
       repositoryId: attestation.repositoryId,
       policySha256: attestation.policySha256,
       evidenceSha256: attestation.evidenceSha256,
+      modelEvaluation: attestation.modelEvaluation,
     },
     attestation.signature,
   );
@@ -179,6 +182,7 @@ export function impactAssessmentClaim(assessment: ImpactAssessment): SignedClaim
       authorizedRoots: assessment.authorizedRoots,
       plannedPaths: assessment.plannedPaths,
       gateIds: assessment.gateIds,
+      modelEvaluationIds: assessment.modelEvaluationIds,
     },
     assessment.signature,
   );
@@ -253,6 +257,32 @@ export function credentialBrokerClaim(attestation: CredentialBrokerAttestation):
   );
 }
 
+export function providerUsageReceiptClaim(receipt: ProviderUsageReceipt): SignedClaim {
+  const { signature: _signature, ...payload } = receipt;
+  return claim(
+    "provider-usage-receipt",
+    receipt.receiptId,
+    receipt.issuer,
+    receipt.issuedAt,
+    receipt.expiresAt,
+    payload,
+    receipt.signature,
+  );
+}
+
+export function modelEvaluationObservationClaim(observation: LiveModelRunObservation): SignedClaim {
+  const { signature: _signature, ...payload } = observation;
+  return claim(
+    "model-evaluation-observation",
+    `${observation.evaluationId}:${observation.runId}:${observation.caseId}:${observation.repetition}`,
+    observation.producerIdentity,
+    observation.issuedAt,
+    observation.expiresAt,
+    payload,
+    observation.signature,
+  );
+}
+
 export function evidencePacketClaim(packet: CandidateEvidencePacket): SignedClaim {
   return claim(
     "evidence-packet",
@@ -299,7 +329,7 @@ export function evidenceCheckClaim(check: EvidenceCheck, packet: CandidateEviden
   );
 }
 
-export class TrustBackedAuthorities implements HarnessAuthorities, TaskSpecAuthorities, ReadinessAuthorities, WorkerAuthorities, EvidenceAuthorities {
+export class TrustBackedAuthorities implements HarnessAuthorities, TaskSpecAuthorities, ReadinessAuthorities, WorkerAuthorities, EvidenceAuthorities, ExecutionCoordinatorAuthorities, LiveModelEvaluationAuthorities {
   constructor(
     private readonly verifier: TrustVerifier,
     private readonly clock: { now(): number },
@@ -308,6 +338,14 @@ export class TrustBackedAuthorities implements HarnessAuthorities, TaskSpecAutho
 
   now(): number {
     return this.clock.now();
+  }
+
+  verifyProviderUsage(receipt: ProviderUsageReceipt): boolean {
+    return this.verifier.verify(providerUsageReceiptClaim(receipt)).valid;
+  }
+
+  verifyObservation(observation: LiveModelRunObservation): boolean {
+    return this.verifier.verify(modelEvaluationObservationClaim(observation)).valid;
   }
 
   verifyActor(proof: ActorProof): boolean {

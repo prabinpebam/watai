@@ -59,6 +59,15 @@ const task = (): LockedTaskSpec => ({
   allowedPaths: ["src/features/voice"],
   nonGoals: ["No release"],
   allowedTools: [...gatewayToolIds],
+  agentRuntime: { providerId: "copilot-subscription", model: "gpt-5" },
+  validationCommands: [{
+    id: "voice-tests",
+    executable: "npm",
+    args: ["test", "--", "src/features/voice"],
+    cwd: "src/features/voice",
+    timeoutMs: 10 * 60_000,
+    maxOutputBytes: 1024 * 1024,
+  }],
   modelNetworkHosts: ["api.githubcopilot.com"],
   toolNetworkHosts: [],
   deniedAuthorities: ["production-network"],
@@ -69,6 +78,7 @@ const task = (): LockedTaskSpec => ({
     { id: "S36-B", gate: "G07", check: "Navigation remains bounded." },
   ],
   requiredEvidenceKinds: ["regression", "browser", "adversarial"],
+  requiredModelEvaluationIds: [],
   negativeControlIds: ["NC-1"],
   visibleOutcome: "Mute stops capture",
   rolloutProfile: "frontend-only",
@@ -82,6 +92,7 @@ const task = (): LockedTaskSpec => ({
     maxInputTokens: 100_000,
     maxOutputTokens: 10_000,
     maxRequests: 20,
+    maxAiCredits: 2,
   },
   preparedAt: "2026-09-10T11:00:00.000Z",
   deadline: "2026-09-10T17:00:00.000Z",
@@ -104,8 +115,10 @@ const runtime = (): WorkerRuntimePlan => ({
   sdkVersion: "1.0.13",
   bundledCliVersion: "1.0.83",
   runtimeImageSha256: digest("7"),
+  containerDependencyDirectory: "/opt/watai/node_modules",
   model: "gpt-5",
   providerId: "copilot-subscription",
+  maxAiCredits: 2,
   brokerScratchDirectory: "C:/harness/broker/run-001",
   brokerHomeDirectory: "C:/harness/home/run-001",
   brokerEnvironment: { PATH: "C:/harness/bin" },
@@ -185,11 +198,16 @@ describe("worker launch contract", () => {
     ["missing broker", isolation(), undefined, "CREDENTIAL_BROKER_ATTESTATION_MISSING"],
     ["networked tools", isolation(), broker(), "TOOL_NETWORK_FORBIDDEN"],
     ["extra runtime tool", isolation(), broker(), "TOOL_SET_INVALID"],
+    ["changed model", isolation(), broker(), "AGENT_RUNTIME_MISMATCH"],
+    ["changed validation", isolation(), broker(), "VALIDATION_COMMAND_SET_MISMATCH"],
   ])("blocks %s", (_label, isolationValue, brokerValue, code) => {
     const value = task();
+    const runtimeValue = runtime();
     if (code === "TOOL_NETWORK_FORBIDDEN") value.toolNetworkHosts = ["example.com"];
     if (code === "TOOL_SET_INVALID") value.allowedTools = ["watai_read_file"];
-    const result = prepareWorkerLaunch(value, runtime(), isolationValue, brokerValue, authorities);
+    if (code === "AGENT_RUNTIME_MISMATCH") runtimeValue.model = "different-model";
+    if (code === "VALIDATION_COMMAND_SET_MISMATCH") runtimeValue.validationCommands[0].args = ["test", "--", "other"];
+    const result = prepareWorkerLaunch(value, runtimeValue, isolationValue, brokerValue, authorities);
     expect(result.outcome).toBe("BLOCKED_SAFE");
     expect(result.blockers.map((blocker) => blocker.code)).toContain(code);
   });
@@ -234,6 +252,7 @@ describe("worker launch contract", () => {
           resultSha256: "unused-in-config-test",
         };
       },
+      getSubmission: async () => undefined,
     });
 
     expect(configuration.client).toMatchObject({ mode: "empty", useLoggedInUser: false });
@@ -244,6 +263,7 @@ describe("worker launch contract", () => {
       remoteSession: "off",
       availableTools: [...gatewayToolIds],
       enableManagedSettings: true,
+      sessionLimits: { maxAiCredits: 2 },
     });
   });
 
@@ -259,6 +279,7 @@ describe("worker launch contract", () => {
         result: { ok: true },
         resultSha256: "0".repeat(64),
       }),
+      getSubmission: async () => undefined,
     });
 
     await expect(tools[0].handler?.({}, {

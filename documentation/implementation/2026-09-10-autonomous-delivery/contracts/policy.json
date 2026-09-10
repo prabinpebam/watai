@@ -69,6 +69,7 @@
     "recoveryMonthUsd": 20,
     "candidateInputTokens": 1200000,
     "candidateOutputTokens": 120000,
+    "candidateAiCredits": 100,
     "memoryContextTokens": 800,
     "memoryLookupMilliseconds": 500
   },
@@ -84,6 +85,7 @@
     "api\\src\\adapters\\cosmos\\settingsStore.integration.test.ts",
     "api\\src\\adapters\\cosmos\\threadStore.integration.test.ts",
     "api\\src\\test\\integrationSetup.ts",
+    "api\\scripts\\live-model-adapter.ts",
     "api\\vitest.integration.config.ts",
     "api\\vitest.config.ts",
     "documentation\\implementation\\2026-09-10-autonomous-delivery\\contracts",

@@ -38,20 +38,25 @@
       "atomicCandidateEventOutbox": true,
       "fencedLeases": true,
       "durableBudgetReservations": true,
+      "durableEffectClaimsAndSessions": true,
+      "atomicEffectUsageSettlement": true,
+      "faultInjectedTransactionRollbacks": true,
       "scope": "same-host implementation only; not distributed release authority"
     },
     "candidateWorktree": {
       "externalRootRequired": true,
       "exactSourceSha": true,
       "canonicalBranch": true,
-      "collisionRejected": true
+      "exactRestartReuse": true,
+      "movedBranchRejected": true
     },
     "toolGateway": {
       "manifestBound": true,
-      "requestIdempotent": true,
+      "durableWriteAheadReceipts": true,
       "trackedReads": true,
-      "pathConfinedPatches": true,
-      "fixedValidationCommands": true,
+      "rollbackSafePathConfinedPatches": true,
+      "dockerIsolatedFixedValidations": true,
+      "currentDiffSubmissionRequired": true,
       "networkAccess": false
     },
     "watchdog": {
@@ -66,12 +71,29 @@
       "storage": "memory-only",
       "cacheSeconds": 300,
       "tokenLogged": false
+    },
+    "executionCoordinator": {
+      "workflowToSettlementIntegration": true,
+      "providerModelTaskBinding": true,
+      "sdkAiCreditLimit": true,
+      "streamingUsageStop": true,
+      "assistantTextCannotComplete": true,
+      "abandonedEffect": "outcome-unknown"
+    },
+    "liveModelEvaluation": {
+      "concreteCaseAndOracleManifest": true,
+      "copilotFixtureAdapter": true,
+      "azureShippedPipelineAdapter": true,
+      "precallBudgetReservation": true,
+      "externalSigningRequired": true,
+      "portableWriteOnceJsonl": true,
+      "realModelRunsExecuted": false
     }
   },
   "evaluation": {
-    "harness": "21 files / 139 tests expected",
-    "root": "53 files / 370 tests expected",
-    "apiUnit": "76 files / 557 tests passed, zero skipped",
+    "harness": "32 files / 197 tests expected",
+    "root": "64 files / 428 tests expected",
+    "apiUnit": "76 files / 560 tests expected, zero skipped",
     "browser": "3 consecutive runs x 44 tests passed, zero skipped, retries 0",
     "apiIntegration": "5 files / 11 tests passed against isolated stage",
     "independentlyAttested": false

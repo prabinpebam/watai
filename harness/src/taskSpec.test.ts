@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import backlogJson from "../../documentation/implementation/2026-09-10-autonomous-delivery/contracts/backlog.json";
 import policyJson from "../../documentation/implementation/2026-09-10-autonomous-delivery/contracts/policy.json";
+import impactMapJson from "../evaluator/impact-map.json";
+import { deriveModelEvaluationIds, validateImpactMap, type ImpactMap } from "./evaluatorInventory";
 import {
   lockTaskSpec,
   prepareTaskSpec,
@@ -14,6 +16,7 @@ import {
   type ImpactAssessment,
   type PrepareTaskInput,
   type TaskSpecAuthorities,
+  verifyLockedTaskSpec,
 } from "./taskSpec";
 
 const backlog = backlogJson as BacklogContract;
@@ -22,6 +25,7 @@ const now = Date.parse("2026-09-10T11:00:00.000Z");
 const digest = (character: string) => character.repeat(64);
 const sourceSha = "a".repeat(40);
 const policySha256 = digest("b");
+const impactMap = impactMapJson as ImpactMap;
 
 const bindings: AuthorityBindings = {
   backlogSha256: digest("a"),
@@ -34,7 +38,7 @@ const bindings: AuthorityBindings = {
   fixtureManifestSha256: digest("f"),
   toolchainSha256: digest("1"),
   dependencyLockSha256: digest("2"),
-  impactMapSha256: digest("3"),
+  impactMapSha256: validateImpactMap(impactMap).sha256,
   negativeControlIds: ["NC-forged-proof", "NC-path-escape"],
 };
 
@@ -69,6 +73,7 @@ const impact = (sliceId: string, plannedPaths: string[] = []): ImpactAssessment 
   authorizedRoots: plannedPaths,
   plannedPaths,
   gateIds: [],
+  modelEvaluationIds: deriveModelEvaluationIds(impactMap, plannedPaths),
   issuer: "trusted-impact-map",
   issuedAt: "2026-09-10T10:55:00.000Z",
   expiresAt: "2026-09-10T11:05:00.000Z",
@@ -89,13 +94,16 @@ const input = (overrides: Partial<PrepareTaskInput> = {}): PrepareTaskInput => (
     diffSha256: digest("5"),
     clean: true,
   },
-  bindings,
+  bindings: structuredClone(bindings),
   capabilityAttestations: [],
   dependencyReceipts: [],
   impactAssessment: impact("H01"),
+  impactMap: structuredClone(impactMap),
   exactAllowedPaths: [],
   nonGoals: ["No cloud mutation", "No release"],
   allowedTools: ["git-read", "filesystem-read"],
+  agentRuntime: null,
+  validationCommands: [],
   modelNetworkHosts: [],
   toolNetworkHosts: [],
   preparedAt: "2026-09-10T11:00:00.000Z",
@@ -155,6 +163,45 @@ describe("TaskSpec preparation", () => {
     expect(result.draft.requiredGates).toEqual(
       expect.arrayContaining(["G00", "G01", "G02", "G03", "G04", "G05", "G07", "G08", "G09", "G10"]),
     );
+  });
+
+  it("binds signed live-model applicability into evidence requirements", () => {
+    const result = prepareTaskSpec(backlog, policy, input({
+      sliceId: "S36",
+      source: { ...input().source, branch: "candidate/S36/run-001" },
+      dependencyReceipts: [receipt("H01"), receipt("H02"), receipt("H03"), receipt("H04")],
+      impactAssessment: impact("S36", ["api/src/ai"]),
+      exactAllowedPaths: ["api/src/ai"],
+      agentRuntime: { providerId: "github-copilot", model: "gpt-5.4" },
+      validationCommands: [{
+        id: "route-tests", executable: "npm", args: ["test"], cwd: "api/src/ai",
+        timeoutMs: 60_000, maxOutputBytes: 1024 * 1024,
+      }],
+    }), authorities);
+
+    expect(result.draft.requiredModelEvaluationIds).toEqual([
+      "responses-streaming-tools-live",
+      "semantic-routing-live",
+    ]);
+    expect(result.draft.requiredEvidenceKinds).toContain("model-eval");
+    expect(result.blockers.map((blocker) => blocker.code)).not.toEqual(expect.arrayContaining([
+      "AGENT_RUNTIME_UNBOUND",
+      "VALIDATION_COMMANDS_MISSING",
+    ]));
+  });
+
+  it("rejects a signed impact assessment that omits derived model evaluations", () => {
+    const result = prepareTaskSpec(backlog, policy, input({
+      sliceId: "S36",
+      source: { ...input().source, branch: "candidate/S36/run-001" },
+      dependencyReceipts: [receipt("H01"), receipt("H02"), receipt("H03"), receipt("H04")],
+      impactAssessment: {
+        ...impact("S36", ["api/src/ai"]),
+        modelEvaluationIds: [],
+      },
+      exactAllowedPaths: ["api/src/ai"],
+    }), authorities);
+    expect(result.blockers.map((blocker) => blocker.code)).toContain("MODEL_EVALUATION_SCOPE_MISMATCH");
   });
 
   it("blocks candidate writes that overlap protected authority paths", () => {
@@ -233,6 +280,13 @@ describe("TaskSpec preparation", () => {
     );
   });
 
+  it("rejects malformed negative-control identifiers", () => {
+    const value = input();
+    value.bindings.negativeControlIds = ["not-canonical"];
+    const result = prepareTaskSpec(backlog, policy, value, authorities);
+    expect(result.blockers.map((blocker) => blocker.code)).toContain("NEGATIVE_CONTROL_ID_INVALID");
+  });
+
   it("locks only an unblocked draft with an independent bounded proof", () => {
     const preparation = prepareTaskSpec(backlog, policy, input(), authorities);
     const proof = {
@@ -251,6 +305,8 @@ describe("TaskSpec preparation", () => {
     const locked = lockTaskSpec(preparation, proof, policy, authorities);
     expect(locked.status).toBe("SPEC_LOCKED");
     expect(locked.dispatchAuthorized).toBe(false);
+    expect(verifyLockedTaskSpec(locked, policy, authorities)).toBe(true);
+    expect(verifyLockedTaskSpec({ ...locked, title: "tampered" }, policy, authorities)).toBe(false);
 
     expect(() => lockTaskSpec(
       preparation,
@@ -269,6 +325,24 @@ describe("TaskSpec preparation", () => {
     expect(result.blockers.map((blocker) => blocker.code)).toEqual(
       expect.arrayContaining(["ALLOWED_PATH_INVALID", "TOOL_ALLOWLIST_INVALID"]),
     );
+  });
+
+  it("allows a fixed repository-root validation without widening writable paths", () => {
+    const result = prepareTaskSpec(backlog, policy, input({
+      sliceId: "S36",
+      source: { ...input().source, branch: "candidate/S36/run-001" },
+      dependencyReceipts: [receipt("H01"), receipt("H02"), receipt("H03"), receipt("H04")],
+      impactAssessment: impact("S36", ["src/features/voice"]),
+      exactAllowedPaths: ["src/features/voice"],
+      agentRuntime: { providerId: "github-copilot", model: "gpt-5.4" },
+      validationCommands: [{
+        id: "root-tests", executable: "npm", args: ["test"], cwd: ".",
+        timeoutMs: 60_000, maxOutputBytes: 1024 * 1024,
+      }],
+    }), authorities);
+    expect(result.blockers.map((blocker) => blocker.code)).not.toContain("VALIDATION_COMMAND_INVALID");
+    expect(result.draft.allowedPaths).toEqual(["src/features/voice"]);
+    expect(result.draft.validationCommands[0].cwd).toBe(".");
   });
 
   it("rejects preparation outside trusted clock skew", () => {

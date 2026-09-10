@@ -218,6 +218,7 @@ export function claimEffect(effect: EffectExecution, command: ClaimEffectCommand
     !Number.isFinite(leaseUntil) ||
     !Number.isFinite(deadline) ||
     leaseUntil - now < command.minimumLeaseMs ||
+    leaseUntil > deadline ||
     deadline <= now
   ) {
     throw new ExecutionError("EFFECT_LEASE_INVALID", "Effect has insufficient lease or an expired deadline.");
@@ -255,6 +256,60 @@ export function expireClaim(
     revision: effect.revision + 1,
     status: effect.idempotency === "queryable" ? "reconciling" : "outcome-unknown",
   };
+}
+
+export function renewEffectClaim(
+  effect: EffectExecution,
+  expectedRevision: number,
+  fencingEpoch: number,
+  now: string,
+  leaseUntil: string,
+  minimumLeaseMs: number,
+): EffectExecution {
+  if (effect.revision !== expectedRevision) {
+    throw new ExecutionError("EFFECT_REVISION_MISMATCH", "Effect renewal lost compare-and-swap.");
+  }
+  const nowMs = Date.parse(now);
+  const leaseUntilMs = Date.parse(leaseUntil);
+  const deadlineMs = Date.parse(effect.intent.deadline);
+  if (
+    effect.status !== "claimed" ||
+    !effect.claim ||
+    effect.claim.fencingEpoch !== fencingEpoch ||
+    effect.intent.epoch !== fencingEpoch ||
+    !Number.isFinite(nowMs) ||
+    !Number.isFinite(leaseUntilMs) ||
+    !Number.isFinite(deadlineMs) ||
+    effect.claim.leaseUntil <= now ||
+    leaseUntilMs - nowMs < minimumLeaseMs ||
+    leaseUntilMs > deadlineMs
+  ) {
+    throw new ExecutionError("EFFECT_RENEWAL_INVALID", "Effect claim is stale, fenced or outside its deadline.");
+  }
+  return {
+    ...effect,
+    revision: effect.revision + 1,
+    claim: { ...effect.claim, leaseUntil },
+  };
+}
+
+export function markEffectOutcomeUnknown(
+  effect: EffectExecution,
+  expectedRevision: number,
+  fencingEpoch: number,
+): EffectExecution {
+  if (effect.revision !== expectedRevision) {
+    throw new ExecutionError("EFFECT_REVISION_MISMATCH", "Effect uncertainty update lost compare-and-swap.");
+  }
+  if (
+    effect.status !== "claimed" ||
+    !effect.claim ||
+    effect.claim.fencingEpoch !== fencingEpoch ||
+    effect.intent.epoch !== fencingEpoch
+  ) {
+    throw new ExecutionError("EFFECT_OUTCOME_STALE", "Only the current claimed effect can become outcome-unknown.");
+  }
+  return { ...effect, revision: effect.revision + 1, status: "outcome-unknown" };
 }
 
 export function completeEffect(

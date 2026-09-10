@@ -50,12 +50,13 @@ numeric maturity score or a passing subset relabeled complete.
 | [contracts/plan.schema.json](contracts/plan.schema.json) | Closed JSON contracts for the machine-readable artifacts |
 | [validate-plan.mjs](validate-plan.mjs) | Local, network-free plan/traceability validator and negative controls |
 
-The four JSON inputs remain **specifications/examples**, not trusted authority.
-The audit-only validator is joined by the local rehearsal controller under
-`harness/`, which executes the workflow contract and tests failure paths. It does
-not authenticate a production identity, dispatch an agent, build Watai, run model
-calls, enable Actions, create infrastructure, promote a release, or prove
-production safety. Existing audit observations remain open.
+The checked-in JSON inputs remain **specifications/examples**, not trusted
+authority. The harness now includes guarded commands for signed workflow events,
+task-bound worker probing, durable local agent execution and paid live-model
+evaluation. Every operational command requires external pinned authority and its
+specific credentials/signers; none grants itself permission, enables Actions,
+creates infrastructure, promotes a release or proves production safety. Existing
+audit observations remain open until independent evidence is admitted.
 
 Run from the repository root:
 
@@ -63,6 +64,12 @@ Run from the repository root:
 node documentation\implementation\2026-09-10-autonomous-delivery\validate-plan.mjs
 npm run validate:harness
 npm run harness:status -- implementation
+npm run harness:model-eval-plan
+npm run harness:controller-apply
+npm run harness:probe-worker
+npm run harness:evaluate-live -- <evaluation-id>
+npm run harness:task-spec
+npm run harness:execute
 ```
 
 It checks JSON contracts, exact audit ID coverage, DAG structure, mandatory fields,

@@ -43,6 +43,27 @@ const root = (): TrustRootManifest => ({
   revokedArtifactIds: [],
 });
 
+function expectations(manifest: TrustRootManifest, expectedRootSha256 = trustRootSha256(manifest)) {
+  return {
+    expectedRootSha256,
+    repositoryId: manifest.repositoryId,
+    backlogSha256: manifest.backlogSha256,
+    policySha256: manifest.policySha256,
+    workflowSha256: manifest.workflowSha256,
+    planSchemaSha256: manifest.planSchemaSha256,
+    controllerSha256: manifest.controllerSha256,
+    evaluatorPackSha256: manifest.evaluatorPackSha256,
+    testInventorySha256: manifest.testInventorySha256,
+    fixtureManifestSha256: manifest.fixtureManifestSha256,
+    toolchainSha256: manifest.toolchainSha256,
+    dependencyLockSha256: manifest.dependencyLockSha256,
+    impactMapSha256: manifest.impactMapSha256,
+    negativeControlIds: manifest.negativeControlIds,
+    maxClockSkewMs: 5_000,
+    maxClaimLifetimeMs: 24 * 60 * 60_000,
+  };
+}
+
 function claim(manifest: TrustRootManifest): SignedClaim {
   const value: SignedClaim = {
     schemaVersion: "1.0",
@@ -62,6 +83,7 @@ function claim(manifest: TrustRootManifest): SignedClaim {
         maxInputTokens: 1000,
         maxOutputTokens: 100,
         maxRequests: 10,
+        maxAiCredits: 10,
       },
     },
     signatureBase64: "",
@@ -124,18 +146,12 @@ describe("external authority bundle", () => {
     directories.push(repositoryRoot);
     const authorityDirectory = await createBundle(repositoryRoot);
     const manifest = root();
-    const bundle = await loadAuthorityBundle(repositoryRoot, authorityDirectory, { now: () => now }, {
-      expectedRootSha256: trustRootSha256(manifest),
-      repositoryId: "prabinpebam/watai",
-      backlogSha256: manifest.backlogSha256,
-      policySha256,
-      workflowSha256,
-      planSchemaSha256: manifest.planSchemaSha256,
-      controllerSha256: manifest.controllerSha256,
-      dependencyLockSha256: manifest.dependencyLockSha256,
-      maxClockSkewMs: 5_000,
-      maxClaimLifetimeMs: 24 * 60 * 60_000,
-    });
+    const bundle = await loadAuthorityBundle(
+      repositoryRoot,
+      authorityDirectory,
+      { now: () => now },
+      expectations(manifest),
+    );
 
     expect(bundle.authorizationGrants).toHaveLength(1);
     expect(bundle.deploymentObservations).toHaveLength(1);
@@ -148,18 +164,8 @@ describe("external authority bundle", () => {
     directories.push(repositoryRoot);
     const authorityDirectory = join(repositoryRoot, "authority");
     await mkdir(authorityDirectory);
-    await expect(loadAuthorityBundle(repositoryRoot, authorityDirectory, { now: () => now }, {
-      expectedRootSha256: trustRootSha256(root()),
-      repositoryId: "prabinpebam/watai",
-      backlogSha256: root().backlogSha256,
-      policySha256,
-      workflowSha256,
-      planSchemaSha256: root().planSchemaSha256,
-      controllerSha256: root().controllerSha256,
-      dependencyLockSha256: root().dependencyLockSha256,
-      maxClockSkewMs: 5_000,
-      maxClaimLifetimeMs: 60_000,
-    })).rejects.toMatchObject({ code: "AUTHORITY_INSIDE_REPOSITORY" });
+    await expect(loadAuthorityBundle(repositoryRoot, authorityDirectory, { now: () => now }, expectations(root())))
+      .rejects.toMatchObject({ code: "AUTHORITY_INSIDE_REPOSITORY" });
   });
 
   it("rejects root pin substitution", async () => {
@@ -168,18 +174,30 @@ describe("external authority bundle", () => {
     const authorityDirectory = await createBundle(repositoryRoot);
     const changedRoot = { ...root(), rootId: "substituted-root" };
     await writeFile(join(authorityDirectory, "trust-root.json"), JSON.stringify(changedRoot), "utf8");
+    await expect(loadAuthorityBundle(repositoryRoot, authorityDirectory, { now: () => now }, expectations(root())))
+      .rejects.toMatchObject({ code: "ROOT_DIGEST_MISMATCH" });
+  });
+
+  it("rejects evaluator-pack drift under an otherwise valid root", async () => {
+    const repositoryRoot = await mkdtemp(join(tmpdir(), "watai-repo-"));
+    directories.push(repositoryRoot);
+    const manifest = root();
+    const authorityDirectory = await createBundle(repositoryRoot, manifest);
     await expect(loadAuthorityBundle(repositoryRoot, authorityDirectory, { now: () => now }, {
-      expectedRootSha256: trustRootSha256(root()),
-      repositoryId: "prabinpebam/watai",
-      backlogSha256: root().backlogSha256,
-      policySha256,
-      workflowSha256,
-      planSchemaSha256: root().planSchemaSha256,
-      controllerSha256: root().controllerSha256,
-      dependencyLockSha256: root().dependencyLockSha256,
-      maxClockSkewMs: 5_000,
-      maxClaimLifetimeMs: 60_000,
-    })).rejects.toMatchObject({ code: "ROOT_DIGEST_MISMATCH" });
+      ...expectations(manifest),
+      evaluatorPackSha256: "f".repeat(64),
+    })).rejects.toMatchObject({ code: "ROOT_CONTRACT_MISMATCH" });
+  });
+
+  it("rejects evaluator-pack drift under an otherwise valid root", async () => {
+    const repositoryRoot = await mkdtemp(join(tmpdir(), "watai-repo-"));
+    directories.push(repositoryRoot);
+    const manifest = root();
+    const authorityDirectory = await createBundle(repositoryRoot, manifest);
+    await expect(loadAuthorityBundle(repositoryRoot, authorityDirectory, { now: () => now }, {
+      ...expectations(manifest),
+      evaluatorPackSha256: "f".repeat(64),
+    })).rejects.toMatchObject({ code: "ROOT_CONTRACT_MISMATCH" });
   });
 
   it("rejects an outside-looking junction that resolves into the repository", async () => {
@@ -193,17 +211,7 @@ describe("external authority bundle", () => {
     const linked = join(external, "authority-link");
     await symlink(inside, linked, process.platform === "win32" ? "junction" : "dir");
 
-    await expect(loadAuthorityBundle(repositoryRoot, linked, { now: () => now }, {
-      expectedRootSha256: trustRootSha256(root()),
-      repositoryId: "prabinpebam/watai",
-      backlogSha256: root().backlogSha256,
-      policySha256,
-      workflowSha256,
-      planSchemaSha256: root().planSchemaSha256,
-      controllerSha256: root().controllerSha256,
-      dependencyLockSha256: root().dependencyLockSha256,
-      maxClockSkewMs: 5_000,
-      maxClaimLifetimeMs: 60_000,
-    })).rejects.toMatchObject({ code: "AUTHORITY_INSIDE_REPOSITORY" });
+    await expect(loadAuthorityBundle(repositoryRoot, linked, { now: () => now }, expectations(root())))
+      .rejects.toMatchObject({ code: "AUTHORITY_INSIDE_REPOSITORY" });
   });
 });

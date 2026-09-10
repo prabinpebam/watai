@@ -103,6 +103,7 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
     let responseId: string | undefined;
     const pending: Array<{ callId: string; name: string; arguments: string }> = [];
     const bufferedText: string[] = [];
+    let sawCompleted = false;
     const enforcingRequiredTool = !!params.requiredToolName && !requiredAttempted;
     const toolChoice = enforcingRequiredTool
       ? (params.toolChoice ?? 'required')
@@ -169,8 +170,14 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
           yield { type: 'error', message: ev.message };
           return;
         case 'completed':
+          sawCompleted = true;
           break;
       }
+    }
+
+    if (!sawCompleted) {
+      yield { type: 'error', message: 'The provider stream ended without a completed response.' };
+      return;
     }
 
     if (pending.length === 0) {

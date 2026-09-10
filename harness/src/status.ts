@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +11,7 @@ import {
   type RuntimeAuthorizationGrant,
 } from "./readiness.js";
 import { loadAuthorityBundle } from "./authorityBundle.js";
+import { collectAuthorityContractDigests } from "./authorityInputs.js";
 import { TrustBackedAuthorities } from "./trustAuthorities.js";
 
 const modes = new Set<HarnessMode>(["rehearsal", "implementation", "evaluation", "release"]);
@@ -29,22 +29,9 @@ if (!modes.has(requestedMode)) {
     "contracts",
     "policy.json",
   );
-  const workflowPath = resolve(
-    root,
-    "documentation",
-    "implementation",
-    "2026-09-10-autonomous-delivery",
-    "contracts",
-    "workflow.json",
-  );
-  const [policyText, workflowText, backlogText, schemaText, controllerBytes, rootLock, apiLock] = await Promise.all([
+  const [policyText, contractDigests] = await Promise.all([
     readFile(policyPath, "utf8"),
-    readFile(workflowPath, "utf8"),
-    readFile(resolve(dirname(policyPath), "backlog.json"), "utf8"),
-    readFile(resolve(dirname(policyPath), "plan.schema.json"), "utf8"),
-    readFile(resolve(root, ".harness-dist", "controller.js")),
-    readFile(resolve(root, "package-lock.json")),
-    readFile(resolve(root, "api", "package-lock.json")),
+    collectAuthorityContractDigests(root),
   ]);
   const policy = JSON.parse(policyText) as HarnessPolicySummary & {
     limits: {
@@ -53,16 +40,7 @@ if (!modes.has(requestedMode)) {
       validationMinutes: number;
     };
   };
-  const policySha256 = createHash("sha256").update(policyText).digest("hex");
-  const workflowSha256 = createHash("sha256").update(workflowText).digest("hex");
-  const backlogSha256 = createHash("sha256").update(backlogText).digest("hex");
-  const planSchemaSha256 = createHash("sha256").update(schemaText).digest("hex");
-  const controllerSha256 = createHash("sha256").update(controllerBytes).digest("hex");
-  const dependencyLockSha256 = createHash("sha256")
-    .update(rootLock)
-    .update("\0")
-    .update(apiLock)
-    .digest("hex");
+  const policySha256 = contractDigests.policySha256;
   const repositoryId = process.env.WATAI_REPOSITORY_ID ?? "prabinpebam/watai";
   let capabilityAttestations: CapabilityAttestation[] = [];
   let authorizationGrant: RuntimeAuthorizationGrant | undefined;
@@ -79,12 +57,7 @@ if (!modes.has(requestedMode)) {
       const bundle = await loadAuthorityBundle(root, authorityDirectory, clock, {
         expectedRootSha256: process.env.WATAI_HARNESS_ROOT_SHA256 ?? "",
         repositoryId,
-        backlogSha256,
-        policySha256,
-        workflowSha256,
-        planSchemaSha256,
-        controllerSha256,
-        dependencyLockSha256,
+        ...contractDigests,
         maxClockSkewMs: policy.limits.maxClockSkewSeconds * 1_000,
         maxClaimLifetimeMs: 24 * 60 * 60_000,
       });

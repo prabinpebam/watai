@@ -22,6 +22,23 @@ function streamOf(...batches: ResponsesEvent[][]) {
 const base = { baseUrl: 'https://x/openai/v1', key: 'k', model: 'm' };
 
 describe('runAgent', () => {
+  it('rejects EOF without an explicit provider completion event', async () => {
+    async function* incomplete(): AsyncGenerator<ResponsesEvent> {
+      yield { type: 'created', responseId: 'resp-incomplete' };
+      yield { type: 'text', delta: 'partial' };
+    }
+    const events: AgentEvent[] = [];
+    for await (const event of runAgent({
+      baseUrl: 'https://example.invalid/openai/v1',
+      key: 'test',
+      model: 'test-model',
+      turns: [{ role: 'user', text: 'hello' }],
+      tools: [],
+      execute: async () => ({ output: '' }),
+      streamFn: incomplete,
+    })) events.push(event);
+    expect(events.at(-1)).toEqual({ type: 'error', message: 'The provider stream ended without a completed response.' });
+  });
   it('streams text then completes', async () => {
     const events = await collect(
       runAgent({

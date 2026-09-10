@@ -1,28 +1,44 @@
-import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadAuthorityBundle } from "./authorityBundle.js";
-import { aggregateFilesSha256, compiledRuntimeSha256 } from "./authorityInputs.js";
+import { collectAuthorityContractDigests } from "./authorityInputs.js";
 import { buildDoctorReport } from "./doctor.js";
 import { collectLocalPreflight } from "./preflight.js";
 import { assessReadiness, type ReadinessAuthorities, type RuntimeAuthorizationGrant } from "./readiness.js";
 import { selectNextSlice } from "./scheduler.js";
 import type { BacklogContract, ExecutionPolicy } from "./taskSpec.js";
 import { TrustBackedAuthorities } from "./trustAuthorities.js";
+import {
+  validateLiveModelEvaluationManifest,
+  type LiveModelEvaluationManifest,
+} from "./modelEvaluation.js";
+import { validateModelCaseManifest, type ModelCaseManifest } from "./modelCases.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const contracts = resolve(root, "documentation", "implementation", "2026-09-10-autonomous-delivery", "contracts");
-const [policyText, workflowText, backlogText, schemaText, controllerSha256, dependencyLockSha256, localPreflight] = await Promise.all([
+const [policyText, backlogText, modelManifestText, modelCaseManifestText, contractDigests, localPreflight] = await Promise.all([
   readFile(resolve(contracts, "policy.json"), "utf8"),
-  readFile(resolve(contracts, "workflow.json"), "utf8"),
   readFile(resolve(contracts, "backlog.json"), "utf8"),
-  readFile(resolve(contracts, "plan.schema.json"), "utf8"),
-  compiledRuntimeSha256(root),
-  aggregateFilesSha256(root, ["api/package-lock.json", "package-lock.json"]),
+  readFile(resolve(root, "harness", "evaluator", "model-evaluations.json"), "utf8"),
+  readFile(resolve(root, "harness", "evaluator", "model-cases.json"), "utf8"),
+  collectAuthorityContractDigests(root),
   collectLocalPreflight(root),
 ]);
+const modelManifestBlockers = validateLiveModelEvaluationManifest(
+  JSON.parse(modelManifestText) as LiveModelEvaluationManifest,
+);
+if (modelManifestBlockers.length > 0) {
+  throw new Error(`Live-model evaluation manifest is invalid: ${JSON.stringify(modelManifestBlockers)}`);
+}
+const modelCaseBlockers = validateModelCaseManifest(
+  JSON.parse(modelCaseManifestText) as ModelCaseManifest,
+  JSON.parse(modelManifestText) as LiveModelEvaluationManifest,
+);
+if (modelCaseBlockers.length > 0) {
+  throw new Error(`Live-model case manifest is invalid: ${JSON.stringify(modelCaseBlockers)}`);
+}
 const policy = JSON.parse(policyText) as ExecutionPolicy & {
   limits: ExecutionPolicy["limits"] & {
     maxClockSkewSeconds: number;
@@ -31,10 +47,7 @@ const policy = JSON.parse(policyText) as ExecutionPolicy & {
   };
 };
 const backlog = JSON.parse(backlogText) as BacklogContract;
-const policySha256 = createHash("sha256").update(policyText).digest("hex");
-const workflowSha256 = createHash("sha256").update(workflowText).digest("hex");
-const backlogSha256 = createHash("sha256").update(backlogText).digest("hex");
-const planSchemaSha256 = createHash("sha256").update(schemaText).digest("hex");
+const policySha256 = contractDigests.policySha256;
 const repositoryId = process.env.WATAI_REPOSITORY_ID ?? localPreflight.repository.repositoryId;
 const clock = { now: () => Date.now() };
 let authorities: ReadinessAuthorities = {
@@ -54,12 +67,7 @@ if (authorityDirectory) {
     const bundle = await loadAuthorityBundle(root, authorityDirectory, clock, {
       expectedRootSha256: process.env.WATAI_HARNESS_ROOT_SHA256 ?? "",
       repositoryId,
-      backlogSha256,
-      policySha256,
-      workflowSha256,
-      planSchemaSha256,
-      controllerSha256,
-      dependencyLockSha256,
+      ...contractDigests,
       maxClockSkewMs: policy.limits.maxClockSkewSeconds * 1_000,
       maxClaimLifetimeMs: 24 * 60 * 60_000,
     });

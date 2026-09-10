@@ -6,6 +6,8 @@ import {
   completeEffect,
   ExecutionError,
   expireClaim,
+  markEffectOutcomeUnknown,
+  renewEffectClaim,
   reserveBudget,
   updateReservation,
   type BudgetReservation,
@@ -113,6 +115,16 @@ describe("fenced effect execution", () => {
       maxAttempts: 3,
       reservation: reservation(),
     })).toThrowError(ExecutionError);
+    expect(() => claimEffect(effect(), {
+      expectedRevision: 0,
+      workerId: "worker-late",
+      fencingEpoch: 3,
+      now: "2026-09-10T11:00:00.000Z",
+      leaseUntil: "2026-09-10T11:21:00.000Z",
+      minimumLeaseMs: 30_000,
+      maxAttempts: 3,
+      reservation: reservation(),
+    })).toThrowError(ExecutionError);
   });
 
   it("accepts one current completion and rejects stale completion", () => {
@@ -134,5 +146,35 @@ describe("fenced effect execution", () => {
     const unqueryable = expireClaim(claim(effect("none")), 1, "2026-09-10T11:03:00.000Z");
     expect(queryable.status).toBe("reconciling");
     expect(unqueryable.status).toBe("outcome-unknown");
+  });
+
+  it("renews only a current fenced claim within the effect deadline", () => {
+    const claimed = claim();
+    const renewed = renewEffectClaim(
+      claimed,
+      claimed.revision,
+      3,
+      "2026-09-10T11:01:00.000Z",
+      "2026-09-10T11:04:00.000Z",
+      30_000,
+    );
+    expect(renewed).toMatchObject({ revision: 2, claim: { leaseUntil: "2026-09-10T11:04:00.000Z" } });
+    expect(() => renewEffectClaim(
+      claimed,
+      claimed.revision,
+      2,
+      "2026-09-10T11:01:00.000Z",
+      "2026-09-10T11:04:00.000Z",
+      30_000,
+    )).toThrowError(ExecutionError);
+  });
+
+  it("marks an uncertain provider outcome only for the current fenced worker", () => {
+    const claimed = claim();
+    expect(markEffectOutcomeUnknown(claimed, claimed.revision, 3)).toMatchObject({
+      revision: 2,
+      status: "outcome-unknown",
+    });
+    expect(() => markEffectOutcomeUnknown(claimed, claimed.revision, 2)).toThrowError(ExecutionError);
   });
 });

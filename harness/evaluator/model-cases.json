@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0",
+  "status": "CANDIDATE_FROZEN",
+  "evaluations": [
+    {
+      "evaluationId": "implementation-agent-smoke",
+      "cases": [
+        {
+          "id": "bounded-read",
+          "input": "Read src/value.ts, make no edits, run the fixed validation, and submit the unchanged result.",
+          "oracle": { "kind": "gateway-contract", "requiredTools": ["watai_read_file", "watai_run_validation", "watai_submit_result"], "requireSubmission": true, "expectedChangedPaths": [] }
+        },
+        {
+          "id": "bounded-edit",
+          "input": "Change the exported numeric value in src/value.ts from 1 to 2, run the fixed validation, and submit.",
+          "oracle": { "kind": "gateway-contract", "requiredTools": ["watai_read_file", "watai_git_diff", "watai_apply_patch", "watai_run_validation", "watai_submit_result"], "requireSubmission": true, "expectedChangedPaths": ["src/value.ts"] }
+        },
+        {
+          "id": "validation-and-submit",
+          "input": "Change the exported numeric value in src/value.ts from 1 to 2, run every fixed validation, and submit only after all pass.",
+          "oracle": { "kind": "gateway-contract", "requiredTools": ["watai_git_diff", "watai_apply_patch", "watai_run_validation", "watai_submit_result"], "requireSubmission": true, "expectedChangedPaths": ["src/value.ts"] }
+        }
+      ]
+    },
+    {
+      "evaluationId": "semantic-routing-live",
+      "cases": [
+        { "id": "long-image-restyle", "input": "Restyle the uploaded image as warm isometric storybook game art while preserving its layout.", "oracle": { "kind": "semantic-action", "expectedAction": "generate_image" } },
+        { "id": "new-image", "input": "Draw a watercolor fox sitting in a misty forest.", "oracle": { "kind": "semantic-action", "expectedAction": "generate_image" } },
+        { "id": "image-follow-up", "input": "Make another version of the generated image, warmer and less contrasty.", "oracle": { "kind": "semantic-action", "expectedAction": "generate_image" } },
+        { "id": "image-layout", "input": "Create a 1536x1024 game-art title screen with a castle and no banner.", "oracle": { "kind": "semantic-action", "expectedAction": "generate_image" } },
+        { "id": "data-deliverable", "input": "Create an xlsx pivot from the supplied sales CSV with totals.", "oracle": { "kind": "semantic-action", "expectedAction": "code_interpreter" } },
+        { "id": "plain-response", "input": "What is the difference between isometric and axonometric projection?", "oracle": { "kind": "semantic-action", "expectedAction": "respond" } }
+      ]
+    },
+    {
+      "evaluationId": "responses-streaming-tools-live",
+      "cases": [
+        { "id": "streamed-markdown", "input": "Explain a small TypeScript function using a heading, list, code block, and inline equation.", "oracle": { "kind": "event-contract", "requiredEvents": ["text", "completed"], "forbiddenEvents": ["error"] } },
+        { "id": "required-tool", "input": "Use the required fixture tool and report its result.", "oracle": { "kind": "event-contract", "requiredEvents": ["functionCall", "completed"], "forbiddenEvents": ["error"] } },
+        { "id": "multiple-tools", "input": "Use both supplied read-only fixture tools before answering.", "oracle": { "kind": "event-contract", "requiredEvents": ["functionCall", "completed"], "minimumToolCalls": 2, "forbiddenEvents": ["error"] } },
+        { "id": "tool-failure-recovery", "input": "Call the supplied failing fixture tool and explain the bounded failure without claiming success.", "oracle": { "kind": "event-contract", "requiredEvents": ["functionCall", "error"], "forbiddenEvents": [] } },
+        { "id": "context-boundary", "input": "Answer using the system instruction and the most recent turn from the supplied near-limit history.", "oracle": { "kind": "event-contract", "requiredEvents": ["text", "completed"], "forbiddenEvents": ["error"] } }
+      ]
+    },
+    {
+      "evaluationId": "memory-quality-live",
+      "cases": [
+        { "id": "capture", "input": "api/scripts/eval/corpus capture partition", "oracle": { "kind": "external-metric", "metric": "capture" } },
+        { "id": "retrieval", "input": "api/scripts/eval/corpus retrieval partition", "oracle": { "kind": "external-metric", "metric": "retrieval" } },
+        { "id": "temporal-update", "input": "frozen temporal-update episodes", "oracle": { "kind": "external-metric", "metric": "temporal-update" } },
+        { "id": "correction", "input": "frozen correction episodes", "oracle": { "kind": "external-metric", "metric": "correction" } },
+        { "id": "forgetting", "input": "frozen forgetting episodes", "oracle": { "kind": "external-metric", "metric": "forgetting" } },
+        { "id": "negative-sensitive", "input": "at least 600 frozen independent negative/sensitive timelines", "oracle": { "kind": "external-metric", "metric": "negative-sensitive" } }
+      ]
+    }
+  ]
+}

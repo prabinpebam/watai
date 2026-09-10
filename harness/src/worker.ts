@@ -7,7 +7,7 @@ import {
   type Tool,
 } from "@github/copilot-sdk";
 
-import type { LockedTaskSpec } from "./taskSpec.js";
+import type { LockedTaskSpec, TaskValidationCommand } from "./taskSpec.js";
 import { canonical, sha256 } from "./trust.js";
 
 export const gatewayToolIds = [
@@ -21,21 +21,16 @@ export const gatewayToolIds = [
 
 export type GatewayToolId = typeof gatewayToolIds[number];
 
-export interface FixedValidationCommand {
-  id: string;
-  executable: string;
-  args: string[];
-  cwd: string;
-  timeoutMs: number;
-  maxOutputBytes: number;
-}
+export type FixedValidationCommand = TaskValidationCommand;
 
 export interface WorkerRuntimePlan {
   sdkVersion: "1.0.13";
   bundledCliVersion: "1.0.83";
   runtimeImageSha256: string;
+  containerDependencyDirectory: "/opt/watai/node_modules";
   model: string;
   providerId: string;
+  maxAiCredits: number;
   brokerScratchDirectory: string;
   brokerHomeDirectory: string;
   brokerEnvironment: Record<string, string>;
@@ -118,6 +113,15 @@ export interface GatewayResponse {
 
 export interface GatewayTransport {
   invoke(request: GatewayRequest, signal?: AbortSignal): Promise<GatewayResponse>;
+  getSubmission(runId: string): Promise<{
+    receiptId: string;
+    runId: string;
+    diffSha256: string;
+    changedPaths: string[];
+    validationCommandIds: string[];
+    summary: string;
+    completedAt: string;
+  } | undefined>;
 }
 
 export interface WorkerLaunchManifest {
@@ -161,6 +165,13 @@ const digestPattern = /^[a-f0-9]{64}$/;
 const safeIdentifier = /^[A-Za-z0-9][A-Za-z0-9._-]{1,80}$/;
 const forbiddenEnvironment = /(TOKEN|SECRET|PASSWORD|KEY|CREDENTIAL|HOME|USERPROFILE|GITHUB|AZURE)/i;
 
+function safeValidationDirectory(value: string): boolean {
+  const path = value.trim().replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+$/, "");
+  if (path === "" || path === ".") return true;
+  return !path.startsWith("/") && !/^[A-Za-z]:/.test(path) &&
+    !path.split("/").some((segment) => segment === ".." || segment === ".");
+}
+
 function currentAttestation(
   issuedAt: string,
   expiresAt: string,
@@ -193,8 +204,25 @@ export function prepareWorkerLaunch(
   if (!digestPattern.test(runtime.runtimeImageSha256)) {
     block("RUNTIME_IMAGE_UNPINNED", "Runtime image must be bound by SHA-256.");
   }
+  if (runtime.containerDependencyDirectory !== "/opt/watai/node_modules") {
+    block("CONTAINER_DEPENDENCIES_UNPINNED", "Worker dependencies must come from the pinned image path /opt/watai/node_modules.");
+  }
   if (!runtime.model.trim() || !runtime.providerId.trim() || !runtime.credentialReference.trim()) {
     block("MODEL_CONFIGURATION_INCOMPLETE", "Model, provider and opaque credential reference are required.");
+  }
+  if (
+    !task.agentRuntime ||
+    task.agentRuntime.providerId !== runtime.providerId ||
+    task.agentRuntime.model !== runtime.model
+  ) {
+    block("AGENT_RUNTIME_MISMATCH", "Worker provider/model does not match the locked TaskSpec.");
+  }
+  if (
+    !Number.isFinite(runtime.maxAiCredits) ||
+    runtime.maxAiCredits <= 0 ||
+    runtime.maxAiCredits !== task.budgets.maxAiCredits
+  ) {
+    block("AI_CREDIT_LIMIT_INVALID", "SDK AI-credit limit must exactly match the locked TaskSpec ceiling.");
   }
   if (Object.keys(runtime.brokerEnvironment).some((name) => forbiddenEnvironment.test(name))) {
     block("BROKER_ENVIRONMENT_UNSAFE", "Broker environment contains a credential or ambient-home variable.");
@@ -227,13 +255,16 @@ export function prepareWorkerLaunch(
       commandIds.has(command.id) ||
       !safeIdentifier.test(command.executable) ||
       command.args.some((arg) => /[\r\n\0]/.test(arg)) ||
-      !task.allowedPaths.some((root) => command.cwd === root || command.cwd.startsWith(`${root}/`)) ||
+      !safeValidationDirectory(command.cwd) ||
       command.timeoutMs <= 0 ||
       command.timeoutMs > task.budgets.maxAttemptMinutes * 60_000 ||
       command.maxOutputBytes <= 0 ||
       command.maxOutputBytes > 10 * 1024 * 1024;
     if (invalid) block("VALIDATION_COMMAND_INVALID", `Validation command ${command.id || "<unnamed>"} is unsafe.`);
     commandIds.add(command.id);
+  }
+  if (canonical(runtime.validationCommands) !== canonical(task.validationCommands)) {
+    block("VALIDATION_COMMAND_SET_MISMATCH", "Worker validations do not exactly match the locked TaskSpec.");
   }
 
   const now = authorities.now();
@@ -357,10 +388,11 @@ const gatewaySchemas: Record<GatewayToolId, Record<string, unknown>> = {
   watai_apply_patch: {
     type: "object",
     additionalProperties: false,
-    required: ["patch", "patchSha256"],
+    required: ["patch", "patchSha256", "expectedDiffSha256"],
     properties: {
       patch: { type: "string", minLength: 1, maxLength: 524288 },
       patchSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+      expectedDiffSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
     },
   },
   watai_run_validation: {
@@ -460,6 +492,12 @@ export function buildCopilotConfiguration(
     enableExperimentalMode: false,
     enableSessionStore: false,
     enableSessionTelemetry: false,
+    sessionLimits: { maxAiCredits: manifest.runtime.maxAiCredits },
+    largeOutput: {
+      enabled: true,
+      maxSizeBytes: 1024 * 1024,
+      outputDirectory: manifest.runtime.brokerScratchDirectory,
+    },
     enableSkills: false,
     skipEmbeddingRetrieval: true,
     embeddingCacheStorage: "in-memory",

@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import inventoryJson from "../evaluator/inventory.json";
 import impactMapJson from "../evaluator/impact-map.json";
 import negativeControlsJson from "../evaluator/negative-controls.json";
+import modelEvaluationsJson from "../evaluator/model-evaluations.json";
+import { validateLiveModelEvaluationManifest, type LiveModelEvaluationManifest } from "./modelEvaluation";
 import {
   validateEvaluatorInventory,
   validateImpactMap,
@@ -25,6 +27,15 @@ describe("evaluator inventory", () => {
     expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("pins repeated live-model contracts without treating them as local tests", () => {
+    expect(validateLiveModelEvaluationManifest(modelEvaluationsJson as LiveModelEvaluationManifest)).toEqual([]);
+    expect(inventory.liveModelEvaluation).toMatchObject({
+      execution: "separate-paid-gate",
+      minimumRepetitions: 3,
+      usageReceiptsRequired: true,
+    });
+  });
+
   it.each([
     ["drops integration", (value: EvaluatorInventory) => {
       value.commands = value.commands.filter((command) => command.id !== "api-isolated-integration");
@@ -35,6 +46,9 @@ describe("evaluator inventory", () => {
     ["permits skips", (value: EvaluatorInventory) => {
       value.requiredProperties.zeroSkipped = false;
     }, "EVALUATOR_PROPERTIES_WEAKENED"],
+    ["removes live usage receipts", (value: EvaluatorInventory) => {
+      value.liveModelEvaluation.usageReceiptsRequired = false as true;
+    }, "LIVE_MODEL_INVENTORY_INVALID"],
   ])("rejects when it %s", (_label, mutate, code) => {
     const value = structuredClone(inventory);
     mutate(value);

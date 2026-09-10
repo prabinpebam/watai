@@ -14,7 +14,8 @@
         "actor-proof", "authorization-grant", "capability-attestation",
         "credential-broker-attestation", "dependency-receipt", "deployment-observation", "evidence-check", "evidence-packet",
         "guard-proof", "impact-assessment", "policy-candidate", "release-permit",
-        "taskspec-lock", "value-assessment", "worker-isolation-attestation"
+          "taskspec-lock", "value-assessment", "worker-isolation-attestation",
+          "provider-usage-receipt", "model-evaluation-observation"
       ]
     },
     "artifactId": { "type": "string", "minLength": 1 },

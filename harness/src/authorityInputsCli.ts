@@ -1,14 +1,12 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { aggregateFilesSha256, compiledRuntimeSha256 } from "./authorityInputs.js";
+import { collectAuthorityContractDigests } from "./authorityInputs.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const contracts = resolve(root, "documentation", "implementation", "2026-09-10-autonomous-delivery", "contracts");
-
 const fileDigest = async (path: string) =>
   createHash("sha256").update(await readFile(resolve(root, path))).digest("hex");
 
@@ -17,42 +15,7 @@ const status = execFileSync("git", ["status", "--porcelain=v1", "--untracked-fil
   encoding: "utf8",
 }).trim();
 const sourceSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-const negativeControls = JSON.parse(
-  await readFile(resolve(root, "harness", "evaluator", "negative-controls.json"), "utf8"),
-) as { ids: string[] };
-
-const rootInputs = {
-  backlogSha256: await fileDigest(relative(root, resolve(contracts, "backlog.json"))),
-  policySha256: await fileDigest(relative(root, resolve(contracts, "policy.json"))),
-  workflowSha256: await fileDigest(relative(root, resolve(contracts, "workflow.json"))),
-  planSchemaSha256: await fileDigest(relative(root, resolve(contracts, "plan.schema.json"))),
-  controllerSha256: await compiledRuntimeSha256(root),
-  evaluatorPackSha256: await aggregateFilesSha256(root, [
-    "harness/evaluator/impact-map.json",
-    "harness/evaluator/inventory.json",
-    "harness/evaluator/negative-controls.json",
-    "harness/src/evidence.ts",
-    "harness/src/evaluatorInventory.ts",
-  ]),
-  testInventorySha256: await fileDigest("harness/evaluator/inventory.json"),
-  fixtureManifestSha256: await fileDigest("documentation/implementation/2026-09-10-autonomous-delivery/contracts/examples.json"),
-  toolchainSha256: await aggregateFilesSha256(root, [
-    ".npmrc",
-    "api/.npmrc",
-    "api/package.json",
-    "api/tsconfig.json",
-    "api/vitest.config.ts",
-    "api/vitest.integration.config.ts",
-    "package.json",
-    "playwright.config.ts",
-    "tsconfig.harness.build.json",
-    "tsconfig.harness.json",
-    "vitest.config.ts",
-  ]),
-  dependencyLockSha256: await aggregateFilesSha256(root, ["api/package-lock.json", "package-lock.json"]),
-  impactMapSha256: await fileDigest("harness/evaluator/impact-map.json"),
-  negativeControlIds: negativeControls.ids,
-};
+const rootInputs = await collectAuthorityContractDigests(root);
 
 console.log(JSON.stringify({
   schemaVersion: "1.0",

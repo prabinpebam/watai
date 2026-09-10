@@ -5,9 +5,12 @@ import type {
   CapabilityAttestation,
   RuntimeAuthorizationGrant,
 } from "./readiness.js";
-import type { AuthorityBindings, DependencyReceipt } from "./taskSpec.js";
+import type { AuthorityBindings, DependencyReceipt, ImpactAssessment, TaskSpecLockProof } from "./taskSpec.js";
+import type { CredentialBrokerAttestation, WorkerIsolationAttestation } from "./worker.js";
 import type { DeploymentObservation } from "./preflight.js";
 import type { ValueAssessment } from "./scheduler.js";
+import type { ProviderUsageReceipt } from "./executionCoordinator.js";
+import type { LiveModelRunObservation } from "./modelEvaluation.js";
 import {
   TrustVerifier,
   type SignedClaim,
@@ -24,7 +27,13 @@ export interface AuthorityBundleExpectations {
   workflowSha256: string;
   planSchemaSha256: string;
   controllerSha256: string;
+  evaluatorPackSha256: string;
+  testInventorySha256: string;
+  fixtureManifestSha256: string;
+  toolchainSha256: string;
   dependencyLockSha256: string;
+  impactMapSha256: string;
+  negativeControlIds: string[];
   maxClockSkewMs: number;
   maxClaimLifetimeMs: number;
 }
@@ -42,6 +51,10 @@ export interface LoadedAuthorityBundle {
   authorizationGrants: RuntimeAuthorizationGrant[];
   capabilityAttestations: CapabilityAttestation[];
   dependencyReceipts: DependencyReceipt[];
+  impactAssessments: ImpactAssessment[];
+  taskSpecLocks: TaskSpecLockProof[];
+  workerIsolationAttestations: WorkerIsolationAttestation[];
+  credentialBrokerAttestations: CredentialBrokerAttestation[];
   deploymentObservations: Array<DeploymentObservation & {
     observationId: string;
     repositoryId: string;
@@ -50,6 +63,8 @@ export interface LoadedAuthorityBundle {
   }>;
   taskSpecBindings: AuthorityBindings;
   valueAssessments: ValueAssessment[];
+  providerUsageReceipts: ProviderUsageReceipt[];
+  modelEvaluationObservations: LiveModelRunObservation[];
 }
 
 export class AuthorityBundleError extends Error {
@@ -133,7 +148,13 @@ export async function loadAuthorityBundle(
     root.workflowSha256 !== expected.workflowSha256 ||
     root.planSchemaSha256 !== expected.planSchemaSha256 ||
     root.controllerSha256 !== expected.controllerSha256 ||
-    root.dependencyLockSha256 !== expected.dependencyLockSha256
+    root.evaluatorPackSha256 !== expected.evaluatorPackSha256 ||
+    root.testInventorySha256 !== expected.testInventorySha256 ||
+    root.fixtureManifestSha256 !== expected.fixtureManifestSha256 ||
+    root.toolchainSha256 !== expected.toolchainSha256 ||
+    root.dependencyLockSha256 !== expected.dependencyLockSha256 ||
+    root.impactMapSha256 !== expected.impactMapSha256 ||
+    JSON.stringify(root.negativeControlIds) !== JSON.stringify(expected.negativeControlIds)
   ) {
     throw new AuthorityBundleError(
       "ROOT_CONTRACT_MISMATCH",
@@ -186,6 +207,18 @@ export async function loadAuthorityBundle(
     dependencyReceipts: validClaims
       .filter((claim) => claim.kind === "dependency-receipt")
       .map((claim) => materialize<DependencyReceipt>(claim)),
+    impactAssessments: validClaims
+      .filter((claim) => claim.kind === "impact-assessment")
+      .map((claim) => materialize<ImpactAssessment>(claim)),
+    taskSpecLocks: validClaims
+      .filter((claim) => claim.kind === "taskspec-lock")
+      .map((claim) => materialize<TaskSpecLockProof>(claim)),
+    workerIsolationAttestations: validClaims
+      .filter((claim) => claim.kind === "worker-isolation-attestation")
+      .map((claim) => materialize<WorkerIsolationAttestation>(claim)),
+    credentialBrokerAttestations: validClaims
+      .filter((claim) => claim.kind === "credential-broker-attestation")
+      .map((claim) => materialize<CredentialBrokerAttestation>(claim)),
     deploymentObservations: validClaims
       .filter((claim) => claim.kind === "deployment-observation")
       .map((claim) => materialize<DeploymentObservation & {
@@ -197,6 +230,12 @@ export async function loadAuthorityBundle(
     valueAssessments: validClaims
       .filter((claim) => claim.kind === "value-assessment")
       .map((claim) => materialize<ValueAssessment>(claim)),
+    providerUsageReceipts: validClaims
+      .filter((claim) => claim.kind === "provider-usage-receipt")
+      .map((claim) => materialize<ProviderUsageReceipt>(claim)),
+    modelEvaluationObservations: validClaims
+      .filter((claim) => claim.kind === "model-evaluation-observation")
+      .map((claim) => materialize<LiveModelRunObservation>(claim)),
     taskSpecBindings: {
       backlogSha256: root.backlogSha256,
       policySha256: root.policySha256,

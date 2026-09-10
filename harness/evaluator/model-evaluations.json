@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.0",
+  "status": "CANDIDATE_FROZEN",
+  "releaseEligible": false,
+  "evaluations": [
+    {
+      "id": "implementation-agent-smoke",
+      "purpose": "implementation-agent",
+      "applicableGates": ["G00", "G08"],
+      "providerId": "github-copilot",
+      "requestedModel": "gpt-5.4",
+      "resolvedVersionPolicy": "observed",
+      "expectedResolvedVersion": null,
+      "caseIds": ["bounded-read", "bounded-edit", "validation-and-submit"],
+      "repetitions": 3,
+      "thresholds": {
+        "minimumSemanticPassRate": 1,
+        "maximumErrorRate": 0,
+        "maximumP95LatencyMs": 30000
+      },
+      "budget": { "usd": 0, "inputTokens": 45000, "outputTokens": 9000, "requests": 9 },
+      "requiresUsageReceipts": true,
+      "requiresPortableJsonl": true
+    },
+    {
+      "id": "semantic-routing-live",
+      "purpose": "product-behavior",
+      "applicableGates": ["G02", "G07", "G08"],
+      "providerId": "azure-openai",
+      "requestedModel": "gpt-5.4",
+      "resolvedVersionPolicy": "observed",
+      "expectedResolvedVersion": null,
+      "caseIds": ["long-image-restyle", "new-image", "image-follow-up", "image-layout", "data-deliverable", "plain-response"],
+      "repetitions": 3,
+      "thresholds": {
+        "minimumSemanticPassRate": 0.95,
+        "maximumErrorRate": 0.05,
+        "maximumP95LatencyMs": 10000
+      },
+      "budget": { "usd": 5, "inputTokens": 120000, "outputTokens": 18000, "requests": 24 },
+      "requiresUsageReceipts": true,
+      "requiresPortableJsonl": true
+    },
+    {
+      "id": "memory-quality-live",
+      "purpose": "memory-quality",
+      "applicableGates": ["G04", "G06", "G08"],
+      "providerId": "azure-openai",
+      "requestedModel": "gpt-5.4-mini",
+      "resolvedVersionPolicy": "observed",
+      "expectedResolvedVersion": null,
+      "caseIds": ["capture", "retrieval", "temporal-update", "correction", "forgetting", "negative-sensitive"],
+      "repetitions": 3,
+      "thresholds": {
+        "minimumSemanticPassRate": 1,
+        "maximumErrorRate": 0,
+        "maximumP95LatencyMs": 180000
+      },
+      "qualityDenominator": {
+        "minimumAttemptedEpisodes": 2880,
+        "minimumIndependentNegativeTimelines": 600,
+        "requiredArms": ["A", "B", "C", "D"]
+      },
+      "budget": { "usd": 75, "inputTokens": 600000, "outputTokens": 120000, "requests": 120 },
+      "requiresUsageReceipts": true,
+      "requiresPortableJsonl": true
+    },
+    {
+      "id": "responses-streaming-tools-live",
+      "purpose": "product-behavior",
+      "applicableGates": ["G02", "G05", "G07", "G08"],
+      "providerId": "azure-openai",
+      "requestedModel": "gpt-5.4",
+      "resolvedVersionPolicy": "observed",
+      "expectedResolvedVersion": null,
+      "caseIds": ["streamed-markdown", "required-tool", "multiple-tools", "tool-failure-recovery", "context-boundary"],
+      "repetitions": 3,
+      "thresholds": {
+        "minimumSemanticPassRate": 0.95,
+        "maximumErrorRate": 0.05,
+        "maximumP95LatencyMs": 180000
+      },
+      "budget": { "usd": 20, "inputTokens": 180000, "outputTokens": 30000, "requests": 30 },
+      "requiresUsageReceipts": true,
+      "requiresPortableJsonl": true
+    }
+  ]
+}

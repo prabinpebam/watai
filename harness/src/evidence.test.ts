@@ -55,6 +55,11 @@ const task = (): LockedTaskSpec => ({
   allowedPaths: ["src/fixture"],
   nonGoals: ["No release"],
   allowedTools: ["watai_read_file"],
+  agentRuntime: { providerId: "copilot", model: "gpt-5" },
+  validationCommands: [{
+    id: "fixture-tests", executable: "npm", args: ["test"], cwd: "src/fixture",
+    timeoutMs: 60_000, maxOutputBytes: 1024 * 1024,
+  }],
   modelNetworkHosts: ["api.githubcopilot.com"],
   toolNetworkHosts: [],
   deniedAuthorities: ["production-network"],
@@ -65,6 +70,7 @@ const task = (): LockedTaskSpec => ({
     { id: "S99-B", gate: "G05", check: "Recovery passes." },
   ],
   requiredEvidenceKinds: ["adversarial", "regression"],
+  requiredModelEvaluationIds: [],
   negativeControlIds: ["NC-forged-proof"],
   visibleOutcome: "Fixture",
   rolloutProfile: "control-plane",
@@ -78,6 +84,7 @@ const task = (): LockedTaskSpec => ({
     maxInputTokens: 100,
     maxOutputTokens: 20,
     maxRequests: 2,
+    maxAiCredits: 2,
   },
   preparedAt: "2026-09-10T10:00:00.000Z",
   deadline: "2026-09-10T16:00:00.000Z",
@@ -190,6 +197,24 @@ const authorities = {
 const policy = policyJson as ExecutionPolicy;
 
 describe("candidate evidence admission", () => {
+  it("requires the exact live-model evaluation selected by the TaskSpec", () => {
+    const value = task();
+    value.requiredEvidenceKinds.push("model-eval");
+    value.requiredModelEvaluationIds = ["responses-streaming-tools-live"];
+    const valuePacket = packet();
+    valuePacket.subjects.push({
+      subjectId: "model-result",
+      kind: "model-eval",
+      evaluationId: "semantic-routing-live",
+      sha256: digest("e"),
+      uri: `runs/${value.runId}/${value.source.sourceSha}/model-eval/${digest("e")}`,
+      parents: [],
+    });
+
+    const result = admitCandidateEvidence(value, policy, valuePacket, authorities);
+    expect(result.blockers.map((blocker) => blocker.code)).toContain("MODEL_EVALUATION_MISSING");
+  });
+
   it("accepts only complete trusted evidence for every acceptance and gate", () => {
     const result = admitCandidateEvidence(task(), policy, packet(), authorities);
     expect(result.outcome).toBe("CANDIDATE_VALID");

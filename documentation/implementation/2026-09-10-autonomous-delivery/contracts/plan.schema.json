@@ -79,7 +79,7 @@
     },
     "limits":{
       "type":"object","additionalProperties":false,
-      "required":["productWip","builders","promotions","builderAttempts","infrastructureReruns","strategySwitches","backoffSeconds","controllerLeaseSeconds","controllerHeartbeatSeconds","workerLeaseSeconds","workerHeartbeatSeconds","maxClockSkewSeconds","minimumEffectLeaseSeconds","permitTtlSeconds","candidateActiveMinutes","builderAttemptMinutes","validationMinutes","candidateUsd","engineeringDayUsd","evaluationRunUsd","infraMonthUsd","recoveryMonthUsd","candidateInputTokens","candidateOutputTokens","memoryContextTokens","memoryLookupMilliseconds"],
+      "required":["productWip","builders","promotions","builderAttempts","infrastructureReruns","strategySwitches","backoffSeconds","controllerLeaseSeconds","controllerHeartbeatSeconds","workerLeaseSeconds","workerHeartbeatSeconds","maxClockSkewSeconds","minimumEffectLeaseSeconds","permitTtlSeconds","candidateActiveMinutes","builderAttemptMinutes","validationMinutes","candidateUsd","engineeringDayUsd","evaluationRunUsd","infraMonthUsd","recoveryMonthUsd","candidateInputTokens","candidateOutputTokens","candidateAiCredits","memoryContextTokens","memoryLookupMilliseconds"],
       "properties":{
         "productWip":{"$ref":"#/$defs/positive"},"builders":{"$ref":"#/$defs/positive"},
         "promotions":{"$ref":"#/$defs/positive"},"builderAttempts":{"$ref":"#/$defs/positive"},
@@ -93,7 +93,7 @@
         "candidateUsd":{"$ref":"#/$defs/positive"},"engineeringDayUsd":{"$ref":"#/$defs/positive"},
         "evaluationRunUsd":{"$ref":"#/$defs/positive"},"infraMonthUsd":{"$ref":"#/$defs/positive"},
         "recoveryMonthUsd":{"$ref":"#/$defs/positive"},"candidateInputTokens":{"$ref":"#/$defs/positive"},
-        "candidateOutputTokens":{"$ref":"#/$defs/positive"},"memoryContextTokens":{"$ref":"#/$defs/positive"},
+        "candidateOutputTokens":{"$ref":"#/$defs/positive"},"candidateAiCredits":{"$ref":"#/$defs/positive"},"memoryContextTokens":{"$ref":"#/$defs/positive"},
         "memoryLookupMilliseconds":{"$ref":"#/$defs/positive"}
       }
     },

@@ -46,6 +46,8 @@ export interface EffectIntent {
   sourceSha: string;
   policySha256: string;
   eventId: string;
+  providerId?: string;
+  model?: string;
   permitId?: string;
   deadline: string;
   status: "pending";
@@ -142,6 +144,7 @@ export interface EventCommand {
   actorProof: ActorProof;
   guardEvidence: Record<string, GuardProof>;
   effectDeadline?: string;
+  effectProvider?: { providerId: string; model: string };
   permit?: ReleasePermit;
 }
 
@@ -158,6 +161,7 @@ export type RejectionCode =
   | "DEFINITION_INVALID"
   | "EFFECT_DEADLINE_REQUIRED"
   | "EFFECT_DEADLINE_INVALID"
+  | "EFFECT_PROVIDER_INVALID"
   | "EVENT_ID_CONFLICT"
   | "FENCING_EPOCH_MISMATCH"
   | "GUARD_EVIDENCE_INVALID"
@@ -224,6 +228,7 @@ const commandFingerprint = (command: EventCommand) => canonical({
   envelope: command.envelope,
   actor: command.actor,
   actorIdentity: command.actorProof.identity,
+  effectProvider: command.effectProvider,
   permit: command.permit && {
     permitId: command.permit.permitId,
     nonce: command.permit.nonce,
@@ -643,6 +648,13 @@ export function applyEvent(
       );
     }
   }
+  if (
+    transition.effect === "worker" &&
+    (!command.effectProvider?.providerId.trim() || !command.effectProvider.model.trim() ||
+      command.effectProvider.providerId.includes("*") || command.effectProvider.model.includes("*"))
+  ) {
+    reject("EFFECT_PROVIDER_INVALID", "Worker effects require an exact provider and model binding.");
+  }
   const permit = verifyReleasePermit(transition, candidate, command, authorities, now);
 
   const revision = candidate.revision + 1;
@@ -681,6 +693,8 @@ export function applyEvent(
           sourceSha: envelope.sourceSha,
           policySha256: envelope.policySha256,
           eventId: envelope.eventId,
+          providerId: command.effectProvider?.providerId,
+          model: command.effectProvider?.model,
           permitId: permit?.permitId,
           deadline: command.effectDeadline!,
           status: "pending" as const,

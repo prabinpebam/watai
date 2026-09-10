@@ -38,6 +38,23 @@ chain is operational, not cosmetic:
 | H04 | Complete independently observed candidate evaluation |
 | H05 | Immutable stage and rollback plane |
 
+Within H03/H04, implementation follows the narrow vertical path before broader
+infrastructure:
+
+1. Compose one signed TaskSpec through reservation, fenced agent execution,
+	measured SDK usage, external usage receipt and settlement.
+2. Prove the implementation agent with the nine-call frozen smoke contract.
+3. Run only the live product evaluations selected by signed changed-path impact;
+	model-independent UI work does not pay for unrelated model suites.
+4. Add distributed CAS, immutable evidence and release brokerage only after the
+	local path and its failure/reconciliation behavior are executable.
+
+`npm run harness:model-eval-plan` reports catalog ceilings but grants no spend.
+Each selected evaluation receives a separate preauthorization and reservation.
+The operational sequence is `harness:controller-apply`, `harness:probe-worker`,
+`harness:evaluate-live`, `harness:task-spec`, then `harness:execute`; each command
+revalidates the external root and fails before side effects when authority is absent.
+
 ## First product safety envelope
 
 After H04, R0 still requires S01, S02, S04 and S06. These are critical safety

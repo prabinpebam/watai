@@ -25,7 +25,21 @@ const attestation = (capability: HarnessCapability): CapabilityAttestation => ({
   capability,
   repositoryId: "prabinpebam/watai",
   policySha256,
-  evidenceSha256: `evidence:${capability}`,
+  evidenceSha256: "a".repeat(64),
+  ...(capability === "agent-model-evaluation" ? {
+    modelEvaluation: {
+      evaluationId: "implementation-agent-smoke",
+      manifestSha256: "b".repeat(64),
+      outcome: "PASSED" as const,
+      expectedRuns: 9,
+      attemptedRuns: 9,
+      providerId: "github-copilot",
+      requestedModel: "gpt-5.4",
+      observedModelVersions: ["gpt-5.4-2026-03-05"],
+      reportSha256: "c".repeat(64),
+      usage: { usd: 0, inputTokens: 9000, outputTokens: 900, requests: 9 },
+    },
+  } : {}),
   issuer: "trusted-capability-verifier",
   issuedAt: "2026-09-10T10:55:00.000Z",
   expiresAt: "2026-09-10T11:05:00.000Z",
@@ -43,6 +57,7 @@ const authorizationGrant = (): RuntimeAuthorizationGrant => ({
     maxInputTokens: 1_200_000,
     maxOutputTokens: 120_000,
     maxRequests: 100,
+    maxAiCredits: 100,
   },
   issuer: "trusted-authorization-root",
   issuedAt: "2026-09-10T10:55:00.000Z",
@@ -61,7 +76,10 @@ const implementationCapabilities: HarnessCapability[] = [
   "controller-runtime",
   "durable-ledger",
   "effect-reconciler",
+  "execution-coordinator",
   "guard-verifier",
+  "agent-model-evaluation",
+  "provider-usage",
   "tool-gateway",
   "watchdog",
   "worker-isolation",
@@ -195,5 +213,38 @@ describe("harness readiness", () => {
 
     expect(result.ready).toBe(false);
     expect(result.blockers.map((finding) => finding.code)).toContain("AUTHORIZATION_NOT_GRANTED");
+  });
+
+  it("rejects a generic agent-model capability without passed frozen results", () => {
+    const policy: HarnessPolicySummary = {
+      schemaVersion: "1.0", status: "SPECIFIED", authorizationGranted: true, effectiveSpendUsd: 20,
+    };
+    const attestations = implementationCapabilities.map(attestation);
+    const index = attestations.findIndex((item) => item.capability === "agent-model-evaluation");
+    attestations[index] = { ...attestations[index], modelEvaluation: undefined };
+    const result = assessReadiness(policy, policySha256, "implementation", attestations, authorities, {
+      ...context, authorizationGrant: authorizationGrant(),
+    });
+    expect(result.blockers.map((blocker) => blocker.code)).toContain("CAPABILITY_MISSING:agent-model-evaluation");
+  });
+
+  it("allows an authorized evaluator to produce the agent-model result without circular self-dependency", () => {
+    const policy: HarnessPolicySummary = {
+      schemaVersion: "1.0", status: "SPECIFIED", authorizationGranted: true, effectiveSpendUsd: 20,
+    };
+    const evaluationOnly = [
+      ...implementationCapabilities.filter((capability) => capability !== "agent-model-evaluation"),
+      "browser-runner",
+      "immutable-evidence",
+      "live-model-evaluator",
+      "evaluator-pack",
+      "trusted-build",
+    ] as HarnessCapability[];
+    const result = assessReadiness(policy, policySha256, "evaluation", evaluationOnly.map(attestation), authorities, {
+      ...context,
+      authorizationGrant: { ...authorizationGrant(), modes: ["evaluation"] },
+    });
+    expect(result.blockers.map((blocker) => blocker.code)).not.toContain("CAPABILITY_MISSING:agent-model-evaluation");
+    expect(result.ready).toBe(true);
   });
 });

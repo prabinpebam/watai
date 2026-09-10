@@ -12,9 +12,11 @@ export type TrustedArtifactKind =
   | "guard-proof"
   | "impact-assessment"
   | "policy-candidate"
+  | "provider-usage-receipt"
   | "release-permit"
   | "taskspec-lock"
   | "value-assessment"
+  | "model-evaluation-observation"
   | "worker-isolation-attestation";
 
 export interface TrustIssuer {

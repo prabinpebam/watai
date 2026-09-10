@@ -42,7 +42,7 @@ describe("candidate worktree", () => {
     });
   });
 
-  it("rejects branch reuse", async () => {
+  it("reuses an exact existing worktree after restart", async () => {
     const fixture = await repository();
     const request = {
       repositoryRoot: fixture.root,
@@ -51,8 +51,9 @@ describe("candidate worktree", () => {
       runId: "run-001",
       baseSha: fixture.baseSha,
     };
-    await prepareCandidateWorktree(request);
-    await expect(prepareCandidateWorktree(request)).rejects.toBeInstanceOf(WorktreeError);
+    const first = await prepareCandidateWorktree(request);
+    const resumed = await prepareCandidateWorktree(request);
+    expect(resumed).toEqual(first);
   });
 
   it("rejects a worktree root inside the controller checkout", async () => {

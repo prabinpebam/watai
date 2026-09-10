@@ -35,6 +35,7 @@ export interface RouteTurnParams {
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
   streamFn?: (params: Parameters<typeof streamResponses>[0]) => AsyncGenerator<ResponsesEvent>;
+  observeEvent?: (event: ResponsesEvent) => void;
 }
 
 /**
@@ -132,6 +133,7 @@ export async function routeTurn(params: RouteTurnParams): Promise<SemanticRoute 
 
   for (const reasoning of ROUTER_EFFORTS) {
     let rejected = false;
+    let selected: SemanticRoute | null = null;
     for await (const event of stream({
       baseUrl: params.baseUrl,
       key: params.key,
@@ -145,6 +147,7 @@ export async function routeTurn(params: RouteTurnParams): Promise<SemanticRoute 
       signal: params.signal,
       fetchImpl: params.fetchImpl,
     })) {
+      params.observeEvent?.(event);
       if (event.type === 'error') {
         // The request itself was refused; the next effort (or none at all) may be accepted.
         console.warn('[routing] router request failed', JSON.stringify({ effort: reasoning?.effort ?? 'omitted', message: event.message }));
@@ -169,7 +172,7 @@ export async function routeTurn(params: RouteTurnParams): Promise<SemanticRoute 
           action === 'generate_image' && Array.isArray(raw.reference_image_ids)
             ? [...new Set(raw.reference_image_ids.filter((id): id is string => typeof id === 'string' && knownImageIds.has(id)))]
             : [];
-        return {
+        selected = {
           action,
           imageAction,
           referenceImageIds,
@@ -179,7 +182,7 @@ export async function routeTurn(params: RouteTurnParams): Promise<SemanticRoute 
         return null;
       }
     }
-    if (!rejected) return null;
+    if (!rejected) return selected;
   }
   return null;
 }

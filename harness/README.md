@@ -24,10 +24,25 @@ network access, spending, staging, deployment, or release.
 - Worst-case budget and fenced-effect reducers.
 - Independent candidate evidence admission.
 - Transactional SQLite candidate/outbox/lease/budget storage for same-host execution.
+- Atomic SQLite reserve/claim, session binding, lease renewal, gateway write-ahead
+    receipts, outcome-unknown recovery and effect/usage settlement.
 - External exact-SHA candidate worktree preparation.
-- Manifest-bound gateway service and bounded Copilot create/resume runner.
+- Manifest-bound gateway with rollback-safe patches, no-network Docker validation,
+    current-diff validation receipts and mandatory durable submission.
+- Runnable signed-event controller and durable implementation executor CLIs.
 - Watchdog and provider-receipt reconciliation.
 - Fixed local evaluator inventory with three browser runs and isolated cloud integration.
+- A reserve-dispatch-execute-settle coordinator that retains worst-case charges
+    when provider outcomes or usage receipts are missing or untrusted.
+- Exact Copilot SDK session usage capture for requests and input/output tokens;
+    explicit AI-credit limits, streaming overage termination and missing usage fail closed.
+- Frozen path-applicable live-model evaluation contracts with repeated runs,
+    concrete hashed cases/oracles, observed model identity, semantic/error/latency
+    thresholds, durable pre-call reservations and portable signed JSONL evidence.
+- Real Copilot fixture and shipped Azure router/Responses adapters behind guarded
+    commands; no live model run is claimed merely because the adapters exist.
+- Exact live-model evaluation IDs in TaskSpecs and evidence admission, preventing
+    one model result from substituting for a different required evaluation.
 - Signed value-per-effort scheduling within immutable safety tiers.
 
 ## Commands
@@ -38,6 +53,12 @@ Run the complete local harness validation:
 npm run validate:harness
 npm run harness:preflight
 npm run harness:doctor
+npm run harness:model-eval-plan
+npm run harness:controller-apply
+npm run harness:probe-worker
+npm run harness:evaluate-live -- <evaluation-id>
+npm run harness:task-spec
+npm run harness:execute
 ```
 
 Inspect current readiness:
@@ -66,12 +87,14 @@ the local implementation never deletes a stale-looking lock automatically becaus
 that creates a split-brain race. Unattended stale-lock recovery requires the
 future durable lease/CAS adapter.
 
+Implementation execution uses the SQLite store, not the file ledger. It remains
+same-host only and cannot satisfy distributed release or immutable-evidence gates.
+
 The controller accepts proofs only through injected verifier interfaces. Test
 verifiers are synthetic and must never be assembled into an implementation or
-release process. A future production composition must provide independently
-managed identity verification, trusted time, durable distributed CAS, immutable
-evidence, isolated workers, budget reservations and a narrowly scoped release
-broker. The readiness gate requires attestations for those capabilities and the
-checked-in policy remains fail-closed. A separately pinned external runtime grant
-must authorize a metered or subscription quota without modifying candidate-owned
-policy bytes.
+release process. Checked-in commands invoke external signing and live-provider
+adapters, but they remain blocked until owner-controlled authority, signer,
+approved image provenance and credentials are supplied. Real paid calls must
+return signed portable observations; deterministic tests and estimated costs
+cannot replace them. Release additionally requires distributed CAS, immutable
+evidence, staging and a narrowly scoped release broker.

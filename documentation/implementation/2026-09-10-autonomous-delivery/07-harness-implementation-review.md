@@ -25,15 +25,23 @@
 | Blocker | Same-host restart/race state was a JSON rehearsal | Added SQLite WAL/FULL-sync CAS for candidate/event/outbox/lease/budget state and watchdog reconciliation |
 | High | Browser/API inventory reported applicability as skips | Added static browser project filters and a fail-closed isolated-stage API inventory; three 44/44 browser runs and 11/11 integrations pass |
 | High | Canonical ordering ignored value per effort | Added signed value/risk/effort scoring inside immutable safety/dependency tiers |
+| Blocker | Execution primitives were tested separately with no reserve-to-settle path | Added a fenced coordinator and Copilot adapter that require exact SDK usage plus an externally issued receipt |
+| Blocker | Deterministic tests could be mistaken for real model assurance | Added frozen repeated live-model contracts, complete-denominator admission and exact path-selected evaluation IDs |
+| Blocker | Components were composed only in tests, not through durable runtime state | Added signed controller/executor commands, SQLite write-ahead gateway/effect state, lease renewal, crash fencing and atomic settlement |
+| Blocker | Agent prose could be accepted without current validations | Completion now requires every fixed Docker validation to pass at the current diff and a durable submit receipt |
+| Blocker | Model applicability and runtime configuration could be omitted after locking | TaskSpec compilation derives evaluations from the pinned path map and binds exact provider/model/validation commands |
+| Blocker | Live model contracts had no executable cases or provider adapters | Added concrete hashed fixtures/oracles, actual Copilot and shipped Azure adapters, durable pre-call budgets, external signing and write-once JSONL |
 
 ## What this earns
 
-The candidate can compile a dependency-closed TaskSpec, rehearse the workflow,
+The candidate can compile a dependency-closed TaskSpec, execute the workflow,
 verify signed authority artifacts, prepare a broker/sandbox worker manifest,
 reserve/fence effects, admit independent evidence, schedule only dependency-ready
 work, recover a local candidate after restart and report H01-H06/G00-G12 blockers.
-State, event receipt and effect intent are produced as one reducer result and
-persisted as one atomic local rehearsal document replacement.
+State, event receipt and effect intent are persisted atomically. The vertical
+integration runs workflow dispatch through an external worktree, gateway patch,
+Docker validation, durable submission, lease renewal, signed usage and atomic
+effect/budget settlement.
 
 This is meaningful executable evidence for part of H03. It is not completion of
 H03 because H01 and H02 are dependencies and the production adapters do not yet
@@ -43,11 +51,11 @@ exist.
 
 1. No external signed authorization root, runtime grant or independently managed verifier keys exist.
 2. Docker Linux is running and isolation controls pass, but no approved Watai image source or signed worker attestation exists.
-3. The local file ledger is not distributed Cosmos CAS, immutable evidence or a production scheduler; an orphaned local lock fails closed and is not automatically reclaimed.
-4. Durable local worktree/gateway/SQLite budget/watchdog/reconciler/agent components exist but are not independently attested; the credential broker remains external.
-5. A complete local evaluator/browser/integration inventory passes, but no independently signed evaluator pack, trusted isolated build or immutable evidence service is attested.
+3. SQLite execution is same-host and restart-safe but is not distributed CAS or immutable evidence; those remain evaluation/release prerequisites.
+4. The worktree/gateway/SQLite/coordinator/agent path is runnable, but no independent usage signer or operational capability attestation is configured.
+5. Live Copilot/Azure adapters and exact fixtures exist, but no real paid model distribution has been run/admitted and no independent evaluator, trusted build or immutable evidence service is attested.
 6. No release broker, immutable stage, LKG routing, queue fencing or rollback adapter exists.
-7. H01 has not observed deployed source/runtime/configuration through an authorized read-only identity.
+7. H01 observed exact deployed frontend/API bytes and runtime/config revisions, but its payload still requires independent authority.
 8. API audit is zero. Root remains 1 critical/1 high/5 moderate (2 moderate production-only); approved-feed tarball gaps block the coherent stable root upgrades and clean-install proof.
 9. API unit and browser inventories now have zero skips; all 11 isolated cloud integrations pass. Independent evidence authority is still required.
 
@@ -67,7 +75,7 @@ npm run harness:status -- implementation
 
 The combined validation runs the original plan validator, strict harness
 typechecking, all harness tests, a standalone Node ESM build and approved package
-source checks. Latest expected inventory: 139 harness tests and 370 root tests;
-the API passed 557 unit and 11 isolated integration tests with zero skips, then
+source checks. Latest expected inventory: 197 harness tests and 428 root tests;
+the API passed 560 unit and 11 isolated integration tests with zero skips, then
 typecheck/build passed; three browser runs passed 44/44 each. These are local
 observations, not independent gate attestations.

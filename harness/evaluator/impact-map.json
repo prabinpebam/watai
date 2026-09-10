@@ -1,6 +1,28 @@
 {
   "schemaVersion": "1.0",
   "status": "CANDIDATE_FROZEN",
+  "modelSensitiveRoots": [
+    {
+      "root": "api/src/ai",
+      "evaluationIds": ["semantic-routing-live", "responses-streaming-tools-live"]
+    },
+    {
+      "root": "api/src/application/runWorker.ts",
+      "evaluationIds": ["semantic-routing-live", "responses-streaming-tools-live"]
+    },
+    {
+      "root": "api/src/application/skillService.ts",
+      "evaluationIds": ["semantic-routing-live", "responses-streaming-tools-live"]
+    },
+    {
+      "root": "api/src/application/memoryContextService.ts",
+      "evaluationIds": ["memory-quality-live"]
+    },
+    {
+      "root": "api/src/application/memoryExtractionService.ts",
+      "evaluationIds": ["memory-quality-live"]
+    }
+  ],
   "domains": [
     {
       "id": "read-only",
@@ -43,6 +65,7 @@
         "api/package.json",
         "api/vitest.config.ts",
         "api/vitest.integration.config.ts",
+        "api/scripts/live-model-adapter.ts",
         "harness/evaluator",
         "playwright.config.ts",
         "tests"

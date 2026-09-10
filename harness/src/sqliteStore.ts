@@ -13,12 +13,20 @@ import {
   type HarnessAuthorities,
 } from "./controller.js";
 import {
+  claimEffect,
+  completeEffect,
+  markEffectOutcomeUnknown,
+  renewEffectClaim,
   reserveBudget,
   updateReservation,
   type BudgetReservation,
   type BudgetState,
+  type ClaimEffectCommand,
+  type EffectExecution,
   type ReservationStatus,
 } from "./execution.js";
+import type { GatewayReceiptStore, GatewayStoredReceipt } from "./gatewayService.js";
+import type { ProviderUsageReceipt } from "./executionCoordinator.js";
 
 const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
 
@@ -55,6 +63,13 @@ interface BudgetRow {
   state_json: string;
 }
 
+interface EffectExecutionRow {
+  run_id: string;
+  revision: number;
+  state_json: string;
+  session_id: string | null;
+}
+
 function parseSnapshot(value: string): CandidateSnapshot {
   try {
     return JSON.parse(value) as CandidateSnapshot;
@@ -75,8 +90,10 @@ function lease(row: LeaseRow): HarnessLease {
 
 export class SqliteHarnessStore {
   private readonly database: DatabaseSyncType;
+  private readonly injectFault: (point: string) => void;
 
-  constructor(path: string) {
+  constructor(path: string, options: { injectFault?: (point: string) => void } = {}) {
+    this.injectFault = options.injectFault ?? (() => undefined);
     mkdirSync(dirname(path), { recursive: true });
     this.database = new DatabaseSync(path);
     this.database.exec(`
@@ -126,6 +143,36 @@ export class SqliteHarnessStore {
         fencing_epoch INTEGER NOT NULL,
         lease_until_ms INTEGER NOT NULL,
         revision INTEGER NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS effect_executions (
+        effect_id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        state_json TEXT NOT NULL,
+        session_id TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(effect_id) REFERENCES effect_outbox(effect_id),
+        FOREIGN KEY(run_id) REFERENCES candidates(run_id)
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS gateway_receipts (
+        run_id TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        tool TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending','completed')),
+        response_json TEXT,
+        created_at TEXT NOT NULL,
+        completed_at TEXT,
+        PRIMARY KEY(run_id, request_id),
+        FOREIGN KEY(run_id) REFERENCES candidates(run_id)
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS provider_usage_receipts (
+        receipt_id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        effect_id TEXT NOT NULL UNIQUE,
+        receipt_json TEXT NOT NULL,
+        FOREIGN KEY(run_id) REFERENCES candidates(run_id),
+        FOREIGN KEY(effect_id) REFERENCES effect_executions(effect_id)
       ) STRICT;
     `);
   }
@@ -240,6 +287,333 @@ export class SqliteHarnessStore {
       status: row.status,
       intent: JSON.parse(row.intent_json),
     }));
+  }
+
+  readEffect(effectId: string): EffectExecution {
+    const row = this.database.prepare(`
+      SELECT run_id, revision, state_json, session_id
+        FROM effect_executions
+       WHERE effect_id = ?
+    `).get(effectId) as unknown as EffectExecutionRow | undefined;
+    if (!row) throw new SqliteStoreError("EFFECT_UNKNOWN", `Unknown effect execution ${effectId}.`);
+    const effect = JSON.parse(row.state_json) as EffectExecution;
+    if (
+      effect.intent.effectId !== effectId ||
+      effect.intent.runId !== row.run_id ||
+      effect.revision !== row.revision
+    ) {
+      throw new SqliteStoreError("STORE_CORRUPT", "Effect execution columns do not match its state.");
+    }
+    return effect;
+  }
+
+  readEffectSessionId(effectId: string): string | null {
+    const row = this.database.prepare("SELECT session_id FROM effect_executions WHERE effect_id = ?")
+      .get(effectId) as unknown as { session_id: string | null } | undefined;
+    if (!row) throw new SqliteStoreError("EFFECT_UNKNOWN", `Unknown effect execution ${effectId}.`);
+    return row.session_id;
+  }
+
+  listEffects(runId: string, statuses?: EffectExecution["status"][]): EffectExecution[] {
+    const rows = this.database.prepare(`
+      SELECT state_json FROM effect_executions WHERE run_id = ? ORDER BY effect_id
+    `).all(runId) as unknown as Array<{ state_json: string }>;
+    const effects = rows.map((row) => JSON.parse(row.state_json) as EffectExecution);
+    return statuses ? effects.filter((effect) => statuses.includes(effect.status)) : effects;
+  }
+
+  gatewayReceiptStore(): GatewayReceiptStore {
+    return {
+      begin: async (receipt) => {
+        try {
+          this.database.prepare(`
+            INSERT INTO gateway_receipts(run_id, request_id, fingerprint, tool, status, response_json, created_at, completed_at)
+            VALUES (?, ?, ?, ?, 'pending', NULL, ?, NULL)
+          `).run(receipt.runId, receipt.requestId, receipt.fingerprint, receipt.tool, receipt.createdAt);
+          return undefined;
+        } catch (error) {
+          if (!String(error).includes("UNIQUE constraint failed")) throw error;
+          return this.readGatewayReceipt(receipt.runId, receipt.requestId);
+        }
+      },
+      complete: async (runId, requestId, fingerprint, response, completedAt) => {
+        const result = this.database.prepare(`
+          UPDATE gateway_receipts
+             SET status = 'completed', response_json = ?, completed_at = ?
+           WHERE run_id = ? AND request_id = ? AND fingerprint = ? AND status = 'pending'
+        `).run(JSON.stringify(response), completedAt, runId, requestId, fingerprint);
+        if (result.changes === 1) return;
+        const current = this.readGatewayReceipt(runId, requestId);
+        if (
+          current.status === "completed" &&
+          current.fingerprint === fingerprint &&
+          JSON.stringify(current.response) === JSON.stringify(response)
+        ) return;
+        throw new SqliteStoreError("GATEWAY_RECEIPT_CAS_LOST", "Gateway receipt completion is stale or conflicting.");
+      },
+      list: async (runId) => {
+        const rows = this.database.prepare(`
+          SELECT request_id FROM gateway_receipts WHERE run_id = ? ORDER BY request_id
+        `).all(runId) as unknown as Array<{ request_id: string }>;
+        return rows.map((row) => this.readGatewayReceipt(runId, row.request_id));
+      },
+    };
+  }
+
+  private readGatewayReceipt(runId: string, requestId: string): GatewayStoredReceipt {
+    const row = this.database.prepare(`
+      SELECT fingerprint, tool, status, response_json, created_at, completed_at
+        FROM gateway_receipts WHERE run_id = ? AND request_id = ?
+    `).get(runId, requestId) as unknown as {
+      fingerprint: string;
+      tool: GatewayStoredReceipt["tool"];
+      status: "pending" | "completed";
+      response_json: string | null;
+      created_at: string;
+      completed_at: string | null;
+    } | undefined;
+    if (!row) throw new SqliteStoreError("GATEWAY_RECEIPT_UNKNOWN", `Unknown gateway receipt ${runId}/${requestId}.`);
+    return {
+      requestId,
+      runId,
+      fingerprint: row.fingerprint,
+      tool: row.tool,
+      status: row.status,
+      ...(row.response_json ? { response: JSON.parse(row.response_json) } : {}),
+      createdAt: row.created_at,
+      ...(row.completed_at ? { completedAt: row.completed_at } : {}),
+    };
+  }
+
+  beginEffectDispatch(
+    runId: string,
+    effectId: string,
+    idempotency: EffectExecution["idempotency"],
+    reservation: BudgetReservation,
+    command: Omit<ClaimEffectCommand, "expectedRevision" | "reservation">,
+  ): { effect: EffectExecution; budget: BudgetState } {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const existing = this.database.prepare("SELECT 1 FROM effect_executions WHERE effect_id = ?")
+        .get(effectId);
+      if (existing) {
+        throw new SqliteStoreError("EFFECT_ALREADY_DISPATCHED", `Effect ${effectId} already has durable execution state.`);
+      }
+      const outbox = this.database.prepare(`
+        SELECT run_id, status, intent_json FROM effect_outbox WHERE effect_id = ?
+      `).get(effectId) as unknown as { run_id: string; status: string; intent_json: string } | undefined;
+      if (!outbox || outbox.run_id !== runId || outbox.status !== "pending") {
+        throw new SqliteStoreError("EFFECT_NOT_PENDING", `Effect ${effectId} is not pending for ${runId}.`);
+      }
+      const budget = this.readBudget(runId);
+      const reserved = reserveBudget(budget, budget.revision, reservation);
+      const dispatched = updateReservation(
+        reserved,
+        reserved.revision,
+        reservation.reservationId,
+        "dispatched",
+      );
+      const initial: EffectExecution = {
+        revision: 0,
+        intent: JSON.parse(outbox.intent_json) as EffectExecution["intent"],
+        status: "pending",
+        attempts: 0,
+        reservationId: reservation.reservationId,
+        idempotency,
+      };
+      const claimed = claimEffect(initial, {
+        ...command,
+        expectedRevision: initial.revision,
+        reservation,
+      });
+      const budgetUpdate = this.database.prepare(`
+        UPDATE budget_ledgers SET revision = ?, state_json = ?
+         WHERE run_id = ? AND revision = ?
+      `).run(dispatched.revision, JSON.stringify(dispatched), runId, budget.revision);
+      if (budgetUpdate.changes !== 1) throw new SqliteStoreError("BUDGET_CAS_LOST", "Budget compare-and-swap lost.");
+      this.injectFault("dispatch-after-budget");
+      this.database.prepare(`
+        INSERT INTO effect_executions(effect_id, run_id, revision, state_json, session_id, updated_at)
+        VALUES (?, ?, ?, ?, NULL, ?)
+      `).run(effectId, runId, claimed.revision, JSON.stringify(claimed), command.now);
+      this.injectFault("dispatch-after-effect");
+      const outboxUpdate = this.database.prepare(`
+        UPDATE effect_outbox SET status = 'claimed' WHERE effect_id = ? AND status = 'pending'
+      `).run(effectId);
+      if (outboxUpdate.changes !== 1) throw new SqliteStoreError("EFFECT_CAS_LOST", "Effect claim compare-and-swap lost.");
+      this.injectFault("dispatch-after-outbox");
+      this.database.exec("COMMIT");
+      return { effect: claimed, budget: dispatched };
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  bindEffectSession(effectId: string, expectedRevision: number, sessionId: string, updatedAt: string): void {
+    if (!sessionId.trim() || !Number.isFinite(Date.parse(updatedAt))) {
+      throw new SqliteStoreError("SESSION_BINDING_INVALID", "Session ID and timestamp are required.");
+    }
+    const result = this.database.prepare(`
+      UPDATE effect_executions SET session_id = ?, updated_at = ?
+       WHERE effect_id = ? AND revision = ? AND session_id IS NULL
+    `).run(sessionId, updatedAt, effectId, expectedRevision);
+    if (result.changes !== 1) {
+      const current = this.readEffectSessionId(effectId);
+      if (current === sessionId) return;
+      throw new SqliteStoreError("EFFECT_SESSION_CAS_LOST", "Effect session binding is stale or conflicting.");
+    }
+  }
+
+  renewEffect(
+    effectId: string,
+    expectedRevision: number,
+    fencingEpoch: number,
+    now: string,
+    leaseUntil: string,
+    minimumLeaseMs: number,
+  ): EffectExecution {
+    return this.updateEffect(effectId, expectedRevision, now, (effect) =>
+      renewEffectClaim(effect, expectedRevision, fencingEpoch, now, leaseUntil, minimumLeaseMs));
+  }
+
+  markEffectUnknown(
+    runId: string,
+    effectId: string,
+    expectedEffectRevision: number,
+    fencingEpoch: number,
+    expectedBudgetRevision: number,
+    reservationId: string,
+    updatedAt: string,
+  ): { effect: EffectExecution; budget: BudgetState } {
+    return this.settleEffectTransaction(
+      runId,
+      effectId,
+      expectedEffectRevision,
+      expectedBudgetRevision,
+      updatedAt,
+      (effect) => markEffectOutcomeUnknown(effect, expectedEffectRevision, fencingEpoch),
+      (budget) => updateReservation(budget, expectedBudgetRevision, reservationId, "outcome-unknown"),
+    );
+  }
+
+  completeEffect(
+    runId: string,
+    effectId: string,
+    expectedEffectRevision: number,
+    fencingEpoch: number,
+    expectedBudgetRevision: number,
+    reservationId: string,
+    providerReceipt: ProviderUsageReceipt,
+  ): { effect: EffectExecution; budget: BudgetState } {
+    const receipt: NonNullable<EffectExecution["receipt"]> = {
+      receiptId: providerReceipt.receiptId,
+      outputSha256: providerReceipt.outputSha256,
+      completedAt: providerReceipt.completedAt,
+    };
+    return this.settleEffectTransaction(
+      runId,
+      effectId,
+      expectedEffectRevision,
+      expectedBudgetRevision,
+      receipt.completedAt,
+      (effect) => {
+        if (
+          providerReceipt.runId !== runId ||
+          providerReceipt.effectId !== effectId ||
+          providerReceipt.reservationId !== reservationId ||
+          effect.reservationId !== reservationId ||
+          (effect.intent.providerId !== undefined && providerReceipt.providerId !== effect.intent.providerId) ||
+          (effect.intent.model !== undefined && providerReceipt.model !== effect.intent.model)
+        ) {
+          throw new SqliteStoreError(
+            "PROVIDER_RECEIPT_BINDING_MISMATCH",
+            "Provider receipt does not belong to the claimed effect and reservation.",
+          );
+        }
+        return completeEffect(effect, expectedEffectRevision, fencingEpoch, receipt);
+      },
+      (budget) => updateReservation(budget, expectedBudgetRevision, reservationId, "settled", providerReceipt.usage),
+      providerReceipt,
+    );
+  }
+
+  readProviderUsageReceipt(effectId: string): ProviderUsageReceipt {
+    const row = this.database.prepare("SELECT receipt_json FROM provider_usage_receipts WHERE effect_id = ?")
+      .get(effectId) as unknown as { receipt_json: string } | undefined;
+    if (!row) throw new SqliteStoreError("PROVIDER_RECEIPT_UNKNOWN", `No provider receipt exists for ${effectId}.`);
+    return JSON.parse(row.receipt_json) as ProviderUsageReceipt;
+  }
+
+  private updateEffect(
+    effectId: string,
+    expectedRevision: number,
+    updatedAt: string,
+    reducer: (effect: EffectExecution) => EffectExecution,
+  ): EffectExecution {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const current = this.readEffect(effectId);
+      const next = reducer(current);
+      const result = this.database.prepare(`
+        UPDATE effect_executions SET revision = ?, state_json = ?, updated_at = ?
+         WHERE effect_id = ? AND revision = ?
+      `).run(next.revision, JSON.stringify(next), updatedAt, effectId, expectedRevision);
+      if (result.changes !== 1) throw new SqliteStoreError("EFFECT_CAS_LOST", "Effect compare-and-swap lost.");
+      this.database.exec("COMMIT");
+      return next;
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  private settleEffectTransaction(
+    runId: string,
+    effectId: string,
+    expectedEffectRevision: number,
+    expectedBudgetRevision: number,
+    updatedAt: string,
+    effectReducer: (effect: EffectExecution) => EffectExecution,
+    budgetReducer: (budget: BudgetState) => BudgetState,
+    providerReceipt?: ProviderUsageReceipt,
+  ): { effect: EffectExecution; budget: BudgetState } {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const currentEffect = this.readEffect(effectId);
+      if (currentEffect.intent.runId !== runId) throw new SqliteStoreError("EFFECT_RUN_MISMATCH", "Effect belongs to another run.");
+      const currentBudget = this.readBudget(runId);
+      const nextEffect = effectReducer(currentEffect);
+      const nextBudget = budgetReducer(currentBudget);
+      const effectUpdate = this.database.prepare(`
+        UPDATE effect_executions SET revision = ?, state_json = ?, updated_at = ?
+         WHERE effect_id = ? AND revision = ?
+      `).run(nextEffect.revision, JSON.stringify(nextEffect), updatedAt, effectId, expectedEffectRevision);
+      if (effectUpdate.changes !== 1) throw new SqliteStoreError("EFFECT_CAS_LOST", "Effect compare-and-swap lost.");
+      this.injectFault("settle-after-effect");
+      const budgetUpdate = this.database.prepare(`
+        UPDATE budget_ledgers SET revision = ?, state_json = ?
+         WHERE run_id = ? AND revision = ?
+      `).run(nextBudget.revision, JSON.stringify(nextBudget), runId, expectedBudgetRevision);
+      if (budgetUpdate.changes !== 1) throw new SqliteStoreError("BUDGET_CAS_LOST", "Budget compare-and-swap lost.");
+      this.injectFault("settle-after-budget");
+      const outboxUpdate = this.database.prepare(`
+        UPDATE effect_outbox SET status = ? WHERE effect_id = ? AND status = 'claimed'
+      `).run(nextEffect.status, effectId);
+      if (outboxUpdate.changes !== 1) throw new SqliteStoreError("EFFECT_CAS_LOST", "Outbox effect compare-and-swap lost.");
+      if (providerReceipt) {
+        this.database.prepare(`
+          INSERT INTO provider_usage_receipts(receipt_id, run_id, effect_id, receipt_json)
+          VALUES (?, ?, ?, ?)
+        `).run(providerReceipt.receiptId, runId, effectId, JSON.stringify(providerReceipt));
+      }
+      this.injectFault("settle-after-outbox");
+      this.database.exec("COMMIT");
+      return { effect: nextEffect, budget: nextBudget };
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   createBudget(runId: string, limits: BudgetState["limits"]): BudgetState {

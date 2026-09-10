@@ -14,7 +14,7 @@ export interface CandidateWorktree {
   path: string;
   branch: string;
   headSha: string;
-  clean: true;
+  clean: boolean;
 }
 
 export class WorktreeError extends Error {
@@ -70,10 +70,28 @@ export async function prepareCandidateWorktree(
     throw new WorktreeError("WORKTREE_PATH_INVALID", "Candidate worktree path escaped its root.");
   }
   const existingBranch = git(repositoryRoot, ["branch", "--list", branch]);
-  if (existingBranch) throw new WorktreeError("BRANCH_EXISTS", `Candidate branch already exists: ${branch}`);
   const listed = git(repositoryRoot, ["worktree", "list", "--porcelain"]);
-  if (listed.split(/\r?\n/).some((line) => line === `worktree ${target}`)) {
-    throw new WorktreeError("WORKTREE_EXISTS", `Candidate worktree already exists: ${target}`);
+  const targetIdentity = resolve(target).toLowerCase();
+  const worktreeExists = listed.split(/\r?\n/)
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => resolve(line.slice("worktree ".length)).toLowerCase())
+    .includes(targetIdentity);
+  if (worktreeExists) {
+    const headSha = git(target, ["rev-parse", "HEAD"]);
+    const currentBranch = git(target, ["branch", "--show-current"]);
+    if (headSha !== request.baseSha || currentBranch !== branch) {
+      throw new WorktreeError("WORKTREE_BINDING_FAILED", "Existing candidate worktree moved from its exact source binding.");
+    }
+    const status = git(target, ["status", "--porcelain=v1", "--untracked-files=all"]);
+    return { path: target, branch, headSha, clean: !status };
+  }
+  if (existingBranch) {
+    const branchSha = git(repositoryRoot, ["rev-parse", branch]);
+    if (branchSha !== request.baseSha) {
+      throw new WorktreeError("BRANCH_BINDING_FAILED", `Existing candidate branch moved from ${request.baseSha}.`);
+    }
+    git(repositoryRoot, ["worktree", "add", target, branch]);
+    return { path: target, branch, headSha: branchSha, clean: true };
   }
 
   try {

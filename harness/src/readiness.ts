@@ -10,12 +10,16 @@ export type HarnessCapability =
   | "controller-runtime"
   | "durable-ledger"
   | "effect-reconciler"
+  | "execution-coordinator"
   | "evaluator-pack"
   | "guard-verifier"
+  | "agent-model-evaluation"
   | "immutable-evidence"
+  | "live-model-evaluator"
   | "release-broker"
   | "rollback-target"
   | "staged-environment"
+  | "provider-usage"
   | "trusted-build"
   | "tool-gateway"
   | "watchdog"
@@ -34,6 +38,23 @@ export interface CapabilityAttestation {
   repositoryId: string;
   policySha256: string;
   evidenceSha256: string;
+  modelEvaluation?: {
+    evaluationId: string;
+    manifestSha256: string;
+    outcome: "PASSED";
+    expectedRuns: number;
+    attemptedRuns: number;
+    providerId: string;
+    requestedModel: string;
+    observedModelVersions: string[];
+    reportSha256: string;
+    usage: {
+      usd: number;
+      inputTokens: number;
+      outputTokens: number;
+      requests: number;
+    };
+  };
   issuer: string;
   issuedAt: string;
   expiresAt: string;
@@ -51,6 +72,7 @@ export interface RuntimeAuthorizationGrant {
     maxInputTokens: number;
     maxOutputTokens: number;
     maxRequests: number;
+    maxAiCredits: number;
   };
   issuer: string;
   issuedAt: string;
@@ -82,7 +104,7 @@ export interface ReadinessResult {
   verifiedCapabilities: HarnessCapability[];
 }
 
-const implementationCapabilities: HarnessCapability[] = [
+const executionInfrastructureCapabilities: HarnessCapability[] = [
   "agent-provider",
   "authorization-root",
   "budget-reservation",
@@ -91,16 +113,24 @@ const implementationCapabilities: HarnessCapability[] = [
   "controller-runtime",
   "durable-ledger",
   "effect-reconciler",
+  "execution-coordinator",
   "guard-verifier",
+  "provider-usage",
   "tool-gateway",
   "watchdog",
   "worker-isolation",
 ];
 
+const implementationCapabilities: HarnessCapability[] = [
+  ...executionInfrastructureCapabilities,
+  "agent-model-evaluation",
+];
+
 const evaluationCapabilities: HarnessCapability[] = [
-  ...implementationCapabilities,
+  ...executionInfrastructureCapabilities,
   "browser-runner",
   "immutable-evidence",
+  "live-model-evaluator",
   "evaluator-pack",
   "trusted-build",
 ];
@@ -121,11 +151,31 @@ function validAttestation(
   const issuedAt = Date.parse(attestation.issuedAt);
   const expiresAt = Date.parse(attestation.expiresAt);
   const now = authorities.now();
+  const digestPattern = /^[a-f0-9]{64}$/;
+  const modelEvaluation = attestation.modelEvaluation;
+  const modelEvaluationValid = attestation.capability !== "agent-model-evaluation" || Boolean(
+    modelEvaluation &&
+    modelEvaluation.evaluationId === "implementation-agent-smoke" &&
+    digestPattern.test(modelEvaluation.manifestSha256) &&
+    modelEvaluation.outcome === "PASSED" &&
+    Number.isSafeInteger(modelEvaluation.expectedRuns) && modelEvaluation.expectedRuns > 0 &&
+    modelEvaluation.attemptedRuns === modelEvaluation.expectedRuns &&
+    modelEvaluation.providerId.trim() &&
+    modelEvaluation.requestedModel.trim() &&
+    modelEvaluation.observedModelVersions.length > 0 &&
+    modelEvaluation.observedModelVersions.every((version) => version.trim()) &&
+    digestPattern.test(modelEvaluation.reportSha256) &&
+    Number.isFinite(modelEvaluation.usage.usd) && modelEvaluation.usage.usd >= 0 &&
+    Number.isSafeInteger(modelEvaluation.usage.inputTokens) && modelEvaluation.usage.inputTokens >= 0 &&
+    Number.isSafeInteger(modelEvaluation.usage.outputTokens) && modelEvaluation.usage.outputTokens >= 0 &&
+    Number.isSafeInteger(modelEvaluation.usage.requests) && modelEvaluation.usage.requests >= modelEvaluation.expectedRuns
+  );
   return (
     attestation.policySha256 === policySha256 &&
     attestation.repositoryId === repositoryId &&
     attestation.attestationId.trim().length > 0 &&
-    attestation.evidenceSha256.trim().length > 0 &&
+    digestPattern.test(attestation.evidenceSha256) &&
+    modelEvaluationValid &&
     attestation.issuer.trim().length > 0 &&
     attestation.signature.trim().length > 0 &&
     Number.isFinite(issuedAt) &&
@@ -157,6 +207,8 @@ function validAuthorization(
     grant.billing.maxOutputTokens > 0 &&
     Number.isSafeInteger(grant.billing.maxRequests) &&
     grant.billing.maxRequests > 0 &&
+    Number.isFinite(grant.billing.maxAiCredits) &&
+    grant.billing.maxAiCredits > 0 &&
     (grant.billing.kind === "subscription" || grant.billing.maxUsd > 0);
   return (
     grant.repositoryId === context.repositoryId &&

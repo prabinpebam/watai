@@ -5,6 +5,7 @@ export interface EvidenceSubject {
   kind: string;
   sha256: string;
   uri: string;
+  evaluationId?: string;
   parents: Array<{ relation: string; subjectId: string }>;
 }
 
@@ -151,6 +152,9 @@ export function admitCandidateEvidence(
       !subject.kind.trim() ||
       !digestPattern.test(subject.sha256) ||
       subject.uri !== expectedUri ||
+      (subject.kind === "model-eval"
+        ? !subject.evaluationId || !/^[a-z][a-z0-9-]+$/.test(subject.evaluationId)
+        : subject.evaluationId !== undefined) ||
       subject.parents.some((parent) => !parentRelations.has(parent.relation))
     ) {
       block("SUBJECT_INVALID", `Evidence subject ${subject.subjectId || "<unnamed>"} is malformed.`);
@@ -179,6 +183,12 @@ export function admitCandidateEvidence(
   for (const kind of task.requiredEvidenceKinds) {
     if (![...subjects.values()].some((subject) => subject.kind === kind)) {
       block("EVIDENCE_KIND_MISSING", `Required evidence kind ${kind} is absent.`);
+    }
+  }
+  for (const evaluationId of task.requiredModelEvaluationIds) {
+    if (![...subjects.values()].some((subject) =>
+      subject.kind === "model-eval" && subject.evaluationId === evaluationId)) {
+      block("MODEL_EVALUATION_MISSING", `Required live-model evaluation ${evaluationId} is absent.`);
     }
   }
 

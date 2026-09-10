@@ -1,11 +1,13 @@
 # Execution readiness against the Definition of Done
 
-**Current machine result:** `BLOCKED_SAFE` pending external authority/provenance.
+**Current machine result:** `BLOCKED_SAFE` pending independent authority,
+approved worker provenance and real model-evaluation evidence.
 **Next canonical slice:** H01.
-**Safe today:** plan validation, local preflight, deterministic workflow rehearsal,
+**Safe today:** plan validation, local preflight, deterministic workflow execution,
 cryptographic verification, transactional same-host SQLite CAS/outbox/budgets,
-external worktree creation, structured gateway tests, bounded Copilot lifecycle
-tests, watchdog reconciliation, fixed local evaluation and isolated-stage tests.
+external worktree creation, durable gateway/effect receipts, Docker-isolated
+validation, bounded Copilot lifecycle tests, watchdog reconciliation, fixed local
+evaluation, real-provider adapter construction and isolated-stage tests.
 **Not safe today:** unattended model dispatch, candidate mutation, independent
 acceptance, cloud staging, deployment or release.
 
@@ -43,9 +45,9 @@ preserving the architecture and DoD.
 - Docker: Linux engine available; probe proves UID/GID 1000, read-only root,
   network none, no-new-privileges, zero effective capabilities, PID 64, memory
   256 MiB and CPU 0.5. No approved Watai base image/registry exists yet.
-- Harness: 21 files / 139 tests expected.
-- Root: 53 files / 370 tests expected.
-- API: 76 files / 557 unit tests pass with zero skips; typecheck/build pass.
+- Harness: 32 files / 197 tests expected.
+- Root: 64 files / 428 tests expected.
+- API: 76 files / 560 unit tests pass with zero skips; typecheck/build pass.
 - Browser: three consecutive complete runs, each 44/44 with zero skips/retries.
 - Isolated cloud integration: 5 files / 11 tests pass against
   `watai-harness-stage` and `harness-media-integration` only.
@@ -58,6 +60,7 @@ Run the authoritative local report:
 npm run validate:harness
 npm run harness:preflight
 npm run harness:doctor
+npm run harness:model-eval-plan
 npm run harness:status -- implementation
 npm run harness:status -- evaluation
 npm run harness:status -- release
@@ -71,7 +74,7 @@ signed release evidence.
 1. The canonical backlog scheduler starts at H01 and counts only independently
    verified `SHIPPED` dependency receipts.
 2. TaskSpecs bind exact source/tree/diff, complete trust-root digests, dependency
-   closure, signed execution domain/path impact, tools, separate model/tool
+  closure, signed execution domain/path impact, exact provider/model/validations, tools, separate model/tool
    egress, budgets, acceptance checks, evidence kinds and negative controls.
 3. `policy-maintainer` is not treated as one mutation class. Signed domains
    distinguish policy, controller and release-plane work. `harness/src` is a
@@ -86,13 +89,24 @@ signed release evidence.
    validation tools run in a separate non-root, read-only-root, no-network Docker
    sandbox with no credentials or Docker socket. SDK permission hooks are not
    accepted as the sandbox.
-7. Worst-case tokens, requests and spend reserve before dispatch. Subscription
+7. Worst-case tokens, requests, AI credits and spend reserve before dispatch. Subscription
    execution may authorize zero incremental USD only with positive token/request
    ceilings and independent provider/budget attestations.
 8. Candidate evidence must cover every applicable gate and acceptance ID with
    exact denominators, no skip/failure/timeout, trusted producers, immutable
    subject DAGs and every pinned negative control. Candidate-valid is still not
    released.
+9. Model-sensitive paths select exact frozen live-evaluation IDs. Every declared
+  case/repetition remains in the denominator; timeouts and errors are failures.
+  Results require observed model identity, signed usage, portable JSONL and
+  semantic/error/latency/budget thresholds. Local mocks never satisfy this gate.
+10. Copilot implementation attempts read exact session request/token usage from
+   SDK 1.0.13. Settlement requires an external receipt matching those metrics;
+   missing or mismatched usage retains the worst-case reservation.
+11. The provider must produce a durable gateway submission after every fixed
+  validation passes at the current diff. Assistant text alone cannot complete
+  an implementation attempt; abandoned effects become outcome-unknown without
+  automatic redispatch.
 
 ## Bootstrap order
 
