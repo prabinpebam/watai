@@ -12,6 +12,10 @@ An action is expensive when it can exceed two minutes, make a live provider call
 
 ## Program-level throughput
 
+### Continuation invariant
+
+For an active DoD implementation mandate, validated slices and commits are recovery checkpoints, not stopping points. The delivery loop selects the next dependency-ready slice immediately and continues without another user prompt. It ends only at complete DoD, explicit user stop, or a verified blocker with no useful parallel work. A blocked canonical slice redirects work; it does not end the program.
+
 An initiative expected to exceed 30 minutes or contain three expensive stages requires one program decision covering the entire path, not a sequence of locally reasonable commands. The decision defines:
 
 - the first user-visible or product-risk-reducing delivery;

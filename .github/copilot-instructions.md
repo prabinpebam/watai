@@ -2,6 +2,20 @@
 
 ## Cost And Time Discipline
 
+## Continuous DoD Delivery
+
+When the user asks to implement, complete, or work against the DoD, continue autonomously across slice boundaries until the DoD is complete. A passing test, completed slice, commit, clean worktree, status report, context compaction, or elapsed delivery milestone is not a stopping condition.
+
+After each validated slice, immediately select and begin the next dependency-ready backlog slice. If the canonical next slice is blocked, continue with the highest-risk dependency-ready product slice that preserves architecture and safety. Keep the backlog and latest user request authoritative; do not wait for the user to say "continue" again.
+
+Stop only when one of these is true:
+
+- the requested DoD is fully implemented and validated;
+- the user explicitly asks to pause or stop;
+- every useful remaining path is blocked by a verified external dependency, authorization, safety ceiling, or required user secret/input that cannot be obtained safely.
+
+When one path is blocked, preserve its evidence and move to parallel ready work. Do not call the task-complete tool or send a final completion response while DoD work remains executable locally. Commit boundaries are recovery checkpoints, not conversation boundaries.
+
 Before any time-consuming or resource-consuming action, use the `Cost Challenger` agent and create a machine-readable work decision with `npm run harness:work-decision`.
 
 An action is expensive when it may exceed 2 minutes, make live model/provider calls, consume AI credits or metered spend, build/pull a container, run a complete browser/integration matrix, deploy, or mutate remote/cloud state.
