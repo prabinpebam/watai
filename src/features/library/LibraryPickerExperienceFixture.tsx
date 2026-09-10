@@ -18,7 +18,10 @@ export function LibraryPickerExperienceFixture() {
       <main className="library-picker-eval">
         <h1>Composer attachment evaluation</h1>
         <div className="composer-slot library-picker-eval__composer">
-          <Composer threadId={threadId} value={value} onChange={setValue} onSend={(_text, _files, _skills, selections) => setSubmitted(selections ?? [])} streaming={false} onStop={() => {}} />
+          <Composer threadId={threadId} value={value} onChange={setValue} onSend={async (_text, _files, _skills, selections) => {
+            setSubmitted(selections ?? []);
+            return { accepted: true };
+          }} streaming={false} onStop={() => {}} />
         </div>
         <output data-testid="submitted-items">{submitted.map((selection) => `${selection.item.id}:${selection.mode}`).join(',')}</output>
       </main>

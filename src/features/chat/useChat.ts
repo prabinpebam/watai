@@ -12,6 +12,7 @@ import type { Attachment, Message } from '../../lib/types';
 import type { SubmitRunBody } from '../../data/cloud/types';
 
 export { DEFAULT_CHAT_MODEL } from './runStore';
+export interface SendResult { accepted: boolean }
 
 // Endpoint capabilities (which tools the saved Azure endpoint supports) rarely change, so cache the
 // status probe briefly. It sits on the send critical path (resolved before the run is submitted), and
@@ -183,9 +184,9 @@ export function useChat(threadId: string, temporary = false) {
       const trimmed = text.trim();
       const hasFiles = !!files && files.length > 0;
       const hasLibraryItems = !!librarySelections && librarySelections.length > 0;
-      if (!trimmed && !hasFiles && !hasLibraryItems) return;
-      if (busyRef.current) return;
-      if (useRuns.getState().isRunning(threadId)) return;
+      if (!trimmed && !hasFiles && !hasLibraryItems) return { accepted: false };
+      if (busyRef.current) return { accepted: false };
+      if (useRuns.getState().isRunning(threadId)) return { accepted: false };
       // Another device is mid-generation: block sending (the composer also disables it) so the
       // two devices don't produce interleaved, concurrent replies.
       const heldByOther = lockHeldByOther(useUi.getState().threadLocks[threadId] ?? null);
@@ -194,8 +195,11 @@ export function useChat(threadId: string, temporary = false) {
           `A response is being generated on ${heldByOther.deviceLabel}. Please wait until it finishes.`,
           'info',
         );
-        return;
+        return { accepted: false };
       }
+      busyRef.current = true;
+      let optimisticMessageId: string | undefined;
+      try {
       // Lazily create the thread on first message (so /new doesn't litter history).
       const existing = await repo.getThread(threadId);
       if (!existing) {
@@ -224,6 +228,7 @@ export function useChat(threadId: string, temporary = false) {
         createdAt: new Date().toISOString(),
         ...(attachments.length ? { attachments } : {}),
       };
+      optimisticMessageId = userMsg.id;
       setPersisted((prev) => [...prev, userMsg]); // optimistic — reload dedupes by id
       await repo.appendMessage(userMsg);
       // Start the run NOW so the assistant bubble appears alongside the prompt — never gated by a
@@ -301,6 +306,13 @@ export function useChat(threadId: string, temporary = false) {
         prepare,
       );
       useUi.getState().bumpThreads();
+      return { accepted: true };
+      } catch (error) {
+        if (optimisticMessageId) setPersisted((current) => current.filter((message) => message.id !== optimisticMessageId));
+        throw error;
+      } finally {
+        busyRef.current = false;
+      }
     },
     [threadId, temporary],
   );

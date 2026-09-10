@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { Composer } from './Composer';
 import { DEFAULT_SETTINGS } from '../../lib/types';
 
@@ -49,12 +49,16 @@ function recorder(blob = new Blob(['audio'], { type: 'audio/webm' })) {
 
 function Harness({ initial = 'Hello world', onSend = vi.fn() }: { initial?: string; onSend?: ReturnType<typeof vi.fn> }) {
   const [value, setValue] = useState(initial);
+  const handleSend = async (...args: Parameters<ComponentProps<typeof Composer>['onSend']>) => {
+    const result = await onSend(...args);
+    return result ?? { accepted: true };
+  };
   return (
     <Composer
       threadId="t1"
       value={value}
       onChange={setValue}
-      onSend={onSend}
+      onSend={handleSend}
       streaming={false}
       onStop={vi.fn()}
     />
@@ -81,6 +85,40 @@ afterEach(() => {
 });
 
 describe('Composer dictation', () => {
+  it('keeps text and selected files when durable admission rejects', async () => {
+    const onSend = vi.fn().mockRejectedValue(new Error('Storage unavailable'));
+    const { container } = render(<Harness initial="Retry me" onSend={onSend} />);
+    const file = new File(['data'], 'retry.txt', { type: 'text/plain' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(onSend).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled());
+    expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('Retry me');
+    expect(screen.getByRole('button', { name: 'Remove retry.txt' })).toBeInTheDocument();
+  });
+
+  it('admits only one send when submit is invoked twice synchronously', async () => {
+    let resolve!: (value: { accepted: boolean }) => void;
+    const onSend = vi.fn(() => new Promise((done) => { resolve = done; }));
+    render(<Harness onSend={onSend} />);
+    const send = screen.getByRole('button', { name: 'Send' });
+    fireEvent.click(send);
+    fireEvent.click(send);
+    expect(onSend).toHaveBeenCalledOnce();
+    await act(async () => resolve({ accepted: true }));
+  });
+
+  it('clears only the submitted text revision after acceptance', async () => {
+    let resolve!: (value: { accepted: boolean }) => void;
+    const onSend = vi.fn(() => new Promise((done) => { resolve = done; }));
+    render(<Harness initial="Submitted" onSend={onSend} />);
+    const input = screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement;
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.change(input, { target: { value: 'Typed later' } });
+    await act(async () => resolve({ accepted: true }));
+    expect(input.value).toBe('Typed later');
+  });
+
   it('starts only one recorder when the mic is tapped rapidly during permission startup', async () => {
     let resolveRecorder!: (value: ReturnType<typeof recorder>) => void;
     mocks.startRecording.mockReturnValue(new Promise((resolve) => { resolveRecorder = resolve; }));

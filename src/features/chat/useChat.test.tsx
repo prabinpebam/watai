@@ -12,12 +12,19 @@ const mocks = vi.hoisted(() => ({
   realtimeEnsure: vi.fn(async () => true),
   realtimeOn: vi.fn(() => () => {}),
   realtimeLiveSince: vi.fn(() => 0),
+  getThread: vi.fn(),
+  createThread: vi.fn(),
+  appendMessage: vi.fn(),
 }));
 
 vi.mock('../../data', () => ({
   repo: {
     listMessages: mocks.listMessages,
     getThreadLock: mocks.getThreadLock,
+    getThread: mocks.getThread,
+    createThread: mocks.createThread,
+    appendMessage: mocks.appendMessage,
+    getSettings: vi.fn(async () => ({ tools: {} })),
   },
   cloudApi: {
     getCredentialStatus: mocks.getCredentialStatus,
@@ -63,6 +70,9 @@ function deferred<T>() {
 beforeEach(() => {
   vi.clearAllMocks();
   useRuns.setState({ runs: {} });
+  useRuns.setState({ startServerRun: vi.fn(async () => undefined) });
+  mocks.getThread.mockResolvedValue({ id: 't1', temporary: false });
+  mocks.appendMessage.mockResolvedValue(undefined);
   useUi.setState({
     threadRev: {},
     threadLocks: {},
@@ -97,5 +107,36 @@ describe('useChat refresh loading', () => {
     await waitFor(() =>
       expect(result.current.messages.map((m) => m.content)).toEqual(['Refreshed answer']),
     );
+  });
+
+  it('rejects acceptance when transactional message persistence fails', async () => {
+    mocks.listMessages.mockResolvedValue([]);
+    mocks.appendMessage.mockRejectedValueOnce(new Error('IndexedDB unavailable'));
+    const { result } = renderHook(() => useChat('t1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await expect(result.current.send('Keep this draft')).rejects.toThrow('IndexedDB unavailable');
+    });
+    expect(result.current.messages).toEqual([]);
+  });
+
+  it('admits only one append across simultaneous send calls', async () => {
+    mocks.listMessages.mockResolvedValue([]);
+    const pending = deferred<void>();
+    mocks.appendMessage.mockReturnValueOnce(pending.promise);
+    const { result } = renderHook(() => useChat('t1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let first!: Promise<{ accepted: boolean }>;
+    let second!: Promise<{ accepted: boolean }>;
+    act(() => {
+      first = result.current.send('First');
+      second = result.current.send('Second');
+    });
+    await expect(second).resolves.toEqual({ accepted: false });
+    await act(async () => {
+      pending.resolve();
+      await expect(first).resolves.toEqual({ accepted: true });
+    });
+    expect(mocks.appendMessage).toHaveBeenCalledTimes(1);
   });
 });

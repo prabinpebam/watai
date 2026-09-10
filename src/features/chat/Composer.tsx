@@ -17,7 +17,7 @@ interface ComposerProps {
   threadId: string;
   value: string;
   onChange: (v: string) => void;
-  onSend: (text: string, files?: File[], skillNames?: string[], librarySelections?: StagedLibraryItem[]) => void;
+  onSend: (text: string, files?: File[], skillNames?: string[], librarySelections?: StagedLibraryItem[]) => Promise<{ accepted: boolean }>;
   streaming: boolean;
   onStop: () => void;
   placeholder?: string;
@@ -132,12 +132,16 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
   const [pending, setPending] = useState<Pending[]>([]);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [transcriptionConfigured, setTranscriptionConfigured] = useState<boolean | null>(null);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillQuery, setSkillQuery] = useState<SkillQuery | null>(null);
   const [skillIndex, setSkillIndex] = useState(0);
   const recRef = useRef<Recorder | null>(null);
   const dictationBusyRef = useRef(false);
+  const submitBusyRef = useRef(false);
+  const valueRef = useRef(value);
+  valueRef.current = value;
   const dictationFinishingRef = useRef(false);
   const dictationOpRef = useRef(0);
   const transcriptionAbortRef = useRef<AbortController | null>(null);
@@ -153,7 +157,6 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
   const stagedLibrary = useUi((s) => s.stagedLibraryByThread[threadId] ?? []);
   const stageLibraryItems = useUi((s) => s.stageLibraryItems);
   const removeStagedLibraryItem = useUi((s) => s.removeStagedLibraryItem);
-  const clearStagedLibraryItems = useUi((s) => s.clearStagedLibraryItems);
 
   useLayoutEffect(() => {
     const ta = taRef.current;
@@ -282,21 +285,30 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
   }, [stagedFiles]);
 
   const submit = () => {
-    if (streaming || locked || pending.some((item) => item.preparing)) return;
+    if (streaming || locked || submitBusyRef.current || pending.some((item) => item.preparing)) return;
     const text = value.trim();
     if (!text && pending.length === 0 && stagedLibrary.length === 0) return;
     const taggedSkills = skillNamesInText(text, skills);
-    onSend(
-      text,
-      pending.map((p) => p.file),
-      taggedSkills,
-      stagedLibrary,
-    );
-    onChange('');
-    setSkillQuery(null);
-    pending.forEach((p) => p.url && URL.revokeObjectURL(p.url));
-    setPending([]);
-    clearStagedLibraryItems(threadId);
+    const submittedValue = value;
+    const submittedPending = [...pending];
+    const submittedPendingIds = new Set(submittedPending.map((item) => item.id));
+    const submittedLibraryIds = stagedLibrary.map((selection) => selection.item.id);
+    submitBusyRef.current = true;
+    setSubmitting(true);
+    void onSend(text, submittedPending.map((item) => item.file), taggedSkills, [...stagedLibrary])
+      .then((result) => {
+        if (!result.accepted) return;
+        if (valueRef.current === submittedValue) onChange('');
+        setSkillQuery(null);
+        submittedPending.forEach((item) => item.url && URL.revokeObjectURL(item.url));
+        setPending((current) => current.filter((item) => !submittedPendingIds.has(item.id)));
+        submittedLibraryIds.forEach((itemId) => removeStagedLibraryItem(threadId, itemId));
+      })
+      .catch((error) => pushToast(error instanceof Error ? error.message : 'Could not send message.', 'error'))
+      .finally(() => {
+        submitBusyRef.current = false;
+        setSubmitting(false);
+      });
   };
 
   const suggestions = useMemo(() => {
@@ -765,7 +777,7 @@ export function Composer({ threadId, value, onChange, onSend, streaming, onStop,
             name="arrow-up"
             label={locked ? 'Waiting for the other device' : 'Send'}
             variant="accent"
-            disabled={!canSend || locked || dictationActive || preparingAttachments}
+            disabled={!canSend || locked || submitting || dictationActive || preparingAttachments}
             onClick={submit}
           />
         )}
