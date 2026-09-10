@@ -20,8 +20,9 @@ import { normalizeBaseUrl } from '../../data/secureStore';
 import { normalizeChatModelOptions } from '../../lib/modelOptions';
 import { DEFAULT_SETTINGS, effectiveMemorySettings } from '../../lib/types';
 import type { ImageRef, MemoryKind, MemorySettings, Settings as SettingsModel, TextScale } from '../../lib/types';
+import { CURRENT_RELEASE, RELEASE_NOTES } from '../../releaseNotes';
 
-const APP_VERSION = '0.1.0';
+const APP_VERSION = CURRENT_RELEASE.version;
 
 // ---------------------------------------------------------------------------
 // Information architecture: one registry drives the desktop rail, the mobile
@@ -1879,6 +1880,23 @@ function AboutBody() {
         </p>
       </div>
       <div className="settings-card">
+        <div className="setting-row">
+          <Avatar size="md" variant="assistant">
+            <Icon name="info" size={18} />
+          </Avatar>
+          <div className="setting-row__body">
+            <div className="setting-row__title">What’s new</div>
+            <div className="setting-row__sub">{CURRENT_RELEASE.title} · {CURRENT_RELEASE.date}</div>
+          </div>
+        </div>
+        {RELEASE_NOTES.map((release) => (
+          <div className="setting-row" key={release.version}>
+            <div className="setting-row__body">
+              <div className="setting-row__title">Version {release.version}</div>
+              <div className="setting-row__sub">{release.changes.join(' · ')}</div>
+            </div>
+          </div>
+        ))}
         <a
           className="setting-row"
           href="https://github.com/prabinpebam/watai"

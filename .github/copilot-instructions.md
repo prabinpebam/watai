@@ -48,6 +48,22 @@ A full qualification may be necessary for a DoD claim, but repeated qualificatio
 
 See `documentation/implementation/2026-09-10-autonomous-delivery/10-cost-and-time-governance.md`.
 
+## Continuous Production Milestones
+
+Real deployment is a delivery goal, not a final cleanup step. Promote a milestone whenever one coherent user-visible slice is validated, or after at most three completed slices, whichever happens first. Do not accumulate days of locally validated benefits without putting them in the real app.
+
+Every production milestone must:
+
+- add a concise entry to the in-app Settings > About release notes describing user-visible benefits and limits;
+- bind the frontend commit and backend artifact/config identity in `documentation/releases/`;
+- preserve an addressable previous frontend commit and backend package before mutation;
+- deploy backend-compatible changes before the frontend that consumes them;
+- run bounded production health and public-shell smoke checks after deployment;
+- provide a short manual validation checklist and the real app URL to the user;
+- define exact rollback commands that restore code only and never roll back consent, deletion, privacy, or data ledgers.
+
+A deployed milestone is a user validation checkpoint, not a reason to stop implementation. Continue dependency-ready work while awaiting feedback, but do not stack another production milestone over an unvalidated regression. If production smoke fails, rollback immediately to the retained target and preserve the failure evidence.
+
 ## Package Sources
 
 Use `https://packagefeedproxy.microsoft.io/npm/` for npm and preserve Microsoft Azure Artifacts tarball hosts returned by its metadata. Do not force registry-host replacement. Never fall back to a public registry or unverified cache artifact.
