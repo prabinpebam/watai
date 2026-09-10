@@ -43,6 +43,8 @@ export type ModelCaseArtifact =
         tool: string;
         status: "pending" | "completed";
         responseStatus?: "success" | "failure";
+        failureCode?: string;
+        failureMessage?: string;
         validation?: { passed: boolean; exitCode: number | null; stdoutSha256: string; stderrSha256: string };
       }>;
     }

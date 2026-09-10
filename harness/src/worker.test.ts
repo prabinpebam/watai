@@ -268,6 +268,17 @@ describe("worker launch contract", () => {
     expect(validationTool?.parameters).toMatchObject({
       properties: { commandId: { enum: runtime().validationCommands.map((command) => command.id) } },
     });
+    const submissionTool = configuration.session.tools?.find((tool) => tool.name === "watai_submit_result");
+    expect(submissionTool?.description).toContain("validationCommandIds must be exactly");
+    expect(submissionTool?.parameters).toMatchObject({
+      properties: {
+        validationCommandIds: {
+          minItems: runtime().validationCommands.length,
+          maxItems: runtime().validationCommands.length,
+          items: { enum: runtime().validationCommands.map((command) => command.id) },
+        },
+      },
+    });
   });
 
   it("rejects a gateway response that is not bound to the launch manifest", async () => {

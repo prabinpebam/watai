@@ -231,6 +231,12 @@ main().then(() => {
   const attemptedToolIds = stored.map((receipt) => receipt.tool);
   const attempts = stored.map((receipt) => {
     const result = receipt.response?.result;
+    const failure = receipt.response?.status === "failure" && result && typeof result === "object"
+      ? {
+          failureCode: String((result as { code?: unknown }).code ?? "GATEWAY_FAILURE").slice(0, 80),
+          failureMessage: String((result as { message?: unknown }).message ?? "Gateway rejected the request.").slice(0, 500),
+        }
+      : undefined;
     const validation = result && typeof result === "object" &&
       typeof (result as { passed?: unknown }).passed === "boolean"
       ? {
@@ -246,6 +252,7 @@ main().then(() => {
       tool: receipt.tool,
       status: receipt.status,
       responseStatus: receipt.response?.status,
+      ...(failure ? failure : {}),
       ...(validation ? { validation } : {}),
     };
   });

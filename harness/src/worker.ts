@@ -430,7 +430,7 @@ export function createGatewayProxyTools(
     watai_apply_patch: "Apply one expected-diff-bound patch through the Watai gateway.",
     watai_run_validation: `Run one fixed validation command (${manifest.runtime.validationCommands.map((command) => command.id).join(", ")}). Never repeat a command after it returns passed=true; submit immediately once all fixed validations pass.`,
     watai_git_diff: "Read the current changed paths, diff, and diff digest through the Watai gateway.",
-    watai_submit_result: "Submit the terminal result after all fixed validations pass. This is the required final tool call.",
+    watai_submit_result: `Submit the terminal result after all fixed validations pass. This is the required final tool call. validationCommandIds must be exactly [${manifest.runtime.validationCommands.map((command) => command.id).join(", ")}], and changedPaths must exactly match the current Git diff.`,
   };
   return manifest.runtime.gatewayTools.map((name): Tool => ({
     name,
@@ -445,6 +445,23 @@ export function createGatewayProxyTools(
             },
           },
         }
+      : name === "watai_submit_result"
+        ? {
+            ...gatewaySchemas[name],
+            properties: {
+              ...(gatewaySchemas[name].properties as Record<string, unknown>),
+              validationCommandIds: {
+                type: "array",
+                minItems: manifest.runtime.validationCommands.length,
+                maxItems: manifest.runtime.validationCommands.length,
+                uniqueItems: true,
+                items: {
+                  type: "string",
+                  enum: manifest.runtime.validationCommands.map((command) => command.id),
+                },
+              },
+            },
+          }
       : gatewaySchemas[name],
     defer: "never",
     handler: async (args, invocation) => {
