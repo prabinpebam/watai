@@ -1080,6 +1080,9 @@ export async function processRun(
           text: memory.text,
           ...(source?.threadId ? { sourceThreadId: source.threadId } : {}),
           ...(source?.messageId ? { sourceMessageId: source.messageId } : {}),
+          origin: memory.origin,
+          confirmation: memory.confirmation,
+          revision: memory.revision,
           score: memory.score,
         };
       });

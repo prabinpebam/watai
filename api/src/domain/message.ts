@@ -135,6 +135,9 @@ const memoryRefSchema = z
     text: z.string().min(1).max(2000),
     sourceThreadId: z.string().min(1).max(64).optional(),
     sourceMessageId: z.string().min(1).max(64).optional(),
+    origin: z.enum(['manual', 'explicit_request', 'inferred', 'imported']).optional(),
+    confirmation: z.enum(['approved', 'automatic']).optional(),
+    revision: z.number().int().positive().optional(),
     score: z.number().min(0).max(1),
   })
   .strict();

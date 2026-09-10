@@ -33,7 +33,7 @@ const EMPTY: Omit<MemoryContextBlock, 'latencyBudgetMs'> = {
   retrievalMode: 'empty',
 };
 
-const DEFAULT_TOKEN_BUDGET = 400;
+const DEFAULT_TOKEN_BUDGET = 800;
 const MAX_SELECTED_MEMORIES = 3;
 const VECTOR_CANDIDATE_LIMIT = 200;
 const RELEVANCE_FLOOR = 0.25;
@@ -96,12 +96,12 @@ export class MemoryContextService {
   }
 
   async buildForRun(input: MemoryContextInput): Promise<MemoryContextBlock> {
-    const allowed = async (): Promise<boolean> => {
+    const currentPolicy = async () => {
       const current = await this.settings.get(input.userId).catch(() => undefined);
-      if (!current) return false;
-      return effectiveMemoryPolicy(current).readSaved;
+      return current ? effectiveMemoryPolicy(current) : null;
     };
-    if (!(await allowed())) return { ...EMPTY, latencyBudgetMs: 250 };
+    const initialPolicy = await currentPolicy();
+    if (!initialPolicy?.readSaved) return { ...EMPTY, latencyBudgetMs: 250 };
     const retrievalOn = !!(this.embedder && this.retriever && input.creds);
     // Read the active candidate set once and share it between vector ranking and the always-on
     // profile, instead of listing the same (up to 200) records twice per run.
@@ -111,7 +111,9 @@ export class MemoryContextService {
             .list(input.userId, { status: 'active', limit: VECTOR_CANDIDATE_LIMIT })
             // Project / work-in-progress context is never injected into prompts — threads are isolated
             // by design and this context must not cross-bleed between them.
-            .then((p) => p.memories.filter((m) => m.kind !== 'project_context'))
+            .then((p) => p.memories.filter((memory) =>
+              memory.kind !== 'project_context' &&
+              (memory.confirmation === 'approved' || (initialPolicy.learnChats === 'automatic' && memory.confirmation === 'automatic'))))
             .catch(() => [])
         : [];
     // Embed the query once and reuse it for the relevance channel AND the profile relevance gate.
@@ -122,7 +124,10 @@ export class MemoryContextService {
         })
       : null;
     const base = retrievalOn ? await this.buildVector(input, candidates, queryVec) : { ...EMPTY, latencyBudgetMs: 250 };
-    if (!this.profileEnabled) return (await allowed()) ? base : { ...EMPTY, latencyBudgetMs: 250 };
+    if (!this.profileEnabled) {
+      const finalPolicy = await currentPolicy();
+      return finalPolicy?.readSaved && finalPolicy.learnChats === initialPolicy.learnChats ? base : { ...EMPTY, latencyBudgetMs: 250 };
+    }
     // Relevance-gate the always-on profile: inject identity grounding only when the query relates to
     // something we know about the user (at least one active fact clears the profile floor). Without an
     // embedder configured we cannot judge relevance, so fall back to always-on (legacy behavior).
@@ -130,7 +135,8 @@ export class MemoryContextService {
       ? candidates.some((m) => m.embedding?.length && cosine(queryVec, m.embedding) >= PROFILE_RELEVANCE_FLOOR)
       : true;
     const result = profileRelevant ? this.withProfile(base, input, candidates) : base;
-    return (await allowed()) ? result : { ...EMPTY, latencyBudgetMs: 250 };
+    const finalPolicy = await currentPolicy();
+    return finalPolicy?.readSaved && finalPolicy.learnChats === initialPolicy.learnChats ? result : { ...EMPTY, latencyBudgetMs: 250 };
   }
 
   /** Semantic retrieval: vector-rank candidates above a relevance floor against the (pre-computed)
@@ -169,6 +175,9 @@ export class MemoryContextService {
         ...(memory.validAt ? { validAt: memory.validAt } : {}),
         ...(memory.invalidAt ? { invalidAt: memory.invalidAt } : {}),
         score: Number(score.toFixed(4)),
+        origin: memory.origin as 'manual' | 'explicit_request' | 'inferred' | 'imported',
+        confirmation: memory.confirmation as 'approved' | 'automatic',
+        revision: memory.revision ?? 1,
       })),
       threadSummaries: [],
       sourceRefs: selected.map(({ memory }) => {
@@ -187,10 +196,39 @@ export class MemoryContextService {
 
   /** Always-on identity profile, prepended to every run when enabled. Sensitive memories excluded. */
   private async withProfile(base: MemoryContextBlock, input: MemoryContextInput, candidates: MemoryRecord[]): Promise<MemoryContextBlock> {
-    const profile = renderMemoryProfile(candidates, input.now, { maxChars: PROFILE_MAX_CHARS });
+    const availableTokens = Math.max(0, (input.tokenBudget ?? DEFAULT_TOKEN_BUDGET) - base.tokenEstimate);
+    if (!availableTokens) return base;
+    const profile = renderMemoryProfile(candidates, input.now, { maxChars: Math.min(PROFILE_MAX_CHARS, availableTokens * 4) });
     if (!profile) return base;
+    const existing = new Set(base.memories.map((memory) => memory.id));
+    const profileRecords = candidates.filter((memory) => !existing.has(memory.id) && profile.includes(`- ${memory.text}`));
     const retrievalMode = base.memories.length || base.instructions.length ? base.retrievalMode : 'profile';
-    return { ...base, profile, tokenEstimate: base.tokenEstimate + estimateTokens(profile), retrievalMode };
+    return {
+      ...base,
+      profile,
+      memories: [
+        ...base.memories,
+        ...profileRecords.map((memory) => ({
+          id: memory.id,
+          kind: memory.kind,
+          text: memory.text,
+          score: memory.salience,
+          origin: memory.origin as 'manual' | 'explicit_request' | 'inferred' | 'imported',
+          confirmation: memory.confirmation as 'approved' | 'automatic',
+          revision: memory.revision ?? 1,
+          profileOnly: true,
+        })),
+      ],
+      sourceRefs: [
+        ...base.sourceRefs,
+        ...profileRecords.map((memory) => {
+          const source = memory.sourceRefs.find((ref) => ref.type !== 'system') ?? memory.sourceRefs[0];
+          return { memoryId: memory.id, ...(source?.threadId ? { threadId: source.threadId } : {}), ...(source?.messageId ? { messageId: source.messageId } : {}) };
+        }),
+      ],
+      tokenEstimate: base.tokenEstimate + estimateTokens(profile),
+      retrievalMode,
+    };
   }
 }
 
@@ -202,7 +240,7 @@ export function renderMemoryContext(block: MemoryContextBlock): string {
     if (block.summary) lines.push(`- Summary: ${block.summary}`);
     for (const instruction of block.instructions) lines.push(`- Instruction: ${instruction}`);
     for (const memory of block.memories) {
-      if (memory.kind === 'instruction') continue;
+      if (memory.kind === 'instruction' || memory.profileOnly) continue;
       lines.push(`- ${memory.kind}: ${memory.text}`);
     }
     parts.push(lines.join('\n'));

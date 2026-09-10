@@ -95,6 +95,9 @@ const memoryRecordSchema = z
     pinned: z.boolean(),
     sensitive: z.boolean(),
     sourceHash: z.string().trim().min(1).max(128).optional(),
+    origin: z.enum(['manual', 'explicit_request', 'inferred', 'imported']).optional(),
+    confirmation: z.enum(['approved', 'automatic', 'unknown']).optional(),
+    revision: z.number().int().positive().optional(),
     route: memoryRouteTargetSchema.optional(),
     visibility: z.enum(MEMORY_VISIBILITY),
     validAt: iso.optional(),
@@ -232,6 +235,10 @@ const memoryContextBlockSchema = z
             validAt: iso.optional(),
             invalidAt: iso.optional(),
             score,
+            origin: z.enum(['manual', 'explicit_request', 'inferred', 'imported']),
+            confirmation: z.enum(['approved', 'automatic']),
+            revision: z.number().int().positive(),
+            profileOnly: z.boolean().optional(),
           })
           .strict(),
       )

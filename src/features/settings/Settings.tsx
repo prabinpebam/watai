@@ -1175,7 +1175,9 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
                     ) : (
                       <>
                         <div className="setting-row__title">{item.text}</div>
-                        <div className="setting-row__sub">{memoryKindLabel(item.kind)} · {item.visibility.replace(/_/g, ' ')} · salience {item.salience.toFixed(2)}</div>
+                        <div className="setting-row__sub">
+                          {memoryKindLabel(item.kind)} · {item.visibility.replace(/_/g, ' ')} · {item.confirmation ?? 'legacy unknown'} · {item.origin ?? 'unknown origin'} · v{item.revision ?? '?'}
+                        </div>
                         <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
                           {item.status !== 'active' ? (
                             <>

@@ -76,6 +76,9 @@ export interface MemoryRecord {
   pinned: boolean;
   sensitive: boolean;
   sourceHash?: string;
+  origin?: 'manual' | 'explicit_request' | 'inferred' | 'imported';
+  confirmation?: 'approved' | 'automatic' | 'unknown';
+  revision?: number;
   visibility: MemoryVisibility;
   validAt?: string;
   invalidAt?: string;

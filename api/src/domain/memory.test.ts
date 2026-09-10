@@ -174,7 +174,10 @@ describe('summary and context schemas', () => {
     const context = {
       summary: 'User prefers concise implementation plans.',
       instructions: ['Keep examples direct.'],
-      memories: [{ id: 'mem_1', kind: 'preference', text: 'User prefers concise implementation plans.', score: 0.92 }],
+      memories: [{
+        id: 'mem_1', kind: 'preference', text: 'User prefers concise implementation plans.', score: 0.92,
+        origin: 'manual', confirmation: 'approved', revision: 1,
+      }],
       threadSummaries: [{ threadId: 'thr_1', title: 'Memory work', summary: 'Memory docs were made implementation-ready.', score: 0.7 }],
       sourceRefs: [{ memoryId: 'mem_1', threadId: 'thr_1', messageId: 'msg_1' }],
       tokenEstimate: 120,

@@ -309,6 +309,9 @@ export class MemoryExtractionService {
               pinned: false,
               sensitive: false,
               sourceHash: hash,
+              origin: 'inferred',
+              confirmation: 'automatic',
+              revision: 1,
               ...(op.target ? { route: op.target } : {}),
               ...(embedded ? { embedding: embedded.embedding, embeddingModel: embedded.model } : {}),
               visibility: op.salience >= 0.85 ? 'top_of_mind' : op.salience <= 0.35 ? 'background' : 'normal',
@@ -323,14 +326,18 @@ export class MemoryExtractionService {
         } else if (op.op === 'merge') {
           const current = await this.deps.memoryStore.get(userId, op.memoryId);
           if (!current || current.status === 'deleted') { rejected++; continue; }
+          if (current.confirmation === 'approved') { rejected++; continue; }
           await this.mergeMemory(current, refs, op.confidence, op.salience, op.text, op.entities, op.topics, op.target, embedder);
           accepted++;
         } else if (op.op === 'invalidate') {
+          const current = await this.deps.memoryStore.get(userId, op.memoryId);
+          if (current?.confirmation === 'approved') { rejected++; continue; }
           await this.invalidateMemory(userId, op.memoryId);
           accepted++;
         } else if (op.op === 'suppress') {
           const current = await this.deps.memoryStore.get(userId, op.memoryId);
           if (!current || current.status === 'deleted') { rejected++; continue; }
+          if (current.confirmation === 'approved') { rejected++; continue; }
           await this.deps.memoryStore.put(parseMemoryRecord({ ...current, status: 'suppressed', updatedAt: this.deps.clock.now() }));
           accepted++;
         }
@@ -361,6 +368,7 @@ export class MemoryExtractionService {
       ...(reembed ? { embedding: reembed.embedding, embeddingModel: reembed.model } : {}),
       confidence: Math.max(memory.confidence, confidence ?? memory.confidence),
       salience: Math.max(memory.salience, salience ?? memory.salience),
+      revision: (memory.revision ?? 0) + 1,
       updatedAt: this.deps.clock.now(),
     }));
   }
@@ -373,6 +381,7 @@ export class MemoryExtractionService {
       status: 'invalidated',
       invalidAt: this.deps.clock.now(),
       ...(supersededBy ? { supersededBy } : {}),
+      revision: (current.revision ?? 0) + 1,
       updatedAt: this.deps.clock.now(),
     }));
   }

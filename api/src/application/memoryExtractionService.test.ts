@@ -85,6 +85,24 @@ describe('MemoryExtractionService', () => {
     expect((await ctx.memoryStore.list('userA', { status: 'active' })).memories).toEqual([]);
   });
 
+  it('does not let automatic extraction overwrite an approved correction', async () => {
+    const ctx = setup(async () => ({ operations: [{
+      op: 'merge', memoryId: 'approved', text: 'Automatic replacement', confidence: 0.99, salience: 0.99,
+      sourceMessageIds: ['u1'], reason: 'must not replace approved value',
+    }] }));
+    await seedThread(ctx);
+    await ctx.memoryStore.put(parseMemoryRecord({
+      id: 'approved', userId: 'userA', kind: 'preference', status: 'active', text: 'User-approved value',
+      confidence: 1, salience: 0.8, pinned: true, sensitive: false, visibility: 'top_of_mind', useCount: 0,
+      origin: 'manual', confirmation: 'approved', revision: 3,
+      createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      sourceRefs: [{ type: 'manual', createdAt: '2026-01-01T00:00:00Z' }],
+    }));
+    const job = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    await ctx.svc.processJob('userA', job!.id);
+    await expect(ctx.memoryStore.get('userA', 'approved')).resolves.toMatchObject({ text: 'User-approved value', revision: 3 });
+  });
+
   it('commits zero memories when learning is revoked while extraction is running', async () => {
     let enabled = true;
     const settings = { get: async () => ({

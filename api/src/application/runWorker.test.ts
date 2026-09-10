@@ -855,6 +855,9 @@ describe('processRun', () => {
         memoryId: saved.id,
         kind: 'fact',
         text: 'Watai deploy target is rg-watai-dev.',
+        origin: 'manual',
+        confirmation: 'approved',
+        revision: 1,
         score: expect.any(Number),
       },
     ]);

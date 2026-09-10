@@ -34,6 +34,9 @@ const rec = (over: Partial<MemoryRecord> & { id: string; text: string }): Memory
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     sourceRefs: [{ type: 'manual', createdAt: '2026-01-01T00:00:00Z' }],
+    origin: 'manual',
+    confirmation: 'approved',
+    revision: 1,
     ...over,
   });
 
@@ -143,6 +146,26 @@ describe('MemoryContextService — relevance channel', () => {
     await store.put(rec({ id: 'saved', text: 'User has a dog named Chopper.', embedding: stubEmbed('dog') }));
     const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: 'my dog', now: NOW, creds: CREDS });
     expect(block.memories.map((memory) => memory.id)).toEqual(['saved']);
+  });
+
+  it('serves only approved records in saved-only mode and stays within the total token budget', async () => {
+    const store = new InMemoryMemoryStore();
+    const savedOnly = { get: async () => ({
+      ...DEFAULT_SETTINGS,
+      personalization: {
+        ...DEFAULT_SETTINGS.personalization,
+        memory: { ...DEFAULT_SETTINGS.personalization.memory!, learnChats: 'off' as const, autoExtract: false },
+      },
+    }) };
+    const ctx = new MemoryContextService(store, savedOnly, { embedder: stubEmbedder, retriever: new InProcessRetriever(store), profile: true });
+    await store.put(rec({ id: 'approved', text: 'User has a dog named Chopper.', embedding: stubEmbed('dog') }));
+    await store.put(rec({ id: 'automatic', text: 'Automatic dog claim.', origin: 'inferred', confirmation: 'automatic', embedding: stubEmbed('dog') }));
+    await store.put(rec({ id: 'legacy', text: 'Legacy dog claim.', origin: undefined, confirmation: undefined, embedding: stubEmbed('dog') }));
+    const block = await ctx.buildForRun({ userId: 'userA', threadId: 't', latestUserText: 'my dog', now: NOW, creds: CREDS, tokenBudget: 800 });
+    expect(block.memories.map((memory) => memory.id)).toEqual(['approved']);
+    expect(block.profile ?? '').not.toContain('Automatic dog claim');
+    expect(block.profile ?? '').not.toContain('Legacy dog claim');
+    expect(block.tokenEstimate).toBeLessThanOrEqual(800);
   });
 
   it('fails closed to empty context when policy cannot be loaded', async () => {
