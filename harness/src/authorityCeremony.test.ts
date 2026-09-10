@@ -39,6 +39,6 @@ describe("authority ceremony request", () => {
       workerIsolation: { scope: "implementation-agent-smoke", runtimeImageSha256: digest("c") },
     });
     expect(request.requiredIssuers.find((issuer) => issuer.purpose === "runtime-evidence")?.allowedKinds)
-      .toEqual(["model-evaluation-observation", "provider-usage-receipt"]);
+      .toEqual(["model-evaluation-observation", "provider-usage-receipt", "worker-isolation-attestation"]);
   });
 });

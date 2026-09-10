@@ -107,7 +107,7 @@ export function buildAuthorityCeremonyRequest(input: {
       },
       {
         purpose: "runtime-evidence",
-        allowedKinds: ["model-evaluation-observation", "provider-usage-receipt"],
+        allowedKinds: ["model-evaluation-observation", "provider-usage-receipt", "worker-isolation-attestation"],
         allowedRoles: [],
       },
     ],
