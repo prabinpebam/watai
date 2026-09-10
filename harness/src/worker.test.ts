@@ -262,6 +262,8 @@ describe("worker launch contract", () => {
       enableManagedSettings: true,
       sessionLimits: { maxAiCredits: 2 },
     });
+    expect(configuration.session.tools?.find((tool) => tool.name === "watai_run_validation")?.description)
+      .toContain("Never repeat");
   });
 
   it("rejects a gateway response that is not bound to the launch manifest", async () => {

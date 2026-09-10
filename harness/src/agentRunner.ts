@@ -110,6 +110,7 @@ function buildPrompt(task: LockedTaskSpec): string {
     `Acceptance: ${task.requiredAcceptance.map((item) => `${item.id}: ${item.check}`).join(" | ")}`,
     `Non-goals: ${task.nonGoals.join(" | ")}`,
     "Use only the provided Watai gateway tools. Read the current diff immediately before every patch and pass its diffSha256 as expectedDiffSha256. Submit a result only after fixed validation commands have run.",
+    "Run each fixed validation command at most once after the final diff. When a validation returns passed=true, do not repeat it. If every fixed validation has passed, call watai_submit_result immediately; do not call any other tool first.",
   ].join("\n");
 }
 

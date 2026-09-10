@@ -422,9 +422,17 @@ export function createGatewayProxyTools(
   manifest: WorkerLaunchManifest,
   transport: GatewayTransport,
 ): Tool[] {
+  const descriptions: Record<GatewayToolId, string> = {
+    watai_read_file: "Read one tracked source-file range through the Watai gateway.",
+    watai_search_text: "Search tracked source text through the Watai gateway.",
+    watai_apply_patch: "Apply one expected-diff-bound patch through the Watai gateway.",
+    watai_run_validation: "Run one fixed validation command. Never repeat a command after it returns passed=true; submit immediately once all fixed validations pass.",
+    watai_git_diff: "Read the current changed paths, diff, and diff digest through the Watai gateway.",
+    watai_submit_result: "Submit the terminal result after all fixed validations pass. This is the required final tool call.",
+  };
   return manifest.runtime.gatewayTools.map((name): Tool => ({
     name,
-    description: `Execute ${name} through the isolated Watai tool gateway.`,
+    description: descriptions[name],
     parameters: gatewaySchemas[name],
     defer: "never",
     handler: async (args, invocation) => {
