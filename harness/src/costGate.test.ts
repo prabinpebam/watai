@@ -76,4 +76,27 @@ describe("project cost gate", () => {
     expect(hook(directory, command).hookSpecificOutput.permissionDecision).toBe("allow");
     expect(hook(directory, command).hookSpecificOutput.permissionDecision).toBe("deny");
   });
+
+  it("requires first value and a setup exit for program-level decisions", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "watai-cost-gate-"));
+    directories.push(directory);
+    const requestPath = join(directory, "program.json");
+    await writeFile(requestPath, JSON.stringify({
+      schemaVersion: "1.0", challengerVerdict: "APPROVE",
+      expectedValue: "Deliver the first DoD product fix.", necessaryNow: true,
+      necessaryNowReason: "Product risk is open.", cheapestStage: "One focused failing test and fix.",
+      alternativesConsidered: ["More setup is deferred."], evidenceReuse: [], estimatedMinutes: 30,
+      ceilings: { wallClockMinutes: 45, requests: 0, aiCredits: 0, usd: 0 },
+      continueIf: "Focused test fails as expected.", stopIf: "Hypothesis is false.", rollback: "Revert the probe.",
+      fullDenominator: false, programLevel: true,
+    }));
+    expect(() => execFileSync(process.execPath, [script, "approve", requestPath], {
+      cwd: directory,
+      env: {
+        ...process.env,
+        WATAI_EXPENSIVE_COMMAND: "implement S02",
+        WATAI_WORK_DECISION_PATH: join(directory, "decision.json"),
+      },
+    })).toThrow();
+  });
 });

@@ -22,6 +22,12 @@ Cost and time review must not be used to abandon necessary work. Its purpose is 
 
 Prefer fixing the architecture or workflow over repeatedly extending timeouts, budgets, retries, or denominators. Ask whether work belongs on the critical path and whether the same outcome can be reached with less repeated setup, fewer model turns, narrower validation, or reuse of existing evidence.
 
+For initiatives expected to exceed 30 minutes or contain three or more expensive stages, create one program-level work decision before further setup. It must define the first user-visible or product-risk-reducing delivery milestone, a maximum setup budget, a time-to-first-value target, the smallest end-to-end path, deferred work, and an exit criterion for meta-work.
+
+Optimize total quality throughput, not isolated command efficiency. Track elapsed setup time versus delivered product value. Setup and governance are enabling work: once the minimum safe control plane exists, prefer delivering the next DoD slice over adding more harness sophistication. Keep at most one setup/improvement thread active alongside product work.
+
+At each 30-minute program checkpoint, or after two failed attempts at the same stage, challenge the whole approach. Ignore sunk cost. Remove unnecessary prerequisites, collapse repeated ceremonies, reuse compatible evidence, and move non-critical qualification to the latest responsible gate. A checkpoint must end with a concrete delivery action, a materially changed approach, or a verified external blocker.
+
 A full qualification may be necessary for a DoD claim, but repeated qualification is forbidden unless source, runtime image, contract, or relevant behavior changed.
 
 See `documentation/implementation/2026-09-10-autonomous-delivery/10-cost-and-time-governance.md`.

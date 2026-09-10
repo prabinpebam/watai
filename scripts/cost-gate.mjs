@@ -60,6 +60,19 @@ export async function approveDecision(requestPath, command) {
   ) {
     throw new Error("Work decision request is incomplete, unbounded, or not approved by the Cost Challenger.");
   }
+  if (request.programLevel === true) {
+    const requiredProgramText = [
+      "firstDeliveryMilestone", "setupExitCriterion", "throughputMetric",
+    ];
+    if (
+      requiredProgramText.some((key) => typeof request[key] !== "string" || !request[key].trim()) ||
+      !validNumber(request.setupBudgetMinutes) || request.setupBudgetMinutes <= 0 ||
+      !validNumber(request.timeToFirstValueMinutes) || request.timeToFirstValueMinutes <= 0 ||
+      !Array.isArray(request.deferredWork) || request.deferredWork.length === 0
+    ) {
+      throw new Error("Program decision lacks first delivery, setup budget, deferred work, throughput metric, or setup exit criterion.");
+    }
+  }
   if (request.fullDenominator === true) {
     if (typeof request.canaryReportPath !== "string" || !request.canaryReportPath.trim()) {
       throw new Error("Full-denominator work requires a canary report path.");
@@ -85,6 +98,15 @@ export async function approveDecision(requestPath, command) {
     continueIf: request.continueIf,
     stopIf: request.stopIf,
     rollback: request.rollback,
+    ...(request.programLevel === true ? {
+      programLevel: true,
+      firstDeliveryMilestone: request.firstDeliveryMilestone,
+      setupBudgetMinutes: request.setupBudgetMinutes,
+      timeToFirstValueMinutes: request.timeToFirstValueMinutes,
+      deferredWork: request.deferredWork,
+      setupExitCriterion: request.setupExitCriterion,
+      throughputMetric: request.throughputMetric,
+    } : {}),
   };
   await mkdir(dirname(decisionPath), { recursive: true });
   await writeFile(decisionPath, `${JSON.stringify(decision, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });

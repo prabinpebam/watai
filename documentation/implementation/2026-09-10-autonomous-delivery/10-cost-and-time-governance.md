@@ -10,6 +10,22 @@ This governance optimizes execution; it does not stop necessary work. A failed o
 
 An action is expensive when it can exceed two minutes, make a live provider call, consume AI credits or metered spend, build or pull a container, run a complete browser/integration denominator, deploy, or mutate remote/cloud state.
 
+## Program-level throughput
+
+An initiative expected to exceed 30 minutes or contain three expensive stages requires one program decision covering the entire path, not a sequence of locally reasonable commands. The decision defines:
+
+- the first user-visible or product-risk-reducing delivery;
+- maximum setup minutes and target time to first value;
+- the smallest safe end-to-end path;
+- setup work explicitly deferred until evaluation, promotion or release;
+- one active setup thread and one product thread maximum;
+- a 30-minute or two-failure architecture checkpoint;
+- the condition that ends meta-work and starts product delivery.
+
+Program success is quality-adjusted delivered value per elapsed hour. Passing checks, adding controls, writing plans and generating evidence are inputs, not delivered value. If setup consumes its budget without reaching the first delivery milestone, ignore sunk cost and simplify the architecture or sequencing.
+
+The checkpoint cannot merely stop necessary work. It must choose one of: deliver the next slice, adopt a materially cheaper changed approach, or record a verified external blocker with the fastest available parallel work.
+
 ## Required sequence
 
 1. Reuse current evidence.
@@ -50,6 +66,10 @@ The request must include:
   "fullDenominator": false
 }
 ```
+
+Program decisions also set `programLevel: true`, `firstDeliveryMilestone`,
+`setupBudgetMinutes`, `timeToFirstValueMinutes`, `deferredWork`,
+`setupExitCriterion`, and `throughputMetric`.
 
 A full denominator must additionally provide `canaryReportPath` referencing `CANARY_PASSED` evidence. Decisions expire after 15 minutes and are consumed once by the pre-tool hook.
 
