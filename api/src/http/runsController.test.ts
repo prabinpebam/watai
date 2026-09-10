@@ -66,7 +66,7 @@ describe('runsController', () => {
     expect(res.status).toBe(409);
   });
 
-  it('GET returns the run; DELETE cancels it → 200', async () => {
+  it('GET returns the run; DELETE requests cancellation → 200', async () => {
     const created = await ctrl.submit({ claims: { sub: 'userA' }, params: { id: 't1' }, body: { text: 'x' } });
     const runId = (created.body as { runId: string }).runId;
 
@@ -76,7 +76,7 @@ describe('runsController', () => {
 
     const canceled = await ctrl.cancel({ claims: { sub: 'userA' }, params: { id: 't1', runId } });
     expect(canceled.status).toBe(200);
-    expect((canceled.body as { status: string }).status).toBe('canceled');
+    expect((canceled.body as { status: string }).status).toBe('cancel_requested');
   });
 
   it('cross-user GET fails closed → 404', async () => {

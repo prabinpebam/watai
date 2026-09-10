@@ -66,6 +66,12 @@ export class CosmosMessageStore implements MessageStore {
     return record;
   }
 
+  async delete(userId: string, threadId: string, id: string): Promise<void> {
+    await this.container.item(ownerScopedDocumentId('message', userId, id), threadId).delete().catch((error) => {
+      if ((error as { code?: number }).code !== 404) throw error;
+    });
+  }
+
   async deleteByThread(userId: string, threadId: string): Promise<void> {
     const { resources } = await this.container.items
       .query<{ id: string }>(

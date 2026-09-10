@@ -27,6 +27,10 @@ export class InMemoryMessageStore implements MessageStore {
     return record;
   }
 
+  async delete(userId: string, threadId: string, id: string): Promise<void> {
+    this.byKey.delete(this.key(userId, threadId, id));
+  }
+
   async deleteByThread(userId: string, threadId: string): Promise<void> {
     for (const [key, m] of [...this.byKey.entries()]) {
       if (m.userId === userId && m.threadId === threadId) this.byKey.delete(key);

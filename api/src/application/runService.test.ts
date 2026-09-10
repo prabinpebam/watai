@@ -216,13 +216,13 @@ describe('RunService.get / cancel', () => {
     expect(await code(() => ctx.svc.get('userB', 't1', run.id))).toBe('not_found');
   });
 
-  it('cancels an active run and signals the worker', async () => {
+  it('requests cancellation, signals the worker, and keeps the slot until acknowledgement', async () => {
     const run = await ctx.svc.submit('userA', 't1', { text: 'x' });
     const canceled = await ctx.svc.cancel('userA', 't1', run.id);
-    expect(canceled.status).toBe('canceled');
+    expect(canceled.status).toBe('cancel_requested');
     expect(ctx.canceled).toHaveLength(1);
-    // Cancellation frees the thread for a new run.
-    expect(await ctx.runStore.listActive('userA', 't1')).toHaveLength(0);
+    expect(await ctx.runStore.listActive('userA', 't1')).toHaveLength(1);
+    await expect(ctx.svc.submit('userA', 't1', { text: 'replacement' })).rejects.toMatchObject({ code: 'conflict' });
   });
 
   it('cancel is idempotent on a terminal run', async () => {

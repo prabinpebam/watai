@@ -45,6 +45,7 @@ export interface MessageStore {
   get(userId: string, threadId: string, id: string): Promise<MessageRecord | null>;
   list(userId: string, threadId: string, opts?: MessageListOptions): Promise<MessageRecord[]>;
   append(record: MessageRecord): Promise<MessageRecord>;
+  delete(userId: string, threadId: string, id: string): Promise<void>;
   /** Hard-delete every message in a thread. Used when the thread itself is permanently deleted, so
    *  no message records are left orphaned behind the thread's tombstone. */
   deleteByThread(userId: string, threadId: string): Promise<void>;

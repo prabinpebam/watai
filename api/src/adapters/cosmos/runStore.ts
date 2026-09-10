@@ -261,7 +261,7 @@ export class CosmosRunStore implements RunStore {
 
   async listStaleActive(before: string, limit = 50): Promise<RunRecord[]> {
     const { resources } = await this.container.items.query<RunDocument>({
-      query: "SELECT * FROM c WHERE c.recordType != 'run-dispatch' AND c.heartbeatAt < @before AND (c.status = 'queued' OR c.status = 'running') OFFSET 0 LIMIT @limit",
+      query: "SELECT * FROM c WHERE c.recordType != 'run-dispatch' AND c.heartbeatAt < @before AND (c.status = 'queued' OR c.status = 'running' OR c.status = 'cancel_requested') OFFSET 0 LIMIT @limit",
       parameters: [{ name: '@before', value: before }, { name: '@limit', value: limit }],
     }).fetchAll();
     return resources.filter((document) => !!document.runId).map(fromDocument);
@@ -307,7 +307,7 @@ export class CosmosRunStore implements RunStore {
 
   async listActive(userId: string, threadId: string): Promise<RunRecord[]> {
     const query =
-      "SELECT * FROM c WHERE c.userId = @u AND c.threadId = @t AND (c.status = 'queued' OR c.status = 'running')";
+      "SELECT * FROM c WHERE c.userId = @u AND c.threadId = @t AND (c.status = 'queued' OR c.status = 'running' OR c.status = 'cancel_requested')";
     const parameters: SqlParameter[] = [{ name: '@u', value: userId }, { name: '@t', value: threadId }];
     const { resources } = await this.container.items
       .query<RunDocument>({ query, parameters }, { partitionKey: threadId })

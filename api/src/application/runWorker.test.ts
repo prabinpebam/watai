@@ -64,6 +64,7 @@ function setup(opts?: { credError?: boolean; tavily?: boolean; kbStore?: string;
     get: (threadId: string, id: string) => messageStore.get('userA', threadId, id),
     list: (threadId: string) => messageStore.list('userA', threadId),
     append: (record: MessageRecord) => messageStore.append(record),
+    delete: (userId: string, threadId: string, id: string) => messageStore.delete(userId, threadId, id),
     deleteByThread: (threadId: string) => messageStore.deleteByThread('userA', threadId),
   };
   return { runStore: testRunStore, messageStore: testMessageStore, workerMessageStore: messageStore, threadStore, clock, credentials, deps };
@@ -1394,6 +1395,15 @@ describe('processRun', () => {
     expect(await ctx.messageStore.get('t1', 'am1')).toBeNull();
   });
 
+  it('acknowledges cancellation requested before worker start without invoking the provider', async () => {
+    await seed(ctx, 'cancel_requested');
+    const runAgent = vi.fn(script([{ type: 'text', delta: 'must not run' }]));
+    await processRun(ctx.deps(runAgent), 't1', 'r1');
+    expect(runAgent).not.toHaveBeenCalled();
+    expect((await ctx.runStore.get('t1', 'r1'))?.status).toBe('canceled');
+    expect(await ctx.messageStore.get('t1', 'am1')).toBeNull();
+  });
+
   it('marks the message + run errored on an agent error', async () => {
     await seed(ctx);
     await processRun(ctx.deps(script([{ type: 'error', message: '429' }])), 't1', 'r1');
@@ -1413,12 +1423,73 @@ describe('processRun', () => {
     const run = await seed(ctx);
     const cancelingAgent: RunAgentFn = async function* () {
       yield { type: 'text', delta: 'partial' };
-      await ctx.runStore.put({ ...run, status: 'canceled' });
+      await ctx.runStore.put({ ...run, status: 'cancel_requested' });
       yield { type: 'text', delta: ' more' };
       yield { type: 'done' };
     };
     await processRun(ctx.deps(cancelingAgent), 't1', 'r1');
-    expect((await ctx.messageStore.get('t1', 'am1'))?.status).toBe('interrupted');
+    expect(await ctx.messageStore.get('t1', 'am1')).toMatchObject({ status: 'interrupted', content: 'partial' });
     expect((await ctx.runStore.get('t1', 'r1'))?.status).toBe('canceled');
+  });
+
+  it('blocks a tool network effect when cancellation is requested before execution', async () => {
+    const local = setup({ tavily: true });
+    const run = await seed(local, 'queued', ['web_search']);
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch;
+    const cancelBeforeTool: RunAgentFn = async function* (params) {
+      await local.runStore.put({ ...run, status: 'cancel_requested' });
+      await params.execute?.('web_search', { query: 'must not execute' }).catch(() => undefined);
+      yield { type: 'done' };
+    };
+    await processRun({ ...local.deps(cancelBeforeTool), fetchImpl }, 't1', 'r1');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect((await local.runStore.get('t1', 'r1'))?.status).toBe('canceled');
+  });
+
+  it('does not resurrect messages or thread state deleted during generation', async () => {
+    const run = await seed(ctx);
+    const deletingAgent: RunAgentFn = async function* () {
+      yield { type: 'text', delta: 'partial' };
+      const thread = await ctx.threadStore.get('userA', 't1');
+      await ctx.threadStore.put({ ...thread!, deletedAt: '2026-06-01T00:02:00Z', updatedAt: '2026-06-01T00:02:00Z' });
+      await ctx.messageStore.deleteByThread('t1');
+      await ctx.runStore.deleteByThread('t1');
+      yield { type: 'done' };
+    };
+    await processRun(ctx.deps(deletingAgent), 't1', run.id);
+    expect((await ctx.threadStore.get('userA', 't1'))?.deletedAt).toBe('2026-06-01T00:02:00Z');
+    expect(await ctx.messageStore.get('t1', 'am1')).toBeNull();
+    expect(await ctx.runStore.get('t1', 'r1')).toBeNull();
+  });
+
+  it('rolls back the final message when deletion wins between append and thread CAS', async () => {
+    await seed(ctx);
+    const originalPutIfMatch = ctx.threadStore.putIfMatch.bind(ctx.threadStore);
+    let injected = false;
+    ctx.threadStore.putIfMatch = async (record, etag) => {
+      if (!injected) {
+        injected = true;
+        const current = await ctx.threadStore.get('userA', 't1');
+        await ctx.threadStore.put({ ...current!, deletedAt: '2026-06-01T00:03:00Z', updatedAt: '2026-06-01T00:03:00Z' });
+        await ctx.messageStore.deleteByThread('t1');
+        return null;
+      }
+      return originalPutIfMatch(record, etag);
+    };
+    await processRun(ctx.deps(script([{ type: 'text', delta: 'answer' }, { type: 'done' }])), 't1', 'r1');
+    expect((await ctx.threadStore.get('userA', 't1'))?.deletedAt).toBe('2026-06-01T00:03:00Z');
+    expect(await ctx.messageStore.get('t1', 'am1')).toBeNull();
+  });
+
+  it('preserves rename and pin changes made while generation is running', async () => {
+    await seed(ctx);
+    const editingAgent: RunAgentFn = async function* () {
+      yield { type: 'text', delta: 'answer' };
+      const thread = await ctx.threadStore.get('userA', 't1');
+      await ctx.threadStore.put({ ...thread!, title: 'User rename', pinned: true, updatedAt: '2026-06-01T00:02:00Z' });
+      yield { type: 'done' };
+    };
+    await processRun(ctx.deps(editingAgent), 't1', 'r1');
+    expect(await ctx.threadStore.get('userA', 't1')).toMatchObject({ title: 'User rename', pinned: true });
   });
 });

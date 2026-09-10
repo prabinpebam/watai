@@ -9,7 +9,7 @@ import { artifactKindForMime } from '../domain/message';
 import { ALLOWED_CONTENT_TYPES } from '../domain/asset';
 import type { Settings } from '../domain/settings';
 import type { MemoryContextBlock } from '../domain/memory';
-import type { ThreadStore, ThreadFileMeta } from '../ports/threadStore';
+import type { ThreadLockStore, ThreadRecord, ThreadStore, ThreadFileMeta } from '../ports/threadStore';
 import type { SignalRSender } from '../adapters/azure/signalr';
 import {
   runAgent as defaultRunAgent,
@@ -51,7 +51,7 @@ export interface SettingsReader {
 export interface RunWorkerDeps {
   runStore: RunStore;
   messageStore: MessageStore;
-  threadStore: ThreadStore;
+  threadStore: ThreadStore & ThreadLockStore;
   libraryStore?: LibraryStore;
   credentials: CredentialReader;
   /** Per-user settings (personalization) for the system prompt. Optional. */
@@ -689,6 +689,7 @@ async function* streamAgentWithRetry(
       }
       throw e;
     } finally {
+      ctrl.abort();
       clear();
     }
   }
@@ -720,6 +721,10 @@ export async function processRun(
     queuedRun.executionToken !== fence.executionToken ||
     queuedRun.dispatchAttempt !== fence.attempt
   )) return;
+  if (queuedRun.status === 'cancel_requested') {
+    await runStore.transition(userId, threadId, runId, ['cancel_requested'], { status: 'canceled', endedAt: clock.now() });
+    return;
+  }
   const started = await runStore.transition(userId, threadId, runId, ['queued'], {
     status: 'running',
     startedAt: clock.now(),
@@ -754,6 +759,7 @@ export async function processRun(
   let memoryBlock: MemoryContextBlock | undefined;
   let memoryRefs: MessageMemoryRef[] = [];
   let acc = '';
+  let cancellationObserved = false;
   let lastFlush = 0;
   let flushed = false;
   let err: { code: string; message: string } | undefined;
@@ -1092,7 +1098,15 @@ export async function processRun(
     const fullTools = semanticRoute?.action === 'respond'
       ? []
       : assembleTools(c, { ...run, tools: offeredToolNames }, thread, skillFileIds);
-    const execute = makeExecute(c, deps.fetchImpl, getImageReferences, semanticRoute);
+    const baseExecute = makeExecute(c, deps.fetchImpl, getImageReferences, semanticRoute);
+    const execute: ToolExecute = async (name, args) => {
+      const live = await runStore.get(userId, threadId, runId);
+      if (!live || live.status === 'cancel_requested' || live.status === 'canceled') {
+        cancellationObserved = true;
+        throw new Error('Run cancellation was requested.');
+      }
+      return baseExecute(name, args);
+    };
 
     // Graceful tool degradation across attempts. The Responses API deadlocks (zero output) when the
     // code_interpreter container (slow to provision, esp. with mounted skill files) is offered
@@ -1128,6 +1142,13 @@ export async function processRun(
       },
     );
     for await (const ev of agentStream) {
+      const live = await runStore.get(userId, threadId, runId);
+      if (!live || live.status === 'cancel_requested' || live.status === 'canceled') {
+        if (live?.status === 'cancel_requested') {
+          await runStore.transition(userId, threadId, runId, ['cancel_requested'], { status: 'canceled', endedAt: clock.now() });
+        }
+        break;
+      }
       if (ev.type === 'text') {
         acc += ev.delta;
         await flush();
@@ -1267,56 +1288,101 @@ export async function processRun(
     }
     // Fallback: code-interpreter files can appear shortly after the done event, or content can be
     // temporarily unavailable. Retry before finalizing so generated PDFs reliably become artifacts.
-    for (const [containerId, callId] of ciContainers) {
-      if (artifacts.some((artifact) => artifact.sourceToolCallId === callId)) continue;
-      console.log('[artifacts] end-of-run fallback capture', { containerId });
-      await captureArtifactsEventually(containerId, callId);
+    if (!cancellationObserved) {
+      for (const [containerId, callId] of ciContainers) {
+        if (artifacts.some((artifact) => artifact.sourceToolCallId === callId)) continue;
+        console.log('[artifacts] end-of-run fallback capture', { containerId });
+        await captureArtifactsEventually(containerId, callId);
+      }
     }
   } catch (e) {
     err = { code: 'internal', message: e instanceof Error ? e.message : 'Generation failed.' };
   }
 
   // A cancel may have landed while we streamed — re-read the run before finalizing.
-  const current = await runStore.get(userId, threadId, runId);
-  const canceled = current?.status === 'canceled';
+  let current = await runStore.get(userId, threadId, runId);
+  if (current?.status === 'cancel_requested') {
+    const acknowledged = await runStore.transition(userId, threadId, runId, ['cancel_requested'], {
+      status: 'canceled', endedAt: clock.now(),
+    });
+    current = acknowledged.outcome === 'missing' ? null : acknowledged.run;
+  }
+  let canceled = !current || current.status === 'canceled';
+
+  let latestThread = await threadStore.get(run.userId, threadId);
+  if (!latestThread || latestThread.deletedAt) {
+    clearInterval(heartbeat);
+    return;
+  }
 
   // Auto-name the thread from the first exchange while the message is still 'streaming', so the
   // client's terminal sync picks up the reply and the new title together.
   let newTitle: string | undefined;
-  if (!err && !canceled && creds && thread && acc.trim() && (!thread.title || thread.title === 'New chat')) {
+  if (!err && !canceled && creds && acc.trim() && (!latestThread.title || latestThread.title === 'New chat')) {
     newTitle = await generateTitle(creds, firstUser, acc, deps.fetchImpl);
   }
+
+  current = await runStore.get(userId, threadId, runId);
+  if (current?.status === 'cancel_requested') {
+    await runStore.transition(userId, threadId, runId, ['cancel_requested'], {
+      status: 'canceled', endedAt: clock.now(),
+    });
+    canceled = true;
+  } else if (!current || current.status === 'canceled') {
+    canceled = true;
+  }
+  let threadVersion = await threadStore.getForUpdate(run.userId, threadId);
+  if (!threadVersion || threadVersion.record.deletedAt) {
+    clearInterval(heartbeat);
+    return;
+  }
+  latestThread = threadVersion.record;
 
   const finalStatus: MessageRecord['status'] = canceled ? 'interrupted' : err ? 'error' : 'complete';
   const finalMessage = buildAssistant(finalStatus);
   await messageStore.append(finalMessage);
-  if (finalStatus === 'complete' && deps.memoryExtraction) {
-    void deps.memoryExtraction.enqueueTurn(run.userId, threadId, run.assistantMessageId, run.id).catch(() => {});
-  }
-  if (deps.signalr) await deps.signalr.sendToUser(run.userId, 'message', { threadId, message: finalMessage });
 
-  // Bump the thread so the assistant message syncs and the thread surfaces as recently active.
-  if (thread) {
-    const nextThread = {
-      ...thread,
+  const nextThread = (base: ThreadRecord): ThreadRecord => ({
+      ...base,
       ...(newTitle ? { title: newTitle } : {}),
       ...(generatedFiles.length
-        ? { files: [...(thread.files ?? []), ...generatedFiles] }
+        ? { files: [
+            ...(base.files ?? []),
+            ...generatedFiles.filter((generated) => !(base.files ?? []).some((file) => file.fileId === generated.fileId)),
+          ] }
         : {}),
       lastMessagePreview: (acc.trim() || (err ? 'Error' : '')).slice(0, 140),
       updatedAt: clock.now(),
-    };
-    await threadStore.put(nextThread);
-    if (deps.signalr)
-      await deps.signalr.sendToUser(run.userId, 'thread', {
-        thread: {
-          id: nextThread.id,
-          title: nextThread.title,
-          lastMessagePreview: nextThread.lastMessagePreview,
-          ...(nextThread.files ? { files: nextThread.files } : {}),
-          updatedAt: nextThread.updatedAt,
-        },
-      });
+    });
+  let savedThread = await threadStore.putIfMatch(nextThread(latestThread), threadVersion.etag);
+  if (!savedThread) {
+    threadVersion = await threadStore.getForUpdate(run.userId, threadId);
+    if (!threadVersion || threadVersion.record.deletedAt) {
+      await messageStore.delete(run.userId, threadId, finalMessage.id);
+      clearInterval(heartbeat);
+      return;
+    }
+    savedThread = await threadStore.putIfMatch(nextThread(threadVersion.record), threadVersion.etag);
+    if (!savedThread) {
+      await messageStore.delete(run.userId, threadId, finalMessage.id);
+      clearInterval(heartbeat);
+      return;
+    }
+  }
+  if (finalStatus === 'complete' && deps.memoryExtraction) {
+    void deps.memoryExtraction.enqueueTurn(run.userId, threadId, run.assistantMessageId, run.id).catch(() => {});
+  }
+  if (deps.signalr) {
+    await deps.signalr.sendToUser(run.userId, 'message', { threadId, message: finalMessage });
+    await deps.signalr.sendToUser(run.userId, 'thread', {
+      thread: {
+        id: savedThread.id,
+        title: savedThread.title,
+        lastMessagePreview: savedThread.lastMessagePreview,
+        ...(savedThread.files ? { files: savedThread.files } : {}),
+        updatedAt: savedThread.updatedAt,
+      },
+    });
   }
 
   if (!canceled) {

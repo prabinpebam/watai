@@ -22,6 +22,12 @@ export class RunDispatchService {
     for (const dispatch of pending) await this.reconcileOne(dispatch, summary);
     const staleBefore = new Date(Date.parse(this.clock.now()) - 30 * 60_000).toISOString();
     for (const run of await this.runs.listStaleActive(staleBefore, limit)) {
+      if (run.status === 'cancel_requested') {
+        await this.runs.transition(run.userId, run.threadId, run.id, ['cancel_requested'], {
+          status: 'canceled', endedAt: this.clock.now(),
+        });
+        continue;
+      }
       if (run.status !== 'running') continue;
       await this.runs.transition(run.userId, run.threadId, run.id, ['running'], {
         status: 'error',

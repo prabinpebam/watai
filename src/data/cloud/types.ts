@@ -639,7 +639,7 @@ export interface CredentialsInput {
 
 // --- runs (server-authoritative generation) ---
 
-export type RunStatus = 'queued' | 'running' | 'complete' | 'error' | 'canceled';
+export type RunStatus = 'queued' | 'running' | 'cancel_requested' | 'complete' | 'error' | 'canceled';
 
 export interface RunError {
   code: string;

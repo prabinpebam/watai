@@ -15,6 +15,7 @@ describe('run state machine', () => {
   it('classifies active vs terminal', () => {
     expect(isActive('queued')).toBe(true);
     expect(isActive('running')).toBe(true);
+    expect(isActive('cancel_requested')).toBe(true);
     expect(isActive('complete')).toBe(false);
     expect(isTerminal('complete')).toBe(true);
     expect(isTerminal('error')).toBe(true);
@@ -25,8 +26,8 @@ describe('run state machine', () => {
   it('allows only valid transitions', () => {
     expect(canTransition('queued', 'running')).toBe(true);
     expect(canTransition('running', 'complete')).toBe(true);
-    expect(canTransition('running', 'canceled')).toBe(true);
-    expect(canTransition('queued', 'canceled')).toBe(true);
+    expect(canTransition('running', 'cancel_requested')).toBe(true);
+    expect(canTransition('cancel_requested', 'canceled')).toBe(true);
     expect(canTransition('queued', 'complete')).toBe(false); // must go through running
     expect(canTransition('complete', 'running')).toBe(false); // terminal
     expect(canTransition('canceled', 'running')).toBe(false);

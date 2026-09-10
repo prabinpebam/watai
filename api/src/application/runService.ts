@@ -121,11 +121,11 @@ export class RunService {
 
   async cancel(userId: string, threadId: string, runId: string): Promise<RunRecord> {
     const run = await this.get(userId, threadId, runId);
+    if (run.status === 'cancel_requested') return run;
     if (!isActive(run.status)) return run; // already terminal — idempotent
     if (run.instanceId) await this.starter.cancel(run).catch(() => {});
     const result = await this.runStore.transition(userId, threadId, runId, ['queued', 'running'], {
-      status: 'canceled',
-      endedAt: this.clock.now(),
+      status: 'cancel_requested',
     });
     return result.outcome === 'missing' ? run : result.run;
   }
