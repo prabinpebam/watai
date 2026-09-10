@@ -79,7 +79,7 @@ export function createLocalGhTokenProvider(
     if (!token || token.length > 16 * 1024 || /\s/.test(token)) {
       return { kind: "cancelled", reason: "Token broker returned an invalid credential." };
     }
-    const lifetimeSeconds = 5 * 60;
+    const lifetimeSeconds = 65 * 60;
     cached = { token, expiresAt: now + lifetimeSeconds * 1_000 };
     return { kind: "token", accessToken: token, expiresIn: lifetimeSeconds };
   };

@@ -9,7 +9,7 @@ describe("local GitHub credential broker", () => {
     const provider = createLocalGhTokenProvider(executor);
     const first = await provider({ host: "https://github.com", reason: "initial", sessionId: "session" });
     const second = await provider({ host: "github.com", reason: "refresh", sessionId: "session" });
-    expect(first).toMatchObject({ kind: "token", accessToken: "synthetic-token", expiresIn: 300 });
+    expect(first).toMatchObject({ kind: "token", accessToken: "synthetic-token", expiresIn: 3_900 });
     expect(second).toMatchObject({ kind: "token", accessToken: "synthetic-token" });
     expect(executor.execute).toHaveBeenCalledOnce();
   });
