@@ -265,12 +265,18 @@ export class SyncRepository implements Repository {
   }
   async listMemory(query?: ListMemoryQuery): Promise<MemoryRecord[]> {
     if (await this.syncEnabled()) {
-      try {
-        const out = await this.cloud.listMemory(query);
-        return out.memories;
-      } catch {
-        return this.local.listMemory(query);
-      }
+      const memories: MemoryRecord[] = [];
+      const seenCursors = new Set<string>();
+      let cursor = query?.cursor;
+      do {
+        const out = await this.cloud.listMemory({ ...query, cursor, limit: Math.min(query?.limit ?? 100, 100) });
+        memories.push(...out.memories);
+        if (!out.cursor) break;
+        if (seenCursors.has(out.cursor)) throw new Error('Memory inventory returned a repeated cursor.');
+        seenCursors.add(out.cursor);
+        cursor = out.cursor;
+      } while (true);
+      return memories;
     }
     return this.local.listMemory(query);
   }

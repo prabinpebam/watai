@@ -827,6 +827,15 @@ function memoryKindLabel(kind: MemoryKind): string {
   return kind.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 }
 
+function memoryStateLabel(item: MemoryRecord): string {
+  if (item.status === 'deleted') return 'Excluded';
+  if (item.status === 'invalidated') return 'Outdated';
+  if (item.status === 'suppressed') return 'Hidden';
+  if (item.confirmation === 'approved') return 'Saved';
+  if (item.confirmation === 'automatic') return 'Automatic';
+  return 'Legacy unknown';
+}
+
 const MEMORY_KIND_VALUES = new Set<MemoryKind>(['fact', 'preference', 'instruction', 'work_style', 'project_context', 'thread_summary', 'avoidance', 'entity', 'procedure']);
 const MEMORY_STATUS_VALUES = new Set<string>(['active', 'suppressed', 'invalidated']);
 const MEMORY_VISIBILITY_VALUES = new Set<string>(['normal', 'top_of_mind', 'background']);
@@ -855,7 +864,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
   const [items, setItems] = useState<MemoryRecord[]>([]);
   const [profile, setProfile] = useState<MemoryProfileView | null>(null);
   const [view, setView] = useState<'structured' | 'evidence' | 'json'>('structured');
-  const [status, setStatus] = useState<Extract<MemoryStatus, 'active' | 'suppressed' | 'invalidated'>>('active');
+  const [status, setStatus] = useState<Extract<MemoryStatus, 'active' | 'suppressed' | 'invalidated' | 'deleted'>>('active');
   const [text, setText] = useState('');
   const [kind, setKind] = useState<Exclude<MemoryKind, 'thread_summary' | 'entity'>>('fact');
   const [loading, setLoading] = useState(true);
@@ -1123,6 +1132,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
                 { value: 'active', label: 'Active' },
                 { value: 'suppressed', label: 'Hidden' },
                 { value: 'invalidated', label: 'Outdated' },
+                { value: 'deleted', label: 'Excluded' },
               ]}
               onChange={setStatus}
             />
@@ -1176,10 +1186,10 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
                       <>
                         <div className="setting-row__title">{item.text}</div>
                         <div className="setting-row__sub">
-                          {memoryKindLabel(item.kind)} · {item.visibility.replace(/_/g, ' ')} · {item.confirmation ?? 'legacy unknown'} · {item.origin ?? 'unknown origin'} · v{item.revision ?? '?'}
+                          {memoryStateLabel(item)} · {memoryKindLabel(item.kind)} · {item.visibility.replace(/_/g, ' ')} · {item.origin ?? 'unknown origin'} · v{item.revision ?? '?'}
                         </div>
                         <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
-                          {item.status !== 'active' ? (
+                          {item.status === 'deleted' ? null : item.status !== 'active' ? (
                             <>
                               <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'active' }, 'Memory restored')}>Restore</Button>
                               <Button size="sm" variant="outline" onClick={() => startEdit(item)}>Edit</Button>

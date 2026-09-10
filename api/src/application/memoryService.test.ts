@@ -74,6 +74,27 @@ describe('MemoryService', () => {
     expect(second.cursor).toBeUndefined();
   });
 
+  it('paginates 1000 equal-timestamp records without omissions', async () => {
+    const { service, store } = makeService();
+    for (let index = 0; index < 1000; index++) {
+      await store.put({
+        id: `memory-${String(index).padStart(4, '0')}`, userId: 'userA', kind: 'fact', status: 'active',
+        text: `Memory ${index}`, sourceRefs: [{ type: 'manual', createdAt: '2026-01-01T00:00:00Z' }],
+        confidence: 1, salience: 0.5, pinned: false, sensitive: false, visibility: 'normal',
+        createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', useCount: 0,
+      });
+    }
+    const ids: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await service.list('userA', { status: 'active', limit: 100, cursor });
+      ids.push(...page.memories.map((memory) => memory.id));
+      cursor = page.cursor;
+    } while (cursor);
+    expect(ids).toHaveLength(1000);
+    expect(new Set(ids).size).toBe(1000);
+  });
+
   it('patches status and excludes suppressed/deleted memories from default list', async () => {
     const { service } = makeService();
     const active = await service.createManual('userA', { text: 'Keep this.' });

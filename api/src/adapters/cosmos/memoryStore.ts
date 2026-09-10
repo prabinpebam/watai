@@ -3,20 +3,6 @@ import type { MemoryRecord, MemorySummaryRecord } from '../../domain/memory';
 import type { MemoryExclusion, MemoryListPage, MemoryStore, MemoryStoreListOptions } from '../../ports/memoryStore';
 import { getCosmosDatabase } from './cosmosClient';
 
-function encodeCursor(record: MemoryRecord): string {
-  return Buffer.from(JSON.stringify({ updatedAt: record.updatedAt, id: record.id }), 'utf8').toString('base64url');
-}
-
-function decodeCursor(cursor?: string): { updatedAt: string; id: string } | null {
-  if (!cursor) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as { updatedAt?: string; id?: string };
-    return parsed.updatedAt && parsed.id ? { updatedAt: parsed.updatedAt, id: parsed.id } : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Cosmos adds system metadata (_rid, _self, _etag, _attachments, _ts) to every item. Strip it so
  *  the domain layer — including strict re-validation on update/delete — sees a clean record. */
 function strip<T>(resource: T): T {
@@ -51,20 +37,18 @@ export class CosmosMemoryStore implements MemoryStore {
       conditions.push('(CONTAINS(LOWER(c.text), @q) OR CONTAINS(LOWER(c.summary), @q) OR ARRAY_CONTAINS(c.entities, @q, true) OR ARRAY_CONTAINS(c.topics, @q, true))');
       parameters.push({ name: '@q', value: q });
     }
-    const cursor = decodeCursor(opts?.cursor);
-    if (cursor) {
-      conditions.push('c.updatedAt < @cursorUpdatedAt');
-      parameters.push({ name: '@cursorUpdatedAt', value: cursor.updatedAt });
-    }
     const limit = opts?.limit ?? 50;
-    const query = `SELECT * FROM c WHERE ${conditions.join(' AND ')} ORDER BY c.updatedAt DESC OFFSET 0 LIMIT ${limit + 1}`;
-    const { resources } = await this.container.items
-      .query<MemoryRecord>({ query, parameters }, { partitionKey: userId })
-      .fetchAll();
-    const page = resources.slice(0, limit).map(strip);
+    const query = `SELECT * FROM c WHERE ${conditions.join(' AND ')} ORDER BY c.updatedAt DESC`;
+    const page = await this.container.items
+      .query<MemoryRecord>({ query, parameters }, {
+        partitionKey: userId,
+        maxItemCount: limit,
+        continuationToken: opts?.cursor,
+      })
+      .fetchNext();
     return {
-      memories: page,
-      ...(resources.length > limit && page.length ? { cursor: encodeCursor(page[page.length - 1]) } : {}),
+      memories: page.resources.map(strip),
+      ...(page.continuationToken ? { cursor: page.continuationToken } : {}),
     };
   }
 

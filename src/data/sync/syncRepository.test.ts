@@ -375,8 +375,13 @@ class FakeCloud implements CloudApi {
   }
   async listMemory(query: ListMemoryQuery = {}): Promise<ListMemoryResponse> {
     this.calls.push('listMemory');
+    const all = [...this.memories.values()].filter((m) => (query.status ? m.status === query.status : m.status === 'active'));
+    const offset = query.cursor ? Number(query.cursor) : 0;
+    const limit = query.limit ?? 100;
+    const memories = all.slice(offset, offset + limit);
     return {
-      memories: [...this.memories.values()].filter((m) => (query.status ? m.status === query.status : m.status === 'active')),
+      memories,
+      ...(offset + limit < all.length ? { cursor: String(offset + limit) } : {}),
     };
   }
   async createMemory(body: CreateMemoryBody): Promise<MemoryRecord> {
@@ -644,6 +649,28 @@ describe('SyncRepository — memory', () => {
     const { repo, cloud } = setup(true);
     await expect(repo.getMemoryProfile()).resolves.toMatchObject({ userId: 'u' });
     expect(cloud.calls).toEqual(['getMemoryProfile']);
+  });
+
+  it('drains every memory page without omitting equal-timestamp records', async () => {
+    const { repo, cloud } = setup(true);
+    for (let index = 0; index < 201; index++) {
+      cloud.memories.set(`memory-${index}`, {
+        id: `memory-${index}`, userId: 'u', kind: 'fact', status: 'active', text: `Memory ${index}`,
+        sourceRefs: [{ type: 'manual', createdAt: '2026-01-01T00:00:00Z' }], confidence: 1,
+        salience: 0.5, pinned: false, sensitive: false, visibility: 'normal',
+        createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', useCount: 0,
+      });
+    }
+    const memories = await repo.listMemory({ status: 'active', limit: 100 });
+    expect(memories).toHaveLength(201);
+    expect(new Set(memories.map((memory) => memory.id)).size).toBe(201);
+    expect(cloud.calls.filter((call) => call === 'listMemory')).toHaveLength(3);
+  });
+
+  it('does not present local memory as a complete inventory when cloud listing fails', async () => {
+    const { repo, cloud } = setup(true);
+    cloud.listMemory = async () => { throw new CloudError('network', 'offline', 0); };
+    await expect(repo.listMemory()).rejects.toMatchObject({ code: 'network' });
   });
 });
 

@@ -19,7 +19,7 @@
       "executable": "npm",
       "args": ["test"],
       "expectedTestFiles": 71,
-      "expectedTests": 461,
+      "expectedTests": 463,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },
@@ -39,7 +39,7 @@
       "executable": "npm",
       "args": ["test"],
       "expectedTestFiles": 84,
-      "expectedTests": 617,
+      "expectedTests": 619,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },

@@ -9,7 +9,7 @@ describe('CosmosMemoryStore', () => {
       items: {
         query: (spec: { query: string }) => {
           queryText = spec.query;
-          return { fetchAll: async () => ({ resources: [] }) };
+          return { fetchNext: async () => ({ resources: [] }) };
         },
       },
     };
@@ -41,7 +41,7 @@ describe('CosmosMemoryStore', () => {
     const container = {
       items: {
         query: () => ({
-          fetchAll: async () => ({ resources: [{ id: 'm1', userId: 'userA', updatedAt: 'x', _etag: '"1"', _rid: 'r' }] }),
+          fetchNext: async () => ({ resources: [{ id: 'm1', userId: 'userA', updatedAt: 'x', _etag: '"1"', _rid: 'r' }] }),
         }),
       },
     };
@@ -88,5 +88,24 @@ describe('CosmosMemoryStore', () => {
     await expect(store.isExcluded('userA', 'other', sourceRefs)).resolves.toBe(true);
     expect(query).toContain('ARRAY_CONTAINS');
     expect(parameters).toContainEqual({ name: '@sourceKey0', value: 'message:t1:u1:' });
+  });
+
+  it('passes opaque continuation tokens through so equal timestamps cannot be cursor-filtered away', async () => {
+    const seen: Array<{ token?: string; max?: number }> = [];
+    const pages = [
+      { resources: Array.from({ length: 100 }, (_, index) => ({ id: `m${index}`, userId: 'userA', updatedAt: 'same' })), continuationToken: 'page-2' },
+      { resources: [{ id: 'm100', userId: 'userA', updatedAt: 'same' }] },
+    ];
+    const container = { items: { query: (_spec: unknown, options: { continuationToken?: string; maxItemCount?: number }) => ({
+      fetchNext: async () => {
+        seen.push({ token: options.continuationToken, max: options.maxItemCount });
+        return pages[options.continuationToken ? 1 : 0];
+      },
+    }) } };
+    const store = new CosmosMemoryStore(container as never);
+    const first = await store.list('userA', { limit: 100 });
+    const second = await store.list('userA', { limit: 100, cursor: first.cursor });
+    expect([...first.memories, ...second.memories]).toHaveLength(101);
+    expect(seen).toEqual([{ token: undefined, max: 100 }, { token: 'page-2', max: 100 }]);
   });
 });
