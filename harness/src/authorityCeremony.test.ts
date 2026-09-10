@@ -8,6 +8,7 @@ const digest = (value: string) => value.repeat(64);
 describe("authority ceremony request", () => {
   it("requests only evaluation bootstrap authority and scopes isolation to the smoke image", () => {
     const request = buildAuthorityCeremonyRequest({
+      attemptId: "attempt-001",
       repositoryId: "prabinpebam/watai",
       evidence: {
         sourceSha: "1".repeat(40),
@@ -29,6 +30,8 @@ describe("authority ceremony request", () => {
       claimLifetimeSeconds: 900,
     });
     const grant = request.unsignedClaimRequests.find((claim) => claim.kind === "authorization-grant");
+    expect(request.attemptId).toBe("attempt-001");
+    expect(grant?.artifactId).toContain("attempt-001");
     expect(grant?.payload).toMatchObject({ modes: ["evaluation"], billing: { kind: "subscription", maxUsd: 0 } });
     expect(request.unsignedClaimRequests.filter((claim) => claim.kind === "capability-attestation")).toHaveLength(
       implementationAgentBootstrapCapabilities.length,

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
@@ -108,7 +108,9 @@ const manifest = JSON.parse(
 ) as LiveModelEvaluationManifest;
 const contract = manifest.evaluations.find((evaluation) => evaluation.id === "implementation-agent-smoke");
 if (!contract) throw new Error("Frozen implementation-agent-smoke contract is missing.");
+const attemptId = randomUUID();
 const request = buildAuthorityCeremonyRequest({
+  attemptId,
   repositoryId: process.env.WATAI_REPOSITORY_ID?.trim() || "prabinpebam/watai",
   evidence: {
     sourceSha,
@@ -132,7 +134,7 @@ await mkdir(requestedOutputRoot, { recursive: true, mode: 0o700 });
 const repository = await realpath(root);
 const outputRoot = await realpath(requestedOutputRoot);
 if (inside(repository, outputRoot)) throw new Error("Authority requests must be written outside the repository.");
-const outputDirectory = resolve(outputRoot, `bootstrap-${sourceSha.slice(0, 12)}`);
+const outputDirectory = resolve(outputRoot, `bootstrap-${sourceSha.slice(0, 12)}-${attemptId}`);
 await mkdir(outputDirectory, { recursive: false, mode: 0o700 });
 await Promise.all([
   writeFile(resolve(outputDirectory, "ceremony-request.json"), `${JSON.stringify(request, null, 2)}\n`, {
@@ -164,6 +166,7 @@ console.log(JSON.stringify({
   status: "READY_FOR_INDEPENDENT_REVIEW",
   releaseEligible: false,
   sourceSha,
+  attemptId,
   smokeWorkerImageSha256,
   evidenceSha256: request.evidenceSha256,
   outputDirectory,

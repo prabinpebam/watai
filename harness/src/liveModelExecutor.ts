@@ -72,7 +72,24 @@ export class CommandLiveModelProviderAdapter implements LiveModelProviderAdapter
       },
     });
     if (result.error || result.status !== 0) {
-      throw new Error((result.stderr || result.error?.message || "Live-model adapter failed.").slice(0, 4000));
+      const timedOut = (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
+      const artifact: ModelCaseArtifact = input.definition.oracle.kind === "gateway-contract"
+        ? { kind: "gateway-contract", toolIds: [], submitted: false, changedPaths: [] }
+        : input.definition.oracle.kind === "semantic-action"
+          ? { kind: "semantic-action", selectedAction: "adapter-failed" }
+          : input.definition.oracle.kind === "event-contract"
+            ? { kind: "event-contract", eventTypes: [], toolCallCount: 0 }
+            : { kind: "external-metric", metric: input.definition.oracle.metric, passed: false, reportSha256: "0".repeat(64) };
+      return {
+        status: timedOut ? "timed-out" : "failed",
+        artifact,
+        latencyMs: this.command.timeoutMs,
+        usage: { usd: 0, inputTokens: 0, outputTokens: 0, requests: 0 },
+        responseSha256: null,
+        resolvedModelVersion: null,
+        errorCode: timedOut ? "ADAPTER_TIMEOUT" : "ADAPTER_PROCESS_FAILED",
+        completedAt: new Date().toISOString(),
+      };
     }
     let parsed: LiveModelAdapterResult;
     try {

@@ -51,4 +51,20 @@ describe("command live-model adapter", () => {
       usage: { requests: 1 },
     });
   });
+
+  it("returns a failed denominator observation when the adapter process exits nonzero", async () => {
+    const adapter = new CommandLiveModelProviderAdapter("azure-openai", {
+      executable: process.execPath,
+      args: ["-e", "process.stderr.write('provider failed');process.exit(2)"],
+      cwd: process.cwd(),
+      timeoutMs: 5_000,
+      environment: {},
+    });
+    await expect(adapter.run({ contract, definition, repetition: 1 })).resolves.toMatchObject({
+      status: "failed",
+      artifact: { kind: "semantic-action", selectedAction: "adapter-failed" },
+      usage: { requests: 0 },
+      errorCode: "ADAPTER_PROCESS_FAILED",
+    });
+  });
 });

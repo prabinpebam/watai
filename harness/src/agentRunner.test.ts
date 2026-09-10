@@ -130,7 +130,7 @@ describe("agent attempt runner", () => {
       usage: { inputTokens: 800, outputTokens: 100, requests: 1, currentModel: "gpt-5" },
     });
     expect(fake.client.createSession).toHaveBeenCalledOnce();
-    expect(fake.session.disconnect).toHaveBeenCalledOnce();
+    expect(fake.session.disconnect).not.toHaveBeenCalled();
     expect(fake.client.stop).toHaveBeenCalledOnce();
   });
 

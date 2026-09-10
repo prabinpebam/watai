@@ -38,6 +38,7 @@ export interface AuthorityCeremonyRequest {
   schemaVersion: "1.0";
   status: "READY_FOR_INDEPENDENT_REVIEW";
   releaseEligible: false;
+  attemptId: string;
   repositoryId: string;
   sourceSha: string;
   rootFixedFields: AuthorityContractDigests;
@@ -53,6 +54,7 @@ export interface AuthorityCeremonyRequest {
 }
 
 export function buildAuthorityCeremonyRequest(input: {
+  attemptId: string;
   repositoryId: string;
   evidence: AuthorityCeremonyEvidence;
   evaluationBudget: {
@@ -64,8 +66,11 @@ export function buildAuthorityCeremonyRequest(input: {
   maxAiCredits: number;
   claimLifetimeSeconds: number;
 }): AuthorityCeremonyRequest {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{7,80}$/.test(input.attemptId)) {
+    throw new Error("Authority ceremony attempt ID is invalid.");
+  }
   const evidenceSha256 = sha256(canonical(input.evidence));
-  const prefix = input.evidence.sourceSha.slice(0, 12);
+  const prefix = `${input.evidence.sourceSha.slice(0, 12)}-${input.attemptId}`;
   const capabilityRequests: UnsignedClaimRequest[] = implementationAgentBootstrapCapabilities.map((capability) => ({
     kind: "capability-attestation",
     artifactId: `bootstrap-${prefix}-${capability}`,
@@ -88,6 +93,7 @@ export function buildAuthorityCeremonyRequest(input: {
     schemaVersion: "1.0",
     status: "READY_FOR_INDEPENDENT_REVIEW",
     releaseEligible: false,
+    attemptId: input.attemptId,
     repositoryId: input.repositoryId,
     sourceSha: input.evidence.sourceSha,
     rootFixedFields: input.evidence.rootInputs,

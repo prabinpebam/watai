@@ -279,13 +279,6 @@ export async function runAgentAttempt(input: AgentAttemptInput): Promise<AgentAt
     unsubscribeLimit?.();
     unsubscribeUsage?.();
     const cleanupErrors: Error[] = [];
-    if (session) {
-      try {
-        await bounded(session.disconnect(), 5_000, "Copilot session disconnect timed out.");
-      } catch (error) {
-        cleanupErrors.push(error instanceof Error ? error : new Error(String(error)));
-      }
-    }
     try {
       cleanupErrors.push(...await bounded(client.stop(), 5_000, "Copilot client stop timed out."));
     } catch (error) {
