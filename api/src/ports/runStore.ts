@@ -27,8 +27,36 @@ export interface RunRecord {
   heartbeatAt: string;
 }
 
+export interface RunAdmissionRequest {
+  run: RunRecord;
+  idempotencyKey: string;
+  requestFingerprint: string;
+  legacyMessageExists: boolean;
+}
+
+export type RunAdmissionResult =
+  | { outcome: 'accepted'; run: RunRecord }
+  | { outcome: 'replay'; run: RunRecord }
+  | { outcome: 'payload_mismatch' }
+  | { outcome: 'legacy_conflict' }
+  | { outcome: 'active_conflict' };
+
+export type RunTransitionResult =
+  | { outcome: 'updated'; run: RunRecord }
+  | { outcome: 'unchanged'; run: RunRecord }
+  | { outcome: 'missing' };
+
 export interface RunStore {
   get(userId: string, threadId: string, runId: string): Promise<RunRecord | null>;
+  admit(request: RunAdmissionRequest): Promise<RunAdmissionResult>;
+  acknowledgeStart(userId: string, threadId: string, runId: string, instanceId: string): Promise<RunRecord | null>;
+  transition(
+    userId: string,
+    threadId: string,
+    runId: string,
+    expectedStatuses: RunStatus[],
+    patch: Partial<Omit<RunRecord, 'id' | 'userId' | 'threadId'>>,
+  ): Promise<RunTransitionResult>;
   put(record: RunRecord): Promise<RunRecord>;
   /** Active (queued|running) runs for a thread — enforces one run per thread. */
   listActive(userId: string, threadId: string): Promise<RunRecord[]>;

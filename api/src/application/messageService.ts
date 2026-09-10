@@ -155,4 +155,9 @@ export class MessageService {
     await this.requireOwnThread(userId, threadId);
     return this.messageStore.list(userId, threadId, opts);
   }
+
+  async get(userId: string, threadId: string, messageId: string): Promise<MessageRecord | null> {
+    await this.requireOwnThread(userId, threadId);
+    return this.messageStore.get(userId, threadId, messageId);
+  }
 }

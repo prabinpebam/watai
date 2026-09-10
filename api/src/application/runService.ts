@@ -1,5 +1,6 @@
 import { AppError } from '../domain/errors';
 import { parseRunInput, isActive } from '../domain/run';
+import { createHash } from 'node:crypto';
 import type { AppendMessageInput } from '../domain/message';
 import type { MessageRecord } from '../ports/messageStore';
 import type { ThreadStore } from '../ports/threadStore';
@@ -10,6 +11,7 @@ import type { ServiceClock } from './threadService';
 /** Narrow dependency on message appending; `MessageService` satisfies this structurally. */
 export interface MessageAppender {
   append(userId: string, threadId: string, input: AppendMessageInput): Promise<MessageRecord>;
+  get(userId: string, threadId: string, messageId: string): Promise<MessageRecord | null>;
 }
 
 /**
@@ -35,22 +37,12 @@ export class RunService {
   async submit(userId: string, threadId: string, input: unknown): Promise<RunRecord> {
     await this.requireOwnThread(userId, threadId);
     const parsed = parseRunInput(input);
-
-    // One run per thread (server-authoritative lock).
-    if ((await this.runStore.listActive(userId, threadId)).length > 0) {
-      throw new AppError('conflict', 'A response is already being generated in this thread.');
-    }
-
-    // Persist the user prompt (idempotent on the client message id).
-    await this.messages.append(userId, threadId, {
-      id: parsed.clientMessageId ?? this.clock.newId(),
-      role: 'user',
-      content: parsed.text ?? '',
-      orderAt: this.clock.now(),
-      ...(parsed.attachments?.length ? { attachments: parsed.attachments } : {}),
-    });
+    const legacyMessageExists = parsed.clientMessageId
+      ? (await this.messages.get(userId, threadId, parsed.clientMessageId)) !== null
+      : false;
 
     const ts = this.clock.now();
+    const clientMessageId = parsed.clientMessageId ?? this.clock.newId();
     const run: RunRecord = {
       id: this.clock.newId(),
       threadId,
@@ -68,15 +60,44 @@ export class RunService {
       endedAt: null,
       heartbeatAt: ts,
     };
-    const saved = await this.runStore.put(run);
+    const requestFingerprint = createHash('sha256').update(JSON.stringify({
+      text: parsed.text ?? '',
+      attachments: parsed.attachments ?? [],
+      model: parsed.model ?? null,
+      tools: parsed.tools ?? [],
+      allowDestructive: parsed.allowDestructive ?? [],
+    })).digest('hex');
+    const admission = await this.runStore.admit({
+      run,
+      idempotencyKey: clientMessageId,
+      requestFingerprint,
+      legacyMessageExists,
+    });
+    if (admission.outcome === 'replay') return admission.run;
+    if (admission.outcome === 'payload_mismatch') {
+      throw new AppError('conflict', 'This message id was already used with different run input.');
+    }
+    if (admission.outcome === 'legacy_conflict') {
+      throw new AppError('conflict', 'This message predates reliable run receipts and cannot be submitted again.');
+    }
+    if (admission.outcome === 'active_conflict') {
+      throw new AppError('conflict', 'A response is already being generated in this thread.');
+    }
+    const saved = admission.run;
 
     try {
+      await this.messages.append(userId, threadId, {
+        id: clientMessageId,
+        role: 'user',
+        content: parsed.text ?? '',
+        orderAt: ts,
+        ...(parsed.attachments?.length ? { attachments: parsed.attachments } : {}),
+      });
       const { instanceId } = await this.starter.start(saved);
-      return this.runStore.put({ ...saved, instanceId });
+      return (await this.runStore.acknowledgeStart(userId, threadId, saved.id, instanceId)) ?? saved;
     } catch {
       // Could not start the worker — fail the run so the thread is not stuck "active".
-      await this.runStore.put({
-        ...saved,
+      await this.runStore.transition(userId, threadId, saved.id, ['queued'], {
         status: 'error',
         error: { code: 'internal', message: 'Could not start generation.' },
         endedAt: this.clock.now(),
@@ -101,6 +122,10 @@ export class RunService {
     const run = await this.get(userId, threadId, runId);
     if (!isActive(run.status)) return run; // already terminal — idempotent
     if (run.instanceId) await this.starter.cancel(run).catch(() => {});
-    return this.runStore.put({ ...run, status: 'canceled', endedAt: this.clock.now() });
+    const result = await this.runStore.transition(userId, threadId, runId, ['queued', 'running'], {
+      status: 'canceled',
+      endedAt: this.clock.now(),
+    });
+    return result.outcome === 'missing' ? run : result.run;
   }
 }

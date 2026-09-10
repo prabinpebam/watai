@@ -1,4 +1,4 @@
-import type { Container, SqlQuerySpec } from '@azure/cosmos';
+import type { Container, OperationInput, SqlQuerySpec } from '@azure/cosmos';
 import { describe, expect, it } from 'vitest';
 import type { MessageRecord } from '../../ports/messageStore';
 import type { RunRecord } from '../../ports/runStore';
@@ -10,24 +10,55 @@ type Document = Record<string, unknown> & { id: string; threadId: string; userId
 
 function fakeContainer(initial: Document[] = []): { container: Container; documents: Document[] } {
   const documents = initial.map((document) => ({ ...document }));
+  const find = (id: string, partitionKey: string) =>
+    documents.findIndex((document) => document.id === id && document.threadId === partitionKey);
   const container = {
     item: (id: string, partitionKey: string) => ({
       read: async () => {
-        const resource = documents.find((document) => document.id === id && document.threadId === partitionKey);
-        if (!resource) throw { code: 404 };
-        return { resource: { ...resource } };
+        const index = find(id, partitionKey);
+        if (index < 0) throw { code: 404 };
+        return { resource: { ...documents[index], _etag: String(index + 1) } };
+      },
+      replace: async (record: Document) => {
+        const index = find(id, partitionKey);
+        if (index < 0) throw { code: 404 };
+        documents[index] = { ...record };
+        return { resource: record };
       },
       delete: async () => {
-        const index = documents.findIndex((document) => document.id === id && document.threadId === partitionKey);
+        const index = find(id, partitionKey);
         if (index >= 0) documents.splice(index, 1);
       },
     }),
     items: {
       upsert: async (record: Document) => {
-        const index = documents.findIndex((document) => document.id === record.id && document.threadId === record.threadId);
+        const index = find(record.id, record.threadId);
         if (index >= 0) documents[index] = { ...record };
         else documents.push({ ...record });
         return { resource: record };
+      },
+      batch: async (operations: OperationInput[], partitionKey: string) => {
+        const createConflict = operations.find((operation) =>
+          operation.operationType === 'Create' &&
+          find(String(operation.resourceBody.id), partitionKey) >= 0);
+        if (createConflict) {
+          return { result: operations.map((operation) => ({
+            statusCode: operation === createConflict ? 409 : 424,
+            requestCharge: 1,
+          })) };
+        }
+        for (const operation of operations) {
+          if (operation.operationType === 'Create' || operation.operationType === 'Upsert' || operation.operationType === 'Replace') {
+            const record = operation.resourceBody as unknown as Document;
+            const index = find(record.id, partitionKey);
+            if (index >= 0) documents[index] = { ...record };
+            else documents.push({ ...record });
+          } else if (operation.operationType === 'Delete') {
+            const index = find(operation.id, partitionKey);
+            if (index >= 0) documents.splice(index, 1);
+          }
+        }
+        return { result: operations.map(() => ({ statusCode: 200, requestCharge: 1 })) };
       },
       query: (spec: SqlQuerySpec, options: { partitionKey?: string }) => ({
         fetchAll: async () => {
@@ -137,5 +168,39 @@ describe('owner-scoped Cosmos child stores', () => {
 
     await store.append({ ...proven, content: 'migrated' });
     await expect(store.list('owner-a', 'same-thread')).resolves.toMatchObject([{ id: 'legacy-message', content: 'migrated' }]);
+  });
+
+  it('atomically owns an active run slot and replays only matching submissions', async () => {
+    const runs = fakeContainer();
+    const store = new CosmosRunStore(runs.container);
+    const first = run('owner-a');
+    first.id = 'run-first';
+    const second = { ...run('owner-a'), id: 'run-second' };
+
+    await expect(store.admit({ run: first, idempotencyKey: 'message-first', requestFingerprint: 'fingerprint-a', legacyMessageExists: false }))
+      .resolves.toMatchObject({ outcome: 'accepted', run: { id: 'run-first' } });
+    await expect(store.admit({ run: second, idempotencyKey: 'message-second', requestFingerprint: 'fingerprint-b', legacyMessageExists: false }))
+      .resolves.toEqual({ outcome: 'active_conflict' });
+    await expect(store.admit({ run: second, idempotencyKey: 'message-first', requestFingerprint: 'fingerprint-a', legacyMessageExists: true }))
+      .resolves.toMatchObject({ outcome: 'replay', run: { id: 'run-first' } });
+    await expect(store.admit({ run: second, idempotencyKey: 'message-first', requestFingerprint: 'changed', legacyMessageExists: true }))
+      .resolves.toEqual({ outcome: 'payload_mismatch' });
+
+    await expect(store.transition('owner-a', 'same-thread', 'run-first', ['queued'], { status: 'complete' }))
+      .resolves.toMatchObject({ outcome: 'updated', run: { status: 'complete' } });
+    await expect(store.admit({ run: second, idempotencyKey: 'message-second', requestFingerprint: 'fingerprint-b', legacyMessageExists: false }))
+      .resolves.toMatchObject({ outcome: 'accepted', run: { id: 'run-second' } });
+  });
+
+  it('does not regress a run that advanced before start acknowledgement', async () => {
+    const runs = fakeContainer();
+    const store = new CosmosRunStore(runs.container);
+    const record = run('owner-a');
+    await store.admit({ run: record, idempotencyKey: 'message', requestFingerprint: 'fingerprint', legacyMessageExists: false });
+    await store.put({ ...record, status: 'running' });
+
+    await expect(store.acknowledgeStart('owner-a', 'same-thread', 'same-run', 'instance'))
+      .resolves.toMatchObject({ status: 'running' });
+    await expect(store.get('owner-a', 'same-thread', 'same-run')).resolves.toMatchObject({ status: 'running' });
   });
 });

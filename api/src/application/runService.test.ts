@@ -8,7 +8,7 @@ import type { RunStarter } from '../ports/runStarter';
 import type { RunRecord } from '../ports/runStore';
 import { AppError } from '../domain/errors';
 
-function setup(opts?: { failStart?: boolean }) {
+function setup(opts?: { failStart?: boolean; advanceOnStart?: RunRecord['status'] }) {
   const threadStore = new InMemoryThreadStore();
   const messageStore = new InMemoryMessageStore();
   let n = 0;
@@ -25,6 +25,7 @@ function setup(opts?: { failStart?: boolean }) {
     async start(run) {
       if (opts?.failStart) throw new Error('boom');
       started.push(run);
+      if (opts?.advanceOnStart) await runStore.put({ ...run, status: opts.advanceOnStart });
       return { instanceId: `inst_${run.id}` };
     },
     async cancel(run) {
@@ -32,7 +33,7 @@ function setup(opts?: { failStart?: boolean }) {
     },
   };
   const svc = new RunService(threadStore, messages, runStore, starter, clock);
-  return { threadStore, messageStore, runStore, started, canceled, svc };
+  return { threadStore, messageStore, messages, runStore, started, canceled, svc };
 }
 
 async function seedThread(store: InMemoryThreadStore, userId = 'userA', id = 't1') {
@@ -82,9 +83,63 @@ describe('RunService.submit', () => {
     expect(msgs.some((m) => m.id === 'cm1')).toBe(true);
   });
 
+  it('returns the original run for identical retries before and after completion', async () => {
+    const input = { text: 'same request', clientMessageId: 'cm-retry', tools: ['web_search'] };
+    const first = await ctx.svc.submit('userA', 't1', input);
+    const activeReplay = await ctx.svc.submit('userA', 't1', input);
+    expect(activeReplay.id).toBe(first.id);
+    expect(ctx.started).toHaveLength(1);
+    expect(await ctx.messageStore.list('userA', 't1')).toHaveLength(1);
+
+    await ctx.runStore.put({ ...first, status: 'complete' });
+    const completedReplay = await ctx.svc.submit('userA', 't1', input);
+    expect(completedReplay).toMatchObject({ id: first.id, status: 'complete' });
+    expect(ctx.started).toHaveLength(1);
+  });
+
+  it('rejects reuse of a client message id with different run input', async () => {
+    await ctx.svc.submit('userA', 't1', { text: 'first payload', clientMessageId: 'cm-reused' });
+    await expect(ctx.svc.submit('userA', 't1', {
+      text: 'different payload', clientMessageId: 'cm-reused',
+    })).rejects.toMatchObject({ code: 'conflict' });
+    expect(ctx.started).toHaveLength(1);
+  });
+
+  it('quarantines a legacy message id that has no run receipt', async () => {
+    await ctx.messages.append('userA', 't1', { id: 'cm-legacy', role: 'user', content: 'old request' });
+    await expect(ctx.svc.submit('userA', 't1', {
+      text: 'old request', clientMessageId: 'cm-legacy',
+    })).rejects.toMatchObject({ code: 'conflict' });
+    expect(ctx.started).toHaveLength(0);
+    expect(await ctx.runStore.listActive('userA', 't1')).toEqual([]);
+  });
+
   it('rejects a second concurrent run on the same thread (409)', async () => {
     await ctx.svc.submit('userA', 't1', { text: 'first' });
     expect(await code(() => ctx.svc.submit('userA', 't1', { text: 'second' }))).toBe('conflict');
+  });
+
+  it('atomically admits only one of two simultaneous submissions', async () => {
+    const results = await Promise.allSettled([
+      ctx.svc.submit('userA', 't1', { text: 'first', clientMessageId: 'cm-first' }),
+      ctx.svc.submit('userA', 't1', { text: 'second', clientMessageId: 'cm-second' }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(await ctx.runStore.listActive('userA', 't1')).toHaveLength(1);
+  });
+
+  it('returns one run for two simultaneous identical submissions', async () => {
+    const input = { text: 'same', clientMessageId: 'cm-same' };
+    const [first, second] = await Promise.all([
+      ctx.svc.submit('userA', 't1', input),
+      ctx.svc.submit('userA', 't1', input),
+    ]);
+
+    expect(second.id).toBe(first.id);
+    expect(ctx.started).toHaveLength(1);
+    expect(await ctx.messageStore.list('userA', 't1')).toHaveLength(1);
   });
 
   it('isolates active runs and client message ids for owners sharing a public thread id', async () => {
@@ -137,6 +192,14 @@ describe('RunService.submit', () => {
     expect(await code(() => failing.svc.submit('userA', 't1', { text: 'x' }))).toBe('internal');
     // No active run remains → the thread is not locked forever.
     expect(await failing.runStore.listActive('userA', 't1')).toHaveLength(0);
+  });
+
+  it('does not overwrite fast worker progress with the enqueue acknowledgement', async () => {
+    const fast = setup({ advanceOnStart: 'complete' });
+    await seedThread(fast.threadStore);
+    const result = await fast.svc.submit('userA', 't1', { text: 'x', clientMessageId: 'cm-fast' });
+    expect(result.status).toBe('complete');
+    expect((await fast.runStore.get('userA', 't1', result.id))?.status).toBe('complete');
   });
 });
 

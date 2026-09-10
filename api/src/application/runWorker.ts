@@ -701,10 +701,15 @@ export async function processRun(deps: RunWorkerDeps, userId: string, threadId: 
   const runAgent = deps.runAgent ?? defaultRunAgent;
   const flushMs = deps.flushIntervalMs ?? DEFAULT_FLUSH_MS;
 
-  const run = await runStore.get(userId, threadId, runId);
-  if (!run || !isActive(run.status)) return; // already finalized / canceled — idempotent
-
-  await runStore.put({ ...run, status: 'running', startedAt: clock.now(), heartbeatAt: clock.now() });
+  const queuedRun = await runStore.get(userId, threadId, runId);
+  if (!queuedRun || !isActive(queuedRun.status)) return; // already finalized / canceled — idempotent
+  const started = await runStore.transition(userId, threadId, runId, ['queued'], {
+    status: 'running',
+    startedAt: clock.now(),
+    heartbeatAt: clock.now(),
+  });
+  if (started.outcome !== 'updated') return;
+  const run = started.run;
 
   const thread = await threadStore.get(run.userId, threadId);
   const orderAt = run.createdAt;
@@ -1294,8 +1299,7 @@ export async function processRun(deps: RunWorkerDeps, userId: string, threadId: 
   }
 
   if (!canceled) {
-    await runStore.put({
-      ...run,
+    await runStore.transition(userId, threadId, runId, ['running'], {
       status: err ? 'error' : 'complete',
       error: err ?? null,
       startedAt: run.startedAt ?? orderAt,
