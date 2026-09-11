@@ -43,6 +43,9 @@ describe("evaluator inventory", () => {
     ["reduces browser repetitions", (value: EvaluatorInventory) => {
       value.commands.find((command) => command.id === "browser-complete")!.repetitions = 1;
     }, "BROWSER_INVENTORY_INVALID"],
+    ["reduces browser coverage", (value: EvaluatorInventory) => {
+      value.commands.find((command) => command.id === "browser-complete")!.expectedTests = 44;
+    }, "BROWSER_INVENTORY_INVALID"],
     ["permits skips", (value: EvaluatorInventory) => {
       value.requiredProperties.zeroSkipped = false;
     }, "EVALUATOR_PROPERTIES_WEAKENED"],

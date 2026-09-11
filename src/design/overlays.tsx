@@ -27,7 +27,9 @@ export function useDialogLayer(
     stackEntryRef.current = entry;
     modalStack.push(entry);
     updateModalLayers();
-    dialog.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')?.focus();
+    const autofocus = dialog.querySelector<HTMLElement>('[data-dialog-autofocus], [autofocus]');
+    const fallback = dialog.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])');
+    (autofocus ?? fallback)?.focus();
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (modalStack.at(-1) !== entry) return;
       if (event.key === 'Escape') entry.onClose();
