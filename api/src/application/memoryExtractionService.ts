@@ -44,6 +44,7 @@ export interface MemoryExtractionDeps {
   extractor: MemoryExtractorPort;
   embedder?: Embedder;
   signalr?: SignalRSender;
+  contained?: () => boolean;
   clock: ServiceClock;
 }
 
@@ -104,6 +105,7 @@ export class MemoryExtractionService {
   ) {}
 
   private async eligible(userId: string, threadId: string): Promise<ThreadRecord | null> {
+    if (this.deps.contained?.()) return null;
     const thread = await this.deps.threadStore.get(userId, threadId);
     if (!thread || thread.deletedAt || thread.temporary) return null;
     const settings = effectiveMemoryPolicy(await this.deps.settings.get(userId));
@@ -112,6 +114,7 @@ export class MemoryExtractionService {
   }
 
   private async learningAllowed(userId: string): Promise<boolean> {
+    if (this.deps.contained?.()) return false;
     const current = await this.deps.settings.get(userId).catch(() => undefined);
     if (!current) return false;
     return effectiveMemoryPolicy(current).learnChats === 'automatic';

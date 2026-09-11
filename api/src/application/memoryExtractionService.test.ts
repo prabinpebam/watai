@@ -14,6 +14,7 @@ function setup(
   embedder?: Embedder,
   settingsOverride?: { get: () => Promise<typeof DEFAULT_SETTINGS> },
   queueOverride?: MemoryQueuePort,
+  contained?: () => boolean,
 ) {
   const memoryStore = new InMemoryMemoryStore();
   const jobStore = new InMemoryMemoryJobStore();
@@ -28,7 +29,7 @@ function setup(
   const credentials = { getDecrypted: async () => ({ baseUrl: 'https://example.com/openai/v1', key: 'k', models: { chat: 'gpt-4.1' } }) };
   const sends: Array<{ target: string; payload: unknown }> = [];
   const signalr = { negotiate: () => ({}) as never, sendToUser: async (_userId: string, target: string, payload: unknown) => void sends.push({ target, payload }) };
-  const svc = new MemoryExtractionService({ memoryStore, jobStore, messageStore, threadStore, queue, settings, credentials, extractor, embedder, signalr: signalr as never, clock });
+  const svc = new MemoryExtractionService({ memoryStore, jobStore, messageStore, threadStore, queue, settings, credentials, extractor, embedder, signalr: signalr as never, contained, clock });
   return { svc, memoryStore, jobStore, messageStore, threadStore, enqueued, sends, clock };
 }
 
@@ -50,6 +51,27 @@ async function seedThread(ctx: ReturnType<typeof setup>, temporary = false, user
 }
 
 describe('MemoryExtractionService', () => {
+  it('blocks new and already-queued extraction work when release containment activates', async () => {
+    let contained = false;
+    const extractor = vi.fn(async () => ({ operations: [] }));
+    const ctx = setup(extractor, undefined, undefined, undefined, () => contained);
+    await seedThread(ctx);
+    const queued = await ctx.svc.enqueueTurn('userA', 't1', 'a1', 'run1');
+    expect(queued).not.toBeNull();
+
+    contained = true;
+    await expect(ctx.svc.enqueueCommand('userA', 't1', 'u1', 'run2')).resolves.toBeNull();
+    await ctx.svc.processJob('userA', queued!.id);
+
+    expect(extractor).not.toHaveBeenCalled();
+    expect(await ctx.jobStore.get('userA', queued!.id)).toMatchObject({
+      status: 'ignored',
+      terminalReason: 'policy_or_source_ineligible',
+      acceptedCount: 0,
+    });
+    expect((await ctx.memoryStore.list('userA', { status: 'active' })).memories).toEqual([]);
+  });
+
   it('enqueues turn jobs idempotently and applies LLM add output', async () => {
     const extractor = vi.fn(async () => ({
       operations: [{ op: 'add' as const, kind: 'preference' as const, text: 'User prefers concise implementation plans.', confidence: 0.92, salience: 0.8, sourceMessageIds: ['u1'], reason: 'Stable preference.' }],

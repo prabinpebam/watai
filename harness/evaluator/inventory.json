@@ -18,8 +18,8 @@
       "cwd": ".",
       "executable": "npm",
       "args": ["test"],
-      "expectedTestFiles": 87,
-      "expectedTests": 513,
+      "expectedTestFiles": 88,
+      "expectedTests": 514,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },
@@ -39,7 +39,7 @@
       "executable": "npm",
       "args": ["test"],
       "expectedTestFiles": 84,
-      "expectedTests": 627,
+      "expectedTests": 630,
       "repetitions": 1,
       "requiresIsolatedStage": false
     },

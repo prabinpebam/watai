@@ -54,7 +54,7 @@ Real deployment is a delivery goal, not a final cleanup step. Promote a mileston
 
 Every production milestone must:
 
-- add a concise entry to the in-app Settings > About release notes describing user-visible benefits and limits;
+- add a concise entry to the in-app Settings > About release notes describing user-visible benefits and limits, then record exact frontend/API deployment timestamps after production smoke;
 - bind the frontend commit and backend artifact/config identity in `documentation/releases/`;
 - preserve an addressable previous frontend commit and backend package before mutation;
 - deploy backend-compatible changes before the frontend that consumes them;

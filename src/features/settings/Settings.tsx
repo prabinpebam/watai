@@ -20,7 +20,7 @@ import { normalizeBaseUrl } from '../../data/secureStore';
 import { normalizeChatModelOptions } from '../../lib/modelOptions';
 import { DEFAULT_SETTINGS, effectiveMemorySettings } from '../../lib/types';
 import type { ImageRef, MemoryKind, MemorySettings, Settings as SettingsModel, TextScale } from '../../lib/types';
-import { CURRENT_RELEASE, RELEASE_NOTES } from '../../releaseNotes';
+import { CURRENT_RELEASE, formatDeploymentTimestamp, RELEASE_NOTES } from '../../releaseNotes';
 
 const APP_VERSION = CURRENT_RELEASE.version;
 
@@ -1472,7 +1472,7 @@ function AppearanceBody({ ctx }: { ctx: SettingsCtx }) {
 }
 
 function DataBody({ ctx }: { ctx: SettingsCtx }) {
-  const { settings, setSettings, account } = ctx;
+  const { account } = ctx;
   const pushToast = useUi((s) => s.pushToast);
   const bump = useUi((s) => s.bumpThreads);
   const navigate = useNavigate();
@@ -1516,32 +1516,7 @@ function DataBody({ ctx }: { ctx: SettingsCtx }) {
       </div>
 
       <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Default to temporary chats</div>
-            <div className="setting-row__sub">New chats won't be saved to history.</div>
-          </div>
-          <Switch
-            checked={settings.data.temporaryDefault}
-            onChange={(v) => setSettings({ ...settings, data: { ...settings.data, temporaryDefault: v } })}
-            label="Temporary default"
-          />
-        </div>
-        <div className="setting-row">
-          <div className="setting-row__body">
-            <div className="setting-row__title">Keep history</div>
-            <div className="setting-row__sub">How long saved chats are retained.</div>
-          </div>
-          <Segmented
-            value={settings.data.retention}
-            onChange={(r) => setSettings({ ...settings, data: { ...settings.data, retention: r } })}
-            options={[
-              { value: 'forever', label: 'Forever' },
-              { value: '30d', label: '30 days' },
-              { value: '90d', label: '90 days' },
-            ]}
-          />
-        </div>
+        <DataRetentionStatus />
       </div>
 
       <div className="settings-card" style={{ marginTop: 'var(--space-5)' }}>
@@ -1586,6 +1561,25 @@ function DataBody({ ctx }: { ctx: SettingsCtx }) {
           onClose={() => setConfirm(false)}
         />
       )}
+    </>
+  );
+}
+
+export function DataRetentionStatus() {
+  return (
+    <>
+      <div className="setting-row">
+        <div className="setting-row__body">
+          <div className="setting-row__title">Temporary chats unavailable</div>
+          <div className="setting-row__sub">New chats are saved normally. Temporary mode stays unavailable until its server lifecycle and provider retention are verified end to end.</div>
+        </div>
+      </div>
+      <div className="setting-row">
+        <div className="setting-row__body">
+          <div className="setting-row__title">History retention</div>
+          <div className="setting-row__sub">Saved chats remain in your account until you delete them. Time-based automatic deletion is not currently enforced.</div>
+        </div>
+      </div>
     </>
   );
 }
@@ -1886,14 +1880,20 @@ function AboutBody() {
           </Avatar>
           <div className="setting-row__body">
             <div className="setting-row__title">What’s new</div>
-            <div className="setting-row__sub">{CURRENT_RELEASE.title} · {CURRENT_RELEASE.date}</div>
+            <div className="setting-row__sub">{CURRENT_RELEASE.title} · Deployed {formatDeploymentTimestamp(CURRENT_RELEASE.deployedAt)}</div>
           </div>
         </div>
         {RELEASE_NOTES.map((release) => (
           <div className="setting-row" key={release.version}>
             <div className="setting-row__body">
               <div className="setting-row__title">Version {release.version}</div>
-              <div className="setting-row__sub">{release.changes.join(' · ')}</div>
+              <div className="setting-row__sub">
+                <time dateTime={release.deployedAt}>Frontend deployed {formatDeploymentTimestamp(release.deployedAt)}</time>
+                {' · '}
+                <time dateTime={release.apiDeployedAt}>API deployed {formatDeploymentTimestamp(release.apiDeployedAt)}</time>
+                {' · '}
+                {release.changes.join(' · ')}
+              </div>
             </div>
           </div>
         ))}

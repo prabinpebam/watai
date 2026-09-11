@@ -44,6 +44,21 @@ const CREDS = { baseUrl: 'b', key: 'k' };
 const NOW = '2026-01-02T00:00:00Z';
 
 describe('MemoryContextService — relevance channel', () => {
+  it('returns empty under release containment without reading settings, memories, or embeddings', async () => {
+    const store = new InMemoryMemoryStore();
+    const settings = { get: async () => { throw new Error('must not read settings'); } };
+    const embedder: Embedder = { model: 'blocked', embed: async () => { throw new Error('must not embed'); } };
+    const ctx = new MemoryContextService(store, settings, {
+      embedder,
+      retriever: new InProcessRetriever(store),
+      profile: true,
+      contained: () => true,
+    });
+
+    await expect(ctx.buildForRun({ userId: 'userA', threadId: 't1', latestUserText: 'hello', now: NOW, creds: CREDS }))
+      .resolves.toMatchObject({ memories: [], instructions: [], retrievalMode: 'empty' });
+  });
+
   it('retrieves by semantic similarity, not lexical overlap', async () => {
     const store = new InMemoryMemoryStore();
     const ctx = new MemoryContextService(store, settingsReader(), { embedder: stubEmbedder, retriever: new InProcessRetriever(store) });

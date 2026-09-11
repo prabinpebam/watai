@@ -84,24 +84,27 @@ export class MemoryContextService {
   private readonly embedder?: Embedder;
   private readonly retriever?: MemoryRetriever;
   private readonly profileEnabled: boolean;
+  private readonly contained: () => boolean;
 
   constructor(
     private readonly store: MemoryStore,
     private readonly settings: MemorySettingsReader,
-    opts?: { embedder?: Embedder; retriever?: MemoryRetriever; profile?: boolean },
+    opts?: { embedder?: Embedder; retriever?: MemoryRetriever; profile?: boolean; contained?: () => boolean },
   ) {
     this.embedder = opts?.embedder;
     this.retriever = opts?.retriever;
     this.profileEnabled = opts?.profile ?? false;
+    this.contained = opts?.contained ?? (() => false);
   }
 
   async buildForRun(input: MemoryContextInput): Promise<MemoryContextBlock> {
+    if (this.contained()) return { ...EMPTY, latencyBudgetMs: 250 };
     const currentPolicy = async () => {
       const current = await this.settings.get(input.userId).catch(() => undefined);
       return current ? effectiveMemoryPolicy(current) : null;
     };
     const initialPolicy = await currentPolicy();
-    if (!initialPolicy?.readSaved) return { ...EMPTY, latencyBudgetMs: 250 };
+    if (this.contained() || !initialPolicy?.readSaved) return { ...EMPTY, latencyBudgetMs: 250 };
     const retrievalOn = !!(this.embedder && this.retriever && input.creds);
     // Read the active candidate set once and share it between vector ranking and the always-on
     // profile, instead of listing the same (up to 200) records twice per run.
@@ -126,7 +129,7 @@ export class MemoryContextService {
     const base = retrievalOn ? await this.buildVector(input, candidates, queryVec) : { ...EMPTY, latencyBudgetMs: 250 };
     if (!this.profileEnabled) {
       const finalPolicy = await currentPolicy();
-      return finalPolicy?.readSaved && finalPolicy.learnChats === initialPolicy.learnChats ? base : { ...EMPTY, latencyBudgetMs: 250 };
+      return !this.contained() && finalPolicy?.readSaved && finalPolicy.learnChats === initialPolicy.learnChats ? base : { ...EMPTY, latencyBudgetMs: 250 };
     }
     // Relevance-gate the always-on profile: inject identity grounding only when the query relates to
     // something we know about the user (at least one active fact clears the profile floor). Without an
@@ -136,7 +139,7 @@ export class MemoryContextService {
       : true;
     const result = profileRelevant ? this.withProfile(base, input, candidates) : base;
     const finalPolicy = await currentPolicy();
-    return finalPolicy?.readSaved && finalPolicy.learnChats === initialPolicy.learnChats ? result : { ...EMPTY, latencyBudgetMs: 250 };
+    return !this.contained() && finalPolicy?.readSaved && finalPolicy.learnChats === initialPolicy.learnChats ? result : { ...EMPTY, latencyBudgetMs: 250 };
   }
 
   /** Semantic retrieval: vector-rank candidates above a relevance floor against the (pre-computed)

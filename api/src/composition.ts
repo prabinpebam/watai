@@ -171,10 +171,12 @@ export function container(): ApiContainer {
   const memoryEmbedder = memoryEmbedModel ? azureEmbedder(memoryEmbedModel) : undefined;
   const memoryRetriever = memoryEmbedder ? new InProcessRetriever(memoryStore) : undefined;
   const memoryProfileEnabled = process.env.MEMORY_PROFILE === '1' || process.env.MEMORY_PROFILE === 'true';
+  const memoryContained = () => process.env.MEMORY_CONTAINED === '1' || process.env.MEMORY_CONTAINED === 'true';
   const memoryContextService = new MemoryContextService(memoryStore, settingsService, {
     embedder: memoryEmbedder,
     retriever: memoryRetriever,
     profile: memoryProfileEnabled,
+    contained: memoryContained,
   });
   const signalr: SignalRSender | null = process.env.AzureSignalRConnectionString
     ? new AzureSignalR(process.env.AzureSignalRConnectionString)
@@ -189,6 +191,7 @@ export function container(): ApiContainer {
     credentials: credentialService,
     extractor: async (creds, input) => extractMemories(creds, input, { model: await memoryModelService.effectiveModel(input.mode) }),
     embedder: memoryEmbedder,
+    contained: memoryContained,
     signalr: signalr ?? undefined,
     clock,
   });

@@ -48,6 +48,9 @@ param memoryEmbedModel string = ''
 @description('When "true", injects an always-on identity profile (durable facts, instructions, avoidances) into every run. Sensitive memories are always excluded.')
 param memoryProfile string = 'true'
 
+@description('When enabled, blocks model-facing memory retrieval and automatic learning, including already-queued jobs. Manual inventory and deletion remain available.')
+param memoryContained bool = false
+
 @description('Always-ready instances for the HTTP+SignalR group (0 disables). Keeps POST /runs and SignalR negotiate warm so the send path never cold-starts.')
 @minValue(0)
 @maxValue(5)
@@ -315,6 +318,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
         { name: 'MEMORY_DEEP_MODEL', value: memoryDeepModel }
         { name: 'MEMORY_EMBED_MODEL', value: memoryEmbedModel }
         { name: 'MEMORY_PROFILE', value: memoryProfile }
+        { name: 'MEMORY_CONTAINED', value: string(memoryContained) }
       ]
     }
   }

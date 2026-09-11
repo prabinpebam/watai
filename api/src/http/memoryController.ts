@@ -8,6 +8,7 @@ import {
   parsePutMemorySummary,
 } from '../domain/memory';
 import type { MemoryService } from '../application/memoryService';
+import { AppError } from '../domain/errors';
 import { respond } from './respond';
 import type { ApiRequest, HttpResult } from './types';
 
@@ -70,7 +71,7 @@ export function createMemoryController(memory: MemoryService) {
     rebuild: (req: ApiRequest): Promise<HttpResult> =>
       respond(202, async () => {
         parseMemoryRebuild(req.body);
-        return { status: 'queued' as const };
+        throw new AppError('conflict', 'Memory rebuild is unavailable because no durable rebuild job is configured.');
       }),
   };
 }
