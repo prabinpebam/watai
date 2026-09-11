@@ -15,6 +15,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       'Prompt and reply order stays fixed from the first bubble through server streaming',
       'Late updates from an older response cannot replace the current reply',
       'Completed replies remain visible until persisted history takes over',
+      'Frontend hotfix published: 2026-09-11 12:30:37 UTC',
+      'API hotfix package published: 2026-09-11 12:29:18 UTC; healthy after restart at 12:29:55 UTC',
     ],
   },
   {
