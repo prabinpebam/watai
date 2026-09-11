@@ -244,7 +244,7 @@ class FakeCloud implements CloudApi {
   }): Promise<ThreadRecord[]> {
     this.calls.push('listThreads');
     return [...this.threads.values()].filter(
-      (t) => (opts?.includeDeleted || !t.deletedAt) && (!opts?.since || t.updatedAt > opts.since),
+      (t) => (opts?.includeDeleted || !t.deletedAt) && (!opts?.since || t.updatedAt >= opts.since),
     );
   }
   async getThread(id: string): Promise<ThreadRecord> {
@@ -289,7 +289,7 @@ class FakeCloud implements CloudApi {
   async listMessages(threadId: string, opts?: { since?: string }): Promise<MessageRecord[]> {
     this.calls.push(`listMessages:${threadId}`);
     return [...this.messages.values()].filter(
-      (m) => m.threadId === threadId && (!opts?.since || m.createdAt > opts.since),
+      (m) => m.threadId === threadId && (!opts?.since || m.createdAt >= opts.since),
     );
   }
   async appendMessage(threadId: string, body: AppendMessageBody): Promise<MessageRecord> {
@@ -898,6 +898,55 @@ describe('SyncRepository — pull', () => {
 
     expect((await local.getThread('s1'))?.title).toBe('Server');
     expect(await kv.get('sync.cursor.threads')).toBe('2026-02-01T00:00:05Z');
+  });
+
+  it('replays an equal-timestamp boundary so a delayed message is not lost or duplicated', async () => {
+    const { repo, local, cloud } = setup(true);
+    const boundary = '2026-02-01T00:00:05Z';
+    cloud.seedThread({ id: 't1', title: 'T', messageCount: 1, updatedAt: boundary });
+    cloud.seedMessage({ id: 'm1', threadId: 't1', content: 'first', createdAt: boundary });
+    await repo.pull();
+
+    cloud.seedThread({ id: 't1', title: 'T', messageCount: 2, updatedAt: boundary });
+    cloud.seedMessage({ id: 'm2', threadId: 't1', content: 'late same-time', createdAt: boundary });
+    await repo.pull();
+
+    expect((await local.listMessages('t1')).map((message) => message.id).sort()).toEqual(['m1', 'm2']);
+  });
+
+  it('retries a thread pull without an invalid cursor when the server requires resync', async () => {
+    const { repo, local, cloud, kv } = setup(true);
+    await kv.set('sync.cursor.threads', 'legacy-invalid');
+    cloud.seedThread({ id: 't1', title: 'Recovered', updatedAt: '2026-02-01T00:00:05Z' });
+    const original = cloud.listThreads.bind(cloud);
+    cloud.listThreads = vi.fn(async (options) => {
+      if (options?.since) throw new CloudError('validation', 'resync', 400, { resyncRequired: true });
+      return original(options);
+    });
+
+    await repo.pull();
+
+    expect((await local.getThread('t1'))?.title).toBe('Recovered');
+    expect(cloud.listThreads).toHaveBeenCalledTimes(2);
+    expect(await kv.get('sync.cursor.threads')).toBe('2026-02-01T00:00:05Z');
+  });
+
+  it('retries a message pull without an invalid cursor when the server requires resync', async () => {
+    const { repo, local, cloud, kv } = setup(true);
+    await kv.set('sync.cursor.messages.t1', 'legacy-invalid');
+    cloud.seedThread({ id: 't1', title: 'T', messageCount: 1, updatedAt: '2026-02-01T00:00:05Z' });
+    cloud.seedMessage({ id: 'm1', threadId: 't1', content: 'Recovered', createdAt: '2026-02-01T00:00:05Z' });
+    const original = cloud.listMessages.bind(cloud);
+    cloud.listMessages = vi.fn(async (threadId, options) => {
+      if (options?.since) throw new CloudError('validation', 'resync', 400, { resyncRequired: true });
+      return original(threadId, options);
+    });
+
+    await repo.pull();
+
+    expect((await local.listMessages('t1')).map((message) => message.id)).toEqual(['m1']);
+    expect(cloud.listMessages).toHaveBeenCalledTimes(2);
+    expect(await kv.get('sync.cursor.messages.t1')).toBe('2026-02-01T00:00:05Z');
   });
 
   it('applies last-write-wins by updatedAt', async () => {

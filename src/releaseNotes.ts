@@ -7,6 +7,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '0.2.1',
+    date: '2026-09-11',
+    title: 'History that reliably catches up after reconnecting',
+    changes: [
+      'Delayed messages with matching timestamps are no longer skipped during sync',
+      'Older invalid sync cursors automatically recover through a bounded full resync',
+      'Message order remains stable and replayed records are deduplicated',
+    ],
+  },
+  {
     version: '0.2.0',
     date: '2026-09-11',
     title: 'Safer sync, memory, voice, and everyday recovery',

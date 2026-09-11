@@ -36,13 +36,32 @@ describe('ThreadService.listChanges (delta pull)', () => {
     expect(await ctx.svc.list('userA')).toEqual([]);
   });
 
-  it('returns only changes strictly after the cursor', async () => {
+  it('replays the cursor boundary and returns later changes', async () => {
     const a1 = await ctx.svc.create('userA', { title: 'A1', temporary: false });
     const cursor = a1.updatedAt;
     const a2 = await ctx.svc.create('userA', { title: 'A2', temporary: false });
 
     const delta = await ctx.svc.listChanges('userA', cursor);
-    expect(delta.map((t) => t.id)).toEqual([a2.id]);
+    expect(delta.map((t) => t.id)).toEqual([a2.id, a1.id]);
+  });
+
+  it('replays records at the cursor timestamp so delayed equal-time changes converge', async () => {
+    await ctx.store.put({
+      id: 'same-time-a', userId: 'userA', title: 'A', pinned: false, archived: false, temporary: false,
+      messageCount: 0, createdAt: '2026-01-01T00:00:05Z', updatedAt: '2026-01-01T00:00:05Z', deletedAt: null,
+    });
+    await ctx.store.put({
+      id: 'same-time-b', userId: 'userA', title: 'B', pinned: false, archived: false, temporary: false,
+      messageCount: 0, createdAt: '2026-01-01T00:00:05Z', updatedAt: '2026-01-01T00:00:05Z', deletedAt: null,
+    });
+    expect((await ctx.svc.listChanges('userA', '2026-01-01T00:00:05Z')).map((thread) => thread.id).sort())
+      .toEqual(['same-time-a', 'same-time-b']);
+  });
+
+  it('rejects a malformed cursor with an explicit full-resync instruction', async () => {
+    await expect(ctx.svc.listChanges('userA', 'not-a-time')).rejects.toMatchObject({
+      code: 'validation', details: { resyncRequired: true },
+    });
   });
 
   it('never leaks another user’s changes (IDOR)', async () => {

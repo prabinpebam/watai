@@ -1,4 +1,5 @@
 import { AppError } from '../domain/errors';
+import { validateReplayCursor } from '../domain/syncCursor';
 import type { CreateThreadInput, UpdateThreadInput } from '../domain/thread';
 import type { ListOptions, ThreadRecord, ThreadStore } from '../ports/threadStore';
 
@@ -56,11 +57,15 @@ export class ThreadService {
 
   /**
    * Delta pull for the sync engine: every change (including archived rows and
-   * soft-deleted tombstones) with `updatedAt` strictly after the cursor. Clients
-   * apply these last-write-wins and drop tombstoned threads locally.
+  * soft-deleted tombstones) at or after the cursor. Replaying the boundary is
+  * intentional: clients de-duplicate by id, while a delayed equal-time write is never lost.
    */
   async listChanges(userId: string, since?: string): Promise<ThreadRecord[]> {
-    return this.store.list(userId, { includeArchived: true, includeDeleted: true, since });
+    return this.store.list(userId, {
+      includeArchived: true,
+      includeDeleted: true,
+      since: validateReplayCursor(since),
+    });
   }
 
   async update(userId: string, id: string, patch: UpdateThreadInput): Promise<ThreadRecord> {

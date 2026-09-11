@@ -40,10 +40,10 @@ export class CosmosMessageStore implements MessageStore {
     const conditions = ['c.userId = @userId', 'c.threadId = @threadId', 'IS_NULL(c.deletedAt)'];
     const parameters: SqlParameter[] = [{ name: '@userId', value: userId }, { name: '@threadId', value: threadId }];
     if (opts?.since) {
-      conditions.push('c.createdAt > @since');
+      conditions.push('c.createdAt >= @since');
       parameters.push({ name: '@since', value: opts.since });
     }
-    const query = `SELECT * FROM c WHERE ${conditions.join(' AND ')} ORDER BY c.createdAt ASC`;
+    const query = `SELECT * FROM c WHERE ${conditions.join(' AND ')} ORDER BY c.createdAt ASC, c.id ASC`;
     const { resources } = await this.container.items
       .query<MessageDocument>({ query, parameters }, { partitionKey: threadId })
       .fetchAll();

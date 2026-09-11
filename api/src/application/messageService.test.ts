@@ -229,7 +229,7 @@ describe('MessageService.list', () => {
     const m3 = await ctx.messages.append('userA', thread.id, { role: 'user', content: '3' });
 
     expect((await ctx.messages.list('userA', thread.id)).map((m) => m.id)).toEqual([m1.id, m2.id, m3.id]);
-    expect((await ctx.messages.list('userA', thread.id, { since: m1.createdAt })).map((m) => m.id)).toEqual([m2.id, m3.id]);
+    expect((await ctx.messages.list('userA', thread.id, { since: m1.createdAt })).map((m) => m.id)).toEqual([m1.id, m2.id, m3.id]);
     expect((await ctx.messages.list('userA', thread.id, { limit: 2 })).map((m) => m.id)).toEqual([m1.id, m2.id]);
   });
 
@@ -237,5 +237,12 @@ describe('MessageService.list', () => {
     const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
     await ctx.messages.append('userA', thread.id, { role: 'user', content: '1' });
     expect(await code(() => ctx.messages.list('userB', thread.id))).toBe('not_found');
+  });
+
+  it('rejects malformed replay cursors with an explicit full-resync instruction', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    await expect(ctx.messages.list('userA', thread.id, { since: 'bad-cursor' })).rejects.toMatchObject({
+      code: 'validation', details: { resyncRequired: true },
+    });
   });
 });

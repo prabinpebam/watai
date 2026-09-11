@@ -26,10 +26,10 @@ export class CosmosThreadStore implements ThreadStore, ThreadLockStore {
     if (!opts?.includeDeleted) conditions.push('IS_NULL(c.deletedAt)');
     if (!opts?.includeArchived) conditions.push('c.archived = false');
     if (opts?.since) {
-      conditions.push('c.updatedAt > @since');
+      conditions.push('c.updatedAt >= @since');
       parameters.push({ name: '@since', value: opts.since });
     }
-    const query = `SELECT * FROM c WHERE ${conditions.join(' AND ')} ORDER BY c.updatedAt DESC`;
+    const query = `SELECT * FROM c WHERE ${conditions.join(' AND ')} ORDER BY c.updatedAt DESC, c.id ASC`;
     const { resources } = await this.container.items
       .query<ThreadRecord>({ query, parameters }, { partitionKey: userId })
       .fetchAll();

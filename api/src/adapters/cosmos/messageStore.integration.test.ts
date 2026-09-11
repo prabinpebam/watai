@@ -60,7 +60,7 @@ describe('CosmosMessageStore (integration)', () => {
     expect(ids).toEqual(['m1', 'm2', 'm3']);
 
     const since = (await store.list('owner', threadA, { since: '2026-01-01T00:00:01Z' })).map((m) => m.id);
-    expect(since).toEqual(['m2', 'm3']);
+    expect(since).toEqual(['m1', 'm2', 'm3']);
 
     const limited = (await store.list('owner', threadA, { limit: 2 })).map((m) => m.id);
     expect(limited).toEqual(['m1', 'm2']);

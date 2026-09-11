@@ -15,9 +15,9 @@ export class InMemoryMessageStore implements MessageStore {
   async list(userId: string, threadId: string, opts?: MessageListOptions): Promise<MessageRecord[]> {
     const since = opts?.since;
     let rows = [...this.byKey.values()].filter(
-      (m) => m.userId === userId && m.threadId === threadId && !m.deletedAt && (!since || m.createdAt > since),
+      (m) => m.userId === userId && m.threadId === threadId && !m.deletedAt && (!since || m.createdAt >= since),
     );
-    rows.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
+    rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
     if (opts?.limit !== undefined) rows = rows.slice(0, opts.limit);
     return rows;
   }

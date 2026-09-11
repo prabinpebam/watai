@@ -36,7 +36,7 @@ export interface MessageRecord {
 }
 
 export interface MessageListOptions {
-  /** Return only messages with `createdAt` strictly greater than this. */
+  /** Replay messages with `createdAt` at or after this boundary; callers de-duplicate by id. */
   since?: string;
   limit?: number;
 }

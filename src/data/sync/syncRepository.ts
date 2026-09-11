@@ -144,6 +144,12 @@ function isStreamingAssistant(message: Message): boolean {
   return message.role === 'assistant' && message.status === 'streaming';
 }
 
+function requiresFullResync(error: unknown): boolean {
+  return error instanceof CloudError
+    && error.code === 'validation'
+    && (error.details as { resyncRequired?: unknown } | undefined)?.resyncRequired === true;
+}
+
 /** A cheap content signature over an assistant message's server-owned fields. Compares counts (not
  *  deep equality) so it stays O(1) and churn-free: an identical server copy yields an identical
  *  signature, so no redundant local write. Used to detect when the server's copy has diverged from a
@@ -550,12 +556,20 @@ export class SyncRepository implements Repository {
   async pull(): Promise<Set<Id>> {
     const changed = new Set<Id>();
     if (!(await this.syncEnabled())) return changed;
-    const cursor = await this.kv.get<string>(THREAD_CURSOR_KEY);
-    const records = await this.cloud.listThreads({
-      includeArchived: true,
-      includeDeleted: true,
-      since: cursor,
-    });
+    let cursor = await this.kv.get<string>(THREAD_CURSOR_KEY);
+    let records: ThreadRecord[];
+    try {
+      records = await this.cloud.listThreads({
+        includeArchived: true,
+        includeDeleted: true,
+        since: cursor,
+      });
+    } catch (error) {
+      if (!cursor || !requiresFullResync(error)) throw error;
+      await this.kv.delete(THREAD_CURSOR_KEY);
+      cursor = undefined;
+      records = await this.cloud.listThreads({ includeArchived: true, includeDeleted: true });
+    }
     let maxUpdated = cursor ?? '';
     for (const rec of records) {
       if (await this.mergeThread(rec)) changed.add(rec.id);
@@ -632,10 +646,18 @@ export class SyncRepository implements Repository {
 
   private async pullMessages(threadId: Id, opts?: { forceFull?: boolean }): Promise<boolean> {
     const key = MSG_CURSOR_PREFIX + threadId;
-    const cursor = await this.kv.get<string>(key);
+    let cursor = await this.kv.get<string>(key);
     const localMessages = await this.local.listMessages(threadId);
     const forceFull = opts?.forceFull || localMessages.some(isStreamingAssistant);
-    const records = await this.cloud.listMessages(threadId, forceFull ? undefined : { since: cursor });
+    let records: MessageRecord[];
+    try {
+      records = await this.cloud.listMessages(threadId, forceFull ? undefined : { since: cursor });
+    } catch (error) {
+      if (forceFull || !cursor || !requiresFullResync(error)) throw error;
+      await this.kv.delete(key);
+      cursor = undefined;
+      records = await this.cloud.listMessages(threadId);
+    }
     if (records.length === 0) return false;
     const known = new Map(localMessages.map((m) => [m.id, m]));
     let maxCreated = cursor ?? '';

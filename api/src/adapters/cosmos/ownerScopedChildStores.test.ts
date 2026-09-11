@@ -67,7 +67,12 @@ function fakeContainer(initial: Document[] = []): { container: Container; docume
           const userId = parameters.get('@userId') ?? parameters.get('@u');
           if (userId !== undefined) resources = resources.filter((document) => document.userId === userId);
           const since = parameters.get('@since');
-          if (typeof since === 'string') resources = resources.filter((document) => String(document.createdAt) > since);
+          if (typeof since === 'string') {
+            const inclusive = spec.query.includes('>= @since');
+            resources = resources.filter((document) => inclusive
+              ? String(document.createdAt) >= since
+              : String(document.createdAt) > since);
+          }
           if (spec.query.includes('IS_NULL(c.deletedAt)')) resources = resources.filter((document) => document.deletedAt == null);
           if (spec.query.includes("c.status = 'queued'")) resources = resources.filter((document) => document.status === 'queued' || document.status === 'running');
           resources.sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));

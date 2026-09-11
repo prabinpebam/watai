@@ -25,9 +25,9 @@ export class InMemoryThreadStore implements ThreadStore, ThreadLockStore {
           r.userId === userId &&
           (opts?.includeDeleted || !r.deletedAt) &&
           (opts?.includeArchived || !r.archived) &&
-          (!since || r.updatedAt > since),
+            (!since || r.updatedAt >= since),
       )
-      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
   }
 
   async put(record: ThreadRecord): Promise<ThreadRecord> {

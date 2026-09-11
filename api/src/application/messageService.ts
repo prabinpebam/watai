@@ -6,6 +6,7 @@ import type { ServiceClock } from './threadService';
 import { libraryIngestionKey, libraryItemIdFor, libraryKindForMime, type LibraryItemRecord } from '../domain/library';
 import type { LibraryStore } from '../ports/libraryStore';
 import { ALLOWED_CONTENT_TYPES, canonicalAttachmentBlobPath, isOwnerBlobPath, type AllowedContentType } from '../domain/asset';
+import { validateReplayCursor } from '../domain/syncCursor';
 
 export interface MemoryExtractionScheduler {
   enqueueAfterMessage(record: MessageRecord, thread: ThreadRecord): Promise<void>;
@@ -153,7 +154,11 @@ export class MessageService {
 
   async list(userId: string, threadId: string, opts?: MessageListOptions): Promise<MessageRecord[]> {
     await this.requireOwnThread(userId, threadId);
-    return this.messageStore.list(userId, threadId, opts);
+    return this.messageStore.list(
+      userId,
+      threadId,
+      opts ? { ...opts, since: validateReplayCursor(opts.since) } : opts,
+    );
   }
 
   async get(userId: string, threadId: string, messageId: string): Promise<MessageRecord | null> {

@@ -43,7 +43,7 @@ export interface ListOptions {
   includeArchived?: boolean;
   /** Include soft-deleted tombstones (used by sync delta pulls, not normal lists). */
   includeDeleted?: boolean;
-  /** Delta cursor: return only rows with `updatedAt` strictly greater than this. */
+  /** Replay rows with `updatedAt` at or after this boundary; callers de-duplicate by id. */
   since?: string;
 }
 
