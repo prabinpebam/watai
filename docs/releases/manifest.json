@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0",
+  "releases": [
+    {
+      "version": "0.2.2",
+      "sourceSha": "50411687df687c46795314e4b01c0388b0f37c45",
+      "artifactSha256": "778e92f6f584fb800ca4d1c86a62919a485f08e732b37a312702c6a7a6be2f4d",
+      "path": "./0.2.2/"
+    }
+  ]
+}
