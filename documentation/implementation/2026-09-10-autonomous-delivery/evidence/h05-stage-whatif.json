@@ -59,6 +59,23 @@
     "productionHealthBeforeAt": "2026-09-11T05:17:53.569Z",
     "productionHealthAfterAt": "2026-09-11T05:22:48.022Z"
   },
+  "accountIsolationMigration": {
+    "status": "WHAT_IF_PASSED_DEPLOYMENT_PENDING",
+    "deploymentName": "watai-stage-owned-infra-whatif-20260911-02",
+    "deployFunctionApp": false,
+    "result": "Succeeded",
+    "creates": 26,
+    "ignored": 16,
+    "modifies": 0,
+    "deletes": 0,
+    "replaces": 0,
+    "stageOwnedAccounts": {
+      "cosmos": "cosmos-wt-stage-cbroocyg3omrk",
+      "storage": "stwtstgcbroocyg3omrk",
+      "keyVault": "kv-wt-stg-cbroocyg3omrk"
+    },
+    "currentStageBoundary": "The running stage still uses shared production accounts until the two-phase migration is applied and verified."
+  },
   "localValidation": {
     "api": "84 files / 630 tests passed",
     "root": "88 files / 514 tests passed",
@@ -70,6 +87,7 @@
   },
   "productionMutation": false,
   "remaining": [
+    "Provision and seed the stage-owned accounts, repoint the stage app, verify account identity, then remove its obsolete shared-account role assignments.",
     "Prove an isolated no-op redeploy and the full advertised capability contract, including authenticated owner isolation and contained memory worker behavior.",
     "Stage and roll back exact immutable frontend bytes through an independently reachable release origin.",
     "Prove candidate origin and versioned queues remain unreachable when every public origin is unhealthy.",

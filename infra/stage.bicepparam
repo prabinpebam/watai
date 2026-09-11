@@ -1,9 +1,9 @@
 using './stage.bicep'
 
 param location = 'eastus2'
-param cosmosAccountName = 'cosmos-watai-cbroocyg3omrk'
-param storageAccountName = 'stwataicbroocyg3omrk'
-param keyVaultName = 'kv-watai-cbroocyg3omrk'
+param cosmosAccountName = 'cosmos-wt-stage-cbroocyg3omrk'
+param storageAccountName = 'stwtstgcbroocyg3omrk'
+param keyVaultName = 'kv-wt-stg-cbroocyg3omrk'
 param functionAppName = 'func-watai-stage-cbroocyg3omrk'
 param adminOids = 'd7755720-6b73-4ece-af70-a95b22a7e547'
 param authIssuer = 'https://f009d35a-019c-4374-8987-2509caf7f66f.ciamlogin.com/f009d35a-019c-4374-8987-2509caf7f66f/v2.0'

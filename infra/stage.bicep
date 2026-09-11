@@ -3,20 +3,19 @@ targetScope = 'resourceGroup'
 @description('Azure region for stage-owned resources.')
 param location string = resourceGroup().location
 
-@description('Existing shared Cosmos account name.')
+@description('Stage-owned Cosmos account name.')
 param cosmosAccountName string
 
-@description('Existing shared Storage account name.')
+@description('Stage-owned Storage account name.')
 param storageAccountName string
 
-@description('Existing shared Key Vault name.')
+@description('Stage-owned Key Vault name.')
 param keyVaultName string
 
 @description('Isolated stage Function App name.')
 param functionAppName string
 
 param planName string = 'plan-watai-stage'
-param logWorkspaceName string = 'log-watai-stage'
 param appInsightsName string = 'appi-watai-stage'
 param cosmosDatabaseName string = 'watai-harness-stage'
 param deploymentContainerName string = 'harness-deployments-stage'
@@ -30,6 +29,7 @@ param adminOids string = ''
 param authIssuer string
 param authAudience string
 param authJwksUri string
+param deployFunctionApp bool = true
 
 var stageContainers = [
   { name: 'users', pk: '/id' }
@@ -52,39 +52,82 @@ var roleKeyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
 var roleKeyVaultCryptoUser = '12338af0-0e69-4776-bea7-57ae8d297424'
 var cosmosBuiltInDataContributor = '00000000-0000-0000-0000-000000000002'
 
-resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing = {
+resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
   name: cosmosAccountName
+  location: location
+  kind: 'GlobalDocumentDB'
+  tags: tags
+  properties: {
+    databaseAccountOfferType: 'Standard'
+    consistencyPolicy: { defaultConsistencyLevel: 'Session' }
+    locations: [
+      { locationName: location, failoverPriority: 0, isZoneRedundant: false }
+    ]
+    capabilities: [ { name: 'EnableServerless' } ]
+    disableLocalAuth: true
+    minimalTlsVersion: 'Tls12'
+  }
 }
-resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
+resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
+  location: location
+  sku: { name: 'Standard_LRS' }
+  kind: 'StorageV2'
+  tags: tags
+  properties: {
+    allowBlobPublicAccess: false
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+    allowSharedKeyAccess: true
+  }
 }
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' existing = {
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storage
   name: 'default'
+  properties: {
+    cors: {
+      corsRules: [
+        {
+          allowedOrigins: allowedOrigins
+          allowedMethods: [ 'GET', 'PUT', 'HEAD', 'OPTIONS', 'POST' ]
+          allowedHeaders: [ '*' ]
+          exposedHeaders: [ '*' ]
+          maxAgeInSeconds: 3600
+        }
+      ]
+    }
+  }
 }
-resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' existing = {
+resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
   parent: storage
   name: 'default'
+  properties: {}
 }
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
-}
-
-resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: logWorkspaceName
   location: location
   tags: tags
-  properties: { retentionInDays: 30, features: { enableLogAccessUsingOnlyResourcePermissions: true } }
-  #disable-next-line BCP187
-  sku: { name: 'PerGB2018' }
+  properties: {
+    sku: { family: 'A', name: 'standard' }
+    tenantId: subscription().tenantId
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 7
+  }
 }
 
-resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+resource credKek 'Microsoft.KeyVault/vaults/keys@2023-07-01' = {
+  parent: keyVault
+  name: 'watai-cred-kek'
+  properties: {
+    kty: 'RSA'
+    keySize: 3072
+    keyOps: [ 'wrapKey', 'unwrapKey' ]
+  }
+}
+
+resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: appInsightsName
-  location: location
-  kind: 'web'
-  tags: tags
-  properties: { Application_Type: 'web', WorkspaceResourceId: law.id }
 }
 
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-11-15' = {
@@ -136,7 +179,7 @@ resource stageQueues 'Microsoft.Storage/storageAccounts/queueServices/queues@202
   properties: {}
 }]
 
-resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
+resource plan 'Microsoft.Web/serverfarms@2023-12-01' = if (deployFunctionApp) {
   name: planName
   location: location
   sku: { name: 'FC1', tier: 'FlexConsumption' }
@@ -145,7 +188,7 @@ resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   tags: tags
 }
 
-resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
+resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
   name: functionAppName
   location: location
   kind: 'functionapp,linux'
@@ -200,29 +243,32 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
-resource blobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource blobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployFunctionApp) {
   name: guid(storage.id, functionAppName, roleStorageBlobDataContributor)
   scope: storage
-  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleStorageBlobDataContributor), principalId: functionApp.identity.principalId, principalType: 'ServicePrincipal' }
+  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleStorageBlobDataContributor), principalId: functionApp!.identity.principalId, principalType: 'ServicePrincipal' }
 }
-resource kvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource kvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployFunctionApp) {
   name: guid(keyVault.id, functionAppName, roleKeyVaultSecretsUser)
   scope: keyVault
-  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser), principalId: functionApp.identity.principalId, principalType: 'ServicePrincipal' }
+  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser), principalId: functionApp!.identity.principalId, principalType: 'ServicePrincipal' }
 }
-resource kvCryptoRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource kvCryptoRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployFunctionApp) {
   name: guid(keyVault.id, functionAppName, roleKeyVaultCryptoUser)
   scope: keyVault
-  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultCryptoUser), principalId: functionApp.identity.principalId, principalType: 'ServicePrincipal' }
+  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultCryptoUser), principalId: functionApp!.identity.principalId, principalType: 'ServicePrincipal' }
 }
-resource cosmosDataRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
+resource cosmosDataRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = if (deployFunctionApp) {
   parent: cosmos
   name: guid(cosmos.id, functionAppName, cosmosBuiltInDataContributor)
-  properties: { roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${cosmosBuiltInDataContributor}', principalId: functionApp.identity.principalId, scope: cosmos.id }
+  properties: { roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${cosmosBuiltInDataContributor}', principalId: functionApp!.identity.principalId, scope: cosmos.id }
 }
 
-output functionAppName string = functionApp.name
-output functionAppHostname string = functionApp.properties.defaultHostName
+output functionAppName string = functionAppName
+output functionAppHostname string = '${functionAppName}.azurewebsites.net'
 output cosmosDatabase string = cosmosDatabaseName
 output mediaContainer string = mediaContainerName
 output deploymentContainer string = deploymentContainerName
+output cosmosAccount string = cosmos.name
+output storageAccount string = storage.name
+output keyVault string = keyVault.name
