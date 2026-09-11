@@ -1,30 +1,38 @@
 {
   "schemaVersion": "1.0",
   "status": "WHAT_IF_PASSED_DEPLOYMENT_PENDING",
-  "observedAt": "2026-09-11T04:55:00.000Z",
+  "observedAt": "2026-09-11T05:07:00.000Z",
   "targetResourceGroup": "rg-watai-dev",
   "stage": {
     "functionApp": "func-watai-stage-cbroocyg3omrk",
     "plan": "plan-watai-stage",
     "cosmosDatabase": "watai-harness-stage",
     "mediaContainer": "harness-media-stage",
+    "deploymentContainer": "harness-deployments-stage",
     "queues": ["harness-run-jobs", "harness-image-jobs", "harness-memory-jobs"],
     "alwaysReady": 0,
     "memoryContained": true,
     "providerMemoryModelsConfigured": false
   },
-  "firstWhatIf": {
+  "rejectedSharedTemplate": {
     "status": "BLOCKED",
     "finding": "Shared role-assignment GUIDs would have redeployed production assignments with the stage principal.",
-    "action": "No apply occurred; role IDs were corrected to preserve legacy production GUIDs and derive distinct stage GUIDs."
+    "action": "No apply occurred. The design was replaced with infra/stage.bicep, which declares shared accounts as existing and owns only stage resources."
   },
-  "correctedWhatIf": {
+  "dedicatedTemplate": {
+    "compiledResourceDeclarations": 14,
+    "bareSharedAccountDeclarations": 0,
+    "isolatedDeploymentContainer": true,
+    "isolatedQueueCopyLoop": 3
+  },
+  "finalNamedWhatIf": {
+    "deploymentName": "watai-stage-final-20260911-01",
     "status": "Succeeded",
-    "nonIgnoreChanges": 30,
     "deleteOrReplaceChanges": 0,
     "productionFunctionAppChanges": 0,
-    "productionRoleAssignmentChanges": 0,
-    "expectedStageCreates": 19
+    "requiredStageFunctionApp": true,
+    "requiredStageDeploymentContainer": true,
+    "requiredStageQueues": 3
   },
   "localValidation": {
     "api": "84 files / 630 tests passed",
@@ -32,6 +40,7 @@
     "frontendBuild": "passed",
     "apiBuild": "passed",
     "mainBicep": "passed",
+    "dedicatedStageBicep": "passed",
     "stageParameters": "passed"
   },
   "productionMutation": false,
