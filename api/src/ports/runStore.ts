@@ -8,6 +8,7 @@ export interface RunRecord {
   userId: string;
   /** The assistant message this run is producing (stable id; the worker upserts it). */
   assistantMessageId: string;
+  messageOrder?: { user: string; assistant: string };
   status: RunStatus;
   /** Durable orchestration instance id (set once the worker starts). */
   instanceId?: string | null;

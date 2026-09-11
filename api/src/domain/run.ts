@@ -41,6 +41,12 @@ const runInputSchema = z
     attachments: z.array(attachmentSchema).max(20).optional(),
     /** Client-supplied id for the user message (idempotent submit). */
     clientMessageId: z.string().min(1).max(64).optional(),
+    messageOrder: z.object({
+      user: z.string().datetime({ precision: 3 }),
+      assistant: z.string().datetime({ precision: 3 }),
+    }).strict().refine(order => Date.parse(order.assistant) > Date.parse(order.user), {
+      message: 'The response must follow its prompt.',
+    }).optional(),
     /** Chat deployment override for this run. Omitted uses the saved default chat model. */
     model: z.string().min(1).max(100).optional(),
     /** Tools enabled for this run (subset of the configured tools). */

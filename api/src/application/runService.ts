@@ -49,6 +49,7 @@ export class RunService {
       threadId,
       userId,
       assistantMessageId: this.clock.newId(),
+      ...(parsed.messageOrder ? { messageOrder: parsed.messageOrder } : {}),
       status: 'queued',
       instanceId: null,
       tools: parsed.tools ?? [],
@@ -70,6 +71,7 @@ export class RunService {
       model: parsed.model ?? null,
       tools: parsed.tools ?? [],
       allowDestructive: parsed.allowDestructive ?? [],
+      ...(parsed.messageOrder ? { messageOrder: parsed.messageOrder } : {}),
     })).digest('hex');
     const admission = await this.runStore.admit({
       run,
@@ -94,7 +96,7 @@ export class RunService {
         id: clientMessageId,
         role: 'user',
         content: parsed.text ?? '',
-        orderAt: ts,
+        orderAt: saved.messageOrder?.user ?? ts,
         ...(parsed.attachments?.length ? { attachments: parsed.attachments } : {}),
       });
       const { instanceId } = await this.starter.start(saved);

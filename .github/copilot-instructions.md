@@ -1,5 +1,28 @@
 # Project Guidelines
 
+## Chat Chronology Is A Release-Blocking Invariant
+
+Chat chronology is sacrosanct. Every observable intermediate render must keep a
+submitted prompt before its own assistant response. A response that briefly appears
+above its prompt, a disappearing/reappearing prompt, or reconciliation-driven sequence
+jumping is a release-blocking defect even when the final state is correct.
+
+Respect existing chat rendering nuance. Inspect the existing logical timestamps,
+optimistic state, streaming overlays, persistence, sync, multi-device ordering and
+scroll anchoring before editing. Do not replace these rules with role-based sorting,
+always-appended responses, arbitrary timestamp rewrites, delays or visual hiding.
+Make the smallest evidence-backed repair and preserve unrelated behavior.
+
+Chronology tests must observe every committed render and relevant DOM/frame transition
+through submission, pending persistence, stale reloads, first response, streaming,
+server timestamp handoff, completion and background/multi-device reconciliation.
+Final-state-only assertions are insufficient. Include delayed and out-of-order reads
+and explicitly fail on any transient inversion, disappearance or sequence jump.
+
+When the user reports a chronology regression, stop other implementation and automated
+continuation first. Fix and validate this incident before resuming other work; do not
+resume a user-requested pause without their direction.
+
 ## Cost And Time Discipline
 
 ## Continuous DoD Delivery

@@ -7,6 +7,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '0.2.2',
+    date: '2026-09-11',
+    title: 'Stable chat chronology throughout a response',
+    changes: [
+      'Submitted prompts remain visible while background history refreshes',
+      'Prompt and reply order stays fixed from the first bubble through server streaming',
+      'Late updates from an older response cannot replace the current reply',
+      'Completed replies remain visible until persisted history takes over',
+    ],
+  },
+  {
     version: '0.2.1',
     date: '2026-09-11',
     title: 'History that reliably catches up after reconnecting',

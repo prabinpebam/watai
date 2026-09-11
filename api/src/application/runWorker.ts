@@ -738,7 +738,7 @@ export async function processRun(
   heartbeat.unref?.();
 
   const thread = await threadStore.get(run.userId, threadId);
-  const orderAt = run.createdAt;
+  const orderAt = run.messageOrder?.assistant ?? run.createdAt;
   const toolCalls = new Map<string, MessageToolCall>();
   const citations: MessageCitation[] = [];
   const seenCitations = new Set<string>();
@@ -1393,7 +1393,7 @@ export async function processRun(
     await runStore.transition(userId, threadId, runId, ['running'], {
       status: err ? 'error' : 'complete',
       error: err ?? null,
-      startedAt: run.startedAt ?? orderAt,
+      startedAt: run.startedAt ?? run.createdAt,
       endedAt: clock.now(),
     });
   }

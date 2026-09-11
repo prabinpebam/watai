@@ -32,6 +32,8 @@ interface ActiveRun {
 
 interface RunsStore {
   runs: Record<string, ActiveRun>;
+  handoffs: Record<string, Message[]>;
+  acknowledgeHandoffs: (threadId: string, messages: Message[]) => void;
   isRunning: (threadId: string) => boolean;
   stop: (threadId: string) => void;
   /** Submit a server-authoritative run; generation completes server-side even if this client
@@ -42,11 +44,23 @@ interface RunsStore {
     threadId: string,
     body: SubmitRunBody,
     prepare?: () => Promise<Partial<SubmitRunBody>>,
+    prompt?: Pick<Message, 'createdAt'>,
   ) => Promise<void>;
 }
 
 export const useRuns = create<RunsStore>((set, get) => ({
   runs: {},
+  handoffs: {},
+  acknowledgeHandoffs: (threadId, messages) => set(state => {
+    const pending = state.handoffs[threadId];
+    if (!pending) return state;
+    const remaining = pending.filter(reply => !messages.some(message => message.id === reply.id && message.status === reply.status && message.content === reply.content));
+    if (remaining.length === pending.length) return state;
+    const handoffs = { ...state.handoffs };
+    if (remaining.length) handoffs[threadId] = remaining;
+    else delete handoffs[threadId];
+    return { handoffs };
+  }),
 
   isRunning: (threadId) => !!get().runs[threadId],
 
@@ -58,7 +72,7 @@ export const useRuns = create<RunsStore>((set, get) => ({
     run.controller.abort();
   },
 
-  startServerRun: async (threadId, body, prepare) => {
+  startServerRun: async (threadId, body, prepare, prompt) => {
     if (get().isRunning(threadId) || startingThreads.has(threadId)) return; // one run per thread
     const ctrl = new AbortController();
     const kv = currentAccountKvStore();
@@ -79,13 +93,17 @@ export const useRuns = create<RunsStore>((set, get) => ({
     window.addEventListener('pagehide', onPageHide);
 
     // Optimistic UI: show an assistant 'streaming' bubble immediately, before the server responds.
+    const messageOrder = body.messageOrder ?? (prompt ? {
+      user: prompt.createdAt,
+      assistant: new Date(Math.max(Date.now(), Date.parse(prompt.createdAt) + 1)).toISOString(),
+    } : undefined);
     const seed: Message = {
       id: `pending-${newId()}`,
       threadId,
       role: 'assistant',
       content: '',
       status: 'streaming',
-      createdAt: new Date().toISOString(),
+      createdAt: messageOrder?.assistant ?? new Date().toISOString(),
     };
     set((s) => ({ runs: { ...s.runs, [threadId]: { threadId, message: seed, controller: ctrl } } }));
     useUi.getState().setStream({ status: 'streaming', threadId, messageId: seed.id });
@@ -95,19 +113,26 @@ export const useRuns = create<RunsStore>((set, get) => ({
     void realtime.ensure();
 
     // Write a (possibly partial) assistant message into the live overlay for this thread.
+    let assistantMessageId: string | undefined;
+    let earlyMessage: MessageRecord | null = null;
     const applyOverlay = (msg: Message) => {
+      if (ctrl.signal.aborted || msg.id !== assistantMessageId) return;
       latestSnapshot = msg;
       scheduleSnapshot();
       set((s) => {
         const r = s.runs[threadId];
-        return r ? { runs: { ...s.runs, [threadId]: { ...r, message: msg } } } : s;
+        return r?.controller === ctrl ? { runs: { ...s.runs, [threadId]: { ...r, message: msg } } } : s;
       });
     };
 
     // SignalR pushes the assistant snapshot on every worker flush (~250ms) — render it immediately.
     const offMessage = realtime.on('message', (payload) => {
       const p = payload as { threadId?: string; message?: MessageRecord } | null;
-      if (!p || p.threadId !== threadId || !p.message) return;
+      if (!p || p.threadId !== threadId || !p.message || p.message.threadId !== threadId || p.message.role !== 'assistant') return;
+      if (!assistantMessageId) {
+        earlyMessage = p.message;
+        return;
+      }
       applyOverlay(messageFromRecord(p.message));
     });
     // A thread push (title/preview set after generation) — pull it and refresh the list in place.
@@ -125,10 +150,10 @@ export const useRuns = create<RunsStore>((set, get) => ({
     // Deferred preparation (enabled tool set, flushing an image attachment, indexing docs) runs
     // AFTER the optimistic bubble is on screen, so the response UI is never gated by a network
     // round-trip. Falls back to the base body (web search only) if it fails.
-    let runBody = body;
+    let runBody = { ...body, ...(messageOrder ? { messageOrder } : {}) };
     if (prepare) {
       try {
-        runBody = { ...body, ...(await prepare()) };
+        runBody = { ...body, ...(await prepare()), ...(messageOrder ? { messageOrder } : {}) };
       } catch {
         /* keep the base body */
       }
@@ -166,11 +191,14 @@ export const useRuns = create<RunsStore>((set, get) => ({
           sync: syncNow,
           submitRun: async (tid, b) => {
             const ack = await cloudApi.submitRun(tid, b);
+            assistantMessageId = ack.assistantMessageId;
             // Record the run id so Stop can cancel it server-side.
             set((s) => {
               const r = s.runs[threadId];
-              return r ? { runs: { ...s.runs, [threadId]: { ...r, runId: ack.runId } } } : s;
+              return r?.controller === ctrl ? { runs: { ...s.runs, [threadId]: { ...r, runId: ack.runId } } } : s;
             });
+            if (earlyMessage?.id === assistantMessageId) applyOverlay(messageFromRecord(earlyMessage));
+            earlyMessage = null;
             return ack;
           },
           getRun: (tid, rid) => cloudApi.getRun(tid, rid),
@@ -218,11 +246,19 @@ export const useRuns = create<RunsStore>((set, get) => ({
       await kv.delete(snapshotKey).catch(() => undefined);
       // Land the finished reply locally so it survives the overlay clearing (the bulk sync cursor
       // skips the streaming message), then clear the overlay and reload the persisted list.
+      if (get().runs[threadId]?.controller !== ctrl) return;
       if (finalAssistant) await saveServerMessage(finalAssistant).catch(() => {});
+      if (get().runs[threadId]?.controller !== ctrl) return;
+      const completed = finalAssistant;
       set((s) => {
         const next = { ...s.runs };
         delete next[threadId];
-        return { runs: next };
+        return {
+          runs: next,
+          ...(completed ? { handoffs: { ...s.handoffs, [threadId]: [
+            ...(s.handoffs[threadId] ?? []).filter(message => message.id !== completed.id), completed,
+          ] } } : {}),
+        };
       });
       const u = useUi.getState();
       u.setStream({ status: 'idle' });
@@ -238,7 +274,7 @@ export async function stopAllRunsForAccountTransition(): Promise<void> {
   await Promise.all(runs.map((run) => run.runId
     ? cloudApi.cancelRun(run.threadId, run.runId).catch(() => undefined)
     : Promise.resolve()));
-  useRuns.setState({ runs: {} });
+  useRuns.setState({ runs: {}, handoffs: {} });
   useUi.getState().setStream({ status: 'idle' });
 }
 

@@ -682,6 +682,7 @@ export interface SubmitRunBody {
   /** Idempotency key for the user message — pass the locally-created user message id so the
    *  server's copy and the local one converge to a single record when sync pulls it back. */
   clientMessageId?: string;
+  messageOrder?: { user: string; assistant: string };
   model?: string;
   tools?: string[];
   allowDestructive?: string[];
