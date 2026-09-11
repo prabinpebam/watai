@@ -241,7 +241,7 @@ resource credKek 'Microsoft.KeyVault/vaults/keys@2023-07-01' = {
   }
 }
 
-// ---------------------------------------------------------------- Function App (Flex Consumption, Node 20)
+// ---------------------------------------------------------------- Function App (Flex Consumption, Node 24)
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = if (deployFunctionApp) {
   name: 'plan-${namePrefix}-${env}'
   location: location
@@ -286,7 +286,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
       }
       runtime: {
         name: 'node'
-        version: '20'
+        version: '24'
       }
     }
     siteConfig: {
