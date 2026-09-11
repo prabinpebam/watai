@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
-  "status": "WHAT_IF_PASSED_DEPLOYMENT_PENDING",
-  "observedAt": "2026-09-11T05:07:00.000Z",
+  "status": "STAGE_API_LIFECYCLE_PASSED_RELEASE_PLANE_PARTIAL",
+  "observedAt": "2026-09-11T05:22:48.022Z",
   "targetResourceGroup": "rg-watai-dev",
   "stage": {
     "functionApp": "func-watai-stage-cbroocyg3omrk",
@@ -34,6 +34,31 @@
     "requiredStageDeploymentContainer": true,
     "requiredStageQueues": 3
   },
+  "provisioning": {
+    "deploymentName": "watai-stage-bootstrap-20260911-01",
+    "status": "Succeeded",
+    "sourceSha": "b74236eb6319bf59a9c5a7b3056df5ba17693e4e",
+    "runtime": "node 24",
+    "maximumInstanceCount": 2,
+    "alwaysReady": 0,
+    "principalId": "77a0e218-732e-4696-ad4b-50b27ac52de1",
+    "expectedAzureRoleAssignments": 3,
+    "expectedCosmosRoleAssignments": 1,
+    "productionHealth": 200
+  },
+  "apiLifecycle": {
+    "releaseManifestSha256": "fb9550c25e22f0d66cfb4f019c31b6e765160872d9e62012be9854cf08a1ac55",
+    "baselinePackageSha256": "15e0ea9dd63b5865e1c33cf57d5c57c948c8699c6f56ce018fd7814dc8081a3b",
+    "candidatePackageSha256": "6b932bcca38ee2c149bdb9ffd5ddb67c9f23b350d8edda8ba0666a1655a50862",
+    "candidateBundleSha256": "b089bd71c07b68d81e7dcf89ff7d58dc9f1bc95210492b894564f986ceebbb24",
+    "finalPackageSha256": "6b932bcca38ee2c149bdb9ffd5ddb67c9f23b350d8edda8ba0666a1655a50862",
+    "baselineHealthAt": "2026-09-11T05:15:45.506Z",
+    "candidateHealthAt": "2026-09-11T05:20:49.351Z",
+    "rollbackCompletedAt": "2026-09-11T05:22:11.7785982Z",
+    "candidateRestoredAt": "2026-09-11T05:22:31.299Z",
+    "productionHealthBeforeAt": "2026-09-11T05:17:53.569Z",
+    "productionHealthAfterAt": "2026-09-11T05:22:48.022Z"
+  },
   "localValidation": {
     "api": "84 files / 630 tests passed",
     "root": "88 files / 514 tests passed",
@@ -45,8 +70,9 @@
   },
   "productionMutation": false,
   "remaining": [
-    "Provision the reviewed zero-warm stage under a separate mutation decision.",
-    "Publish the exact candidate package to the stage app and run contained capability smoke.",
-    "Exercise stage rollback/deletion without touching production."
+    "Prove an isolated no-op redeploy and the full advertised capability contract, including authenticated owner isolation and contained memory worker behavior.",
+    "Stage and roll back exact immutable frontend bytes through an independently reachable release origin.",
+    "Prove candidate origin and versioned queues remain unreachable when every public origin is unhealthy.",
+    "Exercise stage teardown without touching production or the pre-existing integration database."
   ]
 }
