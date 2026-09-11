@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0",
+  "status": "WHAT_IF_PASSED_DEPLOYMENT_PENDING",
+  "observedAt": "2026-09-11T04:55:00.000Z",
+  "targetResourceGroup": "rg-watai-dev",
+  "stage": {
+    "functionApp": "func-watai-stage-cbroocyg3omrk",
+    "plan": "plan-watai-stage",
+    "cosmosDatabase": "watai-harness-stage",
+    "mediaContainer": "harness-media-stage",
+    "queues": ["harness-run-jobs", "harness-image-jobs", "harness-memory-jobs"],
+    "alwaysReady": 0,
+    "memoryContained": true,
+    "providerMemoryModelsConfigured": false
+  },
+  "firstWhatIf": {
+    "status": "BLOCKED",
+    "finding": "Shared role-assignment GUIDs would have redeployed production assignments with the stage principal.",
+    "action": "No apply occurred; role IDs were corrected to preserve legacy production GUIDs and derive distinct stage GUIDs."
+  },
+  "correctedWhatIf": {
+    "status": "Succeeded",
+    "nonIgnoreChanges": 30,
+    "deleteOrReplaceChanges": 0,
+    "productionFunctionAppChanges": 0,
+    "productionRoleAssignmentChanges": 0,
+    "expectedStageCreates": 19
+  },
+  "localValidation": {
+    "api": "84 files / 630 tests passed",
+    "root": "88 files / 514 tests passed",
+    "frontendBuild": "passed",
+    "apiBuild": "passed",
+    "mainBicep": "passed",
+    "stageParameters": "passed"
+  },
+  "productionMutation": false,
+  "remaining": [
+    "Provision the reviewed zero-warm stage under a separate mutation decision.",
+    "Publish the exact candidate package to the stage app and run contained capability smoke.",
+    "Exercise stage rollback/deletion without touching production."
+  ]
+}

@@ -1,7 +1,7 @@
 import { QueueServiceClient, type QueueClient } from '@azure/storage-queue';
 import type { ImageJob, ImageJobStarter } from '../../ports/imageJobStarter';
 
-export const IMAGE_QUEUE = 'image-jobs';
+export const IMAGE_QUEUE = process.env.IMAGE_QUEUE?.trim() || 'image-jobs';
 
 /**
  * Starts image generation by enqueuing a job to a Storage Queue; a queue-triggered worker
