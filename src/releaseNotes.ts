@@ -16,7 +16,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       'Uses your configured image deployment and saved API key; requires a model that supports transparent backgrounds',
       'Provider-generated alpha pixels still require manual validation',
       'Frontend release published: 2026-09-13 12:00:27 UTC',
-      'API package published: 2026-09-13 11:59:10 UTC; healthy after restart at 11:59:25 UTC',
+      'API activation verified: 2026-09-13 18:29:13 UTC (OneDeploy); earlier upload checks did not verify active code',
     ],
   },
   {
