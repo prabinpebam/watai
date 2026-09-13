@@ -15,6 +15,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       'Image generation and edits send the background option and preserve PNG output',
       'Uses your configured image deployment and saved API key; requires a model that supports transparent backgrounds',
       'Provider-generated alpha pixels still require manual validation',
+      'Frontend release published: 2026-09-13 12:00:27 UTC',
+      'API package published: 2026-09-13 11:59:10 UTC; healthy after restart at 11:59:25 UTC',
     ],
   },
   {
