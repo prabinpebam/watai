@@ -53,6 +53,7 @@ function extForType(ct: string): string {
 
 // POST <baseUrl>/images/generations { model, prompt, size, n, output_format } -> { data: [{ b64_json }] }
 export async function generateImage(p: ImageGenParams): Promise<ImageResult[]> {
+  console.info('[image] request', { operation: 'generate', model: p.model, background: p.background ?? 'auto', outputFormat: p.outputFormat ?? 'png' });
   const body: Record<string, unknown> = {
     model: p.model,
     prompt: p.prompt,
@@ -78,6 +79,7 @@ export async function generateImage(p: ImageGenParams): Promise<ImageResult[]> {
 
 // POST <baseUrl>/images/edits (multipart: model, prompt, image, size, n) -> { data: [{ b64_json }] }
 export async function editImage(p: ImageEditParams): Promise<ImageResult[]> {
+  console.info('[image] request', { operation: 'edit', model: p.model, background: p.background ?? 'auto', outputFormat: p.outputFormat ?? 'png' });
   const images = p.images?.length
     ? p.images
     : [{ bytes: p.image, contentType: p.imageContentType }];
