@@ -161,6 +161,7 @@ export async function processImageJob(
         image: bytes,
         imageContentType: contentTypeFor(source.outputFormat),
         size: rec.size,
+        outputFormat: rec.outputFormat,
         ...(rec.quality ? { quality: rec.quality } : {}),
         fetchImpl,
       });

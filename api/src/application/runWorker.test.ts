@@ -1016,6 +1016,44 @@ describe('processRun', () => {
     expect(imageFile?.status).toBe('ready');
   });
 
+  it.each(['transparent', 'opaque', 'auto', undefined] as const)('forwards the image tool background as %s with PNG output', async background => {
+    ctx = setup({ image: true });
+    await seed(ctx, 'queued', ['generate_image']);
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+      data: [{ b64_json: Buffer.from('PNGDATA').toString('base64') }],
+    })));
+    const runAgent: RunAgentFn = async function* (params) {
+      const tool = params.tools.find(candidate => candidate.name === 'generate_image');
+      expect(tool?.parameters).toMatchObject({ properties: {
+        background: { type: 'string', enum: ['auto', 'opaque', 'transparent'] },
+      } });
+      const result = await params.execute('generate_image', {
+        prompt: background === 'transparent' ? 'A logo with a transparent background' : 'A mountain photograph',
+        ...(background ? { background } : {}),
+      });
+      expect(result.image).toBeDefined();
+      yield { type: 'done' };
+    };
+    await processRun({ ...ctx.deps(runAgent), fetchImpl }, 't1', 'r1');
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(JSON.parse(fetchImpl.mock.calls[0][1]!.body as string)).toMatchObject({
+      background: background ?? 'auto', output_format: 'png',
+    });
+  });
+
+  it('does not dispatch an invalid image background to the provider', async () => {
+    ctx = setup({ image: true });
+    await seed(ctx);
+    const fetchImpl = vi.fn<typeof fetch>();
+    const runAgent: RunAgentFn = async function* (params) {
+      expect(await params.execute('generate_image', { prompt: 'A logo', background: 'checkerboard' }))
+        .toEqual({ output: 'Invalid image background. Use auto, opaque, or transparent.' });
+      yield { type: 'done' };
+    };
+    await processRun({ ...ctx.deps(runAgent), fetchImpl }, 't1', 'r1');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('shows a clear content-policy message when image generation is moderated', async () => {
     ctx = setup({ image: true });
     await seed(ctx);
@@ -1090,7 +1128,7 @@ describe('processRun', () => {
     expect(tool?.summary).toBe('Image generation failed: The service is temporarily unavailable.');
   });
 
-  it('passes the latest user image attachment to the image model when edit_reference is requested', async () => {
+  it.each([undefined, 'transparent'] as const)('passes the latest user image attachment and background %s to the image model', async background => {
     ctx = setup({ image: true });
     await seed(ctx);
     await ctx.messageStore.append({
@@ -1130,6 +1168,8 @@ describe('processRun', () => {
       }
       if (url.includes('/images/edits')) {
         editCalled = true;
+        expect((init?.body as FormData).get('background')).toBe(background ?? 'auto');
+        expect((init?.body as FormData).get('output_format')).toBe('png');
         const image = (init?.body as FormData).get('image') as Blob;
         expect([...new Uint8Array(await image.arrayBuffer())]).toEqual([...referenceBytes]);
         return {
@@ -1144,7 +1184,8 @@ describe('processRun', () => {
     }) as typeof fetch;
     const runAgent: RunAgentFn = async function* (params) {
       const result = await params.execute('generate_image', {
-        prompt: 'Turn this into a watercolor portrait.',
+        prompt: background === 'transparent' ? 'Remove the background' : 'Turn this into a watercolor portrait.',
+        ...(background ? { background } : {}),
         edit_reference: true,
       });
       if (result.image) {

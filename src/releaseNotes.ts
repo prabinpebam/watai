@@ -7,6 +7,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '0.2.3',
+    date: '2026-09-13',
+    title: 'Transparent backgrounds for chat images',
+    changes: [
+      'Chat requests for transparent backgrounds or background removal can select native alpha transparency',
+      'Image generation and edits send the background option and preserve PNG output',
+      'Uses your configured image deployment and saved API key; requires a model that supports transparent backgrounds',
+      'Provider-generated alpha pixels still require manual validation',
+    ],
+  },
+  {
     version: '0.2.2',
     date: '2026-09-11',
     title: 'Stable chat chronology throughout a response',

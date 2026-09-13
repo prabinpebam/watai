@@ -428,6 +428,11 @@ function assembleTools(
         properties: {
           prompt: { type: 'string', description: 'A detailed description of the image (or the requested edit).' },
           size: { type: 'string', description: 'Optional size, e.g. 1024x1024, 1024x1536, or 1536x1024.' },
+          background: {
+            type: 'string',
+            enum: ['auto', 'opaque', 'transparent'],
+            description: 'Set transparent when the user requests a transparent background, true alpha, no background, or background removal. This creates actual alpha transparency, not a painted checkerboard or a white background. Use opaque when explicitly requested, otherwise auto. Transparent objects alone do not require a transparent background.',
+          },
           edit_reference: { type: 'boolean', description: 'Set true to edit, restyle, clean up, improve, or transform the latest image the user uploaded (used as the image-model reference; preserves its style).' },
           reference_image_ids: {
             type: 'array',
@@ -497,6 +502,10 @@ function makeExecute(
       if (!prompt) return { output: 'No image prompt was provided.' };
       const sizeArg = (args as { size?: unknown }).size;
       const size = typeof sizeArg === 'string' && sizeArg ? sizeArg : undefined;
+      const background = args.background ?? 'auto';
+      if (background !== 'auto' && background !== 'opaque' && background !== 'transparent') {
+        return { output: 'Invalid image background. Use auto, opaque, or transparent.' };
+      }
       const requestedIds = Array.isArray(args.reference_image_ids)
         ? args.reference_image_ids.filter((id): id is string => typeof id === 'string')
         : [];
@@ -517,6 +526,8 @@ function makeExecute(
               key: creds.key,
               model: imageModel,
               prompt,
+              background,
+              outputFormat: 'png',
               image: imageReferences![0].bytes,
               imageContentType: imageReferences![0].contentType,
               images: imageReferences!.map((reference) => ({
@@ -531,6 +542,8 @@ function makeExecute(
               key: creds.key,
               model: imageModel,
               prompt,
+              background,
+              outputFormat: 'png',
               ...(size ? { size } : {}),
               fetchImpl,
             }),
