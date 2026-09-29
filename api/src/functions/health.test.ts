@@ -6,6 +6,6 @@ it('identifies the active alpha release without exposing configuration', async (
   const result = await health({} as never, {} as never);
   expect(result.status).toBe(200);
   expect(result.jsonBody).toEqual({
-    ok: true, service: 'watai-api', release: 'image-alpha-2026-09-13-r1', time: expect.any(String),
+    ok: true, service: 'watai-api', release: 'run-admission-2026-09-29-r1', time: expect.any(String),
   });
 });

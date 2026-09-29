@@ -2,7 +2,7 @@ import { AppError } from '../domain/errors';
 import { parseRunInput, isActive } from '../domain/run';
 import { createHash } from 'node:crypto';
 import type { AppendMessageInput } from '../domain/message';
-import type { MessageRecord } from '../ports/messageStore';
+import type { MessageListOptions, MessageRecord } from '../ports/messageStore';
 import type { ThreadStore } from '../ports/threadStore';
 import type { RunRecord, RunStore } from '../ports/runStore';
 import type { RunStarter } from '../ports/runStarter';
@@ -12,7 +12,11 @@ import type { ServiceClock } from './threadService';
 export interface MessageAppender {
   append(userId: string, threadId: string, input: AppendMessageInput): Promise<MessageRecord>;
   get(userId: string, threadId: string, messageId: string): Promise<MessageRecord | null>;
+  list(userId: string, threadId: string, opts?: MessageListOptions): Promise<MessageRecord[]>;
 }
+
+/** How long a receipt-less prompt uploaded by sync may still be claimed by its first run submit. */
+const SYNCED_PROMPT_ADOPTION_MS = 10 * 60_000;
 
 /**
  * Submits and tracks server-side runs. `submit` persists the user prompt, enforces one active
@@ -38,11 +42,13 @@ export class RunService {
   async submit(userId: string, threadId: string, input: unknown): Promise<RunRecord> {
     await this.requireOwnThread(userId, threadId);
     const parsed = parseRunInput(input);
-    const legacyMessageExists = parsed.clientMessageId
-      ? (await this.messages.get(userId, threadId, parsed.clientMessageId)) !== null
-      : false;
-
     const ts = this.clock.now();
+    const existingMessage = parsed.clientMessageId
+      ? await this.messages.get(userId, threadId, parsed.clientMessageId)
+      : null;
+    const legacyMessageExists = !!existingMessage &&
+      !(await this.isUnansweredSyncedPrompt(userId, threadId, existingMessage, parsed, ts));
+
     const clientMessageId = parsed.clientMessageId ?? this.clock.newId();
     const run: RunRecord = {
       id: this.clock.newId(),
@@ -107,6 +113,27 @@ export class RunService {
     } catch {
       return saved;
     }
+  }
+
+  /** Sync may upload the prompt before `/runs` claims it (attachment flush); that is not a legacy message. */
+  private async isUnansweredSyncedPrompt(
+    userId: string,
+    threadId: string,
+    message: MessageRecord,
+    parsed: ReturnType<typeof parseRunInput>,
+    now: string,
+  ): Promise<boolean> {
+    const age = Date.parse(now) - Date.parse(message.createdAt);
+    if (message.role !== 'user' || message.deletedAt || message.userId !== userId || message.threadId !== threadId) return false;
+    if (!Number.isFinite(age) || age < 0 || age > SYNCED_PROMPT_ADOPTION_MS) return false;
+    if (message.content !== (parsed.text ?? '')) return false;
+    if (parsed.attachments?.length) {
+      const sentIds = parsed.attachments.map((attachment) => attachment.id).sort();
+      const storedIds = (message.attachments ?? []).map((attachment) => attachment.id).sort();
+      if (sentIds.join('\n') !== storedIds.join('\n')) return false;
+    }
+    const later = await this.messages.list(userId, threadId, { since: message.createdAt });
+    return !later.some((record) => record.role !== 'user' && !record.deletedAt);
   }
 
   async get(userId: string, threadId: string, runId: string): Promise<RunRecord> {
