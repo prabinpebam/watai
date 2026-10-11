@@ -991,3 +991,7 @@ After these shared-source changes, one combined regression pass completed:
 	stale threshold. It remains log-only because signed execution authority and attested
 	cloud-outcome state are missing. A tested guarded foreground adapter is not proof
 	of unattended editor-session continuation. See the harness README for controls.
+- 2026-10-11: these local candidates were integrated onto master and released as 0.2.4
+	(API on Node 20, frontend on Pages); see `documentation/releases/2026-10-11-v0.2.4.md`.
+	This is a Continuous Production Milestone, not a DoD receipt: no finding is closed,
+	H01 remains BLOCKED_SAFE and the Node 24 production runtime is still a separate milestone.

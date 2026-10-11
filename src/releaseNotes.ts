@@ -13,7 +13,7 @@ export function formatDeploymentTimestamp(value: string): string {
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: '0.2.4',
-    deployedAt: '2026-10-11T05:50:00Z',
+    deployedAt: '2026-10-11T05:47:23Z',
     apiDeployedAt: '2026-10-11T05:43:48Z',
     title: 'More dependable memory, sync, uploads and voice',
     changes: [
