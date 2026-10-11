@@ -12,6 +12,16 @@ export function formatDeploymentTimestamp(value: string): string {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '0.2.5',
+    deployedAt: '2026-10-11T06:40:00Z',
+    apiDeployedAt: '2026-10-11T06:24:48Z',
+    title: 'Server moved to a supported Node.js runtime',
+    changes: [
+      'The Watai API now runs on Node.js 24; Node.js 20 reached end of life in April 2026',
+      'The app code and your data are unchanged from 0.2.4',
+    ],
+  },
+  {
     version: '0.2.4',
     deployedAt: '2026-10-11T05:47:23Z',
     apiDeployedAt: '2026-10-11T05:43:48Z',

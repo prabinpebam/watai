@@ -28,10 +28,18 @@
     "priorManifestRejected": true,
     "blockersObserved": ["SOURCE_DIRTY", "BINDING_MISMATCH:validationInputsSha256"]
   },
-  "productionMutation": false,
+  "productionMutation": true,
+  "productionMigration": {
+    "status": "PRODUCTION_RUNTIME_SWITCHED_VERIFIED",
+    "switchedAt": "2026-10-11T06:22:58Z",
+    "verifiedAt": "2026-10-11T06:24:48Z",
+    "method": "az functionapp runtime config set --runtime-version 24 (configuration only; package unchanged)",
+    "package": "b06f7e33b51cdb47795cfc798d0a6f6e5e81b849b2f4416e1d9a44315918bd9f",
+    "actualRuntimeEvidence": "Four post-switch worker starts without the Node.js v20 EOL trace emitted by every Node 20 worker start",
+    "record": "documentation/releases/2026-10-11-v0.2.5.md"
+  },
   "remaining": [
-    "Preserve the current production package and app configuration before runtime promotion.",
-    "Deploy Node 24 as a separate smoke-validated milestone after the current product milestone is manually validated.",
-    "Exercise rollback to the retained Node 20 package/configuration before claiming H05-A complete."
+    "Exercise rollback to Node 20 before claiming H05-A complete; deliberately not exercised in production because Node 20 is end-of-life. A stage exercise is the safer path.",
+    "Observe the first production chat-run completion on Node 24 (recorded in the v0.2.5 release record)."
   ]
 }
