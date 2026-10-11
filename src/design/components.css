@@ -2848,10 +2848,35 @@ button.source-chip:hover {
   min-height: 200px;
 }
 
-/* Image-generation placeholder: the animated Perlin stipple field (see design/noise), sized to the
-   target aspect ratio and swapped for the real image when it arrives. */
+/* Image-generation placeholder: the animated Perlin stipple field (see design/noise) covers the whole
+   card, with the status as a frosted overlay. The empty media box and bar beneath keep the final
+   card's geometry, so the real image replaces it without reflow. */
 .image-card--generating {
+  position: relative;
   max-width: 420px;
+  background: var(--color-noise-bg);
+}
+.image-card--generating .image-card__media {
+  background: transparent;
+}
+.image-card__status {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-bg) 55%, transparent);
+  -webkit-backdrop-filter: blur(var(--blur-appbar)) saturate(140%);
+  backdrop-filter: blur(var(--blur-appbar)) saturate(140%);
+  box-shadow: var(--elevation-1);
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  pointer-events: none;
 }
 .image-placeholder {
   position: absolute;
@@ -2882,13 +2907,6 @@ button.source-chip:hover {
   );
   transform: translateX(-100%);
   animation: image-gen-sweep 2.4s ease-in-out infinite;
-}
-.image-placeholder--noise {
-  background: var(--color-noise-bg);
-  animation: none;
-}
-.image-placeholder--noise::after {
-  content: none;
 }
 .noise-stipple {
   position: absolute;

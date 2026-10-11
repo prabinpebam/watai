@@ -12,6 +12,17 @@ export function formatDeploymentTimestamp(value: string): string {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '0.2.7',
+    deployedAt: '2026-10-11T15:00:00Z',
+    apiDeployedAt: '2026-10-11T06:24:48Z',
+    title: 'Full-card image generation preview',
+    changes: [
+      'The drifting dots now fill the whole image card while it generates',
+      '"Generating image" floats in the centre on a frosted label',
+      'The card keeps its final size, so the image still fades in without the chat jumping',
+    ],
+  },
+  {
     version: '0.2.6',
     deployedAt: '2026-10-11T11:19:13Z',
     apiDeployedAt: '2026-10-11T06:24:48Z',

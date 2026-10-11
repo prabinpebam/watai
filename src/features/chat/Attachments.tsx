@@ -530,18 +530,21 @@ function ImageCardFrame({
   );
 }
 
-/** Animated noise placeholder shown while an image generates; matches the target aspect ratio. */
+/**
+ * Placeholder shown while an image generates. The noise covers the whole card, with the status as a
+ * frosted overlay; underneath, the media box and bar keep the final card's exact geometry so the
+ * image still cross-fades in place without moving the transcript.
+ */
 function ImagePlaceholder({ size }: { size: string }) {
+  const [w, h] = parseAspect(size);
   return (
-    <ImageCardFrame
-      size={size}
-      className="image-card--generating"
-      media={
-        <span className="image-placeholder image-placeholder--noise" role="img" aria-label="Generating image">
-          <NoiseStipple />
-        </span>
-      }
-      bar={<span className="image-card__prompt">Generating image…</span>}
-    />
+    <div className="image-card image-card--generating" role="img" aria-label="Generating image">
+      <NoiseStipple />
+      <div className="image-card__media" style={{ aspectRatio: `${w} / ${h}` }} />
+      <div className="image-card__bar" />
+      <span className="image-card__status" aria-hidden="true">
+        Generating image
+      </span>
+    </div>
   );
 }
