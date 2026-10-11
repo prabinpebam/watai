@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { CapabilityMatrix, Citation, Density, TextScale, Theme, ThreadLock, Toast } from '../lib/types';
 import { newId } from '../lib/ids';
+import { clearPreparedFiles } from '../lib/saveFile';
 import type { LibraryItemDTO } from '../data/cloud/types';
 
 export interface StagedLibraryItem {
@@ -264,6 +265,7 @@ export function uiStorageNameForOwner(ownerId: string | null): string {
 }
 
 export function clearUiOwnerData(): void {
+  clearPreparedFiles();
   useUi.setState({
     ...EMPTY_ACCOUNT_UI,
     drawerOpen: false,
@@ -283,6 +285,7 @@ export function clearUiOwnerData(): void {
 }
 
 export async function activateUiOwner(ownerId: string | null): Promise<void> {
+  clearPreparedFiles();
   const name = uiStorageNameForOwner(ownerId);
   let persisted: string | null = null;
   try {

@@ -35,9 +35,43 @@ const SYNC_KEY_PREFIX = 'sync.';
 const SETTINGS_HYDRATED_KEY = 'sync.settings.hydrated';
 const SETTINGS_REVISION_KEY = 'sync.settings.revision';
 const OUTBOX_LOCK = 'watai.sync.outbox.v2';
+const ASSET_RESOLUTION_BUDGET_MS = 15_000;
+const MEMORY_READ_BUDGET_MS = 15_000;
+const ASSET_RESPONSE_MAX_BYTES = 25 * 1024 * 1024;
 let localPush: Promise<void> | null = null;
 
-type SyncOp = { operationId: string; state?: 'pending' | 'failed'; failure?: { code: string; at: string } } & (
+async function readAssetBlob(response: Response, signal: AbortSignal): Promise<Blob | null> {
+  const body = response.body;
+  if (!body) return null;
+  if (!response.ok || signal.aborted || Number(response.headers.get('content-length')) > ASSET_RESPONSE_MAX_BYTES) {
+    void body.cancel().catch(() => {});
+    return null;
+  }
+  const reader = body.getReader();
+  const chunks: BlobPart[] = [];
+  let bytes = 0;
+  let complete = false;
+  const cancel = () => { void reader.cancel().catch(() => {}); };
+  signal.addEventListener('abort', cancel, { once: true });
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const { value, done } = await reader.read();
+      signal.throwIfAborted();
+      if (done) { complete = true; break; }
+      bytes += value.byteLength;
+      if (bytes > ASSET_RESPONSE_MAX_BYTES) return null;
+      if (value.byteLength) chunks.push(new Uint8Array(value));
+    }
+    return new Blob(chunks, { type: response.headers.get('content-type') ?? '' });
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    if (!complete) cancel();
+    reader.releaseLock();
+  }
+}
+
+type SyncOp = { operationId: string; state?: 'pending' | 'failed'; attempted?: boolean; failure?: { code: string; at: string } } & (
   | { kind: 'thread.create'; id: Id; body: CreateThreadBody }
   | { kind: 'thread.update'; id: Id; body: UpdateThreadBody }
   | { kind: 'thread.delete'; id: Id }
@@ -186,6 +220,13 @@ function reconcileKnownMessage(existing: Message, incoming: Message): Message | 
 }
 
 export class SyncRepository implements Repository {
+  private syncEpoch = 0;
+  private clearsInProgress = 0;
+
+  private isCurrentSync(epoch: number): boolean {
+    return epoch === this.syncEpoch && this.clearsInProgress === 0;
+  }
+
   constructor(
     private readonly local: SyncLocalStore,
     private readonly cloud: CloudApi,
@@ -196,6 +237,8 @@ export class SyncRepository implements Repository {
   /** Threads reconciled (a full message re-pull) once this session. A stale terminal copy that
    *  predates late enrichment converges on first open without re-pulling on every open. */
   private readonly reconciledThreads = new Set<Id>();
+  private readonly assetResolutions = new Map<string, { promise: Promise<string>; controller: AbortController }>();
+  private readonly memoryReads = new Set<AbortController>();
 
   // ---- reads: always local ----
   listThreads(opts?: { includeArchived?: boolean }): Promise<Thread[]> {
@@ -229,18 +272,46 @@ export class SyncRepository implements Repository {
   /** Resolve an asset URL (generated image OR uploaded attachment): prefer the local cache;
    *  otherwise download from Blob Storage via a read SAS and cache it locally so other devices
    *  and reloads work offline after. */
-  async resolveAssetUrl(asset: { id: string; libraryItemId?: string; localBlobKey?: string; blobPath?: string }): Promise<string> {
+  resolveAssetUrl(asset: { id: string; libraryItemId?: string; localBlobKey?: string; blobPath?: string }): Promise<string> {
+    const epoch = this.syncEpoch;
+    if (!this.isCurrentSync(epoch)) return Promise.resolve('');
+    const captured = { ...asset };
+    const key = JSON.stringify([epoch, captured.id, captured.libraryItemId, captured.localBlobKey, captured.blobPath]);
+    const existing = this.assetResolutions.get(key);
+    if (existing) return existing.promise;
+    const controller = new AbortController();
+    let onAbort!: () => void;
+    const aborted = new Promise<string>(resolve => { onAbort = () => resolve(''); });
+    controller.signal.addEventListener('abort', onAbort, { once: true });
+    const timeout = setTimeout(() => controller.abort(), ASSET_RESOLUTION_BUDGET_MS);
+    const pending: Promise<string> = Promise.race([this.resolveAssetOnce(captured, epoch, controller.signal), aborted]).finally(() => {
+      clearTimeout(timeout);
+      controller.signal.removeEventListener('abort', onAbort);
+      if (this.assetResolutions.get(key)?.promise === pending) this.assetResolutions.delete(key);
+    });
+    this.assetResolutions.set(key, { promise: pending, controller });
+    return pending;
+  }
+
+  private async resolveAssetOnce(asset: Parameters<SyncRepository['resolveAssetUrl']>[0], epoch: number, signal: AbortSignal): Promise<string> {
+    const current = () => this.isCurrentSync(epoch) && !signal.aborted;
+    if (!current()) return '';
     // The cache key is the explicit local key, else a stable per-asset cloud key. Always check
     // it FIRST so a once-downloaded cloud asset is never re-fetched (faster + no repeat SAS/egress).
     const cacheKey = asset.localBlobKey ?? `cloud-${asset.id}`;
     const cached = await this.local.getBlobUrl(cacheKey);
+    if (!current()) return '';
     if (cached) return cached;
-    if (asset.blobPath && /^(data:|blob:|https?:)/.test(asset.blobPath)) return asset.blobPath;
     if (asset.libraryItemId && (await this.syncEnabled())) {
-      const item = await this.cloud.getLibraryItem(asset.libraryItemId).catch(() => null);
-      if (item?.url) return item.url;
+      if (!current()) return '';
+      const item = await this.cloud.getLibraryItem(asset.libraryItemId, signal).catch(() => null);
+      if (!current()) return '';
+      return item?.id === asset.libraryItemId && (item.state === 'active' || item.state === 'trashed') ? item.url ?? '' : '';
     }
+    if (!current()) return '';
+    if (asset.blobPath && /^(data:|blob:|https?:)/.test(asset.blobPath)) return asset.blobPath;
     if (asset.blobPath && (await this.syncEnabled())) {
+      if (!current()) return '';
       const parsed = parseBlobPath(asset.blobPath);
       if (!parsed) return '';
       try {
@@ -249,12 +320,15 @@ export class SyncRepository implements Repository {
           assetId: parsed.assetId,
           op: 'read',
           contentType: parsed.contentType,
-        });
-        const res = await this.fetchImpl(sas.url);
-        if (!res.ok) return '';
-        const blob = await res.blob();
+        }, signal);
+        if (!current()) return '';
+        const res = await this.fetchImpl(sas.url, { signal });
+        const blob = await readAssetBlob(res, signal);
+        if (!current() || !blob) return '';
         await this.local.putBlob(cacheKey, blob);
-        return this.local.getBlobUrl(cacheKey);
+        if (!current()) return '';
+        const url = await this.local.getBlobUrl(cacheKey);
+        return current() ? url : '';
       } catch {
         return '';
       }
@@ -269,32 +343,69 @@ export class SyncRepository implements Repository {
   getSettings(): Promise<Settings> {
     return this.local.getSettings();
   }
+
+  private readMemory<T>(operation: (signal: AbortSignal, assertCurrent: () => void) => Promise<T>): Promise<T> {
+    const epoch = this.syncEpoch;
+    const controller = new AbortController();
+    const assertCurrent = () => {
+      if (!this.isCurrentSync(epoch)) throw new Error('Memory inventory was cleared during collection.');
+      controller.signal.throwIfAborted();
+    };
+    let onAbort!: () => void;
+    const aborted = new Promise<T>((_resolve, reject) => { onAbort = () => reject(controller.signal.reason); });
+    controller.signal.addEventListener('abort', onAbort, { once: true });
+    this.memoryReads.add(controller);
+    const timer = setTimeout(() => controller.abort(new Error('Memory request timed out. Retry loading memory.')), MEMORY_READ_BUDGET_MS);
+    const work = Promise.resolve().then(() => {
+      assertCurrent();
+      return operation(controller.signal, assertCurrent);
+    }).then(value => { assertCurrent(); return value; }, error => { assertCurrent(); throw error; });
+    return Promise.race([work, aborted]).finally(() => {
+      clearTimeout(timer);
+      controller.signal.removeEventListener('abort', onAbort);
+      this.memoryReads.delete(controller);
+    });
+  }
+
   async listMemory(query?: ListMemoryQuery): Promise<MemoryRecord[]> {
-    if (await this.syncEnabled()) {
-      const memories: MemoryRecord[] = [];
-      const seenCursors = new Set<string>();
-      let cursor = query?.cursor;
-      do {
-        const out = await this.cloud.listMemory({ ...query, cursor, limit: Math.min(query?.limit ?? 100, 100) });
-        memories.push(...out.memories);
-        if (!out.cursor) break;
-        if (seenCursors.has(out.cursor)) throw new Error('Memory inventory returned a repeated cursor.');
-        seenCursors.add(out.cursor);
-        cursor = out.cursor;
-      } while (true);
+    const captured = query ? { ...query } : undefined;
+    return this.readMemory(async (signal, assertCurrent) => {
+      assertCurrent();
+      const synced = await this.syncEnabled();
+      assertCurrent();
+      if (synced) {
+        const memories: MemoryRecord[] = [];
+        const seenIds = new Set<string>();
+        const seenCursors = new Set<string>(captured?.cursor ? [captured.cursor] : []);
+        let cursor = captured?.cursor;
+        do {
+          const out = await this.cloud.listMemory({ ...captured, cursor, limit: Math.min(captured?.limit ?? 100, 100) }, signal);
+          assertCurrent();
+          for (const memory of out.memories) {
+            if (seenIds.has(memory.id) || memory.status !== (captured?.status ?? 'active')) {
+              throw new Error('Memory inventory changed during collection. Retry from the current state.');
+            }
+            seenIds.add(memory.id);
+            memories.push(structuredClone(memory));
+          }
+          if (!out.cursor) break;
+          if (seenCursors.has(out.cursor)) throw new Error('Memory inventory returned a repeated cursor.');
+          seenCursors.add(out.cursor);
+          cursor = out.cursor;
+        } while (true);
+        return memories;
+      }
+      const memories = await this.local.listMemory(captured);
+      assertCurrent();
       return memories;
-    }
-    return this.local.listMemory(query);
+    });
   }
   async getMemoryProfile(): Promise<MemoryProfileView> {
-    if (await this.syncEnabled()) {
-      try {
-        return await this.cloud.getMemoryProfile();
-      } catch {
-        return this.local.getMemoryProfile();
-      }
-    }
-    return this.local.getMemoryProfile();
+    return this.readMemory(async (signal, assertCurrent) => {
+      const synced = await this.syncEnabled();
+      assertCurrent();
+      return synced ? this.cloud.getMemoryProfile(signal) : this.local.getMemoryProfile();
+    });
   }
   search(query: string): Promise<SearchHit[]> {
     return this.local.search(query);
@@ -480,9 +591,19 @@ export class SyncRepository implements Repository {
   }
 
   async deleteAll(): Promise<void> {
-    await this.local.deleteAll();
-    for (const key of await this.kv.keys()) {
-      if (key.startsWith(SYNC_KEY_PREFIX)) await this.kv.delete(key);
+    this.syncEpoch += 1;
+    for (const controller of this.memoryReads) controller.abort(new Error('Memory inventory was cleared during collection.'));
+    this.memoryReads.clear();
+    for (const resolution of this.assetResolutions.values()) resolution.controller.abort();
+    this.assetResolutions.clear();
+    this.clearsInProgress += 1;
+    try {
+      await this.local.deleteAll();
+      for (const key of await this.kv.keys()) {
+        if (key.startsWith(SYNC_KEY_PREFIX)) await this.kv.delete(key);
+      }
+    } finally {
+      this.clearsInProgress -= 1;
     }
   }
 
@@ -490,20 +611,39 @@ export class SyncRepository implements Repository {
   /** Push local changes then pull remote deltas. Returns the thread ids whose local state
    *  changed during the pull, so the UI can refresh them. No-op when sync is disabled. */
   async sync(): Promise<Set<Id>> {
+    const epoch = this.syncEpoch;
     if (!(await this.syncEnabled())) return new Set();
-    await this.hydrateSettings();
+    if (!this.isCurrentSync(epoch)) return new Set();
+    await this.hydrateSettings(epoch);
+    if (!this.isCurrentSync(epoch)) return new Set();
     await this.push();
-    return this.pull();
+    if (!this.isCurrentSync(epoch)) return new Set();
+    return this.pull(epoch);
   }
 
-  async hydrateSettings(): Promise<void> {
+  async hydrateSettings(epoch = this.syncEpoch): Promise<void> {
+    if (!this.isCurrentSync(epoch)) return;
     if (await this.kv.get<boolean>(SETTINGS_HYDRATED_KEY)) return;
-    const local = await this.local.getSettings();
+    const local = structuredClone(await this.local.getSettings());
+    if (!this.isCurrentSync(epoch)) return;
+    const capturedSettingsIds = new Set((await this.loadQueue(epoch))
+      .filter(operation => operation.kind === 'settings.save').map(operation => operation.operationId));
+    if (!this.isCurrentSync(epoch)) return;
     const server = await this.cloud.getSettings();
+    if (!this.isCurrentSync(epoch)) return;
     const { revision, ...serverSettings } = server;
-    await this.local.saveSettings(preserveDeviceSettings(serverSettings, local));
-    await this.mutateQueue((queue) => queue.filter((operation) => operation.kind !== 'settings.save'));
+    const newerQueuedSettings = (await this.loadQueue(epoch))
+      .some(operation => operation.kind === 'settings.save' && !capturedSettingsIds.has(operation.operationId));
+    if (!this.isCurrentSync(epoch)) return;
+    const currentLocal = await this.local.getSettings();
+    if (!this.isCurrentSync(epoch)) return;
+    const newerIntent = newerQueuedSettings || JSON.stringify(currentLocal) !== JSON.stringify(local);
+    await this.local.saveSettings(newerIntent ? stricterPrivacySettings(serverSettings, currentLocal) : preserveDeviceSettings(serverSettings, currentLocal));
+    if (!this.isCurrentSync(epoch)) return;
+    await this.mutateQueue((queue) => queue.filter((operation) => operation.kind !== 'settings.save' || !capturedSettingsIds.has(operation.operationId)));
+    if (!this.isCurrentSync(epoch)) return;
     await this.kv.set(SETTINGS_REVISION_KEY, revision);
+    if (!this.isCurrentSync(epoch)) return;
     await this.kv.set(SETTINGS_HYDRATED_KEY, true);
   }
 
@@ -526,9 +666,11 @@ export class SyncRepository implements Repository {
   }
 
   async push(): Promise<void> {
+    const epoch = this.syncEpoch;
     if (!(await this.syncEnabled())) return;
+    if (!this.isCurrentSync(epoch)) return;
     if (localPush) return localPush;
-    const drain = () => this.drainOutbox();
+    const drain = () => this.drainOutbox(epoch);
     const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
     const promise: Promise<void> = locks
       ? locks.request(OUTBOX_LOCK, { mode: 'exclusive' }, () => drain()) as unknown as Promise<void>
@@ -537,26 +679,35 @@ export class SyncRepository implements Repository {
     await localPush;
   }
 
-  private async drainOutbox(): Promise<void> {
-    while (true) {
-      const op = (await this.loadQueue()).find((operation) => operation.state !== 'failed');
-      if (!op) return;
+  private async drainOutbox(epoch: number): Promise<void> {
+    while (this.isCurrentSync(epoch)) {
+      const op = (await this.loadQueue(epoch)).find((operation) => operation.state !== 'failed');
+      if (!op || !this.isCurrentSync(epoch)) return;
       try {
-        await this.applyOp(op);
+        if (op.kind === 'thread.create') {
+          const marked = await this.mutateQueue(queue => queue.map(operation => operation.operationId === op.operationId
+            ? { ...operation, attempted: true } : operation));
+          if (!marked.some(operation => operation.operationId === op.operationId)) continue;
+        }
+        await this.applyOp(op, epoch);
       } catch (err) {
+        if (!this.isCurrentSync(epoch)) return;
         if (!(err instanceof CloudError) || err.retryable) break; // transient: stop, keep op
         console.warn(`[sync] retaining failed ${op.kind}: ${err.code}`);
         await this.failOperation(op.operationId, err.code);
         continue;
       }
+      if (!this.isCurrentSync(epoch)) return;
       await this.acknowledge(op.operationId);
     }
   }
 
-  async pull(): Promise<Set<Id>> {
+  async pull(epoch = this.syncEpoch): Promise<Set<Id>> {
     const changed = new Set<Id>();
+    if (!this.isCurrentSync(epoch)) return changed;
     if (!(await this.syncEnabled())) return changed;
     let cursor = await this.kv.get<string>(THREAD_CURSOR_KEY);
+    if (!this.isCurrentSync(epoch)) return changed;
     let records: ThreadRecord[];
     try {
       records = await this.cloud.listThreads({
@@ -565,19 +716,24 @@ export class SyncRepository implements Repository {
         since: cursor,
       });
     } catch (error) {
+      if (!this.isCurrentSync(epoch)) return new Set();
       if (!cursor || !requiresFullResync(error)) throw error;
       await this.kv.delete(THREAD_CURSOR_KEY);
+      if (!this.isCurrentSync(epoch)) return new Set();
       cursor = undefined;
       records = await this.cloud.listThreads({ includeArchived: true, includeDeleted: true });
     }
     let maxUpdated = cursor ?? '';
     for (const rec of records) {
-      if (await this.mergeThread(rec)) changed.add(rec.id);
+      if (!this.isCurrentSync(epoch)) return new Set();
+      if (await this.mergeThread(rec, epoch)) changed.add(rec.id);
+      if (!this.isCurrentSync(epoch)) return new Set();
       if (rec.updatedAt > maxUpdated) maxUpdated = rec.updatedAt;
-      if (!rec.deletedAt && (await this.pullMessages(rec.id))) changed.add(rec.id);
+      if (!rec.deletedAt && (await this.pullMessages(rec.id, { epoch }))) changed.add(rec.id);
     }
+    if (!this.isCurrentSync(epoch)) return new Set();
     if (maxUpdated && maxUpdated !== cursor) await this.kv.set(THREAD_CURSOR_KEY, maxUpdated);
-    return changed;
+    return this.isCurrentSync(epoch) ? changed : new Set();
   }
 
   // ---- internals ----
@@ -585,7 +741,8 @@ export class SyncRepository implements Repository {
     return (await this.local.getSettings()).data.sync;
   }
 
-  private async applyOp(op: SyncOp): Promise<void> {
+  private async applyOp(op: SyncOp, epoch: number): Promise<void> {
+    if (!this.isCurrentSync(epoch)) return;
     switch (op.kind) {
       case 'thread.create':
         await this.cloud.createThread(op.body);
@@ -594,27 +751,42 @@ export class SyncRepository implements Repository {
         await this.cloud.updateThread(op.id, op.body);
         return;
       case 'thread.delete':
-        await this.cloud.deleteThread(op.id);
+        try {
+          await this.cloud.deleteThread(op.id);
+        } catch (error) {
+          if (!(error instanceof CloudError) || error.code !== 'not_found') throw error;
+        }
         return;
       case 'message.append':
-        await this.cloud.appendMessage(
-          op.threadId,
-          await this.buildAppendBody(op.threadId, op.id, op.body),
-        );
-        return;
+        {
+          const body = await this.buildAppendBody(op.threadId, op.id, op.body, epoch);
+          if (!this.isCurrentSync(epoch)) return;
+          await this.cloud.appendMessage(op.threadId, body);
+          return;
+        }
       case 'settings.save':
         {
-          const local = await this.local.getSettings();
+          await this.local.getSettings();
+          if (!this.isCurrentSync(epoch)) return;
           try {
             const updated = await this.cloud.patchSettings(op.patch, op.expectedRevision);
+            if (!this.isCurrentSync(epoch)) return;
             const { revision, ...updatedSettings } = updated;
-            await this.local.saveSettings(preserveDeviceSettings(updatedSettings, local));
+            const currentLocal = await this.local.getSettings();
+            if (!this.isCurrentSync(epoch)) return;
+            await this.local.saveSettings(stricterPrivacySettings(updatedSettings, currentLocal));
+            if (!this.isCurrentSync(epoch)) return;
             await this.kv.set(SETTINGS_REVISION_KEY, updated.revision);
           } catch (error) {
+            if (!this.isCurrentSync(epoch)) return;
             if (!(error instanceof CloudError) || error.code !== 'conflict') throw error;
             const latest = await this.cloud.getSettings();
+            if (!this.isCurrentSync(epoch)) return;
             const { revision, ...latestSettings } = latest;
-            await this.local.saveSettings(stricterPrivacySettings(latestSettings, local));
+            const currentLocal = await this.local.getSettings();
+            if (!this.isCurrentSync(epoch)) return;
+            await this.local.saveSettings(stricterPrivacySettings(latestSettings, currentLocal));
+            if (!this.isCurrentSync(epoch)) return;
             await this.kv.set(SETTINGS_REVISION_KEY, latest.revision);
             throw error;
           }
@@ -623,9 +795,11 @@ export class SyncRepository implements Repository {
     }
   }
 
-  private async mergeThread(rec: ThreadRecord): Promise<boolean> {
+  private async mergeThread(rec: ThreadRecord, epoch: number): Promise<boolean> {
+    if (!this.isCurrentSync(epoch)) return false;
     const incoming = threadFromRecord(rec);
     const existing = await this.local.getThread(rec.id);
+    if (!this.isCurrentSync(epoch)) return false;
     if (rec.deletedAt) {
       if (existing) {
         await this.local.deleteThread(rec.id);
@@ -644,25 +818,31 @@ export class SyncRepository implements Repository {
     return false;
   }
 
-  private async pullMessages(threadId: Id, opts?: { forceFull?: boolean }): Promise<boolean> {
+  private async pullMessages(threadId: Id, opts?: { forceFull?: boolean; epoch?: number }): Promise<boolean> {
+    const epoch = opts?.epoch ?? this.syncEpoch;
+    if (!this.isCurrentSync(epoch)) return false;
     const key = MSG_CURSOR_PREFIX + threadId;
     let cursor = await this.kv.get<string>(key);
     const localMessages = await this.local.listMessages(threadId);
+    if (!this.isCurrentSync(epoch)) return false;
     const forceFull = opts?.forceFull || localMessages.some(isStreamingAssistant);
     let records: MessageRecord[];
     try {
       records = await this.cloud.listMessages(threadId, forceFull ? undefined : { since: cursor });
     } catch (error) {
+      if (!this.isCurrentSync(epoch)) return false;
       if (forceFull || !cursor || !requiresFullResync(error)) throw error;
       await this.kv.delete(key);
+      if (!this.isCurrentSync(epoch)) return false;
       cursor = undefined;
       records = await this.cloud.listMessages(threadId);
     }
-    if (records.length === 0) return false;
+    if (!this.isCurrentSync(epoch) || records.length === 0) return false;
     const known = new Map(localMessages.map((m) => [m.id, m]));
     let maxCreated = cursor ?? '';
     let changed = false;
     for (const rec of records) {
+      if (!this.isCurrentSync(epoch)) return false;
       const existing = known.get(rec.id);
       const incoming = messageFromRecord(rec as MessageRecord);
       const reconciled = existing ? reconcileKnownMessage(existing, incoming) : incoming;
@@ -672,8 +852,9 @@ export class SyncRepository implements Repository {
       }
       if (rec.createdAt > maxCreated) maxCreated = rec.createdAt;
     }
+    if (!this.isCurrentSync(epoch)) return false;
     if (maxCreated && maxCreated !== cursor) await this.kv.set(key, maxCreated);
-    return changed;
+    return this.isCurrentSync(epoch) && changed;
   }
 
   /** On push, upload any local-only images of this message to Blob Storage (write SAS),
@@ -682,39 +863,52 @@ export class SyncRepository implements Repository {
     threadId: Id,
     id: Id,
     fallback: AppendMessageBody,
+    epoch: number,
   ): Promise<AppendMessageBody> {
+    if (!this.isCurrentSync(epoch)) return fallback;
     const message = (await this.local.listMessages(threadId)).find((m) => m.id === id);
+    if (!this.isCurrentSync(epoch)) return fallback;
     if (!message || (!message.images?.length && !message.attachments?.length)) return fallback;
     let changed = false;
     for (const img of message.images ?? []) {
+      if (!this.isCurrentSync(epoch)) return fallback;
       if (img.blobPath || !img.localBlobKey) continue;
       const blob = await this.local.getBlob(img.localBlobKey);
+      if (!this.isCurrentSync(epoch)) return fallback;
       if (!blob) continue;
       const contentType = imageContentType(img.outputFormat);
       const sas = await this.cloud.requestSas({ threadId, assetId: img.id, op: 'write', contentType });
+      if (!this.isCurrentSync(epoch)) return fallback;
       await uploadBlobToSas(this.fetchImpl, sas.url, blob, contentType);
+      if (!this.isCurrentSync(epoch)) return fallback;
       img.blobPath = sas.blobPath;
       changed = true;
     }
     for (const att of message.attachments ?? []) {
+      if (!this.isCurrentSync(epoch)) return fallback;
       if (att.blobPath || !att.localBlobKey) continue;
       // Only sync bytes for content types the asset endpoint allows; others stay local-only.
       if (!SYNCABLE_CONTENT_TYPES.has(att.mime)) continue;
       const blob = await this.local.getBlob(att.localBlobKey);
+      if (!this.isCurrentSync(epoch)) return fallback;
       if (!blob) continue;
       const sas = await this.cloud.requestSas({ threadId, assetId: att.id, op: 'write', contentType: att.mime });
+      if (!this.isCurrentSync(epoch)) return fallback;
       await uploadBlobToSas(this.fetchImpl, sas.url, blob, att.mime);
+      if (!this.isCurrentSync(epoch)) return fallback;
       att.blobPath = sas.blobPath;
       changed = true;
     }
-    if (changed)
+    if (changed && this.isCurrentSync(epoch))
       await this.local.updateMessage(id, { images: message.images, attachments: message.attachments });
     return appendBodyFromMessage(message);
   }
 
-  private async loadQueue(): Promise<SyncOp[]> {
+  private async loadQueue(epoch = this.syncEpoch): Promise<SyncOp[]> {
+    if (!this.isCurrentSync(epoch)) return [];
     if (hasTransactionalOutbox(this.local)) return this.local.listOutbox<SyncOp>();
     const queue = (await this.kv.get<Array<SyncOp | NewSyncOp>>(QUEUE_KEY)) ?? [];
+    if (!this.isCurrentSync(epoch)) return [];
     let migrated = false;
     const normalized = queue.map((operation) => {
       if ('operationId' in operation && operation.operationId) return operation as SyncOp;
@@ -737,7 +931,7 @@ export class SyncRepository implements Repository {
   private async enqueue(op: NewSyncOp): Promise<void> {
     await this.mutateQueue((queue) => [
       ...queue,
-      { ...op, operationId: newId() } as SyncOp,
+      { ...op, operationId: newId(), ...(op.kind === 'thread.create' ? { attempted: false } : {}) } as SyncOp,
     ]);
   }
 
@@ -759,7 +953,7 @@ export class SyncRepository implements Repository {
           operation.kind === 'settings.save' && operation.expectedRevision === expectedRevision,
       );
       if (pending) {
-        pending.patch = {
+        const mergedPatch = {
           ...pending.patch,
           ...patch,
           personalization: {
@@ -773,6 +967,7 @@ export class SyncRepository implements Repository {
           voice: { ...pending.patch.voice, ...patch.voice },
           data: { ...pending.patch.data, ...patch.data },
         };
+        queue[queue.indexOf(pending)] = { kind: 'settings.save', patch: mergedPatch, expectedRevision, operationId: newId() };
       } else queue.push({ kind: 'settings.save', patch, expectedRevision, operationId: newId() });
       return queue;
     });
@@ -786,7 +981,7 @@ export class SyncRepository implements Repository {
         (op): op is Extract<SyncOp, { kind: 'thread.update' }> =>
           op.kind === 'thread.update' && op.id === id,
       );
-      if (pending) Object.assign(pending.body, body);
+      if (pending) queue[queue.indexOf(pending)] = { kind: 'thread.update', id, body: { ...pending.body, ...body }, operationId: newId() };
       else queue.push({ kind: 'thread.update', id, body, operationId: newId() });
       return queue;
     });
@@ -799,7 +994,8 @@ export class SyncRepository implements Repository {
    */
   private async enqueueThreadDelete(id: Id): Promise<void> {
     await this.mutateQueue((current) => {
-      const unsynced = current.some((op) => op.kind === 'thread.create' && op.id === id);
+      const creations = current.filter((op) => op.kind === 'thread.create' && op.id === id);
+      const unsynced = creations.length > 0 && creations.every((op) => op.attempted === false);
       const kept = current.filter((op) => {
         if (op.kind === 'thread.create' || op.kind === 'thread.update') return op.id !== id;
         if (op.kind === 'message.append') return op.threadId !== id;

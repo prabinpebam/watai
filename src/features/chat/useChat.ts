@@ -110,8 +110,10 @@ export function useChat(threadId: string, temporary = false) {
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [indexing, setIndexing] = useState(false);
   const busyRef = useRef(false);
+  const unacknowledgedPromptsRef = useRef(new Map<string, Message>());
   const loadedThreadRef = useRef<string | null>(null);
   const run = useRuns((s) => s.runs[threadId]);
+  const handoffs = useRuns((s) => s.handoffs[threadId]);
   const threadRev = useUi((s) => s.threadRev[threadId] ?? 0);
   const setThreadLock = useUi((s) => s.setThreadLock);
   const lock = useUi((s) => s.threadLocks[threadId] ?? null);
@@ -131,7 +133,11 @@ export function useChat(threadId: string, temporary = false) {
     setLoadError(false);
     repo.listMessages(threadId).then((m) => {
       if (live) {
-        setPersisted(m);
+        const observedIds = new Set(m.map(message => message.id));
+        for (const id of observedIds) unacknowledgedPromptsRef.current.delete(id);
+        const unacknowledged = [...unacknowledgedPromptsRef.current.values()]
+          .filter(message => message.threadId === threadId && !observedIds.has(message.id));
+        setPersisted([...m, ...unacknowledged]);
         loadedThreadRef.current = threadId;
         setLoading(false);
       }
@@ -187,7 +193,15 @@ export function useChat(threadId: string, temporary = false) {
 
   // Render persisted + the in-flight run message as one stable, chronologically ordered list, so
   // a streaming response keeps its slot even when a concurrent prompt arrives from another device.
-  const messages = useMemo(() => orderMessages(persisted, run?.message), [persisted, run]);
+  const messages = useMemo(() => {
+    const visible = new Map(persisted.map(message => [message.id, message]));
+    for (const reply of handoffs ?? []) visible.set(reply.id, reply);
+    return orderMessages([...visible.values()], run?.message);
+  }, [persisted, run, handoffs]);
+
+  useEffect(() => {
+    useRuns.getState().acknowledgeHandoffs(threadId, persisted);
+  }, [threadId, persisted]);
 
   const send = useCallback(
     async (text: string, files?: File[], skillNames?: string[], librarySelections?: StagedLibraryItem[]) => {
@@ -239,6 +253,7 @@ export function useChat(threadId: string, temporary = false) {
         ...(attachments.length ? { attachments } : {}),
       };
       optimisticMessageId = userMsg.id;
+      unacknowledgedPromptsRef.current.set(userMsg.id, userMsg);
       setPersisted((prev) => [...prev, userMsg]); // optimistic — reload dedupes by id
       await repo.appendMessage(userMsg);
       // Start the run NOW so the assistant bubble appears alongside the prompt — never gated by a
@@ -314,11 +329,15 @@ export function useChat(threadId: string, temporary = false) {
           ...(model ? { model } : {}),
         },
         prepare,
+        userMsg,
       );
       useUi.getState().bumpThreads();
       return { accepted: true };
       } catch (error) {
-        if (optimisticMessageId) setPersisted((current) => current.filter((message) => message.id !== optimisticMessageId));
+        if (optimisticMessageId) {
+          unacknowledgedPromptsRef.current.delete(optimisticMessageId);
+          setPersisted((current) => current.filter((message) => message.id !== optimisticMessageId));
+        }
         throw error;
       } finally {
         busyRef.current = false;
@@ -353,6 +372,7 @@ export function useChat(threadId: string, temporary = false) {
         const tools = await serverRunTools(explicitSkills.length > 0);
         return tools.length ? { tools } : {};
       },
+      lastUser,
     );
   }, [threadId]);
 

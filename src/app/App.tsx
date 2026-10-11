@@ -124,11 +124,14 @@ function useSetupState(): { state: SetupState; retry: () => void } {
     (async () => {
       try {
         // Cloud-account-only: a signed-in Entra account is required.
-        if (!(await boundedBootstrap(isSignedIn()))) {
+        const signedIn = await boundedBootstrap(isSignedIn());
+        if (!live) return;
+        if (!signedIn) {
           if (live) setState('no-session');
           return;
         }
         const me = await boundedBootstrap(loadMe(attempt > 0));
+        if (!live) return;
         if (!me) throw new Error('Access status unavailable.');
         if (!me.isInvited) {
           if (live) setState('no-access');
@@ -137,6 +140,7 @@ function useSetupState(): { state: SetupState; retry: () => void } {
         // Credentials live in the server vault now; wipe anything a pre-cloud build stored locally.
         void clearApiCredentials();
         const configured = (await boundedBootstrap(cloudApi.getCredentialStatus())).configured;
+        if (!live) return;
         rememberConfigured(configured);
         if (live) setState(configured ? 'ready' : 'no-config');
       } catch {

@@ -76,6 +76,7 @@ export async function startRecording(deviceId?: string): Promise<Recorder> {
     };
     let canceled = false;
     let stopPromise: Promise<Blob> | null = null;
+    let rejectStop: ((error: Error) => void) | null = null;
     const interruptionListeners = new Set<() => void>();
     const interrupted = () => {
       if (!cleaned && !canceled) interruptionListeners.forEach((callback) => callback());
@@ -94,24 +95,35 @@ export async function startRecording(deviceId?: string): Promise<Recorder> {
       stop: () => {
         if (stopPromise) return stopPromise;
         stopPromise = new Promise<Blob>((resolve, reject) => {
+          rejectStop = reject;
           const fail = (message: string) => {
+            rejectStop = null;
             cleanup();
             reject(new Error(message));
           };
           rec!.onerror = () => fail('Audio recording failed.');
           rec!.onstop = () => {
+            rejectStop = null;
             cleanup();
             if (canceled) return reject(new Error('Audio recording was canceled.'));
             const mime = rec!.mimeType || chunks.find((chunk) => chunk.type)?.type || requestedMime || 'application/octet-stream';
             resolve(new Blob(chunks, { type: mime }));
           };
           if (rec!.state === 'inactive') fail('Audio recording ended unexpectedly.');
-          else rec!.stop();
+          else {
+            try {
+              rec!.stop();
+            } catch {
+              fail('Audio recording failed.');
+            }
+          }
         });
         return stopPromise;
       },
       cancel: () => {
         canceled = true;
+        rejectStop?.(new Error('Audio recording was canceled.'));
+        rejectStop = null;
         rec!.ondataavailable = null;
         rec!.onerror = null;
         rec!.onstop = null;
@@ -157,18 +169,25 @@ export interface InputMonitor {
 
 export async function monitorInput(deviceId?: string): Promise<InputMonitor> {
   const stream = await getInputStream(deviceId);
-  const audioCtx = new AudioContext();
-  const source = audioCtx.createMediaStreamSource(stream);
-  const analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 256;
-  source.connect(analyser);
-  return {
-    analyser,
-    stop: () => {
-      stream.getTracks().forEach((t) => t.stop());
-      audioCtx.close().catch(() => undefined);
-    },
+  let audioCtx: AudioContext | undefined;
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    stream.getTracks().forEach(track => track.stop());
+    void audioCtx?.close().catch(() => undefined);
   };
+  try {
+    audioCtx = new AudioContext();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    return { analyser, stop };
+  } catch (error) {
+    stop();
+    throw error;
+  }
 }
 
 /** Enumerate available audio input devices. Labels are only populated once mic permission is

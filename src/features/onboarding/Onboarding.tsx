@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { Avatar, Button, Field, InlineAlert, Segmented, Spinner } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { signInRedirect } from '../../auth/cloudAuth';
 import { normalizeBaseUrl } from '../../data/secureStore';
 import { useUi } from '../../state/store';
-import { DEFAULT_SETTINGS } from '../../lib/types';
-import { repo, cloudApi } from '../../data';
+import { cloudApi } from '../../data';
 import { Logo as BrandLogo } from '../../design/Logo';
 
 type ModelKey = 'chat' | 'transcribe' | 'image' | 'tts';
@@ -101,6 +100,8 @@ function KeyWizard() {
   const [tts, setTts] = useState('gpt-4o-mini-tts');
   const [effort, setEffort] = useState<'minimal' | 'low' | 'medium' | 'high'>('medium');
   const [testing, setTesting] = useState(false);
+  const operation = useRef(0);
+  useEffect(() => () => { operation.current += 1; }, []);
   const [statuses, setStatuses] = useState<Record<ModelKey, ModelTestStatus>>({
     chat: 'idle',
     transcribe: 'idle',
@@ -121,12 +122,14 @@ function KeyWizard() {
   });
 
   const finish = async () => {
+    const current = ++operation.current;
     setTesting(true);
     try {
       await cloudApi.putCredentials(vaultBody());
-      await repo.saveSettings(DEFAULT_SETTINGS);
+      if (current !== operation.current) return;
       navigate('/onboarding/mic');
     } catch (e) {
+      if (current !== operation.current) return;
       pushToast(e instanceof Error ? e.message : 'Could not save your keys.', 'error');
       setTesting(false);
     }
@@ -135,13 +138,16 @@ function KeyWizard() {
   // Store the keys server-side, then confirm only the chat model responds. Optional model probes
   // are user-triggered in their feature flows so onboarding never creates surprise paid requests.
   const runTest = async () => {
+    const current = ++operation.current;
     setTesting(true);
     setStatuses({ chat: 'testing', transcribe: 'idle', image: 'idle', tts: 'idle' });
     try {
       await cloudApi.putCredentials(vaultBody());
+      if (current !== operation.current) return;
       const { text } = await cloudApi.chatComplete([
         { role: 'user', content: 'Reply with the single word OK.' },
       ]);
+      if (current !== operation.current) return;
       setStatuses({
         chat: text ? { ok: true } : { ok: false, detail: 'No response' },
         transcribe: 'idle',
@@ -149,6 +155,7 @@ function KeyWizard() {
         tts: 'idle',
       });
     } catch (e) {
+      if (current !== operation.current) return;
       setStatuses({
         chat: { ok: false, detail: e instanceof Error ? e.message : 'failed' },
         transcribe: 'idle',
@@ -156,7 +163,7 @@ function KeyWizard() {
         tts: 'idle',
       });
     } finally {
-      setTesting(false);
+      if (current === operation.current) setTesting(false);
     }
   };
 
@@ -284,10 +291,13 @@ function KeyWizard() {
             </Button>
           </div>
           <div className="onboard__actions">
-            <Button variant="ghost" onClick={() => setStep(1)}>
+            <Button variant="ghost" disabled={testing} onClick={() => {
+              setStatuses({ chat: 'idle', transcribe: 'idle', image: 'idle', tts: 'idle' });
+              setStep(1);
+            }}>
               Back
             </Button>
-            <Button variant="primary" full onClick={finish}>
+            <Button variant="primary" full disabled={testing} onClick={finish}>
               Finish
             </Button>
           </div>

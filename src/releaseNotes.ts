@@ -12,6 +12,32 @@ export function formatDeploymentTimestamp(value: string): string {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '0.2.3',
+    deployedAt: '2026-09-13T12:00:27Z',
+    apiDeployedAt: '2026-09-13T18:29:13Z',
+    title: 'Transparent backgrounds for chat images',
+    changes: [
+      'Chat requests for transparent backgrounds or background removal can select native alpha transparency',
+      'Image generation and edits send the background option and preserve PNG output',
+      'Uses your configured image deployment and saved key; requires transparent-background support',
+      'Provider-generated alpha pixels still require manual validation',
+      'API worker activation verified through OneDeploy; earlier upload checks did not verify active code',
+    ],
+  },
+  {
+    version: '0.2.2',
+    deployedAt: '2026-09-11T12:30:37Z',
+    apiDeployedAt: '2026-09-11T12:29:18Z',
+    title: 'Stable chat chronology throughout a response',
+    changes: [
+      'Submitted prompts remain visible while background history refreshes',
+      'Prompt and reply order stays fixed from the first bubble through server streaming',
+      'Late updates from an older response cannot replace the current reply',
+      'Completed replies remain visible until persisted history takes over',
+      'API package healthy after restart at 2026-09-11 12:29:55 UTC',
+    ],
+  },
+  {
     version: '0.2.1',
     deployedAt: '2026-09-11T03:53:57Z',
     apiDeployedAt: '2026-09-11T03:50:53Z',

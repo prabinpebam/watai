@@ -1,7 +1,21 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { LibraryImage } from './LibraryImage';
 
 describe('LibraryImage', () => {
+  it.each(['source-change', 'load-failure'])('ignores a stale decode completion after %s', async change => {
+    let resolve!: () => void;
+    const decoded = new Promise<void>(done => { resolve = done; });
+    const { rerender } = render(<LibraryImage src="old.png" alt="Preview" />);
+    const full = screen.getByRole('img', { name: 'Preview' });
+    Object.defineProperty(full, 'decode', { configurable: true, value: () => decoded });
+    fireEvent.load(full);
+    if (change === 'source-change') rerender(<LibraryImage src="new.png" alt="Preview" />);
+    else fireEvent.error(full);
+    await act(async () => resolve());
+    expect(full.closest('.library-image')).not.toHaveClass('is-loaded');
+    if (change === 'load-failure') expect(full.closest('.library-image')).toHaveClass('is-failed');
+  });
+
   it('keeps a blurred preview until the full image decodes, then reveals it', async () => {
     render(<LibraryImage src="full.png" previewSrc="preview.png" alt="Generated poster" />);
     const full = screen.getByRole('img', { name: 'Generated poster' });

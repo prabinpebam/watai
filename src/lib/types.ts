@@ -208,6 +208,7 @@ export interface Message {
   /** Images surfaced by web search (inline strip + one-tap "Use" to attach). */
   webImages?: WebImage[];
   memoryRefs?: MessageMemoryRef[];
+  memoryDegradedReason?: 'timeout' | 'cancelled' | 'unavailable';
   /** Files the agent generated this message (code interpreter outputs). */
   artifacts?: Artifact[];
 }
@@ -363,6 +364,9 @@ export function effectiveMemorySettings(settings: Settings): MemorySettings {
     referenceHistory: settings.personalization.memoryEnabled,
     autoExtract: settings.personalization.memoryEnabled,
   };
+  if (settings.personalization.memoryEnabled !== true || memory.enabled !== true) {
+    return { ...memory, enabled: false, referenceSaved: false, referenceHistory: false, autoExtract: false, learnChats: 'off' };
+  }
   return {
     ...memory,
     learnChats: memory.learnChats ?? (memory.autoExtract && memory.referenceHistory ? 'automatic' : 'off'),

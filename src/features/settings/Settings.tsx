@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSettings } from './useSettings';
 import { SkillsBody } from '../skills/SkillsBody';
@@ -7,15 +7,16 @@ import { VoicePicker } from '../voice/VoicePicker';
 import { Avatar, Button, Field, IconButton, InlineAlert, Segmented, SelectMenu, Spinner, Switch, TextAreaField } from '../../design/ui';
 import { Icon } from '../../design/icons';
 import { Logo } from '../../design/Logo';
-import { ConfirmDialog } from '../../design/overlays';
+import { ConfirmDialog, Modal } from '../../design/overlays';
+import { saveFile } from '../../lib/saveFile';
 import { clearUiOwnerData, useUi } from '../../state/store';
 import { useIsExpanded } from '../../lib/hooks';
 import { formatBytes } from '../../lib/format';
-import { accountLocalStorageKey, repo, cloudApi, realtime } from '../../data';
+import { accountLocalStorageKey, currentAccountKvStore, repo, cloudApi, realtime } from '../../data';
 import { kvGet } from '../../data/db';
 import { signOut, getSignedInAccount } from '../../auth/cloudAuth';
 import { useMe } from '../../auth/access';
-import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo, MemoryModelConfig, MemoryProfileItem, MemoryProfileView, MemoryRecord, MemoryStatus } from '../../data/cloud/types';
+import type { CredentialCapabilities, CredentialStatus, InviteRecord, MeInfo, MemoryModelConfig, MemoryProfileItem, MemoryProfileView, MemoryRecord, MemoryStatus, MemoryTransferArchive } from '../../data/cloud/types';
 import { normalizeBaseUrl } from '../../data/secureStore';
 import { normalizeChatModelOptions } from '../../lib/modelOptions';
 import { DEFAULT_SETTINGS, effectiveMemorySettings } from '../../lib/types';
@@ -563,7 +564,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   );
 }
 
-function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
+export function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
   const pushToast = useUi((s) => s.pushToast);
   const [status, setStatus] = useState<CredentialStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -574,7 +575,9 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
     chatOptions: normalizeChatModelOptions('model-router'),
   });
   const [tavilyKey, setTavilyKey] = useState('');
+  const [tavilyEdited, setTavilyEdited] = useState(false);
   const [kbStore, setKbStore] = useState('');
+  const [kbEdited, setKbEdited] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -623,12 +626,15 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
           ...(models.tts?.trim() ? { tts: models.tts.trim() } : {}),
         },
         ...(key.trim() ? { key: key.trim() } : {}),
-        ...(tavilyKey.trim() ? { tavilyKey: tavilyKey.trim() } : {}),
-        ...(kbStore.trim() ? { knowledgeBaseVectorStoreId: kbStore.trim() } : {}),
+        ...(tavilyEdited ? { tavilyKey: tavilyKey.trim() || null } : {}),
+        ...(kbEdited ? { knowledgeBaseVectorStoreId: kbStore.trim() || null } : {}),
       });
       setStatus(next);
       setKey('');
       setTavilyKey('');
+      setTavilyEdited(false);
+      setKbStore(next.knowledgeBaseVectorStoreId ?? '');
+      setKbEdited(false);
       ctx.onModelSaved(next.models?.chat ?? models.chat);
       pushToast('Saved', 'success');
     } catch (e) {
@@ -699,22 +705,33 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
             value={models.tts ?? ''}
             onChange={(e) => updateModels({ tts: e.target.value })}
           />
-          <Field
-            label="Web search key (Tavily) — optional"
-            type="password"
-            placeholder={
-              status?.tavilyConfigured ? `Saved ·••${status.tavilyHint ?? ''} — leave blank to keep` : ''
-            }
-            hint="Enables server-side web search."
-            value={tavilyKey}
-            onChange={(e) => setTavilyKey(e.target.value)}
-            autoComplete="off"
-          />
+          <div className="row" style={{ alignItems: 'flex-end', gap: 'var(--space-2)' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Field
+                label="Web search key (Tavily) — optional"
+                type="password"
+                placeholder={tavilyEdited && !tavilyKey.trim()
+                  ? 'Removal pending'
+                  : status?.tavilyConfigured ? `Saved ·••${status.tavilyHint ?? ''} — leave blank to keep` : ''}
+                hint="Enables server-side web search."
+                value={tavilyKey}
+                onChange={(event) => { setTavilyKey(event.target.value); setTavilyEdited(true); }}
+                disabled={saving}
+                autoComplete="off"
+              />
+            </div>
+            {status?.tavilyConfigured && (
+              <IconButton name="trash" label="Remove saved web search key"
+                disabled={saving || (tavilyEdited && !tavilyKey.trim())}
+                onClick={() => { setTavilyKey(''); setTavilyEdited(true); }} />
+            )}
+          </div>
           <Field
             label="Account knowledge base (vector store id) — optional"
             hint="Searched as a fallback alongside each chat's own files."
             value={kbStore}
-            onChange={(e) => setKbStore(e.target.value)}
+            onChange={(event) => { setKbStore(event.target.value); setKbEdited(true); }}
+            disabled={saving}
             autoCapitalize="off"
             spellCheck={false}
           />
@@ -732,13 +749,36 @@ function ModelsBody({ ctx }: { ctx: SettingsCtx }) {
 
 export function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
   const { settings, setSettings } = ctx;
-  const pushToast = useUi((s) => s.pushToast);
+  const [memorySaving, setMemorySaving] = useState(false);
+  const [failedMemoryPatch, setFailedMemoryPatch] = useState<Partial<MemorySettings> | null>(null);
+  const memorySavePending = useRef(false);
+  const lifetime = useRef({ active: true, scope: currentAccountKvStore() });
+  const isCurrentLifetime = (token = lifetime.current) => token.active && token.scope === currentAccountKvStore();
+  useEffect(() => {
+    const token = { active: true, scope: currentAccountKvStore() };
+    lifetime.current = token;
+    return () => { token.active = false; };
+  }, []);
   const p = settings.personalization;
   const memory = effectiveMemorySettings(settings);
   const learnMode = memory.paused ? 'off' : memory.learnChats ?? (memory.autoExtract ? 'automatic' : 'off');
-  const setMemory = (patch: Partial<MemorySettings>) => {
+  const setMemory = async (patch: Partial<MemorySettings>) => {
+    const token = lifetime.current;
+    if (!isCurrentLifetime(token) || memorySavePending.current) return;
+    memorySavePending.current = true;
+    setMemorySaving(true);
+    setFailedMemoryPatch(null);
     const nextMemory = { ...memory, ...patch };
-    setSettings({ ...settings, personalization: { ...p, memoryEnabled: nextMemory.enabled, memory: nextMemory } });
+    try {
+      await setSettings({ ...settings, personalization: { ...p, memoryEnabled: nextMemory.enabled, memory: nextMemory } });
+    } catch {
+      if (isCurrentLifetime(token)) setFailedMemoryPatch({ ...patch });
+    } finally {
+      if (isCurrentLifetime(token)) {
+        memorySavePending.current = false;
+        setMemorySaving(false);
+      }
+    }
   };
   return (
     <>
@@ -772,9 +812,9 @@ export function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
           </div>
           <Switch
             checked={memory.enabled}
+            disabled={memorySaving}
             onChange={(v) => {
-              setMemory({ enabled: v, referenceSaved: v ? memory.referenceSaved : false, autoExtract: v ? memory.autoExtract : false, referenceHistory: v ? memory.referenceHistory : false, learnChats: v ? memory.learnChats : 'off' });
-              pushToast(v ? 'Memory enabled' : 'Memory disabled');
+              void setMemory({ enabled: v, referenceSaved: v, autoExtract: false, referenceHistory: false, learnChats: 'off', paused: false });
             }}
             label="Memory"
           />
@@ -784,7 +824,7 @@ export function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
             <div className="setting-row__title">Use saved memories</div>
             <div className="setting-row__sub">Include relevant saved memories in future server-generated replies.</div>
           </div>
-          <Switch checked={memory.enabled && memory.referenceSaved} disabled={!memory.enabled} onChange={(v) => setMemory({ referenceSaved: v })} label="Use saved memories" />
+          <Switch checked={memory.enabled && memory.referenceSaved} disabled={!memory.enabled || memorySaving} onChange={(v) => setMemory({ referenceSaved: v })} label="Use saved memories" />
         </div>
         <div className="setting-row">
           <div className="setting-row__body">
@@ -800,7 +840,7 @@ export function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
               paused: false,
             })}
             options={[{ value: 'off', label: 'Off' }, { value: 'automatic', label: 'Automatic' }]}
-            disabled={!memory.enabled}
+            disabled={!memory.enabled || memorySaving}
           />
         </div>
         <div className="setting-row">
@@ -808,8 +848,14 @@ export function PersonalizationBody({ ctx }: { ctx: SettingsCtx }) {
             <div className="setting-row__title">Pause learning</div>
             <div className="setting-row__sub">Keep existing memory available, but stop creating automatic memories.</div>
           </div>
-          <Switch checked={memory.enabled && memory.paused} disabled={!memory.enabled} onChange={(v) => setMemory({ paused: v })} label="Pause learning" />
+          <Switch checked={memory.enabled && memory.paused} disabled={!memory.enabled || memorySaving} onChange={(v) => setMemory({ paused: v })} label="Pause learning" />
         </div>
+        {failedMemoryPatch && isCurrentLifetime() && (
+          <div className="setting-row">
+            <div className="setting-row__body"><InlineAlert tone="danger">Memory preference could not be saved. Retry the change.</InlineAlert></div>
+            <Button variant="secondary" onClick={() => setMemory(failedMemoryPatch)}>Retry save</Button>
+          </div>
+        )}
       </div>
       <MemoryManager enabled={memory.enabled} />
     </>
@@ -835,9 +881,147 @@ function memoryStateLabel(item: MemoryRecord): string {
   if (item.status === 'deleted') return 'Excluded';
   if (item.status === 'invalidated') return 'Outdated';
   if (item.status === 'suppressed') return 'Hidden';
+  const validAt = item.validAt === undefined ? undefined : Date.parse(item.validAt);
+  const invalidAt = item.invalidAt === undefined ? undefined : Date.parse(item.invalidAt);
+  if ((validAt !== undefined && !Number.isFinite(validAt)) || (invalidAt !== undefined && !Number.isFinite(invalidAt))) return 'Validity unknown';
+  if (validAt !== undefined && invalidAt !== undefined && validAt > invalidAt) return 'Validity unknown';
+  const now = Date.now();
+  if (invalidAt !== undefined && invalidAt <= now) return 'Expired';
+  if (validAt !== undefined && validAt > now) return 'Not yet valid';
   if (item.confirmation === 'approved') return 'Saved';
   if (item.confirmation === 'automatic') return 'Automatic';
   return 'Legacy unknown';
+}
+
+export function MemoryArchiveTools() {
+  const input = useRef<HTMLInputElement>(null);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const focusFrame = useRef<number | undefined>();
+  const operation = useRef<AbortController | null>(null);
+  const lifetime = useRef({ active: true, scope: currentAccountKvStore() });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [prepared, setPrepared] = useState<{ archive: MemoryTransferArchive; blob: Blob; exported: boolean } | null>(null);
+  const [page, setPage] = useState(0);
+  const current = (token = lifetime.current) => token.active && token.scope === currentAccountKvStore();
+  useEffect(() => {
+    const token = { active: true, scope: currentAccountKvStore() };
+    lifetime.current = token;
+    return () => {
+      token.active = false;
+      operation.current?.abort();
+      if (focusFrame.current !== undefined) cancelAnimationFrame(focusFrame.current);
+    };
+  }, []);
+
+  const inspect = async (file?: File) => {
+    const token = lifetime.current;
+    if (!current(token)) return;
+    if (focusFrame.current !== undefined) cancelAnimationFrame(focusFrame.current);
+    operation.current?.abort();
+    const controller = new AbortController();
+    operation.current = controller;
+    setBusy(true);
+    setError(null);
+    setPrepared(null);
+    setPage(0);
+    const check = () => {
+      controller.signal.throwIfAborted();
+      if (!current(token) || operation.current !== controller) throw new Error('Archive operation cancelled.');
+    };
+    let onAbort!: () => void;
+    const aborted = new Promise<never>((_resolve, reject) => { onAbort = () => reject(controller.signal.reason); });
+    controller.signal.addEventListener('abort', onAbort, { once: true });
+    const timer = setTimeout(() => controller.abort(new Error('Archive request timed out. Try again.')), 15_000);
+    const read = async () => {
+      check();
+      let archive: MemoryTransferArchive;
+      if (file) {
+        if (file.size > 72 * 1024 * 1024) throw new Error('Archive exceeds the 72 MiB limit.');
+        const text = await file.text();
+        check();
+        let payload: unknown;
+        try { payload = JSON.parse(text); } catch { throw new Error('Archive is not valid JSON.'); }
+        const preview = await cloudApi.previewMemoryArchive(payload, controller.signal);
+        check();
+        if (preview.added !== 0 || preview.skipped !== 0 || !Array.isArray(preview.rejected) || preview.rejected.length) throw new Error('Archive preview was not confirmed.');
+        archive = preview.archive;
+      } else {
+        archive = await cloudApi.exportMemoryArchive(controller.signal);
+        check();
+      }
+      if (archive?.version !== 2 || archive.scope !== 'active-records' || typeof archive.exportedAt !== 'string' ||
+          !Array.isArray(archive.memories) || archive.memories.length > 1000 || archive.memories.some(record =>
+            !record || typeof record.id !== 'string' || typeof record.text !== 'string' || record.status !== 'active')) {
+        throw new Error('Unsupported memory archive response.');
+      }
+      const blob = new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' });
+      if (blob.size > 72 * 1024 * 1024) throw new Error('Archive exceeds the 72 MiB limit.');
+      return { archive, blob, exported: !file };
+    };
+    try {
+      const result = await Promise.race([read(), aborted]);
+      check();
+      setPrepared(result);
+    } catch (failure) {
+      if (current(token) && operation.current === controller) setError(failure instanceof Error ? failure.message : 'Archive could not be loaded.');
+    } finally {
+      clearTimeout(timer);
+      controller.signal.removeEventListener('abort', onAbort);
+      if (operation.current === controller) {
+        operation.current = null;
+        if (current(token)) setBusy(false);
+      }
+    }
+  };
+
+  const shown = current() ? prepared : null;
+  const pages = Math.max(1, Math.ceil((shown?.archive.memories.length ?? 0) / 20));
+  const close = () => {
+    const token = lifetime.current;
+    const target = trigger.current;
+    setPrepared(null);
+    focusFrame.current = requestAnimationFrame(() => {
+      if (current(token) && trigger.current === target && target?.isConnected) target.focus();
+    });
+  };
+  return (
+    <>
+      <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-3)' }}>
+        <Button size="sm" variant="outline" icon="download" disabled={busy} onClick={event => { trigger.current = event.currentTarget; void inspect(); }}>Export archive</Button>
+        <Button size="sm" variant="outline" icon="upload" onClick={event => { trigger.current = event.currentTarget; input.current?.click(); }}>Preview archive</Button>
+        <input ref={input} type="file" accept=".json,application/json" aria-label="Memory archive file" hidden onChange={event => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = '';
+          if (file) void inspect(file);
+        }} />
+        {busy && <><Spinner size="sm" /><IconButton name="close" label="Cancel archive operation" onClick={() => operation.current?.abort(new Error('Archive operation cancelled.'))} /></>}
+      </div>
+      {error && current() && <InlineAlert tone="danger">{error}</InlineAlert>}
+      {shown && <Modal title="Memory archive" onClose={close} footer={
+        <Button icon="download" onClick={() => {
+          if (current()) void saveFile(shown.blob, 'watai-memory-active-v2.json');
+        }}>Download archive</Button>
+      }>
+        <div className="col" style={{ gap: 'var(--space-3)' }}>
+          <div>{shown.exported ? 'Export ready' : 'Preview only. No records imported.'}</div>
+          <div className="setting-row__sub">Active records only. Exclusion ledgers and restore are not included.</div>
+          <div>{shown.archive.memories.length} records · {shown.archive.exportedAt}</div>
+          <div className="col" style={{ gap: 'var(--space-2)', maxHeight: 320, overflowY: 'auto', overflowWrap: 'anywhere' }}>
+            {shown.archive.memories.slice(page * 20, (page + 1) * 20).map((record, index) => <div key={`${record.id}:${index}`}>
+              <div>{record.text}</div>
+              <div className="setting-row__sub">{record.kind} · {record.confirmation ?? 'unknown'} · v{record.revision ?? '?'}</div>
+            </div>)}
+          </div>
+          <div className="row" style={{ gap: 'var(--space-2)', justifyContent: 'center' }}>
+            <IconButton name="chevron_left" label="Previous archive page" disabled={page === 0} onClick={() => setPage(value => value - 1)} />
+            <span>{page + 1} / {pages}</span>
+            <IconButton name="chevron_right" label="Next archive page" disabled={page + 1 >= pages} onClick={() => setPage(value => value + 1)} />
+          </div>
+        </div>
+      </Modal>}
+    </>
+  );
 }
 
 export function MemoryManager({ enabled }: { enabled: boolean }) {
@@ -848,119 +1032,181 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
   const [status, setStatus] = useState<Extract<MemoryStatus, 'active' | 'suppressed' | 'invalidated' | 'deleted'>>('active');
   const [text, setText] = useState('');
   const [kind, setKind] = useState<Exclude<MemoryKind, 'thread_summary' | 'entity'>>('fact');
-  const [loading, setLoading] = useState(true);
+  const [pendingLoad, setLoading] = useState(true);
+  const [settledLoadKey, setSettledLoadKey] = useState<string | null>(null);
+  const requestedLoadKey = view === 'structured' ? 'structured' : `evidence:${status}`;
+  const loading = pendingLoad || settledLoadKey !== requestedLoadKey;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editText, setEditText] = useState('');
-  const [editKind, setEditKind] = useState<Exclude<MemoryKind, 'thread_summary' | 'entity'>>('fact');
+  type MemoryEditKind = Exclude<MemoryKind, 'thread_summary' | 'entity'>;
+  const [editDraft, setEditDraft] = useState<{ id: string; text: string; kind: MemoryEditKind; revision?: number } | null>(null);
+  const editingId = editDraft?.id ?? null;
+  const editText = editDraft?.text ?? '';
+  const editKind = editDraft?.kind ?? 'fact';
+  const setEditText = (text: string) => setEditDraft(current => current ? { ...current, text } : null);
+  const setEditKind = (kind: MemoryEditKind) => setEditDraft(current => current ? { ...current, kind } : null);
   const [activeById, setActiveById] = useState<Map<string, MemoryRecord>>(new Map());
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; text: string } | null>(null);
+  const pendingPatches = useRef(new Set<string>());
+  const [pendingPatchIds, setPendingPatchIds] = useState<ReadonlySet<string>>(new Set());
+  const loadGeneration = useRef(0);
+  const lifetime = useRef({ active: true, scope: currentAccountKvStore() });
+  const isCurrentLifetime = (token = lifetime.current) => token.active && token.scope === currentAccountKvStore();
+
+  useEffect(() => {
+    const token = { active: true, scope: currentAccountKvStore() };
+    lifetime.current = token;
+    return () => { token.active = false; };
+  }, []);
 
   const load = async (nextStatus = status) => {
+    const token = lifetime.current;
+    if (!isCurrentLifetime(token)) return;
+    const generation = ++loadGeneration.current;
+    const loadKey = view === 'structured' ? 'structured' : `evidence:${nextStatus}`;
     setLoading(true);
     setError(null);
     try {
       const [nextItems, nextProfile] = await Promise.all([
-        repo.listMemory({ status: nextStatus, limit: 100 }),
-        repo.getMemoryProfile(),
+        repo.listMemory({ status: view === 'structured' ? 'active' : nextStatus, limit: 100 }),
+        view === 'structured' ? repo.getMemoryProfile() : Promise.resolve(null),
       ]);
+      if (!isCurrentLifetime(token) || generation !== loadGeneration.current) return;
       setItems(nextItems);
-      setProfile(nextProfile);
-      const active = nextStatus === 'active' ? nextItems : await repo.listMemory({ status: 'active', limit: 100 });
-      setActiveById(new Map(active.map((m) => [m.id, m])));
-      setRemovedIds(new Set());
+      if (view === 'structured') setProfile(nextProfile);
+      if (view === 'structured' || nextStatus === 'active') setActiveById(new Map(nextItems.map((m) => [m.id, m])));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load memory.');
+      if (isCurrentLifetime(token) && generation === loadGeneration.current) setError(e instanceof Error ? e.message : 'Could not load memory.');
     } finally {
-      setLoading(false);
+      if (isCurrentLifetime(token) && generation === loadGeneration.current) {
+        setSettledLoadKey(loadKey);
+        setLoading(false);
+      }
     }
   };
 
+  const currentLoad = useRef(load);
+  currentLoad.current = load;
+
   useEffect(() => {
     void load();
-  }, [status]);
+    return () => { loadGeneration.current += 1; };
+  }, [status, view]);
 
   useEffect(() => {
     let off: (() => void) | undefined;
+    const token = lifetime.current;
     void realtime.ensure();
     off = realtime.on('memory', () => {
+      if (!isCurrentLifetime(token)) return;
       setStatus('active');
-      void load('active');
+      void currentLoad.current('active');
     });
     return () => off?.();
   }, []);
 
   const add = async () => {
+    const token = lifetime.current;
+    if (!isCurrentLifetime(token)) return;
     const value = text.trim();
     if (!value) return;
     setSaving(true);
     try {
       await repo.addMemory({ text: value, kind });
+      if (!isCurrentLifetime(token)) return;
       setText('');
       setStatus('active');
-      await load();
+      await currentLoad.current('active');
+      if (!isCurrentLifetime(token)) return;
       pushToast('Saved to memory', 'success');
     } catch (e) {
-      pushToast(e instanceof Error ? e.message : 'Could not save memory.', 'error');
+      if (isCurrentLifetime(token)) pushToast(e instanceof Error ? e.message : 'Could not save memory.', 'error');
     } finally {
-      setSaving(false);
+      if (isCurrentLifetime(token)) setSaving(false);
     }
   };
 
   type MemoryEditPatch = Omit<Parameters<typeof repo.updateMemory>[1], 'expectedRevision'>;
-  const patch = async (id: string, update: MemoryEditPatch, label: string) => {
+  const patch = async (id: string, update: MemoryEditPatch, label: string, draftRevision?: number): Promise<boolean> => {
+    const token = lifetime.current;
+    if (!isCurrentLifetime(token) || pendingPatches.current.has(id)) return false;
+    pendingPatches.current.add(id);
+    setPendingPatchIds(new Set(pendingPatches.current));
     try {
       const current = items.find((item) => item.id === id) ?? activeById.get(id);
-      if (!current?.revision) throw new Error('This legacy memory has no safe revision and cannot be edited.');
-      await repo.updateMemory(id, { ...update, expectedRevision: current.revision });
-      await load();
+      const revision = draftRevision ?? current?.revision;
+      if (!revision) throw new Error('This legacy memory has no safe revision and cannot be edited.');
+      await repo.updateMemory(id, { ...update, expectedRevision: revision });
+      if (!isCurrentLifetime(token)) return false;
+      await currentLoad.current();
+      if (!isCurrentLifetime(token)) return false;
       pushToast(label, 'success');
+      return true;
     } catch (e) {
-      pushToast(e instanceof Error ? e.message : 'Could not update memory.', 'error');
+      if (isCurrentLifetime(token)) pushToast(e instanceof Error ? e.message : 'Could not update memory.', 'error');
+      return false;
+    } finally {
+      pendingPatches.current.delete(id);
+      if (isCurrentLifetime(token)) setPendingPatchIds(new Set(pendingPatches.current));
     }
   };
 
   const requestDelete = (ids: string[], text: string) => {
+    if (!isCurrentLifetime()) return;
     const unique = [...new Set(ids.filter(Boolean))];
     if (unique.length) setPendingDelete({ ids: unique, text });
   };
 
   /** Optimistically hide the deleted item(s) instead of reloading the whole view. */
   const performDelete = async (ids: string[]) => {
+    const token = lifetime.current;
     try {
-      for (const id of ids) await repo.removeMemory(id);
-      setRemovedIds((prev) => {
-        const next = new Set(prev);
-        for (const id of ids) next.add(id);
-        return next;
-      });
+      for (const id of ids) {
+        if (!isCurrentLifetime(token)) return;
+        await repo.removeMemory(id);
+        if (!isCurrentLifetime(token)) return;
+        loadGeneration.current += 1;
+        setLoading(false);
+        setRemovedIds((prev) => new Set(prev).add(id));
+      }
       pushToast(ids.length > 1
         ? `Excluded ${ids.length} memories from future replies; source chats and backups may remain.`
         : 'Excluded from future replies; the source chat and backups may remain.', 'success');
     } catch (e) {
-      pushToast(e instanceof Error ? e.message : 'Could not delete memory.', 'error');
+      if (isCurrentLifetime(token)) pushToast(e instanceof Error ? e.message : 'Could not delete memory.', 'error');
     }
   };
 
   const startEdit = (item: MemoryRecord) => {
-    setEditingId(item.id);
-    setEditText(item.text);
-    setEditKind((MANUAL_MEMORY_KINDS as MemoryKind[]).includes(item.kind) ? (item.kind as Exclude<MemoryKind, 'thread_summary' | 'entity'>) : 'fact');
+    setEditDraft({ id: item.id, text: item.text, revision: item.revision,
+      kind: (MANUAL_MEMORY_KINDS as MemoryKind[]).includes(item.kind) ? (item.kind as MemoryEditKind) : 'fact' });
   };
 
   const saveEdit = async (id: string) => {
-    const value = editText.trim();
-    if (!value) return;
-    await patch(id, { text: value, kind: editKind }, 'Memory updated');
-    setEditingId(null);
+    const token = lifetime.current;
+    if (!isCurrentLifetime(token)) return;
+    const draft = editDraft;
+    if (!draft || draft.id !== id || !draft.text.trim()) return;
+    if (!draft.revision) {
+      pushToast('This legacy memory has no safe revision and cannot be edited.', 'error');
+      return;
+    }
+    const saved = await patch(id, { text: draft.text.trim(), kind: draft.kind }, 'Memory updated', draft.revision);
+    if (saved && isCurrentLifetime(token)) setEditDraft(current => current === draft ? null : current);
   };
 
-  const visibleItems = items.filter((i) => !removedIds.has(i.id));
+  const visibleItems = items.filter((i) => i.status === 'deleted' || !removedIds.has(i.id));
+  const memoryLoadError = (
+    <div className="col" style={{ gap: 'var(--space-2)' }}>
+      <InlineAlert tone="danger">{error}</InlineAlert>
+      <Button variant="outline" icon="refresh" disabled={!isCurrentLifetime()} onClick={() => { void currentLoad.current(); }}>Retry memory</Button>
+    </div>
+  );
   const structuredActions: StructuredActions = {
     activeById,
     removedIds,
+    pendingPatchIds,
     editingId,
     editText,
     editKind,
@@ -968,7 +1214,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
     setEditKind,
     onStartEdit: startEdit,
     onSaveEdit: saveEdit,
-    onCancelEdit: () => setEditingId(null),
+    onCancelEdit: () => setEditDraft(null),
     onDelete: requestDelete,
   };
 
@@ -976,6 +1222,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
     <>
     <div className="settings-card" style={{ marginTop: 'var(--space-5)', padding: 'var(--space-5)' }}>
       <div className="settings-group__label" style={{ marginTop: 0 }}>Manage memory</div>
+      <MemoryArchiveTools />
       <div className="col" style={{ gap: 'var(--space-3)' }}>
         <TextAreaField
           label="Add memory"
@@ -1012,7 +1259,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
         loading ? (
           <div className="setting-row"><Spinner size="sm" /><div className="setting-row__body"><div className="setting-row__sub">Loading memory…</div></div></div>
         ) : error ? (
-          <InlineAlert tone="danger">{error}</InlineAlert>
+          memoryLoadError
         ) : (
           <StructuredMemoryView profile={profile} actions={structuredActions} />
         )
@@ -1034,7 +1281,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
           {loading ? (
             <div className="setting-row"><Spinner size="sm" /><div className="setting-row__body"><div className="setting-row__sub">Loading memory…</div></div></div>
           ) : error ? (
-            <InlineAlert tone="danger">{error}</InlineAlert>
+            memoryLoadError
           ) : visibleItems.length === 0 ? (
             <div className="setting-row"><div className="setting-row__body"><div className="setting-row__title">No {status === 'active' ? 'active' : status} memories</div><div className="setting-row__sub">Items you add here appear in this list.</div></div></div>
           ) : (
@@ -1052,8 +1299,8 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
                           <div style={{ minWidth: 180, flex: '0 1 220px' }}>
                             <SelectMenu value={editKind} label="Type" options={MANUAL_MEMORY_KINDS.map((value) => ({ value, label: memoryKindLabel(value) }))} onChange={setEditKind} />
                           </div>
-                          <Button size="sm" variant="primary" disabled={!editText.trim()} onClick={() => saveEdit(item.id)}>Save</Button>
-                          <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+                          <Button size="sm" variant="primary" loading={pendingPatchIds.has(item.id)} disabled={!editText.trim()} onClick={() => saveEdit(item.id)}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditDraft(null)}>Cancel</Button>
                         </div>
                       </div>
                     ) : (
@@ -1065,15 +1312,15 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
                         <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
                           {item.status === 'deleted' ? null : item.status !== 'active' ? (
                             <>
-                              <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'active' }, 'Memory restored')}>Restore</Button>
+                              <Button size="sm" variant="outline" disabled={pendingPatchIds.has(item.id)} onClick={() => patch(item.id, { status: 'active' }, 'Memory restored')}>Restore</Button>
                               <Button size="sm" variant="outline" onClick={() => startEdit(item)}>Edit</Button>
                             </>
                           ) : (
                             <>
                               <Button size="sm" variant="outline" onClick={() => startEdit(item)}>Edit</Button>
-                              <Button size="sm" variant="outline" onClick={() => patch(item.id, { visibility: item.visibility === 'top_of_mind' ? 'normal' : 'top_of_mind', pinned: item.visibility !== 'top_of_mind' }, item.visibility === 'top_of_mind' ? 'Memory unpinned' : 'Memory pinned')}>{item.visibility === 'top_of_mind' ? 'Unpin' : 'Pin'}</Button>
-                              <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'suppressed' }, 'Memory hidden')}>Hide</Button>
-                              <Button size="sm" variant="outline" onClick={() => patch(item.id, { status: 'invalidated' }, 'Memory marked outdated')}>Outdated</Button>
+                              <Button size="sm" variant="outline" disabled={pendingPatchIds.has(item.id)} onClick={() => patch(item.id, { visibility: item.visibility === 'top_of_mind' ? 'normal' : 'top_of_mind', pinned: item.visibility !== 'top_of_mind' }, item.visibility === 'top_of_mind' ? 'Memory unpinned' : 'Memory pinned')}>{item.visibility === 'top_of_mind' ? 'Unpin' : 'Pin'}</Button>
+                              <Button size="sm" variant="outline" disabled={pendingPatchIds.has(item.id)} onClick={() => patch(item.id, { status: 'suppressed' }, 'Memory hidden')}>Hide</Button>
+                              <Button size="sm" variant="outline" disabled={pendingPatchIds.has(item.id)} onClick={() => patch(item.id, { status: 'invalidated' }, 'Memory marked outdated')}>Outdated</Button>
                             </>
                           )}
                           <Button size="sm" variant="danger" onClick={() => requestDelete([item.id], item.text)}>Delete</Button>
@@ -1092,8 +1339,8 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
       <ConfirmDialog
         title="Delete memory?"
         message={pendingDelete.ids.length > 1
-          ? `"${pendingDelete.text.slice(0, 120)}" and its ${pendingDelete.ids.length} source memories will be permanently deleted.`
-          : `"${pendingDelete.text.slice(0, 120)}" will be permanently deleted.`}
+          ? `"${pendingDelete.text.slice(0, 120)}" and its ${pendingDelete.ids.length} source memories will be excluded from future replies. Source chats and backups may remain.`
+          : `"${pendingDelete.text.slice(0, 120)}" will be excluded from future replies. Source chats and backups may remain.`}
         confirmLabel="Delete"
         danger
         onConfirm={() => performDelete(pendingDelete.ids)}
@@ -1107,6 +1354,7 @@ export function MemoryManager({ enabled }: { enabled: boolean }) {
 interface StructuredActions {
   activeById: Map<string, MemoryRecord>;
   removedIds: Set<string>;
+  pendingPatchIds: ReadonlySet<string>;
   editingId: string | null;
   editText: string;
   editKind: Exclude<MemoryKind, 'thread_summary' | 'entity'>;
@@ -1177,7 +1425,7 @@ function TreeSection({ title, icon, compact, children }: { title: string; icon?:
 }
 
 function TreeList({ title, items, actions }: { title: string; items: MemoryProfileItem[]; actions: StructuredActions }) {
-  const visible = items.filter((item) => !item.sourceMemoryIds.length || !item.sourceMemoryIds.every((id) => actions.removedIds.has(id)));
+  const visible = items.filter((item) => !item.sourceMemoryIds.some((id) => actions.removedIds.has(id)));
   if (!visible.length) return null;
   return (
     <div className="memory-tree__group">
@@ -1195,7 +1443,7 @@ function TreeList({ title, items, actions }: { title: string; items: MemoryProfi
                   <div style={{ minWidth: 180, flex: '0 1 220px' }}>
                     <SelectMenu value={actions.editKind} label="Type" options={MANUAL_MEMORY_KINDS.map((value) => ({ value, label: memoryKindLabel(value) }))} onChange={actions.setEditKind} />
                   </div>
-                  <Button size="sm" variant="primary" disabled={!actions.editText.trim()} onClick={() => actions.onSaveEdit(sourceId)}>Save</Button>
+                  <Button size="sm" variant="primary" loading={actions.pendingPatchIds.has(sourceId)} disabled={!actions.editText.trim()} onClick={() => actions.onSaveEdit(sourceId)}>Save</Button>
                   <Button size="sm" variant="outline" onClick={actions.onCancelEdit}>Cancel</Button>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface LibraryImageProps {
   src: string;
@@ -12,20 +12,26 @@ interface LibraryImageProps {
 export function LibraryImage({ src, previewSrc, alt, className = '', loading = 'lazy' }: LibraryImageProps) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const loadEpoch = useRef(0);
   const preview = previewSrc ?? src;
   const separatePreview = preview !== src;
 
   useEffect(() => {
+    loadEpoch.current += 1;
     setLoaded(false);
     setFailed(false);
+    return () => { loadEpoch.current += 1; };
   }, [src]);
 
   const reveal = async (image: HTMLImageElement) => {
+    const epoch = loadEpoch.current;
     try {
       await image.decode?.();
     } catch {
       // onLoad already proves the resource is available; decode can reject on older engines.
     }
+    if (epoch !== loadEpoch.current) return;
+    setFailed(false);
     setLoaded(true);
   };
 
@@ -41,7 +47,11 @@ export function LibraryImage({ src, previewSrc, alt, className = '', loading = '
         alt={alt}
         loading={loading}
         onLoad={(event) => void reveal(event.currentTarget)}
-        onError={() => setFailed(true)}
+        onError={() => {
+          loadEpoch.current += 1;
+          setLoaded(false);
+          setFailed(true);
+        }}
       />
     </span>
   );

@@ -62,6 +62,18 @@ beforeEach(() => {
 });
 
 describe('LibraryDetail', () => {
+  it('retries a failed item load without losing the item or return location', async () => {
+    mocks.getLibraryItem.mockRejectedValueOnce(new Error('Temporary failure')).mockResolvedValue(image);
+    renderDetail();
+    await screen.findByRole('heading', { name: 'We couldn’t open this item' });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByRole('heading', { name: 'Image' });
+    expect(mocks.getLibraryItem).toHaveBeenCalledTimes(2);
+    expect(mocks.getLibraryItem).toHaveBeenLastCalledWith('image-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/library?kind=image');
+  });
+
   it('renders image metadata, incomplete provenance, download, and source navigation', async () => {
     renderDetail();
     expect(await screen.findByRole('img', { name: 'A launch poster' })).toHaveAttribute('src', image.url);

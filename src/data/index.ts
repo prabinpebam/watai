@@ -32,6 +32,7 @@ function createAccountDataScope(ownerId: string): AccountDataScope {
 }
 
 let accountScope = createAccountDataScope(LOCAL_QUARANTINE_OWNER);
+let activationGeneration = 0;
 
 function delegate<T extends object>(current: () => T): T {
   return new Proxy({} as T, {
@@ -60,7 +61,9 @@ export const skillsApi = new SkillsApiClient({ getToken: () => {
 export const realtime = new RealtimeClient(() => accountScope.cloud.negotiate());
 
 export async function activateAccountData(ownerId: string | null): Promise<void> {
+  const generation = ++activationGeneration;
   await realtime.stop();
+  if (generation !== activationGeneration) return;
   const activeOwner = activateLocalDataOwner(ownerId);
   accountScope = createAccountDataScope(activeOwner);
 }
@@ -74,8 +77,12 @@ export function currentAccountKvStore(): KvStore {
 }
 
 export async function loadAccountSettings(): Promise<import('../lib/types').Settings> {
-  await accountScope.sync.hydrateSettings();
-  return accountScope.local.getSettings();
+  const scope = accountScope;
+  await scope.sync.hydrateSettings();
+  if (accountScope !== scope) throw new Error('Account changed during settings load.');
+  const settings = await scope.local.getSettings();
+  if (accountScope !== scope) throw new Error('Account changed during settings load.');
+  return settings;
 }
 
 /** Push local changes + pull remote deltas (no-op unless sync is on and signed in). Resolves

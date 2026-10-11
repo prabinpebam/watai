@@ -98,6 +98,7 @@ export function LibraryDetail() {
   const [item, setItem] = useState<LibraryItemDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [references, setReferences] = useState<LibraryItemDTO[]>([]);
   const [derived, setDerived] = useState<LibraryItemDTO[]>([]);
@@ -119,7 +120,7 @@ export function LibraryDetail() {
       if (live) setLoading(false);
     });
     return () => { live = false; };
-  }, [api, itemId]);
+  }, [api, itemId, loadAttempt]);
 
   useEffect(() => {
     let live = true;
@@ -200,7 +201,11 @@ export function LibraryDetail() {
   if (error || !item) return (
     <section className="library-detail">
       <div className="library-detail__bar"><Button variant="ghost" icon="chevron-left" onClick={goBack}>Back</Button></div>
-      <div className="library-state"><Icon name="alert" size={28} /><h1>We couldn’t open this item</h1><Button onClick={goBack}>Back to Library</Button></div>
+      <div className="library-state">
+        <Icon name="alert" size={28} /><h1>We couldn’t open this item</h1>
+        <Button variant="primary" icon="refresh" onClick={() => { setLoading(true); setLoadAttempt(attempt => attempt + 1); }}>Retry</Button>
+        <Button onClick={goBack}>Back to Library</Button>
+      </div>
     </section>
   );
 

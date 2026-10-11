@@ -655,10 +655,8 @@ describe('cloud mappers', () => {
     ]);
   });
 
-  it('updateBodyFromPatch passes through vectorStoreId', () => {
-    expect(updateBodyFromPatch({ vectorStoreId: 'vs_1' } as Partial<Thread>)).toEqual({
-      vectorStoreId: 'vs_1',
-    });
+  it('updateBodyFromPatch omits server-owned vectorStoreId', () => {
+    expect(updateBodyFromPatch({ vectorStoreId: 'vs_1', title: 'T' } as Partial<Thread>)).toEqual({ title: 'T' });
   });
 
   it('threadFromRecord surfaces vectorStoreId', () => {

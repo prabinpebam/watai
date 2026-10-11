@@ -82,6 +82,7 @@ export interface MemoryRecord {
   visibility: MemoryVisibility;
   validAt?: string;
   invalidAt?: string;
+  validityHistory?: Array<{ validAt?: string; invalidAt: string; revision: number }>;
   createdAt: string;
   updatedAt: string;
   lastUsedAt?: string;
@@ -90,7 +91,23 @@ export interface MemoryRecord {
   supersededBy?: string;
   embedding?: number[];
   embeddingModel?: string;
+  embeddingTextHash?: string;
   deletedAt?: string;
+}
+
+export interface MemoryTransferArchive {
+  version: 2;
+  scope: 'active-records';
+  exportedAt: string;
+  memories: MemoryRecord[];
+  summary: MemorySummaryRecord | null;
+}
+
+export interface MemoryArchivePreview {
+  added: 0;
+  skipped: 0;
+  rejected: [];
+  archive: MemoryTransferArchive;
 }
 
 export interface MemorySummaryRecord {
@@ -157,6 +174,7 @@ export interface MemoryProfileView {
 }
 
 export interface MemoryContextBlock {
+  degradedReason?: 'timeout' | 'cancelled' | 'unavailable';
   summary?: string;
   customInstructions?: {
     aboutYou?: string;
@@ -458,6 +476,7 @@ export interface MessageRecord {
   citations?: CitationRecord[];
   webImages?: WebImageRecord[];
   memoryRefs?: MessageMemoryRefRecord[];
+  memoryDegradedReason?: 'timeout' | 'cancelled' | 'unavailable';
   artifacts?: ArtifactRecord[];
   status: ServerMessageStatus;
   createdAt: string;
@@ -518,7 +537,6 @@ export interface CreateThreadBody {
   id?: string;
   title: string;
   temporary?: boolean;
-  vectorStoreId?: string;
 }
 
 /** The server's update schema is strict: only these fields are accepted. */
@@ -526,7 +544,6 @@ export interface UpdateThreadBody {
   title?: string;
   pinned?: boolean;
   archived?: boolean;
-  vectorStoreId?: string;
 }
 
 export interface AppendMessageBody {
@@ -638,9 +655,9 @@ export interface CredentialsInput {
   chatDefaults?: ChatDefaults;
   /** Optional on update — omit to keep the already-stored (write-only) key. */
   key?: string;
-  tavilyKey?: string;
+  tavilyKey?: string | null;
   /** Account-wide knowledge base store, searched as a fallback alongside per-thread files. */
-  knowledgeBaseVectorStoreId?: string;
+  knowledgeBaseVectorStoreId?: string | null;
 }
 
 export interface ChatDefaults {
@@ -682,6 +699,7 @@ export interface SubmitRunBody {
   /** Idempotency key for the user message — pass the locally-created user message id so the
    *  server's copy and the local one converge to a single record when sync pulls it back. */
   clientMessageId?: string;
+  messageOrder?: { user: string; assistant: string };
   model?: string;
   tools?: string[];
   allowDestructive?: string[];
@@ -772,7 +790,6 @@ export function updateBodyFromPatch(patch: Partial<Thread>): UpdateThreadBody {
   if (patch.title !== undefined) body.title = patch.title;
   if (patch.pinned !== undefined) body.pinned = patch.pinned;
   if (patch.archived !== undefined) body.archived = patch.archived;
-  if (patch.vectorStoreId !== undefined) body.vectorStoreId = patch.vectorStoreId;
   return body;
 }
 
@@ -822,6 +839,8 @@ export function messageFromRecord(r: MessageRecord): Message {
     ...(r.citations?.length ? { citations: r.citations.map((c) => ({ ...c })) } : {}),
     ...(r.webImages?.length ? { webImages: r.webImages.map((w) => ({ ...w })) } : {}),
     ...(r.memoryRefs?.length ? { memoryRefs: r.memoryRefs.map((m) => ({ ...m })) } : {}),
+    ...(r.role === 'assistant' && (r.memoryDegradedReason === 'timeout' || r.memoryDegradedReason === 'cancelled' || r.memoryDegradedReason === 'unavailable')
+      ? { memoryDegradedReason: r.memoryDegradedReason } : {}),
     ...(r.artifacts?.length
       ? {
           artifacts: r.artifacts.map((a) => ({

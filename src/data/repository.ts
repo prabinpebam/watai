@@ -73,6 +73,7 @@ export interface LocalOutboxRecord {
   operationId: string;
   kind: string;
   state?: 'pending' | 'failed';
+  attempted?: boolean;
 }
 
 export interface TransactionalSyncLocalStore extends SyncLocalStore {
