@@ -12,6 +12,23 @@ export function formatDeploymentTimestamp(value: string): string {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '0.2.4',
+    deployedAt: '2026-10-11T05:50:00Z',
+    apiDeployedAt: '2026-10-11T05:43:48Z',
+    title: 'More dependable memory, sync, uploads and voice',
+    changes: [
+      'Memory edits, filters and reads stay consistent; failed saves keep your draft and offer Retry',
+      'Export saved memories to a file and preview an archive without changing your memory',
+      'Replies use memories only if still allowed, current and not deleted, within size and time limits',
+      'Clearing this device or switching accounts stops late sync, uploads and downloads from restoring data',
+      'Library uploads and loads cancel cleanly, and image details can be retried',
+      'Voice capture and onboarding checks stop reliably when you leave, mute or change settings',
+      'Live updates reconnect when the tab returns online without duplicate connections',
+      'Only HTTPS Azure AI endpoints (*.openai, *.cognitiveservices, *.services.ai) can be used',
+      'Background memory indexing remains off; real provider behavior still needs manual validation',
+    ],
+  },
+  {
     version: '0.2.3',
     deployedAt: '2026-09-13T12:00:27Z',
     apiDeployedAt: '2026-09-13T18:29:13Z',
