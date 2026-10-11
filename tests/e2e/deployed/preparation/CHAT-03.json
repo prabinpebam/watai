@@ -1,0 +1,714 @@
+{
+  "schemaVersion": 1,
+  "flowId": "CHAT-03",
+  "flowVersion": 1,
+  "flowDigest": "e9f75d20281d3eb3ebb9746e704180ba6c2d227a62b2feab0e55ba31795d32e1",
+  "variantId": "CHAT-03.streaming-anchor-desktop",
+  "designVersion": 2,
+  "scope": "One fixed desktop pilot child; unrelated families and other variants are deferred.",
+  "expectation": "I can watch a reply arrive progressively and scroll back to my prompt while generation continues, without text rollback, message reordering or the app pulling me away from my reading position.",
+  "userGoals": [
+    "I can watch a reply arrive progressively and scroll back to my prompt while generation continues, without text rollback, message reordering or the app pulling me away from my reading position."
+  ],
+  "preconditions": [
+    "Genuine invited non-admin test session, verified owner/consent and approved provider budget.",
+    "Exact deployed app in the verified existing Edge page; fresh empty test-owned thread; preserve and record actual viewport, scale and locale without emulation or focus.",
+    "Complete task/capture/heuristic and calibrated skill-bound semantic preparation must pass before any evaluated action."
+  ],
+  "cleanup": [
+    "Drain capture, remove only runner-owned page bindings/scripts/routes/listeners and detach its CDP session; leave browser/context/page open. Driver exit disconnects transport. Retain attempts and conversation identities; no deletion or replay."
+  ],
+  "safety": [
+    "At most1 submitted runs, exactly the fixed prompts, no automatic retries.",
+    "Keep90second overall and authored step deadlines;120request/20MiB network and24,000event/16MiB evidence ceilings; no implicit model-review spend.",
+    "Only whitelisted real app/API fields; never capture credentials, storage, headers or arbitrary run secrets."
+  ],
+  "entryStep": "CHAT-03.ready",
+  "steps": [
+    {
+      "id": "CHAT-03.ready",
+      "phase": "ready",
+      "deadlineMs": 15000,
+      "maxVisits": 1,
+      "action": "In the verified existing Edge page, navigate through about:blank to https://prabinpebam.github.io/watai/#/new within this phase deadline. Open a new empty owned thread and verify account, composer and scroll container.",
+      "expected": "One empty conversation and accessible Send control; recorder active before input.",
+      "trigger": "Before navigation or any input; all preflight prerequisites must already pass.",
+      "failureModes": [
+        "Wrong identity, content or chronological order is a product failure.",
+        "Absent required branch, receipt, paint or temporal evidence is insufficient.",
+        "No retry, forced action or altered expectation within the attempt."
+      ],
+      "next": [
+        "CHAT-03.submit",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before ready action and throughout every driver wait, including unexpected states.",
+        "end": "Only after its observed outcome or explicit stop; drain pending observations before transition.",
+        "channels": [
+          "ordered mutation and rAF timeline",
+          "safe real request and run-state receipts",
+          "actual content and formatting",
+          "focus/scroll/hit and linked screenshots"
+        ],
+        "fields": [
+          "document/receiver sequence and monotonic time",
+          "DOM lifetime and immutable message/run/thread IDs",
+          "actual body text and structure",
+          "region coverage, visibility, bounds, clip/hit",
+          "run status and original request phase",
+          "scroll anchor identity and viewport offset"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient on any missing interval, 250ms visible-frame gap, 400-node/4096-character field or flow byte/event limit; never reduce detail dynamically.",
+        "unexpectedSurface": "Fixed sentinel retains unexpected overlays, errors and unrelated message changes; unsupported identity or geometry stops clean interpretation. No runtime resolution changes.",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll container and pinned prompt offset",
+              "ancestor visibility/clipping",
+              "boundary identity and activity"
+            ],
+            "reason": "Preserve context and user-pinned reading position."
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "all prompt/reply IDs and their unchanged order",
+              "safe .bubble-user/.md content and structure",
+              "visibility, bounds and mutation history"
+            ],
+            "reason": "Each existing and new turn must remain attributable through every intermediate state."
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "actual draft and control names",
+              "Send/Stop enabled state and hit geometry",
+              "focus"
+            ],
+            "reason": "Submission and cancellation controls must reflect actual execution."
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text and roles",
+              "visibility and occlusion",
+              "focus and lifetime"
+            ],
+            "reason": "Unexpected failures must remain available to open-ended semantic review."
+          }
+        ]
+      }
+    },
+    {
+      "id": "CHAT-03.submit",
+      "phase": "submit",
+      "deadlineMs": 15000,
+      "maxVisits": 1,
+      "action": "Fill the fixed number-list prompt and click Send once.",
+      "expected": "One accepted run and immutable prompt/reply association; prompt present before first reply.",
+      "trigger": "After ready has its actual required evidence; no skipped or invented transition.",
+      "failureModes": [
+        "Wrong identity, content or chronological order is a product failure.",
+        "Absent required branch, receipt, paint or temporal evidence is insufficient.",
+        "No retry, forced action or altered expectation within the attempt."
+      ],
+      "next": [
+        "CHAT-03.stream",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before submit action and throughout every driver wait, including unexpected states.",
+        "end": "Only after its observed outcome or explicit stop; drain pending observations before transition.",
+        "channels": [
+          "ordered mutation and rAF timeline",
+          "safe real request and run-state receipts",
+          "actual content and formatting",
+          "focus/scroll/hit and linked screenshots"
+        ],
+        "fields": [
+          "document/receiver sequence and monotonic time",
+          "DOM lifetime and immutable message/run/thread IDs",
+          "actual body text and structure",
+          "region coverage, visibility, bounds, clip/hit",
+          "run status and original request phase",
+          "scroll anchor identity and viewport offset"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient on any missing interval, 250ms visible-frame gap, 400-node/4096-character field or flow byte/event limit; never reduce detail dynamically.",
+        "unexpectedSurface": "Fixed sentinel retains unexpected overlays, errors and unrelated message changes; unsupported identity or geometry stops clean interpretation. No runtime resolution changes.",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll container and pinned prompt offset",
+              "ancestor visibility/clipping",
+              "boundary identity and activity"
+            ],
+            "reason": "Preserve context and user-pinned reading position."
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "all prompt/reply IDs and their unchanged order",
+              "safe .bubble-user/.md content and structure",
+              "visibility, bounds and mutation history"
+            ],
+            "reason": "Each existing and new turn must remain attributable through every intermediate state."
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "actual draft and control names",
+              "Send/Stop enabled state and hit geometry",
+              "focus"
+            ],
+            "reason": "Submission and cancellation controls must reflect actual execution."
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text and roles",
+              "visibility and occlusion",
+              "focus and lifetime"
+            ],
+            "reason": "Unexpected failures must remain available to open-ended semantic review."
+          }
+        ]
+      }
+    },
+    {
+      "id": "CHAT-03.stream",
+      "phase": "stream",
+      "deadlineMs": 30000,
+      "maxVisits": 1,
+      "action": "Observe at least three distinct increasing nonempty reply bodies while the real run remains running.",
+      "expected": "Each later body has the earlier body as its exact prefix; a final-only answer does not cover this phase.",
+      "trigger": "After submit has its actual required evidence; no skipped or invented transition.",
+      "failureModes": [
+        "Wrong identity, content or chronological order is a product failure.",
+        "Absent required branch, receipt, paint or temporal evidence is insufficient.",
+        "No retry, forced action or altered expectation within the attempt."
+      ],
+      "next": [
+        "CHAT-03.read-history",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before stream action and throughout every driver wait, including unexpected states.",
+        "end": "Only after its observed outcome or explicit stop; drain pending observations before transition.",
+        "channels": [
+          "ordered mutation and rAF timeline",
+          "safe real request and run-state receipts",
+          "actual content and formatting",
+          "focus/scroll/hit and linked screenshots"
+        ],
+        "fields": [
+          "document/receiver sequence and monotonic time",
+          "DOM lifetime and immutable message/run/thread IDs",
+          "actual body text and structure",
+          "region coverage, visibility, bounds, clip/hit",
+          "run status and original request phase",
+          "scroll anchor identity and viewport offset"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient on any missing interval, 250ms visible-frame gap, 400-node/4096-character field or flow byte/event limit; never reduce detail dynamically.",
+        "unexpectedSurface": "Fixed sentinel retains unexpected overlays, errors and unrelated message changes; unsupported identity or geometry stops clean interpretation. No runtime resolution changes.",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll container and pinned prompt offset",
+              "ancestor visibility/clipping",
+              "boundary identity and activity"
+            ],
+            "reason": "Preserve context and user-pinned reading position."
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "all prompt/reply IDs and their unchanged order",
+              "safe .bubble-user/.md content and structure",
+              "visibility, bounds and mutation history"
+            ],
+            "reason": "Each existing and new turn must remain attributable through every intermediate state."
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "actual draft and control names",
+              "Send/Stop enabled state and hit geometry",
+              "focus"
+            ],
+            "reason": "Submission and cancellation controls must reflect actual execution."
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text and roles",
+              "visibility and occlusion",
+              "focus and lifetime"
+            ],
+            "reason": "Unexpected failures must remain available to open-ended semantic review."
+          }
+        ]
+      }
+    },
+    {
+      "id": "CHAT-03.read-history",
+      "phase": "read-history",
+      "deadlineMs": 25000,
+      "maxVisits": 1,
+      "action": "After overflow is observed, hover the actual .chat__scroll and wheel upward by its observed scrollTop until the prompt is visible; record its viewport offset and perform no more scrolling.",
+      "expected": "At least two subsequent streaming updates occur while the user-pinned prompt offset remains within2 CSS pixels and its identity remains visible.",
+      "trigger": "After stream has its actual required evidence; no skipped or invented transition.",
+      "failureModes": [
+        "Wrong identity, content or chronological order is a product failure.",
+        "Absent required branch, receipt, paint or temporal evidence is insufficient.",
+        "No retry, forced action or altered expectation within the attempt."
+      ],
+      "next": [
+        "CHAT-03.complete",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before read-history action and throughout every driver wait, including unexpected states.",
+        "end": "Only after its observed outcome or explicit stop; drain pending observations before transition.",
+        "channels": [
+          "ordered mutation and rAF timeline",
+          "safe real request and run-state receipts",
+          "actual content and formatting",
+          "focus/scroll/hit and linked screenshots"
+        ],
+        "fields": [
+          "document/receiver sequence and monotonic time",
+          "DOM lifetime and immutable message/run/thread IDs",
+          "actual body text and structure",
+          "region coverage, visibility, bounds, clip/hit",
+          "run status and original request phase",
+          "scroll anchor identity and viewport offset"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient on any missing interval, 250ms visible-frame gap, 400-node/4096-character field or flow byte/event limit; never reduce detail dynamically.",
+        "unexpectedSurface": "Fixed sentinel retains unexpected overlays, errors and unrelated message changes; unsupported identity or geometry stops clean interpretation. No runtime resolution changes.",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll container and pinned prompt offset",
+              "ancestor visibility/clipping",
+              "boundary identity and activity"
+            ],
+            "reason": "Preserve context and user-pinned reading position."
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "all prompt/reply IDs and their unchanged order",
+              "safe .bubble-user/.md content and structure",
+              "visibility, bounds and mutation history"
+            ],
+            "reason": "Each existing and new turn must remain attributable through every intermediate state."
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "actual draft and control names",
+              "Send/Stop enabled state and hit geometry",
+              "focus"
+            ],
+            "reason": "Submission and cancellation controls must reflect actual execution."
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text and roles",
+              "visibility and occlusion",
+              "focus and lifetime"
+            ],
+            "reason": "Unexpected failures must remain available to open-ended semantic review."
+          }
+        ]
+      }
+    },
+    {
+      "id": "CHAT-03.complete",
+      "phase": "complete",
+      "deadlineMs": 5000,
+      "maxVisits": 1,
+      "action": "Wait for the same run to become complete, inspect the full actual body and retain 1500ms of reconciliation.",
+      "expected": "Exactly integers1..200 on separate lines, no format wrappers, no text rollback or anchor jump.",
+      "trigger": "After read-history has its actual required evidence; no skipped or invented transition.",
+      "failureModes": [
+        "Wrong identity, content or chronological order is a product failure.",
+        "Absent required branch, receipt, paint or temporal evidence is insufficient.",
+        "No retry, forced action or altered expectation within the attempt."
+      ],
+      "next": [
+        "end",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before complete action and throughout every driver wait, including unexpected states.",
+        "end": "Only after its observed outcome or explicit stop; drain pending observations before transition.",
+        "channels": [
+          "ordered mutation and rAF timeline",
+          "safe real request and run-state receipts",
+          "actual content and formatting",
+          "focus/scroll/hit and linked screenshots"
+        ],
+        "fields": [
+          "document/receiver sequence and monotonic time",
+          "DOM lifetime and immutable message/run/thread IDs",
+          "actual body text and structure",
+          "region coverage, visibility, bounds, clip/hit",
+          "run status and original request phase",
+          "scroll anchor identity and viewport offset"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient on any missing interval, 250ms visible-frame gap, 400-node/4096-character field or flow byte/event limit; never reduce detail dynamically.",
+        "unexpectedSurface": "Fixed sentinel retains unexpected overlays, errors and unrelated message changes; unsupported identity or geometry stops clean interpretation. No runtime resolution changes.",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll container and pinned prompt offset",
+              "ancestor visibility/clipping",
+              "boundary identity and activity"
+            ],
+            "reason": "Preserve context and user-pinned reading position."
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "all prompt/reply IDs and their unchanged order",
+              "safe .bubble-user/.md content and structure",
+              "visibility, bounds and mutation history"
+            ],
+            "reason": "Each existing and new turn must remain attributable through every intermediate state."
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "actual draft and control names",
+              "Send/Stop enabled state and hit geometry",
+              "focus"
+            ],
+            "reason": "Submission and cancellation controls must reflect actual execution."
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text and roles",
+              "visibility and occlusion",
+              "focus and lifetime"
+            ],
+            "reason": "Unexpected failures must remain available to open-ended semantic review."
+          }
+        ]
+      }
+    }
+  ],
+  "heuristics": [
+    {
+      "id": "CHAT-03.incremental-delivery",
+      "outcome": "incremental-delivery",
+      "steps": [
+        "CHAT-03.ready",
+        "CHAT-03.submit",
+        "CHAT-03.stream",
+        "CHAT-03.read-history",
+        "CHAT-03.complete"
+      ],
+      "algorithm": "Require at least three distinct nonempty prefix-growing body observations during running status; repeated identical snapshots do not count.",
+      "inputs": [
+        "original phase/action/mutation/frame observations",
+        "whitelisted submitted and accepted IDs",
+        "real run status and message bodies",
+        "scroll-anchor observation where applicable"
+      ],
+      "pass": "All required branch observations satisfy the exact algorithm in every retained state.",
+      "fail": "A supported mismatch, transient disappearance, chronology inversion, stale write or incorrect answer remains failure even after correction.",
+      "insufficient": "Missing required intermediate updates, association, cancellation, scroll/paint or calibrated capture is not a pass.",
+      "negativeCases": [
+        "Correct final state after an intermediate failure",
+        "Wrong answer with driver success booleans",
+        "Required asynchronous branch never observed"
+      ],
+      "implementation": "tests/e2e/deployed/pilot-chat-heuristics.mjs#evaluatePilotChat"
+    },
+    {
+      "id": "CHAT-03.reading-anchor",
+      "outcome": "reading-anchor",
+      "steps": [
+        "CHAT-03.ready",
+        "CHAT-03.submit",
+        "CHAT-03.stream",
+        "CHAT-03.read-history",
+        "CHAT-03.complete"
+      ],
+      "algorithm": "After the real wheel action and pinned-anchor receipt, require at least two additional distinct stream bodies with the same visible prompt anchor; absolute offset change <=2 CSS pixels. Missing overflow or updates is insufficient.",
+      "inputs": [
+        "original phase/action/mutation/frame observations",
+        "whitelisted submitted and accepted IDs",
+        "real run status and message bodies",
+        "scroll-anchor observation where applicable"
+      ],
+      "pass": "All required branch observations satisfy the exact algorithm in every retained state.",
+      "fail": "A supported mismatch, transient disappearance, chronology inversion, stale write or incorrect answer remains failure even after correction.",
+      "insufficient": "Missing required intermediate updates, association, cancellation, scroll/paint or calibrated capture is not a pass.",
+      "negativeCases": [
+        "Correct final state after an intermediate failure",
+        "Wrong answer with driver success booleans",
+        "Required asynchronous branch never observed"
+      ],
+      "implementation": "tests/e2e/deployed/pilot-chat-heuristics.mjs#evaluatePilotChat"
+    },
+    {
+      "id": "CHAT-03.complete-sequence",
+      "outcome": "complete-sequence",
+      "steps": [
+        "CHAT-03.ready",
+        "CHAT-03.submit",
+        "CHAT-03.stream",
+        "CHAT-03.read-history",
+        "CHAT-03.complete"
+      ],
+      "algorithm": "After the matching complete receipt, split actual body on CRLF/LF, trim only outer whitespace, and require exactly200 lines whose values equal1..200.",
+      "inputs": [
+        "original phase/action/mutation/frame observations",
+        "whitelisted submitted and accepted IDs",
+        "real run status and message bodies",
+        "scroll-anchor observation where applicable"
+      ],
+      "pass": "All required branch observations satisfy the exact algorithm in every retained state.",
+      "fail": "A supported mismatch, transient disappearance, chronology inversion, stale write or incorrect answer remains failure even after correction.",
+      "insufficient": "Missing required intermediate updates, association, cancellation, scroll/paint or calibrated capture is not a pass.",
+      "negativeCases": [
+        "Correct final state after an intermediate failure",
+        "Wrong answer with driver success booleans",
+        "Required asynchronous branch never observed"
+      ],
+      "implementation": "tests/e2e/deployed/pilot-chat-heuristics.mjs#evaluatePilotChat"
+    }
+  ],
+  "semantic": {
+    "required": true,
+    "openEnded": true,
+    "expectation": "I can watch a reply arrive progressively and scroll back to my prompt while generation continues, without text rollback, message reordering or the app pulling me away from my reading position.",
+    "skillPath": ".github/skills/edd-semantic-review/SKILL.md",
+    "skillSha256": "46862abe75e7fbb915236ba5c4e76dc9dbed9116cf3285510e11c34214cd4b91",
+    "agentPath": "tests/e2e/deployed/semantic-agent.json",
+    "agentSha256": "8c6b1fe13be2194aa4ec3a895e52ee93419ad5739a9fd2b492484d772453c84b",
+    "reviewProtocol": "complete-timeline-then-cross-phase-synthesis-v1",
+    "evidenceLayers": [
+      "timeline",
+      "visual",
+      "run identity/status",
+      "interaction and artifacts"
+    ],
+    "contextExhaustion": "Deny admission if the complete planned capture cannot fit the calibrated review protocol; no on-the-fly summaries or omitted windows.",
+    "findingContract": "Review every original window and required image with the preloaded skill, then synthesize cross-phase experience. Novel anomaly categories need no known detector ID; preserve uncertainty and cite original evidence. Heuristic success never skips review."
+  },
+  "artifacts": [
+    {
+      "path": "tests/e2e/deployed/capture.mjs",
+      "sha256": "0aa95fb1dfa16410f66affaed571267654f7edbff6df8f65ce7661d320478513"
+    },
+    {
+      "path": "tests/e2e/deployed/capture-entry.mjs",
+      "sha256": "fb1018f81b409a915e4c7051f3cc86bf7a5518938cbf7258db56b5dff38abbee"
+    },
+    {
+      "path": "tests/e2e/deployed/capture-bootstrap.mjs",
+      "sha256": "747861d1dbeff0b96752cf92063925359f5ee7515b1fae38738b78e49e297330"
+    },
+    {
+      "path": "tests/e2e/deployed/core.mjs",
+      "sha256": "b7f86d61d5dc1ff490b7f14f7782e1c880eae8bfe7d787cdf9a9ac882d5d2156"
+    },
+    {
+      "path": "tests/e2e/deployed/semantic.mjs",
+      "sha256": "47a8b4f2a79e4774943ad6544780f70c26e27ec384be2b936d2d58b7a31ab850"
+    },
+    {
+      "path": "tests/e2e/deployed/run.mjs",
+      "sha256": "81c233f150c00424af3fcf6c359fd02155089f49ec78450bcf3be016c5b025ac"
+    },
+    {
+      "path": "tests/e2e/deployed/preparation.mjs",
+      "sha256": "3aeccbd58ee9379c6683559632c6fe5531e9bfc80b37e0a0098f18c17814ae6b"
+    },
+    {
+      "path": "tests/e2e/deployed/evidence.mjs",
+      "sha256": "a42fb0db90a4cd6077313463fe5fd1cf13642d664a2530a8e9ca9a6b2846462c"
+    },
+    {
+      "path": "tests/e2e/deployed/auth-heuristics.mjs",
+      "sha256": "2b3bd260b769b99c81932be439a5c8986ce76e4c8b9fe5c05a54f7c68be7aea6"
+    },
+    {
+      "path": "tests/e2e/deployed/chat-heuristics.mjs",
+      "sha256": "4a20f016c62e01fefa25ec2ae4eb2fa131d7cc1c0c58427f560d3be8a4f7354f"
+    },
+    {
+      "path": "tests/e2e/deployed/chat-http.mjs",
+      "sha256": "d73be83504e5a73a135c2a323487fc56cd0d7db0cf22a346c38d41bec44fb8b1"
+    },
+    {
+      "path": "tests/e2e/deployed/pilot-chat-plans.mjs",
+      "sha256": "2f4063dd8b83f663ba12f122cb4f610baa089c8ad93c6ab6e559f95d00d98ad3"
+    },
+    {
+      "path": "tests/e2e/deployed/pilot-chat-heuristics.mjs",
+      "sha256": "cab291ace4de7c27bc574398eed71f21252691209df62650d71dd6c0ad4ff1b5"
+    },
+    {
+      "path": "tests/e2e/deployed/pilot-chat-driver.mjs",
+      "sha256": "c0c1a17e038d073b1ba92f5cfb184344d58a64c116fc7afa3f5112e5d2684cb2"
+    },
+    {
+      "path": "tests/e2e/deployed/five-flow-pilot.json",
+      "sha256": "366d97cb128c80c8f74dd2eed79289b5fbcb8b6eb9af48d0e165926c8560d3d4"
+    }
+  ],
+  "attestations": [],
+  "unresolved": [
+    "Existing Edge login is verified; borrowed-page lifecycle still requires calibration. Actual model/reservation billing authority and independent calibration approval remain unavailable.",
+    "The exact drivers passed source-bound local Chromium interaction and screenshot calibration; actual serving-contract and authenticated product qualification remain required.",
+    "Full intermediate render/paint, identity handoff, scrollbar/anchor and DS evidence are not qualified.",
+    "The current capture envelope exceeds the semantic profile capacity; actual LLM effectiveness and private evidence publication are unvalidated."
+  ],
+  "flowDefinition": {
+    "id": "CHAT-03",
+    "version": 1,
+    "mode": "authenticated",
+    "phases": [
+      "ready",
+      "submit",
+      "stream",
+      "read-history",
+      "complete"
+    ],
+    "requiredPhases": [
+      "ready",
+      "submit",
+      "stream",
+      "read-history",
+      "complete"
+    ],
+    "readySelector": "textarea[aria-label=Message]",
+    "actionSelector": "button[aria-label=Send]",
+    "stopSelector": "button[aria-label='Stop generating']",
+    "answerSelector": ".msg-group--assistant .md",
+    "prompt": "Write the integers from 1 through 200, one integer per line, in order. No headings, Markdown or explanation.",
+    "expectedAnswer": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n100\n101\n102\n103\n104\n105\n106\n107\n108\n109\n110\n111\n112\n113\n114\n115\n116\n117\n118\n119\n120\n121\n122\n123\n124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n134\n135\n136\n137\n138\n139\n140\n141\n142\n143\n144\n145\n146\n147\n148\n149\n150\n151\n152\n153\n154\n155\n156\n157\n158\n159\n160\n161\n162\n163\n164\n165\n166\n167\n168\n169\n170\n171\n172\n173\n174\n175\n176\n177\n178\n179\n180\n181\n182\n183\n184\n185\n186\n187\n188\n189\n190\n191\n192\n193\n194\n195\n196\n197\n198\n199\n200",
+    "deadlineMs": 90000,
+    "reconciliationMs": 1500,
+    "maxRequests": 120,
+    "maxNetworkBytes": 20971520,
+    "maxEvents": 24000,
+    "maxEvidenceBytes": 16777216,
+    "origins": [
+      "https://prabinpebam.github.io",
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com",
+      "https://func-watai-cbroocyg3omrk.azurewebsites.net",
+      "https://wataiexternal.ciamlogin.com",
+      "https://sigr-watai-cbroocyg3omrk.service.signalr.net"
+    ],
+    "regions": [
+      {
+        "id": "conversation",
+        "selector": ".chat__column",
+        "level": "context"
+      },
+      {
+        "id": "message",
+        "selector": "[data-message-id]",
+        "level": "detailed"
+      },
+      {
+        "id": "composer",
+        "selector": ".composer",
+        "level": "detailed"
+      },
+      {
+        "id": "alerts",
+        "selector": "[role=alert], [role=dialog]",
+        "level": "detailed"
+      }
+    ],
+    "claims": [
+      "incremental-delivery",
+      "reading-anchor",
+      "complete-sequence"
+    ],
+    "requiredOutcomes": [
+      "incremental-delivery",
+      "reading-anchor",
+      "complete-sequence"
+    ],
+    "unqualified": [
+      "other-chat-flows",
+      "server-message-identity-handoff",
+      "immutable-account-identity-not-exposed-by-me",
+      "two-account-isolation",
+      "provider-budget-enforcement",
+      "independent-design-review",
+      "full-recorder-calibration",
+      "all-browser-matrix"
+    ],
+    "driver": "PILOT_DRIVER_LOCAL_CALIBRATED",
+    "prompts": [
+      "Write the integers from 1 through 200, one integer per line, in order. No headings, Markdown or explanation."
+    ],
+    "answers": [
+      "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n100\n101\n102\n103\n104\n105\n106\n107\n108\n109\n110\n111\n112\n113\n114\n115\n116\n117\n118\n119\n120\n121\n122\n123\n124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n134\n135\n136\n137\n138\n139\n140\n141\n142\n143\n144\n145\n146\n147\n148\n149\n150\n151\n152\n153\n154\n155\n156\n157\n158\n159\n160\n161\n162\n163\n164\n165\n166\n167\n168\n169\n170\n171\n172\n173\n174\n175\n176\n177\n178\n179\n180\n181\n182\n183\n184\n185\n186\n187\n188\n189\n190\n191\n192\n193\n194\n195\n196\n197\n198\n199\n200"
+    ],
+    "maxRunSubmissions": 1
+  },
+  "bindingStatus": "BOUND_DRAFT_NOT_READY"
+}

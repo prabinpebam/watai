@@ -28,6 +28,14 @@ describe('CosmosMessageStore (integration)', () => {
     store = new CosmosMessageStore();
   });
 
+  it('has the composite index required for deterministic message sync order', async () => {
+    const { resource } = await getCosmosDatabase().container('messages').read();
+    expect(resource?.indexingPolicy?.compositeIndexes).toContainEqual([
+      { path: '/createdAt', order: 'ascending' },
+      { path: '/id', order: 'ascending' },
+    ]);
+  });
+
   afterAll(async () => {
     const c = getCosmosDatabase().container('messages');
     for (const { threadId, id } of created) {

@@ -42,6 +42,7 @@ export function VoiceMode() {
   const [caption, setCaption] = useState('');
 
   const recRef = useRef<Recorder | null>(null);
+  const stoppingRef = useRef<Recorder | null>(null);
   const settingsRef = useRef<Settings['voice'] | null>(null);
   const speakerRef = useRef<ReplySpeaker | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -61,6 +62,8 @@ export function VoiceMode() {
     turnEpochRef.current += 1;
     recRef.current?.cancel();
     recRef.current = null;
+    stoppingRef.current?.cancel();
+    stoppingRef.current = null;
     transcriptionAbortRef.current?.abort();
     transcriptionAbortRef.current = null;
     if (mountedRef.current) {
@@ -157,6 +160,7 @@ export function VoiceMode() {
   const startListening = useCallback(async () => {
     if (captureStartingRef.current) return;
     captureStartingRef.current = true;
+    cancelLocalWork();
     const epoch = ++captureEpochRef.current;
     const audio = voiceAudioRef.current ?? createAudioElement();
     voiceAudioRef.current = audio;
@@ -169,6 +173,12 @@ export function VoiceMode() {
         return;
       }
       recRef.current = recorder;
+      recorder.onInterruption(() => {
+        if (!mountedRef.current || epoch !== captureEpochRef.current || recRef.current !== recorder) return;
+        cancelLocalWork();
+        setErrored(true);
+        setCaption('Microphone capture was interrupted.');
+      });
       setCaption('');
       setListening(true);
     } catch (error) {
@@ -183,7 +193,7 @@ export function VoiceMode() {
     } finally {
       captureStartingRef.current = false;
     }
-  }, []);
+  }, [cancelLocalWork]);
 
   const stopListening = useCallback(async () => {
     const epoch = ++turnEpochRef.current;
@@ -191,6 +201,7 @@ export function VoiceMode() {
     recRef.current = null;
     setListening(false);
     if (!rec) return;
+    stoppingRef.current = rec;
     setTranscribing(true);
     const controller = new AbortController();
     transcriptionAbortRef.current?.abort();
@@ -198,6 +209,8 @@ export function VoiceMode() {
     let text = '';
     try {
       const blob = await rec.stop();
+      if (stoppingRef.current === rec) stoppingRef.current = null;
+      if (!mountedRef.current || mutedRef.current || epoch !== turnEpochRef.current || controller.signal.aborted) return;
       const res = await cloudApi.transcribeAudio({
         audio: blob,
         mime: blob.type,
@@ -209,6 +222,7 @@ export function VoiceMode() {
       setCaption(e instanceof Error ? e.message : 'Could not transcribe');
       return;
     } finally {
+      if (stoppingRef.current === rec) stoppingRef.current = null;
       if (transcriptionAbortRef.current === controller) transcriptionAbortRef.current = null;
       if (mountedRef.current && epoch === turnEpochRef.current) setTranscribing(false);
     }
@@ -219,6 +233,7 @@ export function VoiceMode() {
     // the first sentence can synthesize before the mount-time settings load resolves (→ backend default
     // voice), then later sentences use the selected voice — an audible shift mid-reply.
     settingsRef.current = (await repo.getSettings().catch(() => null))?.voice ?? settingsRef.current;
+    if (!mountedRef.current || mutedRef.current || epoch !== turnEpochRef.current || controller.signal.aborted) return;
     // Start the reply stream clean, then hand off to the run store (memory + tools + skills + SignalR).
     speakerRef.current = createReplySpeaker((t) => ttsRef.current!.enqueue(t));
     lastContentRef.current = '';
@@ -247,12 +262,15 @@ export function VoiceMode() {
 
   // Stop local mic + audio on unmount; the server run is untouched (it persists into the thread).
   useEffect(
-    () => () => {
-      mountedRef.current = false;
-      cancelLocalWork();
-      ttsRef.current?.stop();
-      voiceAudioRef.current?.pause();
-      voiceAudioRef.current = null;
+    () => {
+      mountedRef.current = true;
+      return () => {
+        mountedRef.current = false;
+        cancelLocalWork();
+        ttsRef.current?.stop();
+        voiceAudioRef.current?.pause();
+        voiceAudioRef.current = null;
+      };
     },
     [cancelLocalWork],
   );

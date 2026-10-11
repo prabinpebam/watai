@@ -5,6 +5,7 @@ export interface ThreadFileMeta {
   /** Azure OpenAI file id (also the vector-store file id) — the delete key. For generated
    *  artifacts (kind 'image') this is a synthetic id. */
   fileId: string;
+  providerEndpoint?: string;
   libraryItemId?: string;
   name: string;
   bytes: number;
@@ -30,6 +31,7 @@ export interface ThreadRecord {
   lastMessagePreview?: string;
   /** Vector store id holding the thread's uploaded documents (thread-scoped file search). */
   vectorStoreId?: string;
+  vectorStoreEndpoint?: string;
   /** Documents uploaded into this thread's knowledge base. */
   files?: ThreadFileMeta[];
   /** Active run lock (set while a device generates a reply); null/absent when free. */
@@ -56,6 +58,10 @@ export interface ThreadStore {
   get(userId: string, id: string): Promise<ThreadRecord | null>;
   list(userId: string, opts?: ListOptions): Promise<ThreadRecord[]>;
   put(record: ThreadRecord): Promise<ThreadRecord>;
+}
+
+export interface ThreadCreateStore {
+  createIfAbsent(record: ThreadRecord): Promise<ThreadRecord | null>;
 }
 
 /**

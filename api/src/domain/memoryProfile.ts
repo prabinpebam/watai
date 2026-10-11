@@ -126,15 +126,38 @@ function addInterest(profile: MemoryProfileView, name: string, memory: MemoryRec
 }
 
 function evidenceText(memory: MemoryRecord): string {
+  if (memory.origin === 'manual' && memory.confirmation === 'approved') return memory.text;
   return [memory.text, memory.summary, ...memory.sourceRefs.map((ref) => ref.quote)].filter(Boolean).join(' ');
 }
 
-function extractAge(text: string): number | undefined {
-  const raw = /\b(?:age\s*(?:is\s*)?|(?:is|she(?:'|’)?s|he(?:'|’)?s|they(?:'|’)?re)\s+)?(\d{1,2})\s*(?:years?\s*old|yrs?\s*old|yo|y\/o)\b/i.exec(text)?.[1]
-    ?? /\bage\s*(?:is\s*)?(\d{1,2})\b/i.exec(text)?.[1];
-  if (!raw) return undefined;
-  const age = Number(raw);
-  return age >= 0 && age <= 120 ? age : undefined;
+function extractAge(text: string, childName: string): number | undefined {
+  const genericName = '[A-Z][A-Za-z0-9_-]*';
+  const relation = '(?:daughter|son|child)';
+  const pronoun = "(?:she|he|they)(?: is| are|'s|’s|'re|’re)";
+  const identities = [...text.matchAll(/\b(?:named|called|name\s+is)\s+([A-Z][A-Za-z0-9_-]*)/gi)].map(match => match[1]);
+  identities.push(...[...text.matchAll(/\b([A-Z][A-Za-z0-9_-]*)\s+is\s+my\s+(?:daughter|son|child)\b/gi)].map(match => match[1]));
+  const unambiguous = identities.every(name => name.toLowerCase() === childName.toLowerCase());
+  const agePattern = (name: string, implicit: boolean) => {
+    const subject = `(?:${name} is|${implicit ? `${pronoun}|` : ''}(?:user|the user) (?:has|have) (?:a|an) ${relation} (?:named|called) ${name} who is|(?:my|user's|the user's) ${relation} (?:named |called )?${name} (?:who )?is|(?:my|user's|the user's) ${relation}(?:'s|’s) name is ${name} and ${pronoun}|${name} is my ${relation} and is)`;
+    return new RegExp(`^(?:${subject} (\\d{1,3})\\s*(?:years?\\s*old|yrs?\\s*old|yo|y/o)|(?:${name}'s )${implicit ? '?' : ''}age(?: is)? (\\d{1,3}))$`, 'i');
+  };
+  const exact = agePattern(escapeRegExp(childName), unambiguous);
+  const otherSubject = agePattern(genericName, false);
+  const statements = text.split(/[.!?]\s*|[\r\n]+/).map(statement => statement.trim())
+    .filter(statement => /\b(?:age|years?\s*old|yrs?\s*old|yo|y\/o)\b/i.test(statement));
+  if (!statements.length) return undefined;
+  const ages = new Set<number>();
+  for (const statement of statements) {
+    const match = exact.exec(statement);
+    if (!match) {
+      if (otherSubject.test(statement)) continue;
+      return undefined;
+    }
+    const age = Number(match[1] ?? match[2]);
+    if (age < 0 || age > 120) return undefined;
+    ages.add(age);
+  }
+  return ages.size === 1 ? [...ages][0] : undefined;
 }
 
 function childText(child: { name: string; relationship: string; age?: number }): string {
@@ -157,12 +180,14 @@ function extractChild(memory: MemoryRecord): ProfileChild | null {
     name = match[1];
     relationship = match[2].toLowerCase() as ProfileChild['relationship'];
   }
-  const age = extractAge(text);
+  const age = extractAge(text, name);
   return { name, relationship, ...(age !== undefined ? { age } : {}), text: childText({ name, relationship, age }), sourceMemoryIds: [memory.id], confidence: memory.confidence };
 }
 
 function mergeChild(children: ProfileChild[], next: ProfileChild, options?: { replaceAge?: boolean }): void {
-  const existing = children.find((child) => child.name.toLowerCase() === next.name.toLowerCase());
+  const sameName = children.filter((child) => child.name.toLowerCase() === next.name.toLowerCase());
+  const existing = sameName.find(child => child.relationship === next.relationship) ??
+    (sameName.length === 1 && (sameName[0].relationship === 'child' || next.relationship === 'child') ? sameName[0] : undefined);
   if (!existing) {
     children.push(next);
     return;
@@ -176,12 +201,16 @@ function mergeChild(children: ProfileChild[], next: ProfileChild, options?: { re
 
 function mergeChildAgeFromMemory(children: ProfileChild[], memory: MemoryRecord, ageUpdatedFor: Set<string>): void {
   const text = evidenceText(memory);
-  const age = extractAge(text);
-  if (age === undefined) return;
+  const declared = routedChild(memory) ?? extractChild(memory);
   for (const child of children) {
     if (!new RegExp(`\\b${escapeRegExp(child.name)}\\b`, 'i').test(text)) continue;
-    const key = child.name.toLowerCase();
-    if (ageUpdatedFor.has(key)) return;
+    if (declared?.name.toLowerCase() === child.name.toLowerCase() && declared.relationship !== 'child') {
+      if (declared.relationship !== child.relationship) continue;
+    } else if (children.filter(candidate => candidate.name.toLowerCase() === child.name.toLowerCase()).length !== 1) continue;
+    const age = extractAge(text, child.name);
+    if (age === undefined) continue;
+    const key = `${child.name.toLowerCase()}:${child.relationship}`;
+    if (ageUpdatedFor.has(key)) continue;
     mergeChild(children, { ...child, age, sourceMemoryIds: [memory.id], confidence: memory.confidence, text: childText({ ...child, age }) }, { replaceAge: true });
     ageUpdatedFor.add(key);
     return;
@@ -197,6 +226,7 @@ function asLabel(value: unknown): string | undefined {
 }
 
 function asAttributeAge(value: unknown): number | undefined {
+  if (typeof value === 'string' && !value.trim()) return undefined;
   const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
   return Number.isFinite(n) && n >= 0 && n <= 120 ? n : undefined;
 }
@@ -210,7 +240,8 @@ function routedChild(memory: MemoryRecord): ProfileChild | null {
   const attrs = route.relationship?.attributes ?? {};
   const rel = asLabel(attrs.relationship)?.toLowerCase();
   const relationship: ProfileChild['relationship'] = rel === 'daughter' || rel === 'son' ? rel : 'child';
-  const age = asAttributeAge(attrs.age);
+  const text = evidenceText(memory);
+  const age = /\b\d+\b|\bage\b/i.test(text) ? extractAge(text, name) : asAttributeAge(attrs.age);
   return { name, relationship, ...(age !== undefined ? { age } : {}), text: childText({ name, relationship, age }), sourceMemoryIds: [memory.id], confidence: memory.confidence };
 }
 
@@ -247,6 +278,7 @@ function placeRoutedItem(profile: MemoryProfileView, memory: MemoryRecord): bool
 
 function bucketFor(memory: MemoryRecord, nowMs: number): Array<'today' | 'week' | 'month'> {
   const ageMs = nowMs - Date.parse(memory.updatedAt || memory.createdAt);
+  if (!Number.isFinite(ageMs) || ageMs < 0) return [];
   const day = 24 * 60 * 60 * 1000;
   const buckets: Array<'today' | 'week' | 'month'> = [];
   if (ageMs <= day) buckets.push('today');
@@ -265,11 +297,12 @@ function classifyPreference(memory: MemoryRecord): keyof MemoryProfileView['prof
 }
 
 export function buildMemoryProfile(userId: string, now: string, memories: MemoryRecord[]): MemoryProfileView {
+  const activeMemories = memories.filter((memory) => memory.userId === userId && isRetrievableMemory(memory, now));
   const profile: MemoryProfileView = {
     schemaVersion: 1,
     userId,
     updatedAt: now,
-    evidenceCount: memories.length,
+    evidenceCount: activeMemories.length,
     profile: {
       user: {
         details: {},
@@ -283,8 +316,7 @@ export function buildMemoryProfile(userId: string, now: string, memories: Memory
     temporal: { today: { items: [] }, week: { items: [] }, month: { items: [] } },
   };
 
-  const nowMs = Number.isNaN(Date.parse(now)) ? Date.now() : Date.parse(now);
-  const activeMemories = memories.filter((memory) => memory.status === 'active');
+  const nowMs = Date.parse(now);
 
   for (const memory of activeMemories) {
     for (const bucket of bucketFor(memory, nowMs)) profile.temporal[bucket].items.push({ memoryId: memory.id, text: memory.text, kind: memory.kind, updatedAt: memory.updatedAt });
@@ -334,15 +366,22 @@ const PROFILE_SECTIONS: Array<{ label: string; kinds: MemoryKind[]; max: number 
  * profile is injected on every run, so private facts must never appear here. Structure comes from
  * the typed `kind`, not from parsing memory prose.
  */
-export function renderMemoryProfile(memories: MemoryRecord[], now: string, opts?: { maxChars?: number }): string {
+export function renderMemoryProfile(memories: MemoryRecord[], now: string, opts?: { maxChars?: number; maxItems?: number }): string {
+  return renderMemoryProfileWithSources(memories, now, opts).text;
+}
+
+export function renderMemoryProfileWithSources(memories: MemoryRecord[], now: string, opts?: { maxChars?: number; maxItems?: number }): { text: string; memoryIds: string[] } {
   const maxChars = opts?.maxChars ?? 2400;
+  const maxItems = opts?.maxItems ?? Number.POSITIVE_INFINITY;
   const active = memories.filter((memory) => memory.status === 'active' && !memory.sensitive && isRetrievableMemory(memory, now));
-  if (!active.length) return '';
+  if (!active.length) return { text: '', memoryIds: [] };
   const bySalience = (a: MemoryRecord, b: MemoryRecord): number =>
     b.salience - a.salience || (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt.localeCompare(a.updatedAt);
   const seen = new Set<string>();
   const blocks: string[] = [];
+  const memoryIds: string[] = [];
   for (const section of PROFILE_SECTIONS) {
+    if (memoryIds.length >= maxItems) break;
     const items = active
       .filter((memory) => section.kinds.includes(memory.kind))
       .sort(bySalience)
@@ -354,13 +393,17 @@ export function renderMemoryProfile(memories: MemoryRecord[], now: string, opts?
         return true;
       });
     if (!items.length) continue;
-    blocks.push([`${section.label}:`, ...items.map((memory) => `- ${memory.text}`)].join('\n'));
+    const lines = [`${section.label}:`];
+    for (const memory of items) {
+      if (memoryIds.length >= maxItems) break;
+      const line = `- ${memory.text}`;
+      const next = [...blocks, [...lines, line].join('\n')].join('\n');
+      if (next.length <= maxChars) {
+        lines.push(line);
+        memoryIds.push(memory.id);
+      }
+    }
+    if (lines.length > 1) blocks.push(lines.join('\n'));
   }
-  let out = blocks.join('\n');
-  if (out.length > maxChars) {
-    out = out.slice(0, maxChars);
-    const lastNewline = out.lastIndexOf('\n');
-    if (lastNewline > 0) out = out.slice(0, lastNewline);
-  }
-  return out.trim();
+  return { text: blocks.join('\n'), memoryIds };
 }

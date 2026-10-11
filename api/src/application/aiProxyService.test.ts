@@ -57,16 +57,15 @@ describe('AiProxyService', () => {
     expect(url).toContain('api-version=');
   });
 
-  it('routes non-Azure (OpenAI) transcription via the v1 path with the model in the body', async () => {
+  it('rejects a non-Azure transcription destination without explicit provider authorization', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ text: 'hi' }) });
     const openai = {
       getDecrypted: async () => ({ baseUrl: 'https://api.openai.com/v1', key: 'k', models: { chat: 'g', transcribe: 'whisper-1' } }),
     };
     const svc = new AiProxyService(openai, { fetchImpl: fetchImpl as unknown as typeof fetch });
-    await svc.transcribe('u', { audio: new Uint8Array([1]) });
-    const url = String(fetchImpl.mock.calls[0][0]);
-    expect(url).not.toContain('/openai/deployments/');
-    expect(url).toContain('/audio/transcriptions');
+    await expect(svc.transcribe('u', { audio: new Uint8Array([1]) }))
+      .rejects.toMatchObject({ code: 'validation' });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('preserves MP4 audio MIME and uses an M4A filename', async () => {

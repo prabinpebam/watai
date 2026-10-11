@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { HttpRequest } from '@azure/functions';
-import { runRoute } from './azureFunctions';
+import { MAX_HTTP_BODY_BYTES, readBody, runRoute } from './azureFunctions';
 import { AppError } from '../domain/errors';
 import type { TokenVerifier } from '../ports/tokenVerifier';
 import type { ApiRequest, HttpResult } from './types';
@@ -13,10 +13,12 @@ function fakeRequest(opts: {
   params?: Record<string, string>;
   query?: Record<string, string>;
 }): HttpRequest {
+  const response = new Response(opts.form ?? opts.body ?? null);
   return {
-    headers: { get: (k: string) => k.toLowerCase() === 'authorization' ? opts.auth ?? null : k.toLowerCase() === 'content-type' ? opts.contentType ?? null : null },
+    headers: { get: (k: string) => k.toLowerCase() === 'authorization' ? opts.auth ?? null : k.toLowerCase() === 'content-type' ? (opts.form ? response.headers.get('content-type') : opts.contentType ?? null) : null },
     params: opts.params ?? {},
     query: new URLSearchParams(opts.query ?? {}),
+    body: response.body,
     text: async () => opts.body ?? '',
     formData: async () => opts.form ?? new FormData(),
   } as unknown as HttpRequest;
@@ -79,7 +81,10 @@ describe('runRoute', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(captured?.body).toBe(form);
+    const file = (captured?.body as FormData).get('file') as File;
+    expect(file.name).toBe('audio.m4a');
+    expect(file.type).toBe('audio/mp4');
+    expect(await file.text()).toBe('audio');
   });
 
   it('omits jsonBody for empty (204) results', async () => {
@@ -90,5 +95,81 @@ describe('runRoute', () => {
     );
     expect(res.status).toBe(204);
     expect((res as { jsonBody?: unknown }).jsonBody).toBeUndefined();
+  });
+
+  it('classifies authorization dependency failure without logging its content', async () => {
+    const logger = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await runRoute(okVerifier, async () => ({ status: 200, body: undefined }),
+        fakeRequest({ auth: 'Bearer good' }), async () => { throw { statusCode: 403, message: 'private provider details' }; });
+      expect(response).toEqual({ status: 500, jsonBody: { error: { code: 'internal', message: 'Internal server error.' } } });
+      expect(logger).toHaveBeenCalledExactlyOnceWith({ event: 'api.unexpected_error', category: 'dependency_auth', dependencyStatus: 403 });
+    } finally { logger.mockRestore(); }
+  });
+
+  it('does not duplicate diagnostics for errors already handled by the controller', async () => {
+    const logger = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runRoute(okVerifier, async () => ({ status: 500, body: { error: { code: 'internal', message: 'Internal server error.' } } }), fakeRequest({ auth: 'Bearer good' }));
+      expect(logger).not.toHaveBeenCalled();
+    } finally { logger.mockRestore(); }
+  });
+});
+
+describe('bounded request body consumption', () => {
+  function streamRequest(chunks: string[], length?: string) {
+    const cancel = vi.fn();
+    let index = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (index === chunks.length) controller.close();
+        else controller.enqueue(new TextEncoder().encode(chunks[index++]));
+      }, cancel,
+    }, { highWaterMark: 0 });
+    const getReader = vi.spyOn(stream, 'getReader');
+    const request = { body: stream, headers: new Headers(length === undefined ? {} : { 'content-length': length }) } as unknown as HttpRequest;
+    return { request, cancel, getReader };
+  }
+
+  it('rejects declared oversize before acquiring the stream reader', async () => {
+    const { request, getReader } = streamRequest(['{}'], '17');
+    await expect(readBody(request, 16)).rejects.toMatchObject({ code: 'validation' });
+    expect(getReader).not.toHaveBeenCalled();
+  });
+
+  it('accepts exactly bounded JSON without a content type', async () => {
+    const { request } = streamRequest(['{"value":', '123456}']);
+    expect(await readBody(request, 16)).toEqual({ value: 123456 });
+  });
+
+  it.each([undefined, '1'])('counts actual chunks and cancels overflow despite content length %s', async length => {
+    const { request, cancel } = streamRequest(['{"value":', '123456789}'], length);
+    await expect(readBody(request, 16)).rejects.toMatchObject({ code: 'validation' });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('counts UTF-8 bytes rather than decoded characters', async () => {
+    const { request, cancel } = streamRequest(['"\u00e9\u00e9"']);
+    await expect(readBody(request, 5)).rejects.toMatchObject({ code: 'validation' });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('rejects overflow in multipart before parsing the complete form', async () => {
+    const form = new FormData();
+    form.append('file', new Blob(['audio']), 'recording.webm');
+    await expect(readBody(fakeRequest({ form }), 16)).rejects.toMatchObject({ code: 'validation' });
+  });
+
+  it('never allows a helper limit greater than the production cap', async () => {
+    const { request, getReader } = streamRequest(['{}']);
+    await expect(readBody(request, MAX_HTTP_BODY_BYTES + 1)).rejects.toThrow('Invalid HTTP body limit');
+    expect(getReader).not.toHaveBeenCalled();
+  });
+
+  it('does not consume a body before authentication', async () => {
+    const request = fakeRequest({ body: '{}' });
+    const getReader = vi.spyOn(request.body!, 'getReader');
+    expect((await runRoute(denyVerifier, async () => ({ status: 200, body: undefined }), request)).status).toBe(401);
+    expect(getReader).not.toHaveBeenCalled();
   });
 });

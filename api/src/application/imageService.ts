@@ -105,6 +105,7 @@ export class ImageService {
   async remove(userId: string, id: string): Promise<void> {
     const rec = await this.imageStore.get(userId, id);
     if (!rec) return; // idempotent
+    await this.imageStore.delete(userId, id);
     if (rec.blobPath && isOwnerBlobPath(userId, rec.blobPath)) {
       try {
         const { url } = await this.minter.mint({ blobPath: rec.blobPath, op: 'delete', ttlSeconds: 120 });
@@ -113,6 +114,5 @@ export class ImageService {
         /* best-effort blob cleanup; the record removal is the source of truth */
       }
     }
-    await this.imageStore.delete(userId, id);
   }
 }

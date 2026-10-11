@@ -37,6 +37,14 @@ export class InMemoryThreadStore implements ThreadStore, ThreadLockStore {
     return record;
   }
 
+  async createIfAbsent(record: ThreadRecord): Promise<ThreadRecord | null> {
+    const key = this.key(record.userId, record.id);
+    if (this.byKey.has(key)) return null;
+    this.byKey.set(key, { ...record });
+    this.versions.set(key, (this.versions.get(key) ?? 0) + 1);
+    return record;
+  }
+
   async getForUpdate(
     userId: string,
     id: string,
@@ -49,6 +57,8 @@ export class InMemoryThreadStore implements ThreadStore, ThreadLockStore {
 
   async putIfMatch(record: ThreadRecord, etag: string): Promise<ThreadRecord | null> {
     const k = this.key(record.userId, record.id);
+    if (!etag.trim()) throw new Error('Conditional thread writes require a version token.');
+    if (!this.byKey.has(k)) return null;
     if (String(this.versions.get(k) ?? 0) !== etag) return null; // lost the race
     this.byKey.set(k, { ...record });
     this.versions.set(k, (this.versions.get(k) ?? 0) + 1);

@@ -14,7 +14,7 @@ function provider() {
 }
 
 describe('image request contract', () => {
-  it('sends bearer authentication and generation options', async () => {
+  it('sends bearer authentication and generation options and decodes the response envelope', async () => {
     const fetchImpl = provider();
     const result = await generateImage({
       ...credentials, prompt: 'A mountain photograph', size: '1024x1024', quality: 'low',
@@ -24,7 +24,7 @@ describe('image request contract', () => {
     const [url, init] = fetchImpl.mock.calls[0];
     expect(url).toBe(`${credentials.baseUrl}/images/generations`);
     expect(init).toMatchObject({
-      method: 'POST',
+      method: 'POST', redirect: 'error',
       headers: { Authorization: 'Bearer test-key', 'Content-Type': 'application/json' },
     });
     expect(JSON.parse(init!.body as string)).toEqual({
@@ -44,12 +44,14 @@ describe('image request contract', () => {
     const [url, init] = fetchImpl.mock.calls[0];
     expect(url).toBe(`${credentials.baseUrl}/images/edits`);
     expect(init!.headers).toEqual({ Authorization: 'Bearer test-key' });
+    expect(init!.redirect).toBe('error');
     const form = init!.body as FormData;
     expect(form.get('model')).toBe(credentials.model);
     expect(form.get('prompt')).toBe('Make this black and white');
     expect(form.get('output_format')).toBe('webp');
     expect(form.get('output_compression')).toBe('0');
     expect(form.get('background')).toBe('transparent');
+    expect(form.get('quality')).toBe('low');
     const image = form.get('image') as File;
     const mask = form.get('mask') as File;
     expect(image.type).toBe('image/jpeg');

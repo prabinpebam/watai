@@ -5,6 +5,15 @@
 import { aiFetch, v1Url } from './http';
 import { normalizeHttpError } from './errors';
 
+export const MAX_CONTAINER_FILE_BYTES = 25 * 1024 * 1024;
+
+export class ContainerFileSizeError extends Error {
+  constructor() {
+    super('Artifact exceeds the byte limit.');
+    this.name = 'ContainerFileSizeError';
+  }
+}
+
 export interface AiCreds {
   baseUrl: string;
   key: string;
@@ -79,7 +88,11 @@ export async function getContainerFile(
   containerId: string,
   fileId: string,
   fetchImpl?: typeof fetch,
+  maxBytes = MAX_CONTAINER_FILE_BYTES,
 ): Promise<Uint8Array> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > MAX_CONTAINER_FILE_BYTES) {
+    throw new Error('Invalid artifact byte limit.');
+  }
   const url = v1Url(
     creds.baseUrl,
     `/containers/${encodeURIComponent(containerId)}/files/${encodeURIComponent(fileId)}/content`,
@@ -90,8 +103,34 @@ export async function getContainerFile(
     url,
     method: 'GET',
     timeoutMs: 120_000,
+    bodyTimeout: true,
     fetchImpl,
   });
   if (!res.ok) throw await normalizeHttpError(res, 'code_interpreter');
-  return new Uint8Array(await res.arrayBuffer());
+  const declaredBytes = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new ContainerFileSizeError();
+  }
+  if (!res.body) return new Uint8Array();
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  let finished = false;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) { finished = true; break; }
+      if (value.byteLength > maxBytes - totalBytes) throw new ContainerFileSizeError();
+      totalBytes += value.byteLength;
+      if (value.byteLength) chunks.push(value);
+    }
+    const bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    return bytes;
+  } finally {
+    if (!finished) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
 }

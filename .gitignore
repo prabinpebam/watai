@@ -18,6 +18,7 @@ vite.config.d.ts
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
+!.vscode/tasks.json
 
 # Logs
 npm-debug.log*

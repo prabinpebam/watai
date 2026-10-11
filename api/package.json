@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.cjs",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "description": "Watai API (Azure Functions): server-authoritative generation + encrypted credential vault. Persists threads/messages/runs in Cosmos and runs Azure OpenAI server-side.",
   "scripts": {
     "test": "vitest run",
@@ -18,8 +21,8 @@
     "library:inventory": "npx --yes tsx scripts/library-inventory.ts",
     "library:backfill": "npx --yes tsx scripts/library-backfill.ts",
     "library:migrate": "npx --yes tsx scripts/library-migrate.ts",
-    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node20 --packages=external --outfile=dist/index.cjs",
-    "build:live-model-adapter": "esbuild scripts/live-model-adapter.ts --bundle --platform=node --format=esm --target=node20 --packages=external --outfile=dist/live-model-adapter.mjs",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node24 --packages=external --outfile=dist/index.cjs",
+    "build:live-model-adapter": "esbuild scripts/live-model-adapter.ts --bundle --platform=node --format=esm --target=node24 --packages=external --outfile=dist/live-model-adapter.mjs",
     "live-model-adapter": "npm run build:live-model-adapter --silent && node dist/live-model-adapter.mjs",
     "prestart": "npm run build",
     "start": "func start"
@@ -32,11 +35,12 @@
     "@azure/storage-blob": "^12.32.0",
     "@azure/storage-queue": "^12.31.0",
     "fflate": "^0.8.3",
+    "gpt-tokenizer": "4.0.0",
     "jose": "^5.10.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@types/node": "^24.13.3",
     "esbuild": "0.28.2",
     "typescript": "^5.5.4",
     "vitest": "4.1.11"

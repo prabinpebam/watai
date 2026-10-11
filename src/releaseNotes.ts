@@ -1,40 +1,46 @@
 export interface ReleaseNote {
   version: string;
-  date: string;
+  deployedAt: string;
+  apiDeployedAt: string;
   title: string;
   changes: string[];
+}
+
+export function formatDeploymentTimestamp(value: string): string {
+  return value.replace('T', ' ').replace('Z', ' UTC');
 }
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: '0.2.3',
-    date: '2026-09-13',
+    deployedAt: '2026-09-13T12:00:27Z',
+    apiDeployedAt: '2026-09-13T18:29:13Z',
     title: 'Transparent backgrounds for chat images',
     changes: [
       'Chat requests for transparent backgrounds or background removal can select native alpha transparency',
       'Image generation and edits send the background option and preserve PNG output',
-      'Uses your configured image deployment and saved API key; requires a model that supports transparent backgrounds',
+      'Uses your configured image deployment and saved key; requires transparent-background support',
       'Provider-generated alpha pixels still require manual validation',
-      'Frontend release published: 2026-09-13 12:00:27 UTC',
-      'API activation verified: 2026-09-13 18:29:13 UTC (OneDeploy); earlier upload checks did not verify active code',
+      'API worker activation verified through OneDeploy; earlier upload checks did not verify active code',
     ],
   },
   {
     version: '0.2.2',
-    date: '2026-09-11',
+    deployedAt: '2026-09-11T12:30:37Z',
+    apiDeployedAt: '2026-09-11T12:29:18Z',
     title: 'Stable chat chronology throughout a response',
     changes: [
       'Submitted prompts remain visible while background history refreshes',
       'Prompt and reply order stays fixed from the first bubble through server streaming',
       'Late updates from an older response cannot replace the current reply',
       'Completed replies remain visible until persisted history takes over',
-      'Frontend hotfix published: 2026-09-11 12:30:37 UTC',
-      'API hotfix package published: 2026-09-11 12:29:18 UTC; healthy after restart at 12:29:55 UTC',
+      'API package healthy after restart at 2026-09-11 12:29:55 UTC',
     ],
   },
   {
     version: '0.2.1',
-    date: '2026-09-11',
+    deployedAt: '2026-09-11T03:53:57Z',
+    apiDeployedAt: '2026-09-11T03:50:53Z',
     title: 'History that reliably catches up after reconnecting',
     changes: [
       'Delayed messages with matching timestamps are no longer skipped during sync',
@@ -44,7 +50,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
   },
   {
     version: '0.2.0',
-    date: '2026-09-11',
+    deployedAt: '2026-09-10T20:23:54Z',
+    apiDeployedAt: '2026-09-10T20:19:45Z',
     title: 'Safer sync, memory, voice, and everyday recovery',
     changes: [
       'Safer account-isolated sync and durable chat submission',

@@ -33,6 +33,7 @@ describe('LibraryPicker', () => {
     const close = vi.fn();
     render(<LibraryPicker threadId="thread-1" onClose={close} />);
     await screen.findByText('Reference.png');
+    expect(screen.getByRole('textbox', { name: 'Search Library' })).toHaveFocus();
     fireEvent.click(screen.getByRole('button', { name: /Reference.png/ }));
     fireEvent.click(screen.getByRole('button', { name: /Brief.pdf/ }));
     expect(useUi.getState().stagedLibraryByThread['thread-1']).toBeUndefined();

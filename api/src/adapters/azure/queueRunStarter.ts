@@ -2,7 +2,7 @@ import { QueueServiceClient, type QueueClient } from '@azure/storage-queue';
 import type { RunStarter } from '../../ports/runStarter';
 import type { RunRecord } from '../../ports/runStore';
 
-export const RUN_QUEUE = 'run-jobs';
+export const RUN_QUEUE = process.env.RUN_QUEUE?.trim() || 'run-jobs';
 
 export interface RunJob {
   runId: string;

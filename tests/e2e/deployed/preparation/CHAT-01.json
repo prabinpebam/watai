@@ -1,0 +1,895 @@
+{
+  "schemaVersion": 1,
+  "flowId": "CHAT-01",
+  "flowVersion": 1,
+  "flowDigest": "158e4a27efeda83f0f8f7cc67bc9449db9b027c1dde806a4372c6e43f0b162c9",
+  "variantId": "CHAT-01.first-prompt-reload-desktop",
+  "designVersion": 3,
+  "bindingStatus": "BOUND_DRAFT_NOT_READY",
+  "scope": "Five-flow pilot first-prompt/reload child only. Other CHAT-01 variants are deferred, not pilot prerequisites; cancellation and streaming have their own selected pilot cases.",
+  "deferredVariants": [
+    "Pending/stale/out-of-order/reconnect/multi-session and responsive/theme child variants outside the selected first-prompt/reload child"
+  ],
+  "expectation": "I can ask this question once, follow a coherent response that visibly belongs to it, understand what the app is doing at every step, and return to the same trustworthy conversation after reload without lost or displaced work.",
+  "userGoals": [
+    "Submit one prompt, receive the correctly associated answer 46, and retain that exact conversation after reload"
+  ],
+  "preconditions": [
+    "Exact deployed Watai origin and actual approved frontend/API identities; no local app, mocked requests, fabricated responses or token injection",
+    "Genuine designated invited non-admin test identity, protected session, verified immutable owner and consent/configuration state",
+    "Real configured provider, one-submission authority and independently enforced provider spend ceiling",
+    "Verified existing Edge page with the designated account; preserve and record actual viewport, scale, locale and theme/fonts without emulation, cloning or foreground focus",
+    "New empty /#/new conversation with zero data-message-id nodes; existing history blocks rather than being deleted",
+    "Complete capture, heuristic, skill/model/runtime, privacy, evidence storage and independent calibration prerequisites validated before launch"
+  ],
+  "safety": [
+    "Exactly one Send action and one POST run submission; no automatic resend, regeneration, tool confirmation or cleanup deletion",
+    "Only fixed approved app/API/identity/realtime origins, at most120 requests and20MiB decoded traffic; browser task90seconds maximum",
+    "No foreground focus, user profile takeover, forced click, alternate selector or invented capture phase",
+    "Record only fixed non-sensitive prompt/reply and whitelisted run/message identities; never credentials, headers, cookies, storage, URL queries, execution tokens or arbitrary response bodies",
+    "Unexpected account, pre-existing history, ambiguous acceptance, unplanned provider work or evidence loss stops side effects and preserves the attempt"
+  ],
+  "cleanup": [
+    "Drain capture, remove only runner-owned page bindings/scripts/routes/listeners and detach its CDP session; leave browser/context/page open. Driver exit disconnects transport; borrowed-page lifecycle calibration remains required",
+    "Retain created conversation identity and failure evidence for separately authorized test-owned cleanup; never delete or retry to conceal an uncertain outcome"
+  ],
+  "entryStep": "open-empty-thread",
+  "steps": [
+    {
+      "id": "open-empty-thread",
+      "phase": "navigate",
+      "maxVisits": 1,
+      "deadlineMs": 15000,
+      "trigger": "Before blank-document handoff and app navigation, after page-scoped document-start recorder and request guards are installed",
+      "action": "In the verified existing Edge page, navigate through about:blank to https://prabinpebam.github.io/watai/#/new and await DOMContentLoaded within the same step deadline",
+      "expected": "The actual designated account reaches the new-conversation shell without redirect loops, stale identity or protected content from another account",
+      "failureModes": [
+        "Wrong account or route",
+        "Authentication/permission failure",
+        "Missing document-start observation",
+        "Unexpected pre-existing thread data"
+      ],
+      "next": [
+        "verify-ready",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before navigation and throughout authentication/bootstrap waits",
+        "end": "Explicit ready transition or stopped failure",
+        "channels": [
+          "document and safe request lifecycle",
+          "ordered DOM mutations",
+          "rAF state/geometry",
+          "focus and fonts"
+        ],
+        "fields": [
+          "document/receiver sequences",
+          "observed time and origin",
+          "region identities/coverage",
+          "actual safe account-state receipt",
+          "viewport/scroll/ancestor effects"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient on lost events, oversized evidence, unsupported state or undeclared origin; never weaken capture",
+        "unexpectedSurface": "Fixed sentinel retains safe overlays and stops on unclassified frames/forms or owner ambiguity; no runtime resolution change",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "boundary identity",
+              "scroll and ancestor geometry"
+            ],
+            "reason": "Contains the future conversation and its reading position"
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "actual IDs/order/content",
+              "visibility and geometry"
+            ],
+            "reason": "Any pre-existing message must be visible as a violated initial condition"
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "safe draft",
+              "control names/states",
+              "focus/hit geometry"
+            ],
+            "reason": "Primary entry point must become honestly ready"
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text/state",
+              "visibility/focus/occlusion"
+            ],
+            "reason": "Startup failures and unanticipated overlays are in scope"
+          }
+        ]
+      }
+    },
+    {
+      "id": "verify-ready",
+      "phase": "ready",
+      "maxVisits": 1,
+      "deadlineMs": 5000,
+      "trigger": "The exact composer is visible and the real account verification response is available",
+      "action": "Require one textarea[aria-label=Message], one button[aria-label=Send], no message nodes and the approved identity/consent/configuration; capture the empty-thread checkpoint",
+      "expected": "The user is in a genuinely empty owned conversation with a usable composer",
+      "failureModes": [
+        "Duplicate or hidden composer",
+        "Existing message",
+        "Unverified owner or provider budget",
+        "Missing initial-state evidence"
+      ],
+      "next": [
+        "compose-fixed-prompt",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before any readiness assertion and during its waits",
+        "end": "Compose transition or explicit failure",
+        "channels": [
+          "DOM/region snapshots",
+          "geometry and hit tests",
+          "account receipt",
+          "screenshot checkpoint"
+        ],
+        "fields": [
+          "complete message-region observation",
+          "composer bounds/name/enabled state",
+          "document/thread identity",
+          "approved initial-state binding"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Missing identity/coverage/paint is insufficient, not an empty-state success",
+        "unexpectedSurface": "New message or overlay is retained and stops setup; never clear the state automatically",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "boundary and scroll"
+            ],
+            "reason": "Establish the initial reading context"
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "presence/absence with coverage",
+              "IDs/content"
+            ],
+            "reason": "Observed empty differs from an omitted region"
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "draft",
+              "accessible names",
+              "enabled/hit/clip geometry"
+            ],
+            "reason": "The exact input and action must be usable"
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe content",
+              "focus/paint"
+            ],
+            "reason": "Readiness cannot hide an error or blocking dialog"
+          }
+        ]
+      }
+    },
+    {
+      "id": "compose-fixed-prompt",
+      "phase": "compose",
+      "maxVisits": 1,
+      "deadlineMs": 2000,
+      "trigger": "Before the real fill action with the complete recorder active",
+      "action": "Fill exactly: Calculate 17 + 29. Reply with only the decimal integer, without formatting or explanation.",
+      "expected": "The exact non-sensitive prompt remains in the composer, with Send usable and no submission yet",
+      "failureModes": [
+        "Changed or lost text",
+        "Unusable Send",
+        "Unexpected auto-submission"
+      ],
+      "next": [
+        "submit-once",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before input begins",
+        "end": "Submit transition or explicit stop",
+        "channels": [
+          "real action log",
+          "input/focus and DOM changes",
+          "rAF geometry"
+        ],
+        "fields": [
+          "exact allowed composer value",
+          "focusId",
+          "Send state/hit/clip",
+          "message-region activity"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient without replaying the action",
+        "unexpectedSurface": "Unexpected submission, replacement draft or overlay is retained; no input repair within this attempt",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "boundary/scroll"
+            ],
+            "reason": "Observe unintended navigation or layout movement"
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "identity/order/content"
+            ],
+            "reason": "Messages appearing before submission are unexpected"
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "exact draft",
+              "focus and operability"
+            ],
+            "reason": "Prove the actual submitted input rather than a test variable"
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe content and visible state"
+            ],
+            "reason": "Input failures must remain observable"
+          }
+        ]
+      }
+    },
+    {
+      "id": "submit-once",
+      "phase": "submit",
+      "maxVisits": 1,
+      "deadlineMs": 30000,
+      "trigger": "Before the single real Send click, not after an acceptance predicate succeeds",
+      "action": "Click the exact Send button once; record whitelisted request clientMessageId/threadId/prompt hash and the real acceptance runId/assistantMessageId. Continue observing pending acceptance until first assistant root or explicit failure",
+      "expected": "One request is admitted, the submitted prompt persists, and its own first reply never appears before it",
+      "failureModes": [
+        "Duplicate Send or POST",
+        "Lost/altered prompt",
+        "Response above prompt",
+        "Wrong acceptance identity",
+        "Admission without completed append/start",
+        "Ambiguous acceptance"
+      ],
+      "next": [
+        "observe-response",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before Send and throughout request/acceptance/first-response waits",
+        "end": "First-response phase or explicit failure; no resubmission",
+        "channels": [
+          "real action/request/acceptance records",
+          "ordered message mutations",
+          "every rAF order/visibility",
+          "composer/progress changes"
+        ],
+        "fields": [
+          "clientMessageId/runId/threadId/assistantMessageId",
+          "original prompt body",
+          "DOM lifetime/domain identity",
+          "actual order/geometry/visibility",
+          "logical-time receipts when available"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Any lost interval or unsupported identity handoff is insufficient; known chronology failures remain failures",
+        "unexpectedSurface": "Unknown optimistic/server alias is never guessed; preserve it as uncorrelated evidence and stop if safety requires",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll anchor and ancestor effects"
+            ],
+            "reason": "Submission can move or hide the conversation"
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "lifetime and domain IDs",
+              "bubble-user/md body",
+              "order/visibility/bounds",
+              "old/new mutations"
+            ],
+            "reason": "Every submitted-prompt/first-reply transition is release critical"
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "draft clearing",
+              "Send/Stop state",
+              "focus"
+            ],
+            "reason": "Feedback must agree with real acceptance"
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe error/status",
+              "visibility/occlusion"
+            ],
+            "reason": "An admitted but unstarted run must not look successfully complete"
+          }
+        ]
+      }
+    },
+    {
+      "id": "observe-response",
+      "phase": "response",
+      "maxVisits": 1,
+      "deadlineMs": 20000,
+      "trigger": "First actual assistant root observed while preserving all earlier submit evidence",
+      "action": "Observe streaming without user action until actual terminal receipt and corresponding terminal UI; mere appearance of the substring46 is not completion",
+      "expected": "Content grows coherently, remains attached to the same prompt and reaches an honest terminal state",
+      "failureModes": [
+        "Prompt/reply disappearance or inversion",
+        "Uncorrelated replacement response",
+        "Stall or truncated stream claimed complete",
+        "Late work changes terminal state"
+      ],
+      "next": [
+        "inspect-complete",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before first response transition",
+        "end": "Actual terminal condition or bounded failure",
+        "channels": [
+          "message DOM mutation history",
+          "rAF order/visibility/scroll",
+          "safe real run status",
+          "progress/Stop controls"
+        ],
+        "fields": [
+          "message IDs and body structure",
+          "streaming text and formatting",
+          "run status and terminal receipt",
+          "anchor/geometry",
+          "original errors"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient; never shorten the trace or broaden a timing threshold to pass",
+        "unexpectedSurface": "Retain unexpected tools, content, overlays and identity changes without changing the capture plan",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll and ancestor geometry"
+            ],
+            "reason": "Reading position and visible association matter throughout streaming"
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "actual content and formatting",
+              "identity/order/lifetime",
+              "visibility/geometry",
+              "old/new text"
+            ],
+            "reason": "Do not reduce the response to an expected integer before recording it"
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "Send/Stop/progress",
+              "focus/geometry"
+            ],
+            "reason": "Controls must agree with execution, even without a cancellation action"
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "error/status content",
+              "paint and focus"
+            ],
+            "reason": "Progress failure is part of the actual experience"
+          }
+        ]
+      }
+    },
+    {
+      "id": "inspect-complete",
+      "phase": "complete",
+      "maxVisits": 1,
+      "deadlineMs": 5000,
+      "trigger": "Actual run terminal receipt and matching terminal UI, with no fabricated expected-answer readiness condition",
+      "action": "Observe1500 monotonic ms of reconciliation; inspect the actual .md body and structure, capture linked terminal screenshot and record the owned conversation route identity",
+      "expected": "Exactly46 without formatting/explanation is delivered by the accepted assistant identity; prompt and reply remain visible and ordered",
+      "failureModes": [
+        "Wrong/hidden/formatted answer",
+        "Wrong assistant identity",
+        "Transient handoff loss",
+        "Success UI without delivered output"
+      ],
+      "next": [
+        "reload-and-verify",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before terminal handoff",
+        "end": "After full reconciliation and screenshot, before reload",
+        "channels": [
+          "terminal receipt",
+          "mutation/rAF state",
+          "actual answer body/format",
+          "linked screenshot"
+        ],
+        "fields": [
+          "exact body text",
+          "contentHasFormatting",
+          "run/message/thread IDs",
+          "before/after screenshot checkpoints",
+          "order and visibility"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Missing handoff, terminal or paint evidence is insufficient and retained",
+        "unexpectedSurface": "A later correct answer cannot erase an earlier terminal mismatch or disappearance",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll/ancestor effects"
+            ],
+            "reason": "Completion must not displace the reader"
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "prompt/reply body and identities",
+              "order/visibility",
+              "format structure"
+            ],
+            "reason": "Inspect the actual delivered answer and stable handoff"
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "terminal Send/Stop state",
+              "focus"
+            ],
+            "reason": "No stale spinner or misleading terminal action state"
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "actual errors/status",
+              "visibility"
+            ],
+            "reason": "An error cannot be hidden by a correct-looking answer"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reload-and-verify",
+      "phase": "reload",
+      "maxVisits": 1,
+      "deadlineMs": 13000,
+      "trigger": "Before the sole real page reload, after the prior document has a drained checkpoint",
+      "action": "Reload the same owned conversation once. Capture a new document, fresh HTTP message read with original request phase and pagination completeness, and1500 ms of visible reconciliation; inspect exact persisted prompt/reply and linked screenshot",
+      "expected": "The same prompt and accepted reply survive actual persistence and reappear in correct order without duplicates or substituted content",
+      "failureModes": [
+        "Optimistic-only success",
+        "Wrong thread/document",
+        "Stale pre-reload response treated as fresh",
+        "Missing/duplicate/wrong persisted messages",
+        "Transient reorder or disappearance after restoration"
+      ],
+      "next": [
+        "end",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before reload with document continuity and request-phase correlation",
+        "end": "After fresh-read inspection, reconciliation, screenshot and final drain",
+        "channels": [
+          "new document lifecycle",
+          "fresh permitted HTTP message receipt",
+          "message mutations/rAF",
+          "linked screenshot",
+          "final capture health"
+        ],
+        "fields": [
+          "new documentId",
+          "requestPhase/source/pageComplete",
+          "owned threadId and message IDs/roles/content",
+          "exact restored bodies",
+          "order/geometry/visibility",
+          "capture-stopped"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Any missing fresh-read or document/capture evidence is insufficient, never inferred from the visible cache",
+        "unexpectedSurface": "Wrong route, unrelated records or unknown ownership stop; do not navigate elsewhere or rewrite the evidence",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "restored route/scroll boundary"
+            ],
+            "reason": "Verify the same conversation and reading context"
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "fresh identities/content",
+              "all restored ordering/visibility transitions",
+              "body formatting"
+            ],
+            "reason": "Fresh persistence, not optimistic display, establishes retention"
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "restored draft/action states",
+              "focus"
+            ],
+            "reason": "Reload must leave a coherent usable conversation"
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "real restore errors/status",
+              "occlusion"
+            ],
+            "reason": "A failed reload cannot be silently counted as persistence success"
+          }
+        ]
+      }
+    }
+  ],
+  "heuristics": [
+    {
+      "id": "CHAT-H01",
+      "outcome": "prompt",
+      "steps": [
+        "compose-fixed-prompt",
+        "submit-once",
+        "observe-response",
+        "inspect-complete",
+        "reload-and-verify"
+      ],
+      "inputs": [
+        "exact composer/request prompt hash",
+        "clientMessageId and accepted run identity",
+        "every observed bubble-user body"
+      ],
+      "algorithm": "Require one submission whose fixed prompt hash/thread/clientMessageId match one accepted run; every observed user body equals the fixed prompt and its domainId matches the request. Acceptance alone is not persistence",
+      "pass": "All original observed prompt and request identity facts agree",
+      "fail": "Changed/lost prompt, duplicate submission or wrong binding",
+      "insufficient": "Missing request/receipt/body/identity evidence",
+      "negativeCases": [
+        "Driver flags true with wrong prompt",
+        "Duplicate POST",
+        "Prompt hidden then restored"
+      ],
+      "implementation": "tests/e2e/deployed/chat-heuristics.mjs#evaluateChatHeuristics"
+    },
+    {
+      "id": "CHAT-H02",
+      "steps": [
+        "submit-once",
+        "observe-response",
+        "inspect-complete",
+        "reload-and-verify"
+      ],
+      "inputs": [
+        "every message snapshot/mutation and frame",
+        "DOM order and visual bounds",
+        "lifetime and accepted message IDs"
+      ],
+      "algorithm": "Within each actual document retain prompt/reply presence after first observation; require prompt before its own reply in original DOM and geometry at every observed state. Never role-sort. Uncorrelated optimistic assistant ID is insufficient; a wrong terminal ID is failure",
+      "pass": "All calibrated intermediate observations preserve association, presence and order",
+      "fail": "One-state inversion, disappearance, duplicate or wrong terminal association",
+      "insufficient": "Missing frames/geometry or unsupported identity handoff",
+      "negativeCases": [
+        "Transient inversion corrected later",
+        "Prompt removal/reinsert",
+        "Unknown optimistic alias"
+      ],
+      "implementation": "tests/e2e/deployed/chat-heuristics.mjs#evaluateChatHeuristics"
+    },
+    {
+      "id": "CHAT-H03",
+      "steps": [
+        "submit-once",
+        "observe-response",
+        "inspect-complete"
+      ],
+      "inputs": [
+        "actual run lifecycle receipts",
+        "stream progress/terminal UI",
+        "delivered content"
+      ],
+      "algorithm": "Join UI progress to the accepted run's actual lifecycle; require queued/running/terminal consistency and no post-terminal changes without a new action. Stop absence or answer substring is never a terminal oracle",
+      "pass": "Every observed progress and terminal state matches execution and actual delivery",
+      "fail": "Truncated stream or append/start failure claims successful completion",
+      "insufficient": "Safe real lifecycle receipts or exact transition oracle unavailable",
+      "negativeCases": [
+        "Queued admission without start",
+        "Socket closes before complete",
+        "Correct substring while still streaming"
+      ],
+      "implementation": "NOT_IMPLEMENTED:CHAT-H03_REAL_LIFECYCLE"
+    },
+    {
+      "id": "CHAT-H04",
+      "outcome": "answer",
+      "steps": [
+        "inspect-complete",
+        "reload-and-verify"
+      ],
+      "inputs": [
+        "actual .md body and format tags",
+        "accepted assistantMessageId",
+        "terminal receipt"
+      ],
+      "algorithm": "At terminal and reload, trim only leading/trailing whitespace and compare actual body exactly with46; reject formatting/explanation and wrong terminal reply identity. Never compare wrapper text containing copy controls",
+      "pass": "The exact actual unformatted46 belongs to the accepted reply",
+      "fail": "Wrong, hidden, formatted or substituted answer",
+      "insufficient": "Missing body/format/terminal identity evidence",
+      "negativeCases": [
+        "47",
+        "Code-fenced46",
+        "Other reply ID",
+        "Correct hidden value behind wrong visible output"
+      ],
+      "implementation": "tests/e2e/deployed/chat-heuristics.mjs#evaluateChatHeuristics"
+    },
+    {
+      "id": "CHAT-H05",
+      "outcome": "restored",
+      "steps": [
+        "reload-and-verify"
+      ],
+      "inputs": [
+        "new documentID",
+        "fresh HTTP message read originated during reload",
+        "complete pagination and owned thread",
+        "persisted original messages"
+      ],
+      "algorithm": "Require a new document and actual reload-phase complete HTTP read for the accepted thread containing exactly one expected user and assistant identity with exact prompt and46 content; then match actual rendered restoration. A prior optimistic or pre-reload read never qualifies",
+      "pass": "Fresh persistence and visible restoration agree exactly",
+      "fail": "Missing/duplicate/wrong persisted identities or content",
+      "insufficient": "Missing fresh-read/source/phase/page completeness",
+      "negativeCases": [
+        "Acceptance but no saved prompt",
+        "Wrong persisted answer",
+        "Stale request finishes after reload"
+      ],
+      "implementation": "tests/e2e/deployed/chat-heuristics.mjs#evaluateChatHeuristics"
+    },
+    {
+      "id": "CHAT-H06",
+      "steps": [
+        "open-empty-thread",
+        "verify-ready",
+        "compose-fixed-prompt",
+        "submit-once",
+        "observe-response",
+        "inspect-complete",
+        "reload-and-verify"
+      ],
+      "inputs": [
+        "approved DS and actual paint",
+        "ancestor clip/hit geometry",
+        "focus/scroll anchor",
+        "actual fonts/images"
+      ],
+      "algorithm": "Require visible unclipped messages and usable exact controls, approved typography/assets and preserved reading anchor throughout each transition; reference values and pixel thresholds must be independently bound before completion",
+      "pass": "Actual paint and interactions satisfy the approved reference in every required phase",
+      "fail": "Hidden/covered primary result, clipped action or displaced reader",
+      "insufficient": "Approved reference, genuine pixels or full focus/scroll evidence absent",
+      "negativeCases": [
+        "Correct DOM under overlay",
+        "Missing glyph",
+        "Completion scroll jump"
+      ],
+      "implementation": "PARTIAL:message visibility checks; independent DS/scroll/paint qualification missing"
+    },
+    {
+      "id": "CHAT-H07",
+      "outcome": "oneSubmission",
+      "steps": [
+        "open-empty-thread",
+        "verify-ready",
+        "compose-fixed-prompt",
+        "submit-once",
+        "observe-response",
+        "inspect-complete",
+        "reload-and-verify"
+      ],
+      "inputs": [
+        "all phase/receiver/document sequences",
+        "request/submission counts",
+        "required screenshots and safe receipts",
+        "final drain"
+      ],
+      "algorithm": "Require the exact seven-phase order, contiguous receiver/document records, one Send/POST, every required interval/asset and normal drain; preserve reliable product failures even if later capture fails. Unreached stale/pending/multi-session branches never count as covered",
+      "pass": "Complete calibrated evidence within the fixed task envelope",
+      "fail": "Extra submission or unauthorized side effect; preserve independently observed defects",
+      "insufficient": "Any omitted channel, phase, branch, receipt, artifact or drain",
+      "negativeCases": [
+        "Missing reload read",
+        "Dropped event",
+        "Capture gap after visible wrong result"
+      ],
+      "implementation": "PARTIAL:tests/e2e/deployed/chat-heuristics.mjs and core.mjs"
+    }
+  ],
+  "semantic": {
+    "required": true,
+    "openEnded": true,
+    "expectation": "I can ask this question once, follow a coherent response that visibly belongs to it, understand what the app is doing at every step, and return to the same trustworthy conversation after reload without lost or displaced work.",
+    "skillPath": ".github/skills/edd-semantic-review/SKILL.md",
+    "skillSha256": "46862abe75e7fbb915236ba5c4e76dc9dbed9116cf3285510e11c34214cd4b91",
+    "agentPath": "tests/e2e/deployed/semantic-agent.json",
+    "agentSha256": "8c6b1fe13be2194aa4ec3a895e52ee93419ad5739a9fd2b492484d772453c84b",
+    "reviewProtocol": "complete-timeline-then-cross-phase-synthesis-v1",
+    "evidenceLayers": [
+      "timeline",
+      "visual",
+      "interaction",
+      "actual run and persistence receipts",
+      "assets"
+    ],
+    "contextExhaustion": "Preflight must establish lossless capacity for the full capture envelope; exhaustion or omitted windows means insufficient and never prompts improvised compaction",
+    "findingContract": "Inspect every original window and required asset independently of heuristic conclusions, then synthesize the whole experience. Discover novel anomalies without a detector ID; cite original events/assets and separate observation, expectation, impact and uncertainty. Durable journal acknowledgement is mandatory before dispatch and completion"
+  },
+  "artifacts": [
+    {
+      "path": "tests/e2e/deployed/pilot-chat-driver.mjs",
+      "sha256": "c0c1a17e038d073b1ba92f5cfb184344d58a64c116fc7afa3f5112e5d2684cb2"
+    },
+    {
+      "path": "tests/e2e/deployed/pilot-chat-plans.mjs",
+      "sha256": "2f4063dd8b83f663ba12f122cb4f610baa089c8ad93c6ab6e559f95d00d98ad3"
+    },
+    {
+      "path": "tests/e2e/deployed/pilot-chat-heuristics.mjs",
+      "sha256": "cab291ace4de7c27bc574398eed71f21252691209df62650d71dd6c0ad4ff1b5"
+    },
+    {
+      "path": "tests/e2e/deployed/five-flow-pilot.json",
+      "sha256": "366d97cb128c80c8f74dd2eed79289b5fbcb8b6eb9af48d0e165926c8560d3d4"
+    },
+    {
+      "path": "tests/e2e/deployed/chat-http.mjs",
+      "sha256": "d73be83504e5a73a135c2a323487fc56cd0d7db0cf22a346c38d41bec44fb8b1"
+    },
+    {
+      "path": "tests/e2e/deployed/capture.mjs",
+      "sha256": "0aa95fb1dfa16410f66affaed571267654f7edbff6df8f65ce7661d320478513"
+    },
+    {
+      "path": "tests/e2e/deployed/capture-entry.mjs",
+      "sha256": "fb1018f81b409a915e4c7051f3cc86bf7a5518938cbf7258db56b5dff38abbee"
+    },
+    {
+      "path": "tests/e2e/deployed/capture-bootstrap.mjs",
+      "sha256": "747861d1dbeff0b96752cf92063925359f5ee7515b1fae38738b78e49e297330"
+    },
+    {
+      "path": "tests/e2e/deployed/core.mjs",
+      "sha256": "b7f86d61d5dc1ff490b7f14f7782e1c880eae8bfe7d787cdf9a9ac882d5d2156"
+    },
+    {
+      "path": "tests/e2e/deployed/semantic.mjs",
+      "sha256": "47a8b4f2a79e4774943ad6544780f70c26e27ec384be2b936d2d58b7a31ab850"
+    },
+    {
+      "path": "tests/e2e/deployed/run.mjs",
+      "sha256": "81c233f150c00424af3fcf6c359fd02155089f49ec78450bcf3be016c5b025ac"
+    },
+    {
+      "path": "tests/e2e/deployed/preparation.mjs",
+      "sha256": "3aeccbd58ee9379c6683559632c6fe5531e9bfc80b37e0a0098f18c17814ae6b"
+    },
+    {
+      "path": "tests/e2e/deployed/evidence.mjs",
+      "sha256": "a42fb0db90a4cd6077313463fe5fd1cf13642d664a2530a8e9ca9a6b2846462c"
+    },
+    {
+      "path": "tests/e2e/deployed/chat-heuristics.mjs",
+      "sha256": "4a20f016c62e01fefa25ec2ae4eb2fa131d7cc1c0c58427f560d3be8a4f7354f"
+    },
+    {
+      "path": "tests/e2e/deployed/auth-heuristics.mjs",
+      "sha256": "2b3bd260b769b99c81932be439a5c8986ce76e4c8b9fe5c05a54f7c68be7aea6"
+    },
+    {
+      "path": "src/features/chat/Message.tsx",
+      "sha256": "3e1b9beb9a46a3c525178e04f255a5f8d3f4d8636cb835fbcbe7a600a9005834"
+    },
+    {
+      "path": "api/src/application/runService.ts",
+      "sha256": "86a9ae2f1249b71b348dde712e826971102635f5983c492b2fc977e20649c16d"
+    },
+    {
+      "path": "src/design/global.css",
+      "sha256": "a2ed4eb92aa9bbf06672dddd80d3d7213afe7064a296ea6f838540e5f914d00a"
+    },
+    {
+      "path": "documentation/quality-gate/flows/AUTH-01-CHAT-01.md",
+      "sha256": "c00fcca2609d131517684b15df36569fdc04e971d1ee0ce46ce871359def0988"
+    }
+  ],
+  "attestations": [],
+  "unresolved": [
+    "Designated account login in the existing Edge automation page is verified; borrowed-page lifecycle calibration, immutable API identity and initial consent/provider-side budget proof remain incomplete",
+    "Safe submitted-run, accepted-run, HTTP lifecycle and fresh reload-message capture are implemented with a pre-buffer decoded-byte cap; real serving-contract and HTTP terminal availability validation remain incomplete; pagination completeness is not attested by the endpoint",
+    "Driver now waits for a matching real HTTP terminal status rather than expected answer text and enforces bound phase budgets; full required screenshot coverage and real HTTP lifecycle availability remain incomplete",
+    "Optimistic/server assistant identity handoffs, full mutation/paint continuity and recorder privacy/resource calibration are incomplete",
+    "CHAT-H03 now correlates accepted IDs and run-status receipts with recorder-side snapshot boundaries, retaining stale terminal regressions and intermediate wrong answers; actual serving calibration and independent DS/scroll/paint parts of CHAT-H06/H07 remain unqualified",
+    "Proposed semantic capacity cannot cover the full declared capture envelope; no lossless qualified review protocol yet fits",
+    "Isolated window sessions and hard pre-dispatch reservation checks are implemented; runtime/model/tool/vision, isolated credentials, actual reservation authority and held-out quality are not independently validated",
+    "Create-only flushed partial-review journals are implemented; independent design/calibration/privacy authority and private evidence publication are not wired to live dispatch"
+  ]
+}

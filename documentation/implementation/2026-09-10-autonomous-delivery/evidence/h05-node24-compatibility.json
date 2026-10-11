@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0",
+  "status": "LOCAL_COMPATIBILITY_PASSED_DEPLOYMENT_PENDING",
+  "observedAt": "2026-09-11T04:30:00.000Z",
+  "target": {
+    "region": "eastus2",
+    "plan": "Flex Consumption",
+    "currentRuntime": "node 20",
+    "selectedRuntime": "node 24"
+  },
+  "azureReadOnlyProbe": {
+    "supportedNodeVersions": ["24", "22", "20", "18"],
+    "flexConsumptionLocationsMatched": ["eastus2", "eastus2euap"]
+  },
+  "localToolchain": {
+    "node": "24.13.0",
+    "functionsCoreTools": "4.2.1",
+    "nodeTypes": "24.13.3",
+    "esbuildTarget": "node24"
+  },
+  "validation": {
+    "apiTypecheck": "passed",
+    "apiTests": "84 files / 627 tests passed",
+    "apiBuild": "passed",
+    "bicepBuild": "passed"
+  },
+  "releaseBindingNegativeControl": {
+    "priorManifestRejected": true,
+    "blockersObserved": ["SOURCE_DIRTY", "BINDING_MISMATCH:validationInputsSha256"]
+  },
+  "productionMutation": false,
+  "remaining": [
+    "Preserve the current production package and app configuration before runtime promotion.",
+    "Deploy Node 24 as a separate smoke-validated milestone after the current product milestone is manually validated.",
+    "Exercise rollback to the retained Node 20 package/configuration before claiming H05-A complete."
+  ]
+}

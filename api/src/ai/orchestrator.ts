@@ -13,6 +13,7 @@ import {
   type ResponsesTool,
 } from './responses';
 import type { AiErrorCode } from './errors';
+import { observeAgentUsage, type AgentUsageObservation } from '../domain/run';
 
 export interface Turn {
   role: 'system' | 'user' | 'assistant';
@@ -39,6 +40,7 @@ export type ToolExecute = (name: string, args: Record<string, unknown>) => Promi
 
 export type AgentEvent =
   | { type: 'text'; delta: string }
+  | { type: 'usage'; observation: AgentUsageObservation }
   | {
       type: 'image';
       b64: string;
@@ -173,6 +175,7 @@ export async function* runAgent(params: RunAgentParams): AsyncGenerator<AgentEve
           return;
         case 'completed':
           sawCompleted = true;
+          yield { type: 'usage', observation: observeAgentUsage(ev.responseId ?? responseId, ev.resolvedModelVersion, ev.usage) };
           break;
       }
     }

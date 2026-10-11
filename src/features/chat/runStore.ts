@@ -165,7 +165,9 @@ export const useRuns = create<RunsStore>((set, get) => ({
       window.removeEventListener('pagehide', onPageHide);
       if (snapshotTimer !== null) clearTimeout(snapshotTimer);
       await snapshotWrite;
+      if (get().runs[threadId]?.controller !== ctrl) return;
       await kv.delete(snapshotKey).catch(() => undefined);
+      if (get().runs[threadId]?.controller !== ctrl) return;
       set((s) => {
         const next = { ...s.runs };
         delete next[threadId];
@@ -243,6 +245,7 @@ export const useRuns = create<RunsStore>((set, get) => ({
       window.removeEventListener('pagehide', onPageHide);
       if (snapshotTimer !== null) clearTimeout(snapshotTimer);
       await snapshotWrite;
+      if (get().runs[threadId]?.controller !== ctrl) return;
       await kv.delete(snapshotKey).catch(() => undefined);
       // Land the finished reply locally so it survives the overlay clearing (the bulk sync cursor
       // skips the streaming message), then clear the overlay and reload the persisted list.

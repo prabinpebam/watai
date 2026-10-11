@@ -1,4 +1,5 @@
 import type { RunAdmissionRequest, RunAdmissionResult, RunDispatchRecord, RunRecord, RunStore, RunTransitionResult } from '../../ports/runStore';
+import { samePendingRunDispatch, sameRunExecution, type RunExecutionIdentity } from '../../ports/runStore';
 import type { RunStatus } from '../../domain/run';
 import { isActive } from '../../domain/run';
 
@@ -52,10 +53,11 @@ export class InMemoryRunStore implements RunStore {
     return { outcome: 'accepted', run };
   }
 
-  async acknowledgeStart(userId: string, threadId: string, runId: string, instanceId: string): Promise<RunRecord | null> {
+  async acknowledgeStart(userId: string, threadId: string, runId: string, instanceId: string, expectedExecution?: RunExecutionIdentity): Promise<RunRecord | null> {
     const key = this.key(userId, threadId, runId);
     const current = this.byKey.get(key);
     if (!current || current.status !== 'queued') return current ?? null;
+    if (expectedExecution && !sameRunExecution(current, expectedExecution)) return null;
     const updated = { ...current, instanceId };
     this.byKey.set(key, updated);
     return updated;
@@ -67,11 +69,12 @@ export class InMemoryRunStore implements RunStore {
     runId: string,
     expectedStatuses: RunStatus[],
     patch: Partial<Omit<RunRecord, 'id' | 'userId' | 'threadId'>>,
+    expectedExecution?: RunExecutionIdentity,
   ): Promise<RunTransitionResult> {
     const key = this.key(userId, threadId, runId);
     const current = this.byKey.get(key);
     if (!current) return { outcome: 'missing' };
-    if (!expectedStatuses.includes(current.status)) return { outcome: 'unchanged', run: current };
+    if (!expectedStatuses.includes(current.status) || (expectedExecution && !sameRunExecution(current, expectedExecution))) return { outcome: 'unchanged', run: current };
     const updated = { ...current, ...patch };
     this.byKey.set(key, updated);
     const threadKey = this.threadKey(userId, threadId);
@@ -93,7 +96,7 @@ export class InMemoryRunStore implements RunStore {
   async markDispatchSent(record: RunDispatchRecord, sentAt: string): Promise<void> {
     const key = this.key(record.userId, record.threadId, record.runId);
     const current = this.dispatches.get(key);
-    if (current && current.attempt === record.attempt) {
+    if (current && samePendingRunDispatch(current, record)) {
       this.dispatches.set(key, { ...current, state: 'sent', updatedAt: sentAt });
     }
   }

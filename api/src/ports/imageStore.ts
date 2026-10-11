@@ -31,6 +31,8 @@ export interface ImageGenRecord {
   dispatchAttempt?: number;
 }
 
+export type ImageExecutionIdentity = Pick<ImageGenRecord, 'releaseId' | 'executionToken' | 'dispatchAttempt'> & { expectedUpdatedAt?: string };
+
 export interface ImageDispatchRecord {
   imageId: string;
   userId: string;
@@ -62,7 +64,7 @@ export interface ImageStore {
   get(userId: string, id: string): Promise<ImageGenRecord | null>;
   put(record: ImageGenRecord): Promise<ImageGenRecord>;
   putQueued(record: ImageGenRecord): Promise<ImageGenRecord>;
-  transition(userId: string, id: string, expected: ImageStatus[], patch: Partial<ImageGenRecord>): Promise<ImageGenRecord | null>;
+  transition(userId: string, id: string, expected: ImageStatus[], patch: Partial<ImageGenRecord>, identity?: ImageExecutionIdentity): Promise<ImageGenRecord | null>;
   listPendingDispatch(limit?: number): Promise<ImageDispatchRecord[]>;
   listStaleActive(before: string, limit?: number): Promise<ImageGenRecord[]>;
   markDispatchSent(record: ImageDispatchRecord, sentAt: string): Promise<void>;

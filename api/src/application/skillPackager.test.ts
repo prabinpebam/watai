@@ -1,10 +1,68 @@
-import { describe, it, expect } from 'vitest';
-import { zipSync, strToU8 } from 'fflate';
-import { zipSkill, unzipToPackage } from './skillPackager';
+import { describe, it, expect, vi } from 'vitest';
+import { zipSync, unzipSync, strToU8, type UnzipFileInfo } from 'fflate';
+import { zipSkill, unzipToPackage, MAX_SKILL_FILES, MAX_SKILL_UNPACKED_BYTES } from './skillPackager';
 import { PDF_SKILL } from '../skills/pdf';
 import type { SkillPackage } from '../domain/skill';
 
 const VALID_MD = '---\nname: my-skill\ndescription: Does a thing. Use when needed.\n---\n# My skill\nBody.';
+
+vi.mock('fflate', async importOriginal => {
+  const original = await importOriginal<typeof import('fflate')>();
+  return { ...original, unzipSync: vi.fn(original.unzipSync) };
+});
+
+function metadataArchive(entries: UnzipFileInfo[]) {
+  let accepted = 0;
+  vi.mocked(unzipSync).mockImplementationOnce((_bytes, options) => {
+    for (const entry of entries) if (!options?.filter || options.filter(entry)) accepted += 1;
+    return { 'SKILL.md': strToU8(VALID_MD) };
+  });
+  const result = unzipToPackage(new Uint8Array([1]));
+  return { result, accepted };
+}
+
+describe('pre-extraction archive admission', () => {
+  it('rejects an oversized entry before accepting it for decompression', () => {
+    const { result, accepted } = metadataArchive([{name:'huge.txt',size:50,originalSize:MAX_SKILL_UNPACKED_BYTES+1,compression:8}]);
+    expect(result.issues[0]?.rule).toBe('size');
+    expect(result.package).toBeUndefined();
+    expect(accepted).toBe(0);
+  });
+
+  it('counts duplicate and hidden entries against the aggregate allocation limit', () => {
+    const {result,accepted} = metadataArchive([
+      {name:'.hidden',size:50,originalSize:MAX_SKILL_UNPACKED_BYTES/2,compression:8},
+      {name:'.hidden',size:50,originalSize:MAX_SKILL_UNPACKED_BYTES/2+1,compression:8},
+    ]);
+    expect(result.issues[0]?.rule).toBe('size');
+    expect(accepted).toBe(1);
+  });
+
+  it('accepts exact-cap metadata without allocating its alleged bytes in the test', () => {
+    const {result,accepted} = metadataArchive([{name:'SKILL.md',size:50,originalSize:MAX_SKILL_UNPACKED_BYTES,compression:8}]);
+    expect(result.issues).toEqual([]);
+    expect(accepted).toBe(1);
+  });
+
+  it('rejects excess entry count before accepting the overflowing entry', () => {
+    const entries = Array.from({length:MAX_SKILL_FILES+1},(_,index)=>({name:`file-${index}`,size:0,originalSize:0,compression:0}));
+    const {result,accepted} = metadataArchive(entries);
+    expect(result.issues[0]?.rule).toBe('count');
+    expect(accepted).toBe(MAX_SKILL_FILES);
+  });
+
+  it.each(['../escape.py','/absolute.py','C:/drive.py'])('rejects unsafe entry paths before extraction: %s', name => {
+    const {result,accepted} = metadataArchive([{name,size:1,originalSize:1,compression:0}]);
+    expect(result.issues[0]?.rule).toBe('path');
+    expect(accepted).toBe(0);
+  });
+
+  it('rejects stored-entry size mismatches before allocation', () => {
+    const {result,accepted} = metadataArchive([{name:'stored.txt',size:MAX_SKILL_UNPACKED_BYTES+1,originalSize:1,compression:0}]);
+    expect(result.issues[0]?.rule).toBe('size');
+    expect(accepted).toBe(0);
+  });
+});
 
 describe('zipSkill + unzipToPackage round-trip', () => {
   it('round-trips the bundled PDF skill (text files preserved at their paths)', () => {

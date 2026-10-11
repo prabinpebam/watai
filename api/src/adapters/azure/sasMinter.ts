@@ -43,8 +43,19 @@ export class AzureSasMinter implements SasMinter {
     const startsOn = new Date(now - 5 * 60_000); // tolerate clock skew
     const expiresOn = new Date(now + 60 * 60_000); // 1h signing key, reused across mints
     const key = await this.client.getUserDelegationKey(startsOn, expiresOn);
-    this.cachedKey = { key, expiresAtMs: expiresOn.getTime() };
+    const validity = this.keyValidity(key, Date.now());
+    this.cachedKey = { key, expiresAtMs: validity.expiresAtMs };
     return key;
+  }
+
+  private keyValidity(key: UserDelegationKey, now: number): { startsAtMs: number; expiresAtMs: number } {
+    const startsAtMs = key.signedStartsOn instanceof Date ? key.signedStartsOn.getTime() : NaN;
+    const expiresAtMs = key.signedExpiresOn instanceof Date ? key.signedExpiresOn.getTime() : NaN;
+    if (!Number.isFinite(startsAtMs) || !Number.isFinite(expiresAtMs) ||
+        startsAtMs >= expiresAtMs || startsAtMs > now || expiresAtMs <= now) {
+      throw new Error('Storage returned an unusable signing-key validity interval.');
+    }
+    return { startsAtMs, expiresAtMs };
   }
 
   async mint(args: {
@@ -54,9 +65,19 @@ export class AzureSasMinter implements SasMinter {
     ttlSeconds: number;
   }): Promise<SasGrant> {
     const now = Date.now();
-    const startsOn = new Date(now - 5 * 60_000);
-    const expiresOn = new Date(now + args.ttlSeconds * 1000);
+    const requestedExpiry = now + args.ttlSeconds * 1000;
+    if (!Number.isFinite(args.ttlSeconds) || args.ttlSeconds <= 0 ||
+        !Number.isFinite(new Date(requestedExpiry).getTime()) || Math.floor(requestedExpiry / 1000) * 1000 <= now) {
+      throw new Error('SAS lifetime must have a finite positive usable expiry.');
+    }
     const key = await this.getDelegationKey();
+    const currentNow = Date.now();
+    const validity = this.keyValidity(key, currentNow);
+    const startsOn = new Date(Math.ceil(Math.max(now - 5 * 60_000, validity.startsAtMs) / 1000) * 1000);
+    const expiresOn = new Date(Math.floor(Math.min(requestedExpiry, validity.expiresAtMs) / 1000) * 1000);
+    if (startsOn.getTime() > currentNow || expiresOn.getTime() <= Math.max(currentNow, startsOn.getTime())) {
+      throw new Error('No usable signed interval remains for this asset grant.');
+    }
 
     // Least privilege: write => create+write only; delete => delete only; read => read only.
     const permissions =

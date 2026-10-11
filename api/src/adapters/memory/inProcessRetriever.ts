@@ -1,4 +1,4 @@
-import { isRetrievableMemory } from '../../domain/memory';
+import { hasCurrentMemoryEmbedding, isRetrievableMemory, usableMemoryVector } from '../../domain/memory';
 import type { MemoryStore } from '../../ports/memoryStore';
 import type { MemoryRetriever, MemoryRetrieveOptions, ScoredMemory } from '../../ports/memoryRetriever';
 
@@ -27,15 +27,15 @@ export class InProcessRetriever implements MemoryRetriever {
   constructor(private readonly store: MemoryStore) {}
 
   async retrieve(userId: string, queryEmbedding: number[], opts: MemoryRetrieveOptions): Promise<ScoredMemory[]> {
-    if (!queryEmbedding.length) return [];
+    if (typeof opts.embeddingModel !== 'string' || !opts.embeddingModel.trim() || !usableMemoryVector(queryEmbedding)) return [];
     const memories =
       opts.candidates ??
       (await this.store.list(userId, { status: 'active', limit: opts.candidateLimit ?? 200 })).memories;
     const scored: ScoredMemory[] = [];
     for (const memory of memories) {
-      if (!memory.embedding?.length) continue;
+      if (!hasCurrentMemoryEmbedding(memory, userId, opts.embeddingModel, queryEmbedding.length)) continue;
       if (!isRetrievableMemory(memory, opts.now)) continue;
-      scored.push({ memory, relevance: cosineSimilarity(queryEmbedding, memory.embedding) });
+      scored.push({ memory, relevance: cosineSimilarity(queryEmbedding, memory.embedding!) });
     }
     scored.sort((a, b) => b.relevance - a.relevance || b.memory.updatedAt.localeCompare(a.memory.updatedAt));
     return scored.slice(0, opts.limit);

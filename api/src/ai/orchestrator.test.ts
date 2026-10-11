@@ -57,6 +57,7 @@ describe('runAgent', () => {
     expect(events).toEqual([
       { type: 'text', delta: 'Hel' },
       { type: 'text', delta: 'lo' },
+      { type: 'usage', observation: { responseId: 'r1', model: null, status: 'unknown', tokens: null } },
       { type: 'done' },
     ]);
   });
@@ -76,6 +77,24 @@ describe('runAgent', () => {
       },
     }));
     expect(requests[0].reasoning).toEqual({ effort: 'high' });
+  });
+
+  it('forwards each completed call across tool iterations without response content', async () => {
+    const events = await collect(runAgent({
+      ...base, turns: [{ role: 'user', text: 'private prompt' }], tools: [],
+      execute: async () => ({ output: 'private tool output' }),
+      streamFn: streamOf(
+        [{ type: 'created', responseId: 'first' }, { type: 'functionCall', callId: 'call', name: 'tool', arguments: '{}' },
+          { type: 'completed', responseId: 'first', resolvedModelVersion: 'model-v1', usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 } }],
+        [{ type: 'created', responseId: 'second' }, { type: 'text', delta: 'private answer' }, { type: 'completed' }],
+      ),
+    }));
+    const usage = events.filter(event => event.type === 'usage');
+    expect(usage).toEqual([
+      { type: 'usage', observation: { responseId: 'first', model: 'model-v1', status: 'reported', tokens: { inputTokens: 10, outputTokens: 4, totalTokens: 14 } } },
+      { type: 'usage', observation: { responseId: 'second', model: null, status: 'unknown', tokens: null } },
+    ]);
+    expect(JSON.stringify(usage)).not.toContain('private');
   });
 
   it('forwards the code-interpreter container id on the tool event', async () => {

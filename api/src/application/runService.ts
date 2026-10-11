@@ -109,7 +109,7 @@ export class RunService {
       const dispatch = (await this.runStore.listPendingDispatch()).find((record) =>
         record.userId === userId && record.threadId === threadId && record.runId === saved.id);
       if (dispatch) await this.runStore.markDispatchSent(dispatch, this.clock.now());
-      return (await this.runStore.acknowledgeStart(userId, threadId, saved.id, instanceId)) ?? saved;
+      return (await this.runStore.acknowledgeStart(userId, threadId, saved.id, instanceId, saved)) ?? saved;
     } catch {
       return saved;
     }

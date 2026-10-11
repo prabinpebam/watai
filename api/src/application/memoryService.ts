@@ -1,21 +1,26 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { AppError } from '../domain/errors';
 import {
+  memorySourceKeys,
   parseCreateMemory,
   parseMemoryRecord,
   parseMemorySummaryRecord,
   parsePatchMemory,
   parsePutMemorySummary,
+  parseMemoryTransferArchive,
   type CreateMemoryInput,
   type ListMemoryQuery,
   type MemoryImportInput,
   type MemoryRecord,
   type MemorySummaryRecord,
+  type MemoryTransferArchive,
   type PatchMemoryInput,
 } from '../domain/memory';
 import { buildMemoryProfile, type MemoryProfileView } from '../domain/memoryProfile';
 import type { MemoryListPage, MemoryStore } from '../ports/memoryStore';
 import type { ServiceClock } from './threadService';
+import type { MemoryIndexStore } from '../ports/memoryIndexStore';
 
 export interface MemoryExportResponse {
   exportedAt: string;
@@ -29,6 +34,7 @@ export interface MemoryImportResponse {
   skipped: number;
   rejected: Array<{ text: string; reason: string }>;
   preview?: MemoryRecord[];
+  archive?: MemoryTransferArchive;
 }
 
 export interface MemoryDeleteReceipt {
@@ -46,14 +52,11 @@ function sourceHash(text: string, kind: string, entities: string[] = []): string
   return createHash('sha256').update(`${normalizeText(text)}\n${kind}\n${[...entities].sort().join('|')}`).digest('hex');
 }
 
-function sourceKeys(memory: MemoryRecord): string[] {
-  return [...new Set(memory.sourceRefs.map((ref) => `${ref.type}:${ref.threadId ?? ''}:${ref.messageId ?? ''}:${ref.runId ?? ''}`))];
-}
-
 export class MemoryService {
   constructor(
     private readonly store: MemoryStore,
     private readonly clock: ServiceClock,
+    private readonly indexing?: { store: MemoryIndexStore; model: string },
   ) {}
 
   list(userId: string, query: ListMemoryQuery): Promise<MemoryListPage> {
@@ -61,14 +64,39 @@ export class MemoryService {
   }
 
   async profile(userId: string): Promise<MemoryProfileView> {
-    const memories: MemoryRecord[] = [];
+    const memories = await this.activeInventory(userId);
+    return buildMemoryProfile(userId, this.clock.now(), memories.filter(memory => memory.confirmation === 'approved'));
+  }
+
+  private async activeInventory(userId: string, maximumRecords?: number): Promise<MemoryRecord[]> {
+    const memories = new Map<string, MemoryRecord>();
+    const observedCursors = new Set<string>();
     let cursor: string | undefined;
     do {
       const page = await this.store.list(userId, { status: 'active', limit: 100, cursor });
-      memories.push(...page.memories);
+      for (const memory of page.memories) {
+        const previous = memories.get(memory.id);
+        if (memory.userId !== userId || memory.status !== 'active' || (previous && !isDeepStrictEqual(previous, memory))) {
+          throw new AppError('conflict', 'Memory inventory changed during collection. Retry from the current state.');
+        }
+        if (!previous) memories.set(memory.id, structuredClone(memory));
+        if (maximumRecords !== undefined && memories.size > maximumRecords) {
+          throw new AppError('validation', 'Memory archive exceeds the 1000-record limit.');
+        }
+      }
       cursor = page.cursor;
+      if (cursor) {
+        if (observedCursors.has(cursor)) throw new AppError('internal', 'Memory inventory pagination did not advance.');
+        observedCursors.add(cursor);
+      }
     } while (cursor);
-    return buildMemoryProfile(userId, this.clock.now(), memories);
+    const collected = [...memories.values()];
+    for (let offset = 0; offset < collected.length; offset += 100) {
+      if (await this.store.hasExcludedMemories(userId, collected.slice(offset, offset + 100))) {
+        throw new AppError('conflict', 'Memory inventory contains excluded records. Retry from the current state.');
+      }
+    }
+    return collected;
   }
 
   async createManual(userId: string, input: CreateMemoryInput): Promise<MemoryRecord> {
@@ -97,7 +125,12 @@ export class MemoryService {
       updatedAt: ts,
       useCount: 0,
     });
-    return this.store.put(record);
+    if (await this.store.isExcluded(userId, record.sourceHash, record.sourceRefs)) {
+      throw new AppError('conflict', 'This memory matches a prior exclusion. Explicit reauthorization is not available.');
+    }
+    const saved = this.indexing ? await this.indexing.store.saveWithIndex(record, this.indexing.model) : await this.store.createIfAbsent(record);
+    if (!saved) throw new AppError('conflict', 'Memory identifier already exists. Retry creating the memory.');
+    return saved;
   }
 
   async patch(userId: string, memoryId: string, input: PatchMemoryInput): Promise<MemoryRecord> {
@@ -108,42 +141,118 @@ export class MemoryService {
     if ((current.revision ?? 1) !== patch.expectedRevision) throw new AppError('conflict', 'Memory changed. Reload before saving.');
     const ts = this.clock.now();
     const nextText = patch.text?.trim();
+    const textChanged = nextText !== undefined && nextText !== current.text;
     const nextKind = patch.kind ?? current.kind;
+    const restoring = patch.status === 'active' && current.status === 'invalidated';
+    if (patch.status === 'active' && current.supersededBy) throw new AppError('conflict', 'Superseded memory requires a new corrected assertion.');
+    if (restoring) {
+      const end = Date.parse(current.invalidAt ?? '');
+      const start = current.validAt === undefined ? undefined : Date.parse(current.validAt);
+      if (!Number.isFinite(end) || !Number.isFinite(Date.parse(ts)) || end > Date.parse(ts) ||
+          (start !== undefined && (!Number.isFinite(start) || start > end))) {
+        throw new AppError('conflict', 'Memory validity cannot be restored from this record.');
+      }
+      if ((current.validityHistory?.length ?? 0) >= 16) throw new AppError('conflict', 'Memory validity history is full. Create a new corrected assertion.');
+    } else if (patch.status === 'active' && current.invalidAt !== undefined &&
+        (!Number.isFinite(Date.parse(current.invalidAt)) || Date.parse(current.invalidAt) <= Date.parse(ts))) {
+      throw new AppError('conflict', 'Historical memory requires an explicit invalidated-state restoration.');
+    }
     const next = parseMemoryRecord({
       ...current,
-      ...(nextText !== undefined ? { text: nextText, normalizedText: normalizeText(nextText), embedding: undefined, embeddingModel: undefined } : {}),
+      ...(textChanged ? { text: nextText, normalizedText: normalizeText(nextText), embedding: undefined, embeddingModel: undefined, embeddingTextHash: undefined,
+        route: undefined, summary: undefined, entities: undefined, topics: undefined } : {}),
       ...(patch.kind !== undefined ? { kind: patch.kind } : {}),
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       ...(patch.visibility !== undefined ? { visibility: patch.visibility } : {}),
       ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
       ...(patch.salience !== undefined ? { salience: patch.salience } : {}),
       ...(patch.status === 'invalidated' ? { invalidAt: ts } : {}),
-      ...(nextText !== undefined || patch.kind !== undefined ? { sourceHash: sourceHash(nextText ?? current.text, nextKind, current.entities) } : {}),
+      ...(restoring ? { validAt: ts, invalidAt: undefined, validityHistory: [...(current.validityHistory ?? []), {
+        ...(current.validAt !== undefined ? { validAt: current.validAt } : {}), invalidAt: current.invalidAt!, revision: current.revision ?? 1,
+      }] } : {}),
+      ...(textChanged || nextKind !== current.kind ? { sourceHash: sourceHash(nextText ?? current.text, nextKind, textChanged ? [] : current.entities) } : {}),
       origin: 'manual',
       confirmation: 'approved',
       revision: (current.revision ?? 0) + 1,
       updatedAt: ts,
     });
-    const saved = await this.store.putIfRevision(next, patch.expectedRevision);
+    if (patch.status === 'active' && (await this.store.getExclusion(userId, memoryId) ||
+      await this.store.isExcluded(userId, current.sourceHash, current.sourceRefs) ||
+        (next.sourceHash !== current.sourceHash && await this.store.isExcluded(userId, next.sourceHash, next.sourceRefs)))) {
+      throw new AppError('conflict', 'Excluded memory cannot be restored.');
+    }
+    if (next.status === 'active' && patch.status !== 'active' &&
+        await this.store.isExcluded(userId, next.sourceHash, next.sourceRefs, memoryId)) {
+      throw new AppError('conflict', 'This memory matches a prior exclusion. Explicit reauthorization is not available.');
+    }
+    const saved = this.indexing && next.status === 'active' && !next.sensitive
+      ? await this.indexing.store.saveWithIndex(next, this.indexing.model, patch.expectedRevision)
+      : await this.store.putIfRevision(next, patch.expectedRevision);
     if (!saved) throw new AppError('conflict', 'Memory changed. Reload before saving.');
     return saved;
   }
 
   async delete(userId: string, memoryId: string): Promise<MemoryDeleteReceipt> {
-    const current = await this.store.get(userId, memoryId);
-    if (!current) throw new AppError('not_found', 'Memory not found.');
-    if (current.status !== 'deleted') {
+    let excluded = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const current = await this.store.get(userId, memoryId);
+      if (!current) throw new AppError('not_found', 'Memory not found.');
+      let sourceKeys = memorySourceKeys(current.sourceRefs);
+      let excludedHash = current.sourceHash ?? (current.status === 'deleted' ? undefined : sourceHash(current.text, current.kind, current.entities));
+      let receiptComplete = false;
+      const receipt = await this.store.getExclusion(userId, memoryId);
+      if (receipt && (receipt.userId !== userId || receipt.memoryId !== memoryId ||
+          !Array.isArray(receipt.sourceKeys) || !receipt.sourceKeys.every(key => typeof key === 'string') ||
+          !receipt.excludedAt)) {
+        throw new AppError('conflict', 'Existing deletion evidence conflicts with this record.');
+      }
+      if (current.status === 'deleted') {
+        if (!excludedHash && !sourceKeys.length) throw new AppError('conflict', 'Deletion exclusion cannot be verified from this legacy record.');
+        receiptComplete = receipt?.userId === userId && receipt.memoryId === memoryId &&
+        (!excludedHash || receipt.sourceHash === excludedHash) && Array.isArray(receipt.sourceKeys) &&
+          sourceKeys.every(key => receipt.sourceKeys.includes(key));
+      }
+      if (receipt) {
+        sourceKeys = [...new Set([...receipt.sourceKeys, ...sourceKeys])];
+        excludedHash ??= receipt.sourceHash;
+      }
       const ts = this.clock.now();
-      const deleted = parseMemoryRecord({ ...current, status: 'deleted', deletedAt: ts, updatedAt: ts });
-      await this.store.exclude(deleted, {
+      const deleted = parseMemoryRecord({
+        id: current.id,
+        userId,
+        kind: current.kind,
+        status: 'deleted',
+        text: 'Deleted memory',
+        sourceHash: excludedHash,
+        sourceRefs: current.sourceRefs.map(ref => ({
+          type: ref.type, threadId: ref.threadId, messageId: ref.messageId, runId: ref.runId, createdAt: ref.createdAt,
+        })),
+        confidence: 0,
+        salience: 0,
+        pinned: false,
+        sensitive: false,
+        visibility: 'background',
+        useCount: 0,
+        revision: (current.revision ?? 1) + 1,
+        createdAt: current.createdAt,
+        deletedAt: current.deletedAt ?? ts,
+        updatedAt: ts,
+      });
+      if (receiptComplete && isDeepStrictEqual(
+        JSON.parse(JSON.stringify(current)),
+        JSON.parse(JSON.stringify({ ...deleted, revision: current.revision, updatedAt: current.updatedAt })),
+      )) { excluded = true; break; }
+      excluded = await this.store.exclude(deleted, {
         id: `memory-exclusion-${current.id}`,
         userId,
         memoryId: current.id,
-        ...(current.sourceHash ? { sourceHash: current.sourceHash } : {}),
-        sourceKeys: sourceKeys(current),
-        excludedAt: ts,
-      });
+        sourceHash: excludedHash,
+        sourceKeys,
+        excludedAt: receipt?.excludedAt ?? ts,
+      }, current.revision ?? 1, receipt ?? undefined);
+      if (excluded) break;
     }
+    if (!excluded) throw new AppError('conflict', 'Memory changed repeatedly. Retry deletion from the current state.');
     return {
       memoryId,
       servingExcluded: true,
@@ -152,8 +261,19 @@ export class MemoryService {
     };
   }
 
-  getSummary(userId: string): Promise<MemorySummaryRecord | null> {
-    return this.store.getSummary(userId);
+  async getSummary(userId: string): Promise<MemorySummaryRecord | null> {
+    const summary = await this.store.getSummary(userId);
+    if (!summary) return null;
+    const parsed = parseMemorySummaryRecord(summary);
+    if (parsed.userId !== userId || parsed.id !== 'memory-summary') throw new AppError('conflict', 'Memory summary owner binding failed.');
+    const sourceIds = [...new Set(parsed.sourceMemoryIds)];
+    for (let offset = 0; offset < sourceIds.length; offset += 100) {
+      const sources = sourceIds.slice(offset, offset + 100).map(id => ({ id, userId, sourceRefs: [] }));
+      if (await this.store.hasExcludedMemories(userId, sources)) {
+        throw new AppError('conflict', 'Memory summary contains excluded sources. Rebuild it from current records.');
+      }
+    }
+    return parsed;
   }
 
   async putSummary(userId: string, input: string | { text: string }): Promise<MemorySummaryRecord> {
@@ -172,18 +292,36 @@ export class MemoryService {
     return this.store.putSummary(record);
   }
 
-  async export(userId: string): Promise<MemoryExportResponse> {
-    const pages: MemoryRecord[] = [];
-    let cursor: string | undefined;
-    do {
-      const page = await this.store.list(userId, { limit: 100, cursor, status: 'active' });
-      pages.push(...page.memories);
-      cursor = page.cursor;
-    } while (cursor);
-    return { exportedAt: this.clock.now(), version: 1, memories: pages, summary: await this.store.getSummary(userId) };
+  async export(userId: string, version: 1 | 2 = 1): Promise<MemoryExportResponse | MemoryTransferArchive> {
+    const memories = await this.activeInventory(userId, version === 2 ? 1000 : undefined);
+    const result = { exportedAt: this.clock.now(), version, memories, summary: await this.getSummary(userId) };
+    return version === 2 ? parseMemoryTransferArchive({ ...result, scope: 'active-records' }) : { ...result, version: 1 };
   }
 
   async import(userId: string, input: MemoryImportInput): Promise<MemoryImportResponse> {
+    if (input.version === 2) {
+      if (input.mode !== 'preview') throw new AppError('validation', 'Memory archive activation is not supported.');
+      const { mode: _mode, ...payload } = input;
+      const archive = parseMemoryTransferArchive(payload);
+      const ids = new Set<string>();
+      for (const memory of archive.memories) {
+        if (memory.userId !== userId || ids.has(memory.id)) throw new AppError('validation', 'Memory archive owner or identity binding failed.');
+        ids.add(memory.id);
+      }
+      if (archive.summary && archive.summary.userId !== userId) throw new AppError('validation', 'Memory archive owner or identity binding failed.');
+      for (let offset = 0; offset < archive.memories.length; offset += 100) {
+        if (await this.store.hasExcludedMemories(userId, archive.memories.slice(offset, offset + 100))) {
+          throw new AppError('conflict', 'Memory archive contains excluded records.');
+        }
+      }
+      const sources = archive.summary?.sourceMemoryIds ?? [];
+      for (let offset = 0; offset < sources.length; offset += 100) {
+        if (await this.store.hasExcludedMemories(userId, sources.slice(offset, offset + 100).map(id => ({ id, userId, sourceRefs: [] })))) {
+          throw new AppError('conflict', 'Memory archive contains excluded summary sources.');
+        }
+      }
+      return { added: 0, skipped: 0, rejected: [], archive };
+    }
     const preview: MemoryRecord[] = [];
     const rejected: Array<{ text: string; reason: string }> = [];
     for (const item of input.memories) {
@@ -221,10 +359,8 @@ export class MemoryService {
       let skipped = 0;
       for (const memory of preview) {
         if (await this.store.isExcluded(userId, memory.sourceHash, memory.sourceRefs)) skipped++;
-        else {
-          await this.store.put(memory);
-          added++;
-        }
+        else if (await this.store.createIfAbsent(memory)) added++;
+        else skipped++;
       }
       return { added, skipped, rejected };
     }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { startRecording, supportedRecordingMime } from './audio';
+import { monitorInput, startRecording, supportedRecordingMime } from './audio';
 
 class FakeTrack {
   stop = vi.fn();
@@ -66,6 +66,59 @@ afterEach(() => {
 });
 
 describe('audio recording', () => {
+  it.each(['construction', 'connection'])('releases microphone monitoring resources after %s fails', async stage => {
+    const track = new FakeTrack();
+    installMedia(track);
+    const close = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('AudioContext', class extends FakeAudioContext {
+      constructor() {
+        super();
+        this.close = close;
+        if (stage === 'construction') throw new Error('Audio setup failed');
+      }
+      createMediaStreamSource = vi.fn(() => { throw new Error('Audio connection failed'); });
+    });
+    await expect(monitorInput()).rejects.toThrow();
+    expect(track.stop).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledTimes(stage === 'construction' ? 0 : 1);
+  });
+
+  it('stops a microphone monitor idempotently', async () => {
+    const track = new FakeTrack();
+    installMedia(track);
+    const monitor = await monitorInput();
+    monitor.stop();
+    monitor.stop();
+    expect(track.stop).toHaveBeenCalledOnce();
+  });
+
+  it('releases tracks when browser recorder stop throws synchronously', async () => {
+    const track = new FakeTrack();
+    installMedia(track);
+    vi.stubGlobal('MediaRecorder', class extends FakeMediaRecorder {
+      stop(): void { throw new DOMException('Invalid state', 'InvalidStateError'); }
+    });
+    const recorder = await startRecording();
+    await expect(recorder.stop()).rejects.toThrow();
+    expect(track.stop).toHaveBeenCalledOnce();
+  });
+
+  it('settles a pending stop when cancelled and releases every track', async () => {
+    const track = new FakeTrack();
+    installMedia(track);
+    vi.stubGlobal('MediaRecorder', class extends FakeMediaRecorder {
+      stop() { this.state = 'inactive'; }
+    });
+    const recorder = await startRecording();
+    let outcome = 'pending';
+    const stopped = recorder.stop().then(() => { outcome = 'resolved'; }, () => { outcome = 'cancelled'; });
+    recorder.cancel();
+    await Promise.resolve();
+    expect(outcome).toBe('cancelled');
+    expect(track.stop).toHaveBeenCalledOnce();
+    await stopped;
+  });
+
   it('selects and preserves Safari MP4 audio when WebM is unavailable', async () => {
     FakeMediaRecorder.supported.add('audio/mp4');
     const track = new FakeTrack();

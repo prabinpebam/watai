@@ -9,3 +9,5 @@ src/test
 vitest.config.ts
 tsconfig*.json
 local.settings.json
+.env
+.env.*

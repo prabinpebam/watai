@@ -87,7 +87,7 @@ export function LibraryPicker({ threadId, onClose, returnFocus }: { threadId: st
       }
     >
       <div className="library-picker">
-        <Field autoFocus aria-label="Search Library" placeholder="Search Library" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Field autoFocus data-dialog-autofocus aria-label="Search Library" placeholder="Search Library" value={query} onChange={(event) => setQuery(event.target.value)} />
         <div className="library-picker__tabs" role="tablist" aria-label="Library category">
           {TABS.map((option) => <button key={option.value} role="tab" aria-selected={tab === option.value} onClick={() => setTab(option.value)}>{option.label}</button>)}
         </div>

@@ -1,0 +1,158 @@
+{
+  "schemaVersion": "1.0",
+  "status": "STAGE_API_LIFECYCLE_PASSED_RELEASE_PLANE_PARTIAL",
+  "observedAt": "2026-09-11T06:32:11.636Z",
+  "targetResourceGroup": "rg-watai-dev",
+  "stage": {
+    "functionApp": "func-watai-stage-cbroocyg3omrk",
+    "plan": "plan-watai-stage",
+    "cosmosDatabase": "watai-release-stage-v2",
+    "cosmosAccount": "cosmos-wt-stage-cbroocyg3omrk",
+    "storageAccount": "stwtstgcbroocyg3omrk",
+    "keyVault": "kv-wt-stg-cbroocyg3omrk",
+    "mediaContainer": "harness-media-stage",
+    "deploymentContainer": "harness-deployments-stage",
+    "queues": ["harness-run-jobs", "harness-image-jobs", "harness-memory-jobs"],
+    "alwaysReady": 0,
+    "memoryContained": true,
+    "providerMemoryModelsConfigured": false
+  },
+  "rejectedSharedTemplate": {
+    "status": "BLOCKED",
+    "finding": "Shared role-assignment GUIDs would have redeployed production assignments with the stage principal.",
+    "action": "No apply occurred. The design was replaced with infra/stage.bicep, which declares shared accounts as existing and owns only stage resources."
+  },
+  "dedicatedTemplate": {
+    "compiledResourceDeclarations": 14,
+    "bareSharedAccountDeclarations": 0,
+    "isolatedDeploymentContainer": true,
+    "isolatedQueueCopyLoop": 3
+  },
+  "finalNamedWhatIf": {
+    "deploymentName": "watai-stage-final-20260911-01",
+    "status": "Succeeded",
+    "deleteOrReplaceChanges": 0,
+    "productionFunctionAppChanges": 0,
+    "requiredStageFunctionApp": true,
+    "requiredStageDeploymentContainer": true,
+    "requiredStageQueues": 3
+  },
+  "provisioning": {
+    "deploymentName": "watai-stage-bootstrap-20260911-01",
+    "status": "Succeeded",
+    "sourceSha": "b74236eb6319bf59a9c5a7b3056df5ba17693e4e",
+    "runtime": "node 24",
+    "maximumInstanceCount": 2,
+    "alwaysReady": 0,
+    "principalId": "77a0e218-732e-4696-ad4b-50b27ac52de1",
+    "expectedAzureRoleAssignments": 3,
+    "expectedCosmosRoleAssignments": 1,
+    "productionHealth": 200
+  },
+  "apiLifecycle": {
+    "releaseManifestSha256": "fb9550c25e22f0d66cfb4f019c31b6e765160872d9e62012be9854cf08a1ac55",
+    "baselinePackageSha256": "15e0ea9dd63b5865e1c33cf57d5c57c948c8699c6f56ce018fd7814dc8081a3b",
+    "candidatePackageSha256": "6b932bcca38ee2c149bdb9ffd5ddb67c9f23b350d8edda8ba0666a1655a50862",
+    "candidateBundleSha256": "b089bd71c07b68d81e7dcf89ff7d58dc9f1bc95210492b894564f986ceebbb24",
+    "finalPackageSha256": "6b932bcca38ee2c149bdb9ffd5ddb67c9f23b350d8edda8ba0666a1655a50862",
+    "baselineHealthAt": "2026-09-11T05:15:45.506Z",
+    "candidateHealthAt": "2026-09-11T05:20:49.351Z",
+    "rollbackCompletedAt": "2026-09-11T05:22:11.7785982Z",
+    "candidateRestoredAt": "2026-09-11T05:22:31.299Z",
+    "productionHealthBeforeAt": "2026-09-11T05:17:53.569Z",
+    "productionHealthAfterAt": "2026-09-11T05:22:48.022Z"
+  },
+  "accountIsolationMigration": {
+    "status": "RUNTIME_MIGRATED_OBSOLETE_GRANTS_REVOKED",
+    "deploymentName": "watai-stage-owned-infra-whatif-20260911-02",
+    "deployFunctionApp": false,
+    "result": "Succeeded",
+    "creates": 26,
+    "ignored": 16,
+    "modifies": 0,
+    "deletes": 0,
+    "replaces": 0,
+    "stageOwnedAccounts": {
+      "cosmos": "cosmos-wt-stage-cbroocyg3omrk",
+      "storage": "stwtstgcbroocyg3omrk",
+      "keyVault": "kv-wt-stg-cbroocyg3omrk"
+    },
+    "currentStageBoundary": "Stage runtime references dedicated accounts and the new database. Its four obsolete grants on production accounts are absent. Runtime negative-access tests and token-propagation checks remain pending.",
+    "phaseOne": {
+      "deploymentName": "watai-stage-owned-infra-bootstrap-20260911-01",
+      "status": "Succeeded",
+      "baselineSeedSha256": "15e0ea9dd63b5865e1c33cf57d5c57c948c8699c6f56ce018fd7814dc8081a3b",
+      "seedReadbackMatched": true,
+      "stageBoundaryUnchanged": true,
+      "stageHealth": 200,
+      "productionHealth": 200,
+      "baselineActivationPermitted": false
+    },
+    "partitionRepair": {
+      "oldDatabase": "watai-harness-stage",
+      "newDatabase": "watai-release-stage-v2",
+      "runPartitionKey": "/threadId",
+      "existingDatabasesPreserved": true,
+      "status": "DEPLOYED_PARTITION_READBACK_PASSED"
+    },
+    "phaseTwoInspection": {
+      "deploymentName": "watai-stage-phase2-20260911-01",
+      "status": "REJECTED_UNRELATED_STAGE_RESOURCE_DEFAULT_CHANGES",
+      "productionChanges": 0,
+      "deleteOrReplaceChanges": 0,
+      "repair": "Runtime template now references provisioned stage accounts and blob resources as existing; account and key provisioning is no longer on the runtime update path."
+    },
+    "finalPhaseTwoInspection": {
+      "deploymentName": "watai-stage-phase2-20260911-02",
+      "status": "ALLOWLIST_PASSED",
+      "creates": 19,
+      "stageAppModifies": 1,
+      "unexpectedChanges": 0
+    },
+    "runtimeMigration": {
+      "deploymentName": "watai-stage-runtime-isolation-20260911-01",
+      "status": "SUCCEEDED",
+      "stageHealthAt": "2026-09-11T06:27:08.442Z",
+      "productionHealthAt": "2026-09-11T06:27:09.171Z",
+      "verified": ["sanitized package readback", "same stage principal", "Node 24", "dedicated account connections", "new database", "runs partition /threadId", "stage queues", "memory containment", "authentication settings"]
+    },
+    "obsoleteGrantRevocation": {
+      "principalId": "77a0e218-732e-4696-ad4b-50b27ac52de1",
+      "removedAzureRoleIds": ["e1fefa40-da36-50aa-b5bc-66d3332cf87c", "8477b194-723c-5dbd-b21c-020321a74713", "dfaef4f8-4e02-5f0c-bc1a-4882698df11b"],
+      "removedCosmosRoleId": "bd3e92e3-cb61-5366-b3f9-e667d69942cf",
+      "remainingDedicatedAzureGrants": 3,
+      "remainingDedicatedCosmosGrants": 1,
+      "stageHealthAt": "2026-09-11T06:32:10.553Z",
+      "productionHealthAt": "2026-09-11T06:32:11.636Z",
+      "effectiveDenialProbe": "PENDING_TOKEN_PROPAGATION_AND_RUNTIME_PROBE"
+    }
+  },
+  "packageSafety": {
+    "retainedCandidateContainsEnvironmentFile": true,
+    "secretContentsInspectedOrPrinted": false,
+    "futurePublishExclusions": [".env", ".env.*", "local.settings.json"],
+    "sanitizedCandidatePath": ".release-artifacts/v0.2.2/stage-candidate-sanitized.zip",
+    "sanitizedPackageSha256": "8ef543787d25ffb603e7bdbec40c9e1050293b487cddd91719541ac9efd25779",
+    "sanitizedBundleSha256": "b089bd71c07b68d81e7dcf89ff7d58dc9f1bc95210492b894564f986ceebbb24",
+    "sanitizedEnvironmentEntries": 0,
+    "status": "SANITIZED_CANDIDATE_DEPLOYED_TO_STAGE",
+    "limit": "Previously uploaded packages may contain local credentials; sanitization is not credential rotation or proof of non-exposure. Unsanitized packages must not be activated as rollback targets."
+  },
+  "localValidation": {
+    "api": "84 files / 630 tests passed",
+    "root": "88 files / 514 tests passed",
+    "frontendBuild": "passed",
+    "apiBuild": "passed",
+    "mainBicep": "passed",
+    "dedicatedStageBicep": "passed",
+    "stageParameters": "passed"
+  },
+  "productionMutation": false,
+  "remaining": [
+    "Prove negative production-account access from the stage runtime after RBAC propagation; control-plane absence and liveness alone do not establish effective denial.",
+    "Prove an isolated no-op redeploy and the full advertised capability contract, including authenticated owner isolation and contained memory worker behavior.",
+    "Stage and roll back exact immutable frontend bytes through an independently reachable release origin.",
+    "Prove candidate origin and versioned queues remain unreachable when every public origin is unhealthy.",
+    "Exercise stage teardown without touching production or the pre-existing integration database."
+  ]
+}

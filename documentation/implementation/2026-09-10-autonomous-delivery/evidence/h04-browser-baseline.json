@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0",
+  "status": "H04_A_PASSED_H04_B_BLOCKED",
+  "observedAt": "2026-09-11T04:08:00.000Z",
+  "sourceBaseline": "d7ef8de",
+  "inventory": {
+    "specFiles": 4,
+    "expandedTests": 45,
+    "projects": ["desktop-chromium", "mobile-chromium", "mobile-webkit"],
+    "repetitionsRequired": 3,
+    "retries": 0
+  },
+  "repairEvidence": {
+    "initialRun": {
+      "expected": 42,
+      "unexpected": 3,
+      "skipped": 0,
+      "failure": "LibraryPicker search did not receive initial focus in all three projects.",
+      "receiptSha256": "2513b42d17a6ab5df5c2982abab8439bca91ced7d7cec1af8afe8c6f2c2a0723"
+    },
+    "focusedRerun": "3/3 passed after explicit shared-dialog autofocus repair"
+  },
+  "cleanRuns": [
+    {"run": 1, "passed": 45, "unexpected": 0, "flaky": 0, "skipped": 0, "durationMs": 26598, "receiptSha256": "f8fde1c83ac2a325bcf15ed48d645900f742ae348ed42368a6e010de2f85add0"},
+    {"run": 2, "passed": 45, "unexpected": 0, "flaky": 0, "skipped": 0, "durationMs": 26398, "receiptSha256": "e0025a245636f4e0c5486300683e4bbcea826c95f26d6ec3f3597bc3d4250f54"},
+    {"run": 3, "passed": 45, "unexpected": 0, "flaky": 0, "skipped": 0, "durationMs": 26423, "receiptSha256": "e2670016d442a58e84692eb1c958866ee6f3cf1ec20561311518c2c65d4963fa"}
+  ],
+  "postRepairValidation": {
+    "root": "86 files / 505 tests passed",
+    "build": "passed"
+  },
+  "acceptance": {
+    "H04-A": "passed locally",
+    "H04-B": "blocked"
+  },
+  "blockers": [
+    "No user-authorized protected hosted validation workflow or independent workflow authority is configured.",
+    "Local inventory/test-count tamper rejection passes, but workflow-SHA and between-job artifact substitution are not independently attested."
+  ],
+  "claimsExcluded": [
+    "No WCAG certification or assistive-technology conformance claim.",
+    "No hosted CI trust claim.",
+    "No H04 complete claim until H04-B is independently satisfied."
+  ]
+}

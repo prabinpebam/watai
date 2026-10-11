@@ -38,6 +38,7 @@ import { RunService } from './application/runService';
 import type { RunWorkerDeps } from './application/runWorker';
 import { ImageService } from './application/imageService';
 import { MemoryService } from './application/memoryService';
+import { MemoryIndexService } from './application/memoryIndexService';
 import { MemoryContextService } from './application/memoryContextService';
 import { MemoryExtractionService } from './application/memoryExtractionService';
 import { MemoryModelService } from './application/memoryModelService';
@@ -105,6 +106,7 @@ export interface ApiContainer {
   runDispatch: RunDispatchService;
   imageDispatch: ImageDispatchService;
   memoryDispatch: MemoryDispatchService;
+  memoryIndex: MemoryIndexService | null;
 }
 
 /** Production uses an Azure Key Vault RSA key as the KEK; local dev falls back to an
@@ -157,7 +159,6 @@ export function container(): ApiContainer {
   const imageStarter = new QueueImageStarter();
   const imageService = new ImageService(imageStore, credentialService, imageStarter, minter, clock);
   const imageDispatch = new ImageDispatchService(imageStore, imageStarter, clock);
-  const memoryService = new MemoryService(memoryStore, clock);
   const memoryModelService = new MemoryModelService(
     appConfigStore,
     () => process.env.MEMORY_MODEL,
@@ -169,12 +170,19 @@ export function container(): ApiContainer {
   const memoryEmbedModel = process.env.MEMORY_EMBED_MODEL?.trim();
   const memoryQueue = new QueueMemoryStarter();
   const memoryEmbedder = memoryEmbedModel ? azureEmbedder(memoryEmbedModel) : undefined;
+  const memoryService = new MemoryService(memoryStore, clock, memoryEmbedModel ? { store: memoryStore, model: memoryEmbedModel } : undefined);
   const memoryRetriever = memoryEmbedder ? new InProcessRetriever(memoryStore) : undefined;
   const memoryProfileEnabled = process.env.MEMORY_PROFILE === '1' || process.env.MEMORY_PROFILE === 'true';
-  const memoryContextService = new MemoryContextService(memoryStore, settingsService, {
+  const memoryContained = () => process.env.MEMORY_CONTAINED === '1' || process.env.MEMORY_CONTAINED === 'true';
+  const memoryIndex = memoryEmbedder ? new MemoryIndexService({ store: memoryStore, settings: settingsStore,
+    credentials: credentialService, embedder: memoryEmbedder, clock, contained: memoryContained,
+    enabled: () => process.env.MEMORY_INDEX_ENABLED === '1' || process.env.MEMORY_INDEX_ENABLED === 'true' }) : null;
+  const memorySettings = { get: (userId: string) => settingsService.getForMemory(userId) };
+  const memoryContextService = new MemoryContextService(memoryStore, memorySettings, {
     embedder: memoryEmbedder,
     retriever: memoryRetriever,
     profile: memoryProfileEnabled,
+    contained: memoryContained,
   });
   const signalr: SignalRSender | null = process.env.AzureSignalRConnectionString
     ? new AzureSignalR(process.env.AzureSignalRConnectionString)
@@ -185,10 +193,11 @@ export function container(): ApiContainer {
     messageStore,
     threadStore,
     queue: memoryQueue,
-    settings: settingsService,
+    settings: memorySettings,
     credentials: credentialService,
     extractor: async (creds, input) => extractMemories(creds, input, { model: await memoryModelService.effectiveModel(input.mode) }),
     embedder: memoryEmbedder,
+    contained: memoryContained,
     signalr: signalr ?? undefined,
     clock,
   });
@@ -296,6 +305,7 @@ export function container(): ApiContainer {
     runDispatch,
     imageDispatch,
     memoryDispatch,
+    memoryIndex,
   };
   return cached;
 }

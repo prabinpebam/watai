@@ -41,10 +41,8 @@ describe('parseCreateThread', () => {
     expect(code(() => parseCreateThread({ title: 'x'.repeat(201) }))).toBe('validation');
   });
 
-  it('accepts an optional vectorStoreId (thread-scoped file search)', () => {
-    expect(parseCreateThread({ title: 'T', vectorStoreId: 'vs_abc' })).toMatchObject({
-      vectorStoreId: 'vs_abc',
-    });
+  it('rejects a client-supplied vectorStoreId even with valid thread fields', () => {
+    expect(code(() => parseCreateThread({ title: 'T', vectorStoreId: 'vs_abc' }))).toBe('validation');
   });
 
   it('rejects unknown fields (strict)', () => {
@@ -57,8 +55,9 @@ describe('parseUpdateThread', () => {
     expect(parseUpdateThread({ pinned: true })).toEqual({ pinned: true });
   });
 
-  it('accepts a vectorStoreId patch (thread file search)', () => {
-    expect(parseUpdateThread({ vectorStoreId: 'vs_abc' })).toEqual({ vectorStoreId: 'vs_abc' });
+  it('rejects provider store changes alone or alongside ordinary edits', () => {
+    expect(code(() => parseUpdateThread({ vectorStoreId: 'vs_abc' }))).toBe('validation');
+    expect(code(() => parseUpdateThread({ title: 'T', vectorStoreId: 'vs_abc' }))).toBe('validation');
   });
 
   it('requires at least one field', () => {

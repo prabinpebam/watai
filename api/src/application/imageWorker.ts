@@ -51,7 +51,7 @@ function contentTypeFor(format: ImageGenRecord['outputFormat']): string {
 
 function toImageError(e: unknown): ImageError {
   if (isAiError(e)) return { code: e.code, message: e.message };
-  return { code: 'internal', message: e instanceof Error ? e.message : 'Image generation failed.' };
+  return { code: 'internal', message: 'Image generation failed.' };
 }
 
 async function downloadBlob(
@@ -83,8 +83,12 @@ async function uploadBlob(
 
 async function push(deps: ImageWorkerDeps, record: ImageGenRecord): Promise<void> {
   if (!deps.signalr) return;
-  const dto = await toImageDto(deps.minter, record);
-  await deps.signalr.sendToUser(record.userId, 'image', { image: dto });
+  try {
+    const dto = await toImageDto(deps.minter, record);
+    await deps.signalr.sendToUser(record.userId, 'image', { image: dto });
+  } catch {
+    console.warn('[image] Realtime notification unavailable.');
+  }
 }
 
 /**
@@ -98,7 +102,7 @@ async function finalizeError(
 ): Promise<void> {
   const errored = await deps.imageStore.transition(record.userId, record.id, ['generating'], {
     status: 'error', error, updatedAt: deps.clock.now(),
-  });
+  }, record);
   if (errored?.status === 'error') await push(deps, errored);
 }
 
@@ -123,10 +127,16 @@ export async function processImageJob(
   if (!rec || !isActiveImage(rec.status)) return; // already finalized / deleted — idempotent
   if (fence && (rec.releaseId !== fence.releaseId || rec.executionToken !== fence.executionToken || rec.dispatchAttempt !== fence.attempt)) return;
 
-  const generating = await imageStore.transition(userId, imageId, ['queued'], { status: 'generating', updatedAt: clock.now() });
+  const generating = await imageStore.transition(userId, imageId, ['queued'], { status: 'generating', updatedAt: clock.now() }, rec);
   if (!generating || generating.status !== 'generating') return;
+  const stillGenerating = async () => {
+    const current = await imageStore.get(userId, imageId);
+    return current?.status === 'generating' && current.userId === userId && current.id === imageId &&
+      current.releaseId === rec.releaseId && current.executionToken === rec.executionToken && current.dispatchAttempt === rec.dispatchAttempt;
+  };
   const heartbeat = setInterval(() => {
-    void imageStore.transition(userId, imageId, ['generating'], { updatedAt: clock.now() });
+    void imageStore.transition(userId, imageId, ['generating'], { updatedAt: clock.now() }, rec)
+      .catch(() => console.warn('[image] Heartbeat update unavailable.'));
   }, 60_000);
   heartbeat.unref?.();
   await push(deps, generating);
@@ -134,6 +144,7 @@ export async function processImageJob(
   try {
   try {
     const creds = await credentials.getDecrypted(userId);
+    if (!(await stillGenerating())) return;
     if (!creds.models.image) {
       await finalizeError(deps, generating, {
         code: 'no_image_model',
@@ -145,7 +156,7 @@ export async function processImageJob(
     let results: ImageResult[];
     if (rec.sourceImageId && rec.useReference) {
       const source = await imageStore.get(userId, rec.sourceImageId);
-      if (!source?.blobPath || !isOwnerBlobPath(userId, source.blobPath)) {
+      if (source?.status !== 'ready' || !source.blobPath || !isOwnerBlobPath(userId, source.blobPath)) {
         await finalizeError(deps, generating, {
           code: 'source_missing',
           message: 'The source image is no longer available.',
@@ -153,6 +164,12 @@ export async function processImageJob(
         return;
       }
       const bytes = await downloadBlob(minter, source.blobPath, fetchImpl);
+      const currentSource = await imageStore.get(userId, rec.sourceImageId);
+      if (currentSource?.status !== 'ready' || currentSource.blobPath !== source.blobPath || currentSource.outputFormat !== source.outputFormat) {
+        await finalizeError(deps, generating, { code: 'source_missing', message: 'The source image is no longer available.' });
+        return;
+      }
+      if (!(await stillGenerating())) return;
       results = await edit({
         baseUrl: creds.baseUrl,
         key: creds.key,
@@ -183,13 +200,27 @@ export async function processImageJob(
       return;
     }
 
+    if (!(await stillGenerating())) return;
     const first = results[0];
     const bytes = b64ToBytes(first.b64);
     const libraryItemId = rec.libraryItemId ?? libraryItemIdFor(userId, 'studio_generated_image', rec.id);
+    const initialLibrary = deps.libraryStore ? await deps.libraryStore.get(userId, libraryItemId) : null;
+    if (initialLibrary && (initialLibrary.id !== libraryItemId || initialLibrary.userId !== userId || initialLibrary.state !== 'active')) {
+      await finalizeError(deps, generating, { code: 'library_unavailable', message: 'The output Library item is no longer available.' });
+      return;
+    }
+    if (!(await stillGenerating())) return;
     const blobPath = `${userId}/library/${libraryItemId}.${extFor(rec.outputFormat)}`;
     await uploadBlob(minter, blobPath, bytes, contentTypeFor(rec.outputFormat), fetchImpl);
-    if (deps.libraryStore && !(await deps.libraryStore.get(userId, libraryItemId))) {
-      await deps.libraryStore.put({
+    if (!(await stillGenerating())) return;
+    const existingLibrary = deps.libraryStore ? await deps.libraryStore.get(userId, libraryItemId) : null;
+    if (existingLibrary && (existingLibrary.id !== libraryItemId || existingLibrary.userId !== userId || existingLibrary.state !== 'active')) {
+      await finalizeError(deps, generating, { code: 'library_unavailable', message: 'The output Library item is no longer available.' });
+      return;
+    }
+    if (deps.libraryStore && !existingLibrary) {
+      if (!(await stillGenerating())) return;
+      const created = await deps.libraryStore.createIfAbsent({
         id: libraryItemId,
         userId,
         ingestionKey: libraryIngestionKey('studio_generated_image', rec.id),
@@ -214,7 +245,20 @@ export async function processImageJob(
           provenanceComplete: rec.provenanceComplete ?? true,
         },
       });
+      if (!created) {
+        await finalizeError(deps, generating, { code: 'library_unavailable', message: 'The output Library item changed during publication.' });
+        return;
+      }
     }
+    if (!(await stillGenerating())) return;
+    if (deps.libraryStore) {
+      const published = await deps.libraryStore.get(userId, libraryItemId);
+      if (!published || published.id !== libraryItemId || published.userId !== userId || published.state !== 'active') {
+        await finalizeError(deps, generating, { code: 'library_unavailable', message: 'The output Library item is no longer available.' });
+        return;
+      }
+    }
+    if (!(await stillGenerating())) return;
 
     // Re-read so a delete that landed mid-generation is not resurrected.
     const ready = await imageStore.transition(userId, imageId, ['generating'], {
@@ -224,7 +268,7 @@ export async function processImageJob(
       ...(first.revisedPrompt ? { revisedPrompt: first.revisedPrompt } : {}),
       error: null,
       updatedAt: clock.now(),
-    });
+    }, rec);
     if (ready?.status === 'ready') await push(deps, ready);
   } catch (e) {
     await finalizeError(deps, generating, toImageError(e));

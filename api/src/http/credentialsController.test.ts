@@ -1,17 +1,25 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createCredentialsController } from './credentialsController';
 import { CredentialService } from '../application/credentialService';
-import type { CredentialRecord, CredentialStore } from '../ports/credentialStore';
+import type { CredentialRecord, CredentialStore, StoredCredential } from '../ports/credentialStore';
 import type { KeyWrapper } from '../ports/keyWrapper';
 
 class MemStore implements CredentialStore {
   byUser = new Map<string, CredentialRecord>();
+  versions = new Map<string, number>();
   async get(u: string) {
     return this.byUser.get(u) ?? null;
   }
-  async put(r: CredentialRecord) {
-    this.byUser.set(r.userId, { ...r });
-    return r;
+  async getForUpdate(userId: string): Promise<StoredCredential | null> {
+    const record = this.byUser.get(userId);
+    return record ? { record: structuredClone(record), versionToken: String(this.versions.get(userId)) } : null;
+  }
+  async put(record: CredentialRecord, expected: StoredCredential | null) {
+    const current = await this.getForUpdate(record.userId);
+    if ((current?.versionToken ?? null) !== (expected?.versionToken ?? null)) return null;
+    this.versions.set(record.userId, (this.versions.get(record.userId) ?? 0) + 1);
+    this.byUser.set(record.userId, { ...record });
+    return record;
   }
   async delete(u: string) {
     this.byUser.delete(u);
@@ -54,6 +62,17 @@ describe('credentialsController', () => {
     const res = await ctx.ctrl.get({ claims: { sub: 'userA' } });
     expect(res.status).toBe(200);
     expect((res.body as { configured: boolean }).configured).toBe(false);
+  });
+
+  it('PUT null clears optional integrations and GET retains the cleared status', async () => {
+    await ctx.ctrl.put({ claims: { sub: 'userA' }, body: { ...body, tavilyKey: 'test-tavily-secret', knowledgeBaseVectorStoreId: 'vs-existing' } });
+    const response = await ctx.ctrl.put({ claims: { sub: 'userA' }, body: {
+      baseUrl: body.baseUrl, models: body.models, tavilyKey: null, knowledgeBaseVectorStoreId: null,
+    } });
+    expect(response.status).toBe(200);
+    const status = await ctx.ctrl.get({ claims: { sub: 'userA' } });
+    expect(status.body).toMatchObject({ configured: true, tavilyConfigured: false, tavilyHint: null, knowledgeBaseVectorStoreId: null });
+    expect(JSON.stringify([response.body, status.body])).not.toContain('test-tavily-secret');
   });
 
   it('rejects an unauthenticated request → 401', async () => {

@@ -1,8 +1,8 @@
 import { isOwnerBlobPath } from '../domain/asset';
-import { isActive } from '../domain/run';
+import { isActive, mergeAgentUsage } from '../domain/run';
 import type { ServiceClock } from './threadService';
 import type { DecryptedCredentials } from './credentialService';
-import type { RunStore } from '../ports/runStore';
+import { sameRunExecution, type RunStore } from '../ports/runStore';
 import type { MessageRecord, MessageStore } from '../ports/messageStore';
 import type { ArtifactKind, MessageToolCall, MessageCitation, MessageImage, MessageArtifact, MessageMemoryRef, MessageWebImage } from '../domain/message';
 import { artifactKindForMime } from '../domain/message';
@@ -22,20 +22,21 @@ import type { ResponsesCitation, ResponsesTool } from '../ai/responses';
 import { tavilySearch, normalizeTavilyImages } from '../ai/tavily';
 import { editImage, generateImage } from '../ai/image';
 import { isAiError } from '../ai/errors';
-import { listContainerFiles, getContainerFile, mimeForFilename } from '../ai/containerFiles';
+import { ContainerFileSizeError, MAX_CONTAINER_FILE_BYTES as MAX_ARTIFACT_BYTES, listContainerFiles, getContainerFile, mimeForFilename } from '../ai/containerFiles';
 import type { ContainerFile } from '../ai/containerFiles';
 import { selectSkills, codeInterpreterSection, slashSkillTags } from './skillService';
 import type { SkillProvisioner } from './skillProvisioner';
 import type { MountedSkill, SkillPackage } from '../domain/skill';
 import { DEFAULT_SKILLS } from '../skills';
 import { completeChat } from '../ai/chat';
+import { validatedAiUrl } from '../ai/http';
 import {
   semanticRouterSystemPrompt,
   type SemanticAction,
   type SemanticRoute,
   type RouteTurnParams,
 } from '../ai/semanticRouter';
-import { renderMemoryContext, type MemoryContextService } from './memoryContextService';
+import { MEMORY_CONTEXT_BUDGET_MS, renderMemoryContext, type MemoryContextService } from './memoryContextService';
 import type { MemoryExtractionService } from './memoryExtractionService';
 import { libraryIngestionKey, libraryItemIdFor } from '../domain/library';
 import type { LibraryStore } from '../ports/libraryStore';
@@ -121,10 +122,9 @@ export interface RunExecutionFence {
 const DEFAULT_FLUSH_MS = 250;
 /** Per-run artifact guards (code interpreter outputs persisted to Blob Storage). */
 const MAX_ARTIFACTS = 16;
-const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 const ARTIFACT_CAPTURE_ATTEMPTS = 4;
 const ARTIFACT_CAPTURE_RETRY_MS = 500;
-const DEFAULT_MEMORY_CONTEXT_BUDGET_MS = 3000;
+const DEFAULT_MEMORY_CONTEXT_BUDGET_MS = MEMORY_CONTEXT_BUDGET_MS;
 
 /** First-token watchdog: abort + cleanly retry an agent attempt that yields NOTHING within this
  *  window. The Azure Responses API can stall (no output at all) when code_interpreter is offered
@@ -368,7 +368,7 @@ async function buildTurns(
 function assembleTools(
   creds: DecryptedCredentials,
   run: { tools: string[] },
-  thread: { vectorStoreId?: string; files?: ThreadFileMeta[] } | null,
+  thread: { vectorStoreId?: string; vectorStoreEndpoint?: string; files?: ThreadFileMeta[] } | null,
   skillFileIds: string[] = [],
 ): ResponsesTool[] {
   const requested = run.tools.length > 0 ? new Set(run.tools) : null;
@@ -376,6 +376,7 @@ function assembleTools(
     requested === null ? name === 'web_search' : requested.has(name);
 
   const tools: ResponsesTool[] = [];
+  const providerEndpoint = new URL(validatedAiUrl(creds.baseUrl, '/files')).origin;
   // The Responses API deadlocks when the code_interpreter container has skill files mounted AND
   // custom function tools are offered alongside it (zero output until the request times out). When
   // skills are mounted this is a skill/code-oriented run, so prioritise code_interpreter and omit
@@ -400,7 +401,7 @@ function assembleTools(
     // a PDF). `purpose=assistants` uploads expose their fileId here. Skill packages (zips + the
     // bootstrap script) are mounted first so the model sees them when it lists /mnt/data.
     const docIds = (thread?.files ?? [])
-      .filter((f) => (f.kind ?? 'document') === 'document' && f.status === 'ready')
+      .filter((f) => (f.kind ?? 'document') === 'document' && f.status === 'ready' && f.providerEndpoint === providerEndpoint)
       .map((f) => f.fileId);
     const fileIds = [...skillFileIds, ...docIds];
     tools.push({
@@ -411,10 +412,11 @@ function assembleTools(
   // file_search: search the thread's store (auto-enabled whenever it exists — the user uploaded
   // docs) plus an optional account-wide knowledge base as a fallback. The account store alone only
   // engages when the client explicitly requested file_search (capability-probed).
-  const storeIds = [thread?.vectorStoreId, creds.knowledgeBaseVectorStoreId].filter(
+  const threadStoreId = thread?.vectorStoreEndpoint === providerEndpoint ? thread.vectorStoreId : undefined;
+  const storeIds = [threadStoreId, creds.knowledgeBaseVectorStoreId].filter(
     (x): x is string => !!x,
   );
-  if (storeIds.length && (thread?.vectorStoreId || wants('file_search'))) {
+  if (storeIds.length && (threadStoreId || wants('file_search'))) {
     tools.push({ type: 'file_search', vector_store_ids: storeIds });
   }
   if (!skillsMounted && wants('generate_image') && creds.models.image) {
@@ -634,13 +636,13 @@ function mapCitation(c: ResponsesCitation): MessageCitation {
   };
 }
 
-async function withTimeout<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+async function withTimeout<T>(work: Promise<T>, ms: number, fallback: T, onTimeout?: () => void): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       work,
       new Promise<T>((resolve) => {
-        timer = setTimeout(() => resolve(fallback), Math.max(0, ms));
+        timer = setTimeout(() => { onTimeout?.(); resolve(fallback); }, Math.max(0, ms));
       }),
     ]);
   } finally {
@@ -648,7 +650,7 @@ async function withTimeout<T>(work: Promise<T>, ms: number, fallback: T): Promis
   }
 }
 
-function emptyMemoryBlock(): MemoryContextBlock {
+function emptyMemoryBlock(degradedReason?: MemoryContextBlock['degradedReason']): MemoryContextBlock {
   return {
     instructions: [],
     memories: [],
@@ -657,6 +659,7 @@ function emptyMemoryBlock(): MemoryContextBlock {
     tokenEstimate: 0,
     latencyBudgetMs: DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
     retrievalMode: 'empty',
+    ...(degradedReason ? { degradedReason } : {}),
   };
 }
 
@@ -674,9 +677,10 @@ async function* streamAgentWithRetry(
   runAgent: (p: RunAgentParams) => AsyncGenerator<AgentEvent>,
   params: Omit<RunAgentParams, 'signal' | 'tools'>,
   toolsForAttempt: (attempt: number) => ResponsesTool[],
-  opts: { maxAttempts: number; watchdogMs: number; onStall?: (attempt: number, message: string) => void },
+  opts: { maxAttempts: number; watchdogMs: number; onStall?: (attempt: number, message: string) => void; beforeAttempt?: () => Promise<boolean> },
 ): AsyncGenerator<AgentEvent> {
   for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
+    if (opts.beforeAttempt && !(await opts.beforeAttempt())) return;
     const ctrl = new AbortController();
     let produced = false;
     let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => ctrl.abort(), opts.watchdogMs);
@@ -735,20 +739,34 @@ export async function processRun(
     queuedRun.dispatchAttempt !== fence.attempt
   )) return;
   if (queuedRun.status === 'cancel_requested') {
-    await runStore.transition(userId, threadId, runId, ['cancel_requested'], { status: 'canceled', endedAt: clock.now() });
+    await runStore.transition(userId, threadId, runId, ['cancel_requested'], { status: 'canceled', endedAt: clock.now() }, queuedRun);
     return;
   }
   const started = await runStore.transition(userId, threadId, runId, ['queued'], {
     status: 'running',
     startedAt: clock.now(),
     heartbeatAt: clock.now(),
-  });
+  }, queuedRun);
   if (started.outcome !== 'updated') return;
-  const run = started.run;
+  const run = structuredClone(started.run);
   const heartbeat = setInterval(() => {
-    void runStore.transition(userId, threadId, runId, ['running'], { heartbeatAt: clock.now() });
+    void runStore.transition(userId, threadId, runId, ['running'], { heartbeatAt: clock.now() }, run)
+      .catch(() => console.warn('[run] heartbeat unconfirmed'));
   }, 60_000);
   heartbeat.unref?.();
+  const memoryController = new AbortController();
+  try {
+  const ownsExecution = async (requireRunning = false): Promise<boolean> => {
+    const live = await runStore.get(userId, threadId, runId);
+    const owned = sameRunExecution(live, run) && !!live && ['running', 'cancel_requested', 'canceled'].includes(live.status);
+    if (!owned) clearInterval(heartbeat);
+    if (!owned || (requireRunning && live?.status !== 'running')) return false;
+    if (requireRunning) {
+      const currentThread = await threadStore.get(run.userId, threadId);
+      if (!currentThread || currentThread.deletedAt) return false;
+    }
+    return true;
+  };
 
   const thread = await threadStore.get(run.userId, threadId);
   const orderAt = run.messageOrder?.assistant ?? run.createdAt;
@@ -776,6 +794,7 @@ export async function processRun(
   let lastFlush = 0;
   let flushed = false;
   let err: { code: string; message: string } | undefined;
+  let terminalEventObserved = false;
   let model: string | undefined;
   let creds: DecryptedCredentials | undefined;
   let firstUser = '';
@@ -809,6 +828,7 @@ export async function processRun(
     ...(citations.length ? { citations } : {}),
     ...(webImages.length ? { webImages } : {}),
     ...(memoryRefs.length ? { memoryRefs } : {}),
+    ...(memoryBlock?.degradedReason ? { memoryDegradedReason: memoryBlock.degradedReason } : {}),
     ...(images.length ? { images } : {}),
     ...(artifacts.length ? { artifacts } : {}),
   });
@@ -816,6 +836,7 @@ export async function processRun(
   const flush = async (force = false): Promise<void> => {
     const now = Date.now();
     if (force || !flushed || now - lastFlush > flushMs) {
+      if (!(await ownsExecution(true))) return;
       flushed = true;
       lastFlush = now;
       const snapshot = buildAssistant('streaming');
@@ -828,6 +849,18 @@ export async function processRun(
    *  new assistant-sourced file, persist it to Blob Storage, and record it as an artifact on the
    *  message + thread. Best-effort — failures never fail the run. */
   const captureArtifacts = async (containerId: string, toolCallId: string): Promise<number> => {
+    const allowed = async (): Promise<boolean> => {
+      if (cancellationObserved) return false;
+      const live = await runStore.get(run.userId, threadId, runId);
+      const currentThread = await threadStore.get(run.userId, threadId);
+        if (!sameRunExecution(live, run) || live?.status !== 'running' ||
+          !currentThread || currentThread.deletedAt) {
+        cancellationObserved = true;
+        return false;
+      }
+      return true;
+    };
+    if (!(await allowed())) return 0;
     if (!creds || !deps.uploadArtifact) {
       console.warn('[artifacts] skipped', { hasCreds: !!creds, hasUploadArtifact: !!deps.uploadArtifact });
       return 0;
@@ -835,48 +868,63 @@ export async function processRun(
     let files;
     try {
       files = await listContainerFiles(creds, containerId, deps.fetchImpl);
-    } catch (e) {
-      console.error('[artifacts] listContainerFiles failed', containerId, e instanceof Error ? e.message : String(e));
+    } catch {
+      console.error('[artifacts] listContainerFiles failed');
       return 0;
     }
     console.log('[artifacts] listed container files', {
-      containerId,
       count: files.length,
-      items: files.map((f) => `${f.source ?? '?'}:${f.filename ?? f.path ?? f.id}`),
     });
     let persisted = 0;
     for (const f of files) {
-      if (f.source === 'user' || seenArtifactFiles.has(f.id)) continue;
+      if (!(await allowed())) return persisted;
+      if (f.source !== 'assistant' || seenArtifactFiles.has(f.id)) continue;
       if (artifacts.length >= MAX_ARTIFACTS) break;
       const name = ((f.filename || f.path || 'artifact').split('/').pop() || 'artifact').slice(0, 400);
       const mime = mimeForFilename(name);
       if (!(ALLOWED_CONTENT_TYPES as readonly string[]).includes(mime)) {
         seenArtifactFiles.add(f.id);
-        console.warn('[artifacts] skipped (mime not allowed)', { name, mime });
+        console.warn('[artifacts] skipped (mime not allowed)', { mime });
         continue;
       }
       const kind = artifactKindForMime(mime);
       if (!shouldExposeArtifact(f, name, kind, requestedKinds)) {
         seenArtifactFiles.add(f.id);
-        console.log('[artifacts] skipped (not a requested deliverable)', { name, path: f.path, kind });
+        console.log('[artifacts] skipped (not a requested deliverable)', { kind });
         continue;
       }
       try {
         const bytes = await getContainerFile(creds, containerId, f.id, deps.fetchImpl);
+        if (!(await allowed())) return persisted;
         if (!bytes.byteLength) {
-          console.warn('[artifacts] skipped (empty, may retry)', { name });
+          console.warn('[artifacts] skipped (empty, may retry)');
           continue;
         }
         if (bytes.byteLength > MAX_ARTIFACT_BYTES) {
           seenArtifactFiles.add(f.id);
-          console.warn('[artifacts] skipped (size)', { name, bytes: bytes.byteLength });
+          console.warn('[artifacts] skipped (size)', { bytes: bytes.byteLength });
           continue;
         }
         const artifactId = `art${artifacts.length + 1}-${run.assistantMessageId}`.slice(0, 64);
-        const blobPath = await deps.uploadArtifact(run.userId, threadId, artifactId, bytes, mime);
         const libraryItemId = libraryItemIdFor(run.userId, 'code_artifact', artifactId);
-        if (deps.libraryStore && !(await deps.libraryStore.get(run.userId, libraryItemId))) {
-          await deps.libraryStore.put({
+        if (deps.libraryStore) {
+          const existing = await deps.libraryStore.get(run.userId, libraryItemId);
+          if (existing && (existing.id !== libraryItemId || existing.userId !== run.userId || existing.state !== 'active')) {
+            seenArtifactFiles.add(f.id);
+            continue;
+          }
+        }
+        if (!(await allowed())) return persisted;
+        const blobPath = await deps.uploadArtifact(run.userId, threadId, artifactId, bytes, mime);
+        if (!(await allowed())) return persisted;
+        const existingLibrary = deps.libraryStore ? await deps.libraryStore.get(run.userId, libraryItemId) : null;
+        if (existingLibrary && (existingLibrary.id !== libraryItemId || existingLibrary.userId !== run.userId || existingLibrary.state !== 'active')) {
+          seenArtifactFiles.add(f.id);
+          continue;
+        }
+        if (deps.libraryStore && !existingLibrary) {
+          if (!(await allowed())) return persisted;
+          const created = await deps.libraryStore.createIfAbsent({
             id: libraryItemId,
             userId: run.userId,
             ingestionKey: libraryIngestionKey('code_artifact', artifactId),
@@ -893,7 +941,14 @@ export async function processRun(
             ...(kind === 'image' ? { image: { provenanceComplete: false } } : {}),
             artifact: { sourceItemIds: artifactSourceItemIds, version: 1, provenanceComplete: true },
           });
+          if (!created) { seenArtifactFiles.add(f.id); continue; }
         }
+        if (!(await allowed())) return persisted;
+        if (deps.libraryStore) {
+          const published = await deps.libraryStore.get(run.userId, libraryItemId);
+          if (!published || published.id !== libraryItemId || published.userId !== run.userId || published.state !== 'active') continue;
+        }
+        if (!(await allowed())) return persisted;
         artifacts.push({
           id: artifactId,
           libraryItemId,
@@ -923,10 +978,11 @@ export async function processRun(
         });
         const tc = toolCalls.get(toolCallId);
         if (tc) toolCalls.set(toolCallId, { ...tc, artifactIds: [...(tc.artifactIds ?? []), artifactId] });
-        console.log('[artifacts] persisted', { name, mime, bytes: bytes.byteLength, blobPath });
+        console.log('[artifacts] persisted', { mime, bytes: bytes.byteLength });
         await flush(true);
-      } catch (e) {
-        console.error('[artifacts] persist failed', name, e instanceof Error ? e.message : String(e));
+      } catch (error) {
+        if (error instanceof ContainerFileSizeError) seenArtifactFiles.add(f.id);
+        console.error('[artifacts] persist failed');
       }
     }
     return persisted;
@@ -946,6 +1002,7 @@ export async function processRun(
 
   try {
     const c = await credentials.getDecrypted(run.userId);
+    if (!(await ownsExecution(true))) throw new Error('Run is no longer active.');
     creds = c;
     model = run.model ?? c.models.chat;
     // Kick off memory retrieval as early as possible using the submitted prompt text (available
@@ -958,18 +1015,21 @@ export async function processRun(
       ? deps.settings.get(run.userId).catch(() => undefined)
       : Promise.resolve(undefined);
     const earlyMemoryPromise = deps.memoryContext && submittedText
-      ? settingsPromise.then((settings) =>
-          withTimeout(
-            deps.memoryContext!.buildForRun({ userId: run.userId, threadId, latestUserText: submittedText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key }, settings }),
+      ? settingsPromise.then(async (settings) => {
+          if (!(await ownsExecution(true))) return emptyMemoryBlock();
+          return withTimeout(
+            deps.memoryContext!.buildForRun({ userId: run.userId, threadId, latestUserText: submittedText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key }, settings, signal: memoryController.signal }),
             deps.memoryContextBudgetMs ?? DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
-            emptyMemoryBlock(),
-          ).catch(() => emptyMemoryBlock()),
-        )
+            emptyMemoryBlock('timeout'),
+            () => memoryController.abort(),
+          ).catch(() => emptyMemoryBlock('unavailable'));
+        }).catch(() => emptyMemoryBlock('unavailable'))
       : undefined;
     const [settings, history] = await Promise.all([
       settingsPromise,
       messageStore.list(userId, threadId),
     ]);
+    if (!(await ownsExecution(true))) throw new Error('Run is no longer active.');
     const imageReferencePromises = new Map<string, Promise<ImageReference[]>>();
     const getImageReferences = (ids: string[]): Promise<ImageReference[]> => {
       const key = ids.join('\u0000');
@@ -990,10 +1050,11 @@ export async function processRun(
     // Fall back to a history-derived query when there was no submitted prompt text (e.g. regenerate).
     const memoryBlockPromise = earlyMemoryPromise ?? (deps.memoryContext
       ? withTimeout(
-          deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key }, settings }),
+          deps.memoryContext.buildForRun({ userId: run.userId, threadId, latestUserText, now: clock.now(), creds: { baseUrl: c.baseUrl, key: c.key }, settings, signal: memoryController.signal }),
           deps.memoryContextBudgetMs ?? DEFAULT_MEMORY_CONTEXT_BUDGET_MS,
-          emptyMemoryBlock(),
-        ).catch(() => emptyMemoryBlock())
+          emptyMemoryBlock('timeout'),
+          () => memoryController.abort(),
+        ).catch(() => emptyMemoryBlock('unavailable'))
       : Promise.resolve(undefined));
     const promptForSkills = run.prompt?.text ?? firstUser;
     const explicitSkillNames = slashSkillTags(promptForSkills);
@@ -1019,6 +1080,7 @@ export async function processRun(
         threadId,
         deps.resolveImageUrl,
       );
+      if (!(await ownsExecution(true))) throw new Error('Run is no longer active.');
       semanticRoute = await withTimeout(
         deps.routeTurn({
           baseUrl: c.baseUrl,
@@ -1068,15 +1130,17 @@ export async function processRun(
           ? await deps.resolveSkills(run.userId)
           : DEFAULT_SKILLS;
         if (effective.length) {
+          if (!(await ownsExecution(true))) { cancellationObserved = true; throw new Error('Run no longer owns skill preparation.'); }
           const prov = await deps.skillProvisioner.ensure(
             { baseUrl: c.baseUrl, key: c.key, fetchImpl: deps.fetchImpl },
             effective,
+            run.userId,
           );
           skillFileIds = prov.fileIds;
           skillMounts = prov.skills;
         }
-      } catch (e) {
-        console.error('[skills] provisioning failed', e instanceof Error ? e.message : String(e));
+      } catch {
+        console.error('[skills] provisioning failed');
       }
     }
 
@@ -1117,7 +1181,7 @@ export async function processRun(
     const baseExecute = makeExecute(c, deps.fetchImpl, getImageReferences, semanticRoute);
     const execute: ToolExecute = async (name, args) => {
       const live = await runStore.get(userId, threadId, runId);
-      if (!live || live.status === 'cancel_requested' || live.status === 'canceled') {
+      if (!sameRunExecution(live, run) || live?.status !== 'running') {
         cancellationObserved = true;
         throw new Error('Run cancellation was requested.');
       }
@@ -1154,19 +1218,35 @@ export async function processRun(
       {
         maxAttempts: deps.maxAgentAttempts ?? 3,
         watchdogMs: deps.firstTokenWatchdogMs ?? (needsSkills ? SKILLS_FIRST_TOKEN_WATCHDOG_MS : DEFAULT_FIRST_TOKEN_WATCHDOG_MS),
-        onStall: (attempt, message) =>
-          console.warn('[run] responses stream stalled; retrying with reduced tools', { runId, attempt, message }),
+        beforeAttempt: () => ownsExecution(true),
+        onStall: (attempt) =>
+          console.warn('[run] responses stream stalled; retrying with reduced tools', { attempt }),
       },
     );
     for await (const ev of agentStream) {
       const live = await runStore.get(userId, threadId, runId);
-      if (!live || live.status === 'cancel_requested' || live.status === 'canceled') {
+      if (!sameRunExecution(live, run)) { cancellationObserved = true; break; }
+      if (!live || live.status !== 'running') {
         if (live?.status === 'cancel_requested') {
-          await runStore.transition(userId, threadId, runId, ['cancel_requested'], { status: 'canceled', endedAt: clock.now() });
+          await runStore.transition(userId, threadId, runId, ['cancel_requested'], { status: 'canceled', endedAt: clock.now() }, run);
         }
         break;
       }
-      if (ev.type === 'text') {
+      if (ev.type === 'usage') {
+        let current = live;
+        let persisted = false;
+        for (let attempt = 0; attempt < 2 && current.status === 'running'; attempt += 1) {
+          const agentUsage = mergeAgentUsage(current.agentUsage, ev.observation);
+          if (JSON.stringify(agentUsage) === JSON.stringify(current.agentUsage)) { persisted = true; break; }
+          const result = await runStore.transition(userId, threadId, runId, ['running'], { agentUsage }, run);
+          if (result.outcome === 'updated') { persisted = true; break; }
+          if (result.outcome === 'missing' || result.run.status !== 'running' || attempt === 1) break;
+          const latest = await runStore.get(userId, threadId, runId);
+          if (!latest) break;
+          current = latest;
+        }
+        if (!persisted) console.warn({ event: 'usage.observation_unconfirmed', scope: 'agent-responses-only' });
+      } else if (ev.type === 'text') {
         acc += ev.delta;
         await flush();
       } else if (ev.type === 'tool') {
@@ -1227,6 +1307,12 @@ export async function processRun(
       } else if (ev.type === 'image' && !ev.partial && deps.uploadImage) {
         try {
           const imageId = `img${images.length + 1}-${run.assistantMessageId}`.slice(0, 64);
+          const libraryItemId = libraryItemIdFor(run.userId, 'chat_generated_image', imageId);
+          const initialLibrary = deps.libraryStore ? await deps.libraryStore.get(run.userId, libraryItemId) : null;
+          if (initialLibrary && (initialLibrary.id !== libraryItemId || initialLibrary.userId !== run.userId || initialLibrary.state !== 'active')) {
+            throw new Error('The output Library item is no longer available.');
+          }
+          if (!(await ownsExecution(true))) { cancellationObserved = true; break; }
           const bytes = b64ToBytes(ev.b64);
           const blobPath = await deps.uploadImage(
             run.userId,
@@ -1235,11 +1321,16 @@ export async function processRun(
             bytes,
             'image/png',
           );
+          if (!(await ownsExecution(true))) { cancellationObserved = true; break; }
           const selectedSourceIds = imageReferenceIdsByCall.get(ev.callId ?? '') ?? semanticRoute?.referenceImageIds ?? [];
           const referenceItemIds = imageLibraryItemIds(history, run.userId, selectedSourceIds);
-          const libraryItemId = libraryItemIdFor(run.userId, 'chat_generated_image', imageId);
-          if (deps.libraryStore && !(await deps.libraryStore.get(run.userId, libraryItemId))) {
-            await deps.libraryStore.put({
+          const existingLibrary = deps.libraryStore ? await deps.libraryStore.get(run.userId, libraryItemId) : null;
+          if (existingLibrary && (existingLibrary.id !== libraryItemId || existingLibrary.userId !== run.userId || existingLibrary.state !== 'active')) {
+            throw new Error('The output Library item is no longer available.');
+          }
+          if (deps.libraryStore && !existingLibrary) {
+            if (!(await ownsExecution(true))) { cancellationObserved = true; break; }
+            const created = await deps.libraryStore.createIfAbsent({
               id: libraryItemId,
               userId: run.userId,
               ingestionKey: libraryIngestionKey('chat_generated_image', imageId),
@@ -1255,7 +1346,15 @@ export async function processRun(
               source: { surface: 'chat', threadId, messageId: run.assistantMessageId, runId: run.id, ...(ev.callId ? { toolCallId: ev.callId } : {}), threadTitleSnapshot: thread?.title, createdAt: clock.now() },
               image: { size: ev.size ?? '1024x1024', format: 'png', prompt: ev.prompt ?? '', referenceItemIds, provenanceComplete: referenceItemIds.length === selectedSourceIds.length },
             });
+            if (!created) throw new Error('The output Library item changed during publication.');
           }
+          if (deps.libraryStore) {
+            const published = await deps.libraryStore.get(run.userId, libraryItemId);
+            if (!published || published.id !== libraryItemId || published.userId !== run.userId || published.state !== 'active') {
+              throw new Error('The output Library item is no longer available.');
+            }
+          }
+          if (!(await ownsExecution(true))) { cancellationObserved = true; break; }
           images.push({
             id: imageId,
             libraryItemId,
@@ -1299,16 +1398,24 @@ export async function processRun(
           }
           await flush(true);
         }
+      } else if (ev.type === 'done') {
+        terminalEventObserved = true;
+        break;
       } else if (ev.type === 'error') {
+        terminalEventObserved = true;
         err = { code: 'internal', message: ev.message };
+        break;
       }
+    }
+    if (!terminalEventObserved && !err) {
+      err = { code: 'incomplete_stream', message: 'The response ended before completion was confirmed.' };
     }
     // Fallback: code-interpreter files can appear shortly after the done event, or content can be
     // temporarily unavailable. Retry before finalizing so generated PDFs reliably become artifacts.
     if (!cancellationObserved) {
       for (const [containerId, callId] of ciContainers) {
         if (artifacts.some((artifact) => artifact.sourceToolCallId === callId)) continue;
-        console.log('[artifacts] end-of-run fallback capture', { containerId });
+        console.log('[artifacts] end-of-run fallback capture');
         await captureArtifactsEventually(containerId, callId);
       }
     }
@@ -1318,10 +1425,11 @@ export async function processRun(
 
   // A cancel may have landed while we streamed — re-read the run before finalizing.
   let current = await runStore.get(userId, threadId, runId);
+  if (!sameRunExecution(current, run) || !current || !['running', 'cancel_requested', 'canceled'].includes(current.status)) { clearInterval(heartbeat); return; }
   if (current?.status === 'cancel_requested') {
     const acknowledged = await runStore.transition(userId, threadId, runId, ['cancel_requested'], {
       status: 'canceled', endedAt: clock.now(),
-    });
+    }, run);
     current = acknowledged.outcome === 'missing' ? null : acknowledged.run;
   }
   let canceled = !current || current.status === 'canceled';
@@ -1336,14 +1444,15 @@ export async function processRun(
   // client's terminal sync picks up the reply and the new title together.
   let newTitle: string | undefined;
   if (!err && !canceled && creds && acc.trim() && (!latestThread.title || latestThread.title === 'New chat')) {
-    newTitle = await generateTitle(creds, firstUser, acc, deps.fetchImpl);
+    if (await ownsExecution(true)) newTitle = await generateTitle(creds, firstUser, acc, deps.fetchImpl);
   }
 
   current = await runStore.get(userId, threadId, runId);
+  if (!sameRunExecution(current, run) || !current || !['running', 'cancel_requested', 'canceled'].includes(current.status)) { clearInterval(heartbeat); return; }
   if (current?.status === 'cancel_requested') {
     await runStore.transition(userId, threadId, runId, ['cancel_requested'], {
       status: 'canceled', endedAt: clock.now(),
-    });
+    }, run);
     canceled = true;
   } else if (!current || current.status === 'canceled') {
     canceled = true;
@@ -1355,6 +1464,7 @@ export async function processRun(
   }
   latestThread = threadVersion.record;
 
+  if (!(await ownsExecution())) return;
   const finalStatus: MessageRecord['status'] = canceled ? 'interrupted' : err ? 'error' : 'complete';
   const finalMessage = buildAssistant(finalStatus);
   await messageStore.append(finalMessage);
@@ -1371,9 +1481,11 @@ export async function processRun(
       lastMessagePreview: (acc.trim() || (err ? 'Error' : '')).slice(0, 140),
       updatedAt: clock.now(),
     });
+  if (!(await ownsExecution())) return;
   let savedThread = await threadStore.putIfMatch(nextThread(latestThread), threadVersion.etag);
   if (!savedThread) {
     threadVersion = await threadStore.getForUpdate(run.userId, threadId);
+    if (!(await ownsExecution())) return;
     if (!threadVersion || threadVersion.record.deletedAt) {
       await messageStore.delete(run.userId, threadId, finalMessage.id);
       clearInterval(heartbeat);
@@ -1385,6 +1497,17 @@ export async function processRun(
       clearInterval(heartbeat);
       return;
     }
+  }
+  if (!(await ownsExecution())) return;
+  if (!canceled) {
+    const terminalStatus = err ? 'error' : 'complete';
+    const terminal = await runStore.transition(userId, threadId, runId, ['running'], {
+      status: terminalStatus,
+      error: err ?? null,
+      startedAt: run.startedAt ?? run.createdAt,
+      endedAt: clock.now(),
+    }, run);
+    if (terminal.outcome !== 'updated' || !sameRunExecution(terminal.run, run) || terminal.run.status !== terminalStatus) return;
   }
   if (finalStatus === 'complete' && deps.memoryExtraction) {
     void deps.memoryExtraction.enqueueTurn(run.userId, threadId, run.assistantMessageId, run.id).catch(() => {});
@@ -1402,13 +1525,8 @@ export async function processRun(
     });
   }
 
-  if (!canceled) {
-    await runStore.transition(userId, threadId, runId, ['running'], {
-      status: err ? 'error' : 'complete',
-      error: err ?? null,
-      startedAt: run.startedAt ?? run.createdAt,
-      endedAt: clock.now(),
-    });
+  } finally {
+    memoryController.abort();
+    clearInterval(heartbeat);
   }
-  clearInterval(heartbeat);
 }

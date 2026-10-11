@@ -1,5 +1,6 @@
 import type { Container, OperationInput, SqlParameter } from '@azure/cosmos';
 import type { RunAdmissionRequest, RunAdmissionResult, RunDispatchRecord, RunRecord, RunStore, RunTransitionResult } from '../../ports/runStore';
+import { samePendingRunDispatch, sameRunExecution, type RunExecutionIdentity } from '../../ports/runStore';
 import { getCosmosDatabase } from './cosmosClient';
 import { ownerScopedDocumentId } from './ownerScopedId';
 import { isActive, type RunStatus } from '../../domain/run';
@@ -22,6 +23,11 @@ interface RunSlotDocument {
   runId: string;
 }
 type RunDispatchDocument = RunDispatchRecord & { id: string; recordType: 'run-dispatch'; _etag?: string };
+
+function matchesRunDocument(document: RunDocument | undefined, userId: string, threadId: string, runId: string, documentId: string): document is RunDocument {
+  return !!document && document.userId === userId && document.threadId === threadId &&
+    document.id === documentId && (document.runId ?? document.id) === runId;
+}
 
 function fromDocument(document: RunDocument): RunRecord {
   const { runId, _etag: _etag, ...record } = document;
@@ -61,13 +67,13 @@ export class CosmosRunStore implements RunStore {
       const { resource } = await this.container
         .item(ownerScopedDocumentId('run', userId, runId), threadId)
         .read<RunDocument>();
-      return resource?.userId === userId ? fromDocument(resource) : null;
+      return matchesRunDocument(resource, userId, threadId, runId, ownerScopedDocumentId('run', userId, runId)) ? fromDocument(resource) : null;
     } catch (err) {
       if ((err as { code?: number }).code !== 404) throw err;
     }
     try {
       const { resource } = await this.container.item(runId, threadId).read<RunDocument>();
-      return resource?.userId === userId ? fromDocument(resource) : null;
+      return matchesRunDocument(resource, userId, threadId, runId, runId) ? fromDocument(resource) : null;
     } catch (err) {
       if ((err as { code?: number }).code === 404) return null;
       throw err;
@@ -148,7 +154,7 @@ export class CosmosRunStore implements RunStore {
     })) as OperationInput[];
     try {
       const { result } = await this.container.items.batch(operations, run.threadId);
-      if (!result) throw new Error('Run admission batch returned no operation results.');
+      if (!result || result.length !== operations.length) throw new Error('Run admission batch returned incomplete operation results.');
       if (result.every((operation) => operation.statusCode >= 200 && operation.statusCode < 300)) {
         return { outcome: 'accepted', run };
       }
@@ -164,21 +170,23 @@ export class CosmosRunStore implements RunStore {
     }
   }
 
-  async acknowledgeStart(userId: string, threadId: string, runId: string, instanceId: string): Promise<RunRecord | null> {
+  async acknowledgeStart(userId: string, threadId: string, runId: string, instanceId: string, expectedExecution?: RunExecutionIdentity): Promise<RunRecord | null> {
     const item = this.container.item(ownerScopedDocumentId('run', userId, runId), threadId);
     try {
       const { resource } = await item.read<RunDocument>();
-      if (!resource || resource.userId !== userId) return null;
+      if (!matchesRunDocument(resource, userId, threadId, runId, ownerScopedDocumentId('run', userId, runId))) return null;
       if (resource.status !== 'queued') return fromDocument(resource);
+      if (expectedExecution && !sameRunExecution(fromDocument(resource), expectedExecution)) return null;
+      if (!resource._etag) throw new Error('Run start acknowledgement requires a Cosmos ETag.');
       const updated: RunDocument = { ...resource, instanceId };
       try {
-        const { resource: replaced } = await item.replace(updated, resource._etag
-          ? { accessCondition: { type: 'IfMatch', condition: resource._etag } }
-          : undefined);
+        const { resource: replaced } = await item.replace(updated, { accessCondition: { type: 'IfMatch', condition: resource._etag } });
         return replaced ? fromDocument(replaced as RunDocument) : fromDocument(updated);
       } catch (error) {
         if ((error as { code?: number }).code !== 412) throw error;
-        return this.get(userId, threadId, runId);
+        const latest = await this.get(userId, threadId, runId);
+        if (latest?.status === 'queued' && expectedExecution && !sameRunExecution(latest, expectedExecution)) return null;
+        return latest;
       }
     } catch (error) {
       if ((error as { code?: number }).code === 404) return null;
@@ -192,27 +200,30 @@ export class CosmosRunStore implements RunStore {
     runId: string,
     expectedStatuses: RunStatus[],
     patch: Partial<Omit<RunRecord, 'id' | 'userId' | 'threadId'>>,
+    expectedExecution?: RunExecutionIdentity,
   ): Promise<RunTransitionResult> {
     const item = this.container.item(ownerScopedDocumentId('run', userId, runId), threadId);
     let current: RunDocument;
     try {
       const { resource } = await item.read<RunDocument>();
-      if (!resource || resource.userId !== userId) return { outcome: 'missing' };
+      if (!matchesRunDocument(resource, userId, threadId, runId, ownerScopedDocumentId('run', userId, runId))) return { outcome: 'missing' };
       current = resource;
     } catch (error) {
       if ((error as { code?: number }).code === 404) return { outcome: 'missing' };
       throw error;
     }
-    if (!expectedStatuses.includes(current.status)) {
+    if (!expectedStatuses.includes(current.status) || (expectedExecution && !sameRunExecution(fromDocument(current), expectedExecution))) {
       return { outcome: 'unchanged', run: fromDocument(current) };
     }
     if (!current._etag) throw new Error('Run transition requires a Cosmos ETag.');
     const updated: RunDocument = { ...current, ...patch };
     try {
       if (!isActive(updated.status)) {
+        let slotReleaseAttempted = false;
         try {
           const { resource: slot } = await this.container.item(slotId(userId), threadId).read<RunSlotDocument>();
           if (slot?.userId === userId && slot.runId === runId) {
+            if (!slot._etag) throw new Error('Run slot release requires a Cosmos ETag.');
             const operations: OperationInput[] = [
               {
                 operationType: 'Replace',
@@ -220,18 +231,25 @@ export class CosmosRunStore implements RunStore {
                 ifMatch: current._etag,
                 resourceBody: updated,
               } as OperationInput,
-              { operationType: 'Delete', id: slot.id } as OperationInput,
+              { operationType: 'Delete', id: slot.id, ifMatch: slot._etag } as OperationInput,
             ];
+            slotReleaseAttempted = true;
             const { result } = await this.container.items.batch(operations, threadId);
-            if (!result) throw new Error('Run transition batch returned no operation results.');
+            if (!result || result.length !== operations.length) throw new Error('Run transition batch returned incomplete operation results.');
             if (result.every((operation) => operation.statusCode >= 200 && operation.statusCode < 300)) {
               return { outcome: 'updated', run: fromDocument(updated) };
             }
-            if (!result.some((operation) => operation.statusCode === 409 || operation.statusCode === 412)) {
-              throw new Error(`Run transition batch failed (${result.map((operation) => operation.statusCode).join(',')}).`);
+            if (result.some((operation) => [404, 409, 412].includes(operation.statusCode))) {
+              const latest = await this.get(userId, threadId, runId);
+              return latest ? { outcome: 'unchanged', run: latest } : { outcome: 'missing' };
             }
+            throw new Error(`Run transition batch failed (${result.map((operation) => operation.statusCode).join(',')}).`);
           }
         } catch (error) {
+          if (slotReleaseAttempted && [404, 409, 412].includes((error as { code?: number }).code ?? 0)) {
+            const latest = await this.get(userId, threadId, runId);
+            return latest ? { outcome: 'unchanged', run: latest } : { outcome: 'missing' };
+          }
           if ((error as { code?: number }).code !== 404) throw error;
         }
       }
@@ -271,10 +289,10 @@ export class CosmosRunStore implements RunStore {
     const item = this.container.item(dispatchId(record.userId, record.runId), record.threadId);
     try {
       const { resource } = await item.read<RunDispatchDocument>();
-      if (!resource || resource.state !== 'pending' || resource.attempt !== record.attempt || resource.executionToken !== record.executionToken) return;
-      await item.replace({ ...resource, state: 'sent', updatedAt: sentAt }, resource._etag
-        ? { accessCondition: { type: 'IfMatch', condition: resource._etag } }
-        : undefined);
+      if (!resource || resource.id !== dispatchId(record.userId, record.runId) || resource.recordType !== 'run-dispatch' ||
+          !samePendingRunDispatch(resource, record)) return;
+      if (!resource._etag) throw new Error('Run dispatch acknowledgement requires a Cosmos ETag.');
+      await item.replace({ ...resource, state: 'sent', updatedAt: sentAt }, { accessCondition: { type: 'IfMatch', condition: resource._etag } });
     } catch (error) {
       if (![404, 409, 412].includes((error as { code?: number }).code ?? 0)) throw error;
     }

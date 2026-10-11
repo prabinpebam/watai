@@ -1,10 +1,11 @@
-import { v1Url } from './chat';
+import { validatedAiUrl } from './http';
 import type { Embedder, EmbedCredentials } from '../ports/embedder';
 
 export interface EmbedTextOptions {
   model: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -13,15 +14,18 @@ export interface EmbedTextOptions {
  * write path persists the record without a vector and lets backfill fill it later.
  */
 export async function embedText(creds: EmbedCredentials, text: string, opts: EmbedTextOptions): Promise<number[]> {
+  opts.signal?.throwIfAborted();
   const fetchImpl = opts.fetchImpl ?? fetch;
   const ctrl = new AbortController();
+  const signal = opts.signal ? AbortSignal.any([ctrl.signal, opts.signal]) : ctrl.signal;
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 10_000);
   try {
-    const res = await fetchImpl(v1Url(creds.baseUrl, '/embeddings'), {
+    const res = await fetchImpl(validatedAiUrl(creds.baseUrl, '/embeddings'), {
       method: 'POST',
+      redirect: 'error',
       headers: { Authorization: `Bearer ${creds.key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: opts.model, input: text }),
-      signal: ctrl.signal,
+      signal,
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
@@ -40,6 +44,6 @@ export async function embedText(creds: EmbedCredentials, text: string, opts: Emb
 export function azureEmbedder(model: string, fetchImpl?: typeof fetch): Embedder {
   return {
     model,
-    embed: (creds, text) => embedText(creds, text, { model, fetchImpl }),
+    embed: (creds, text, options) => embedText(creds, text, { model, fetchImpl, signal: options?.signal }),
   };
 }

@@ -27,6 +27,13 @@ export class InMemoryMessageStore implements MessageStore {
     return record;
   }
 
+  async createIfAbsent(record: MessageRecord): Promise<MessageRecord | null> {
+    const key = this.key(record.userId, record.threadId, record.id);
+    if (this.byKey.has(key)) return null;
+    this.byKey.set(key, { ...record });
+    return record;
+  }
+
   async delete(userId: string, threadId: string, id: string): Promise<void> {
     this.byKey.delete(this.key(userId, threadId, id));
   }

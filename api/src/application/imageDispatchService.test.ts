@@ -12,6 +12,21 @@ const image = (overrides: Partial<ImageGenRecord> = {}): ImageGenRecord => ({
 });
 
 describe('ImageDispatchService', () => {
+  it.each(['heartbeat', 'replacement'])('does not expire a stale candidate after a newer %s', async change => {
+    const store = new InMemoryImageStore();
+    await store.put(image({ status: 'generating', updatedAt: '2025-12-31T22:00:00Z' }));
+    const list = store.listStaleActive.bind(store);
+    vi.spyOn(store, 'listStaleActive').mockImplementationOnce(async (...args) => {
+      const candidates = await list(...args);
+      await store.put({ ...candidates[0], ...(change === 'heartbeat' ? { updatedAt: clock.now() } : { executionToken: 'replacement' }) });
+      return candidates;
+    });
+    const start = vi.fn();
+    await new ImageDispatchService(store, { start }, clock).reconcile();
+    expect((await store.get('user-1', 'image-1'))?.status).toBe('generating');
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it('retries pending accepted images once and records transport acknowledgement', async () => {
     const store = new InMemoryImageStore();
     await store.putQueued(image());

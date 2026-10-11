@@ -117,9 +117,11 @@ export function LibraryView() {
   const [error, setError] = useState(false);
   const [requestVersion, setRequestVersion] = useState(0);
   const activeRequestKeyRef = useRef('');
+  const requestEpochRef = useRef(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
+  const uploadControllerRef = useRef<AbortController | null>(null);
   const [uploads, setUploads] = useState<Array<{ id: string; name: string; progress: number; error?: string }>>([]);
   const kind = params.get('kind') ?? 'all';
   const origin = params.get('origin') ?? 'all';
@@ -134,6 +136,11 @@ export function LibraryView() {
     else next.set(name, value);
     setParams(next, { replace: true });
   };
+
+  useEffect(() => () => {
+    uploadControllerRef.current?.abort();
+    uploadControllerRef.current = null;
+  }, [api]);
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -163,6 +170,7 @@ export function LibraryView() {
 
   useEffect(() => {
     let live = true;
+    requestEpochRef.current += 1;
     setLoading(true);
     setLoadingMore(false);
     setLoadMoreError(false);
@@ -177,7 +185,10 @@ export function LibraryView() {
     }).finally(() => {
       if (live) setLoading(false);
     });
-    return () => { live = false; };
+    return () => {
+      live = false;
+      requestEpochRef.current += 1;
+    };
   }, [api, params, requestVersion]);
 
   useEffect(() => {
@@ -204,22 +215,27 @@ export function LibraryView() {
   const loadMore = async () => {
     if (!cursor || loadingMore) return;
     const startedFor = requestKey;
+    const epoch = requestEpochRef.current;
+    const isCurrent = () => activeRequestKeyRef.current === startedFor && requestEpochRef.current === epoch;
     setLoadingMore(true);
     setLoadMoreError(false);
     try {
       const result = await api.listLibrary(queryFromParams(params, cursor));
-      if (activeRequestKeyRef.current !== startedFor) return;
+      if (!isCurrent()) return;
       setItems((current) => [...current, ...result.items.filter((item) => !current.some((known) => known.id === item.id))]);
       setCursor(result.cursor);
       setTotal(result.totalApprox ?? total);
     } catch {
-      if (activeRequestKeyRef.current === startedFor) setLoadMoreError(true);
+      if (isCurrent()) setLoadMoreError(true);
     } finally {
-      if (activeRequestKeyRef.current === startedFor) setLoadingMore(false);
+      if (isCurrent()) setLoadingMore(false);
     }
   };
 
   const uploadFiles = async (list: FileList) => {
+    uploadControllerRef.current?.abort();
+    const controller = new AbortController();
+    uploadControllerRef.current = controller;
     const files = [...list].slice(0, 20);
     if (files.reduce((sum, file) => sum + file.size, 0) > 100 * 1024 * 1024) {
       setUploads([{ id: 'batch-error', name: 'Upload selection', progress: 0, error: 'Select 100 MB or less at a time.' }]);
@@ -228,14 +244,20 @@ export function LibraryView() {
     const queued = files.map((file, index) => ({ id: `${Date.now()}-${index}`, name: file.name, progress: 0 }));
     setUploads(queued);
     for (let index = 0; index < files.length; index++) {
+      if (controller.signal.aborted) return;
       const row = queued[index];
       try {
-        await uploadToLibrary(files[index], (progress) => setUploads((current) => current.map((entry) => entry.id === row.id ? { ...entry, progress } : entry)), api);
+        await uploadToLibrary(files[index], (progress) => {
+          if (!controller.signal.aborted) setUploads((current) => current.map((entry) => entry.id === row.id ? { ...entry, progress } : entry));
+        }, api, controller.signal);
       } catch (error) {
+        if (controller.signal.aborted) return;
         setUploads((current) => current.map((entry) => entry.id === row.id ? { ...entry, error: error instanceof Error ? error.message : 'Upload failed.' } : entry));
       }
     }
+    if (controller.signal.aborted) return;
     setRequestVersion((version) => version + 1);
+    if (uploadControllerRef.current === controller) uploadControllerRef.current = null;
   };
 
   const filtered = ['q', 'kind', 'origin', 'sort'].some((name) => params.has(name));

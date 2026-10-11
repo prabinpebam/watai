@@ -31,19 +31,27 @@ export async function prepareLibraryUpload(file: File): Promise<File> {
   return prepared.type === mime ? prepared : new File([prepared], prepared.name, { type: mime, lastModified: prepared.lastModified });
 }
 
-export async function uploadToLibrary(file: File, onProgress?: (progress: number) => void, api: Pick<LibraryReadApi, 'reserveLibraryUpload' | 'completeLibraryUpload'> = cloudApi): Promise<LibraryItemDTO> {
+export async function uploadToLibrary(file: File, onProgress?: (progress: number) => void, api: Pick<LibraryReadApi, 'reserveLibraryUpload' | 'completeLibraryUpload'> = cloudApi, signal?: AbortSignal): Promise<LibraryItemDTO> {
+  signal?.throwIfAborted();
   const prepared = await prepareLibraryUpload(file);
+  signal?.throwIfAborted();
   const contentHash = await sha256(prepared);
+  signal?.throwIfAborted();
   const reservation = await api.reserveLibraryUpload({ name: prepared.name, mime: prepared.type, bytes: prepared.size, contentHash });
+  signal?.throwIfAborted();
   onProgress?.(15);
   let response: Response | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
-    response = await fetch(reservation.upload.url, { method: 'PUT', headers: reservation.upload.headers, body: prepared });
+    signal?.throwIfAborted();
+    response = await fetch(reservation.upload.url, { method: 'PUT', headers: reservation.upload.headers, body: prepared, signal });
+    signal?.throwIfAborted();
     if (response.ok) break;
   }
   if (!response?.ok) throw new Error('The file could not be uploaded.');
   onProgress?.(85);
+  signal?.throwIfAborted();
   const item = await api.completeLibraryUpload(reservation.item.id, { bytes: prepared.size, contentHash });
+  signal?.throwIfAborted();
   onProgress?.(100);
   return item;
 }

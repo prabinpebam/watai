@@ -10,7 +10,9 @@ export default defineConfig({
   base: './',
   build: {
     outDir: 'docs',
-    emptyOutDir: true,
+    // `prepare-pages-output.mjs` removes the mutable shell while retaining
+    // independently addressable `docs/releases/*` rollback artifacts.
+    emptyOutDir: false,
     target: 'es2020',
     sourcemap: false,
   },

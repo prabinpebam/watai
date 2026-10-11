@@ -6,9 +6,11 @@ import { LibraryView } from './LibraryView';
 
 const mocks = vi.hoisted(() => ({
   listLibrary: vi.fn(),
+  upload: vi.fn(),
 }));
 
 vi.mock('../../data', () => ({ cloudApi: { listLibrary: mocks.listLibrary } }));
+vi.mock('./upload', () => ({ uploadToLibrary: mocks.upload }));
 
 vi.mock('../../lib/hooks', async () => {
   const actual = await vi.importActual<typeof import('../../lib/hooks')>('../../lib/hooks');
@@ -65,9 +67,48 @@ function renderLibrary(path = '/library') {
 beforeEach(() => {
   mocks.listLibrary.mockReset();
   mocks.listLibrary.mockResolvedValue({ items: [image], totalApprox: 1 });
+  mocks.upload.mockReset().mockResolvedValue(image);
 });
 
 describe('LibraryView', () => {
+  it.each(['unmount', 'replacement'])('cancels an old batch and starts no later files after %s', async action => {
+    const pending = deferred<LibraryItemDTO>();
+    mocks.upload.mockReturnValueOnce(pending.promise);
+    const view = renderLibrary();
+    await screen.findByText('A launch poster');
+    const input = view.container.querySelector('input[type="file"]')!;
+    const first = new File(['first'], 'first.pdf', { type: 'application/pdf' });
+    const second = new File(['second'], 'second.pdf', { type: 'application/pdf' });
+    fireEvent.change(input, { target: { files: [first, second] } });
+    expect(mocks.upload).toHaveBeenCalledOnce();
+    const signal = mocks.upload.mock.calls[0][3] as AbortSignal | undefined;
+    if (action === 'unmount') view.unmount();
+    else fireEvent.change(input, { target: { files: [new File(['new'], 'replacement.pdf', { type: 'application/pdf' })] } });
+    await act(async () => pending.resolve(image));
+    expect(signal?.aborted).toBe(true);
+    expect(mocks.upload.mock.calls.some(([file]) => file.name === 'second.pdf')).toBe(false);
+    expect(mocks.upload).toHaveBeenCalledTimes(action === 'unmount' ? 1 : 2);
+  });
+
+  it('rejects an old page after switching away and back to the same filter', async () => {
+    const pending = deferred<{ items: LibraryItemDTO[] }>();
+    const stale = { ...pdf, id: 'old-page', name: 'stale-page.pdf' };
+    mocks.listLibrary.mockImplementation((query: { cursor?: string; kind?: string[] }) => {
+      if (query.cursor) return pending.promise;
+      if (query.kind?.includes('image')) return Promise.resolve({ items: [image] });
+      return Promise.resolve({ items: [pdf], cursor: 'next-page' });
+    });
+    renderLibrary();
+    await screen.findByText('old-filter.pdf');
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Images' }));
+    await screen.findByRole('img', { name: 'A launch poster' });
+    fireEvent.click(screen.getByRole('tab', { name: 'All' }));
+    await screen.findByText('old-filter.pdf');
+    await act(async () => pending.resolve({ items: [stale] }));
+    expect(screen.queryByText('stale-page.pdf')).not.toBeInTheDocument();
+  });
+
   it('shows layout-preserving shimmer rows instead of a circular loader', () => {
     mocks.listLibrary.mockReturnValue(new Promise(() => {}));
     renderLibrary();

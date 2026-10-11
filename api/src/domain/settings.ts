@@ -60,7 +60,7 @@ const accountDataPatch = dataBase.omit({ sync: true }).partial().strict();
 
 const patchSchema = z
   .object({
-    personalization: personalizationBase.partial().strict().optional(),
+    personalization: personalizationBase.partial().extend({ memory: memorySettingsSchema.partial().strict().optional() }).strict().optional(),
     appearance: appearanceBase.partial().strict().optional(),
     voice: accountVoicePatch.optional(),
     data: accountDataPatch.optional(),
@@ -113,10 +113,13 @@ export function normalizeSettings(settings: Settings): Settings {
 
 /** Shallow-merge each section of a patch over the current settings. */
 export function mergeSettings(current: Settings, patch: SettingsPatch): Settings {
+  const { memory, ...personalization } = patch.personalization ?? {};
   const voicePatch = patch.voice as SettingsPatch['voice'] & { autoSend?: boolean };
   const autoStopDictation = voicePatch?.autoStopDictation ?? voicePatch?.autoSend ?? current.voice.autoStopDictation;
   return normalizeSettings({
-    personalization: { ...current.personalization, ...patch.personalization },
+    personalization: { ...current.personalization, ...personalization,
+      ...(memory ? { memory: { ...(current.personalization.memory ?? effectiveMemorySettings(current)), ...memory } } : {}),
+    },
     appearance: { ...current.appearance, ...patch.appearance },
     voice: { ...current.voice, ...patch.voice, autoStopDictation },
     data: { ...current.data, ...patch.data },
@@ -131,6 +134,9 @@ export function effectiveMemorySettings(settings: Settings): MemorySettings {
     referenceHistory: settings.personalization.memoryEnabled,
     autoExtract: settings.personalization.memoryEnabled,
   };
+  if (settings.personalization.memoryEnabled !== true || memory.enabled !== true) {
+    return { ...memory, enabled: false, referenceSaved: false, referenceHistory: false, autoExtract: false, learnChats: 'off' };
+  }
   return {
     ...memory,
     learnChats: memory.learnChats ?? (memory.autoExtract && memory.referenceHistory ? 'automatic' : 'off'),

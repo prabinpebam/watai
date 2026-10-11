@@ -23,6 +23,7 @@ export class CosmosSettingsStore implements SettingsStore {
   async get(userId: string): Promise<StoredSettings | null> {
     try {
       const { resource } = await this.container.item(userId, userId).read<SettingsDoc>();
+      if (resource && (resource.id !== userId || resource.userId !== userId)) throw new Error('Settings owner binding failed.');
       return resource?.value
         ? { value: resource.value, revision: resource.revision ?? 1, ...(resource._etag ? { versionToken: resource._etag } : {}) }
         : null;
@@ -33,13 +34,12 @@ export class CosmosSettingsStore implements SettingsStore {
   }
 
   async put(userId: string, settings: Settings, expected: StoredSettings | null): Promise<StoredSettings | null> {
+    if (expected && (typeof expected.versionToken !== 'string' || !expected.versionToken.trim())) throw new Error('Settings update requires a version token.');
     const revision = (expected?.revision ?? 0) + 1;
     const doc: SettingsDoc = { id: userId, userId, value: settings, revision };
     try {
       const response = expected
-        ? await this.container.item(userId, userId).replace(doc, expected.versionToken
-            ? { accessCondition: { type: 'IfMatch', condition: expected.versionToken } }
-            : undefined)
+        ? await this.container.item(userId, userId).replace(doc, { accessCondition: { type: 'IfMatch', condition: expected.versionToken! } })
         : await this.container.items.create(doc);
       return {
         value: settings,

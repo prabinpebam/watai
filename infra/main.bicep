@@ -21,7 +21,25 @@ param allowedOrigins array = [
 @description('Deploy the Function App. Requires consumption-plan VM quota in the region.')
 param deployFunctionApp bool = true
 
-@description('Email of the admin who can manage invites and is always allowed access.')
+@description('Optional Function App name override for an isolated stage. Empty preserves the existing production name.')
+param functionAppName string = ''
+
+@description('Cosmos database used by this environment.')
+param cosmosDatabaseName string = 'watai'
+
+@description('Blob container used for this environment media.')
+param mediaContainerName string = 'media'
+
+@description('Storage Queue used for durable chat runs.')
+param runQueueName string = 'run-jobs'
+
+@description('Storage Queue used for image jobs.')
+param imageQueueName string = 'image-jobs'
+
+@description('Storage Queue used for memory jobs.')
+param memoryQueueName string = 'memory-jobs'
+
+@description('Administrative contact email. Privileged access requires a configured immutable admin OID.')
 param adminEmail string = 'prabinpebam@gmail.com'
 
 @description('Comma-separated token object-ids (oid) that are always treated as admin. Robust against missing email claims on federated/external accounts.')
@@ -45,8 +63,14 @@ param memoryDeepModel string = 'gpt-5.4'
 @description('Embedding deployment name for semantic memory retrieval. Empty disables vector retrieval (memory contributes only the always-on profile) and skips write-time embeddings. Set to a deployed embedding model (e.g. text-embedding-3-small) to enable.')
 param memoryEmbedModel string = ''
 
+@description('Enables bounded independent saved-memory indexing. Keep disabled until permission and storage qualification passes.')
+param memoryIndexEnabled bool = false
+
 @description('When "true", injects an always-on identity profile (durable facts, instructions, avoidances) into every run. Sensitive memories are always excluded.')
 param memoryProfile string = 'true'
+
+@description('When enabled, blocks model-facing memory retrieval and automatic learning, including already-queued jobs. Manual inventory and deletion remain available.')
+param memoryContained bool = false
 
 @description('Always-ready instances for the HTTP+SignalR group (0 disables). Keeps POST /runs and SignalR negotiate warm so the send path never cold-starts.')
 @minValue(0)
@@ -59,6 +83,9 @@ param alwaysReadyHttp int = 1
 param alwaysReadyRunWorker int = 1
 
 var suffix = uniqueString(resourceGroup().id)
+var resolvedFunctionAppName = empty(functionAppName) ? 'func-${namePrefix}-${suffix}' : functionAppName
+// Preserve historical production assignment GUIDs; overridden stage apps get distinct IDs.
+var roleAssignmentIdentity = empty(functionAppName) ? 'func' : resolvedFunctionAppName
 var tags = {
   app: 'watai'
   env: env
@@ -129,9 +156,9 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
 
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-11-15' = {
   parent: cosmos
-  name: 'watai'
+  name: cosmosDatabaseName
   properties: {
-    resource: { id: 'watai' }
+    resource: { id: cosmosDatabaseName }
   }
 }
 
@@ -143,7 +170,15 @@ resource containers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containe
       resource: {
         id: c.name
         partitionKey: { paths: [ c.pk ], kind: 'Hash' }
-        indexingPolicy: { indexingMode: 'consistent', automatic: true }
+        indexingPolicy: {
+          indexingMode: 'consistent'
+          automatic: true
+          compositeIndexes: c.name == 'threads'
+            ? [[{ path: '/updatedAt', order: 'descending' }, { path: '/id', order: 'ascending' }]]
+            : c.name == 'messages'
+              ? [[{ path: '/createdAt', order: 'ascending' }, { path: '/id', order: 'ascending' }]]
+              : []
+        }
       }
     }
   }
@@ -204,7 +239,7 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
 
 resource mediaContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
-  name: 'media'
+  name: mediaContainerName
   properties: { publicAccess: 'None' }
 }
 
@@ -241,7 +276,7 @@ resource credKek 'Microsoft.KeyVault/vaults/keys@2023-07-01' = {
   }
 }
 
-// ---------------------------------------------------------------- Function App (Flex Consumption, Node 20)
+// ---------------------------------------------------------------- Function App (Flex Consumption, Node 24)
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = if (deployFunctionApp) {
   name: 'plan-${namePrefix}-${env}'
   location: location
@@ -252,7 +287,7 @@ resource plan 'Microsoft.Web/serverfarms@2023-12-01' = if (deployFunctionApp) {
 }
 
 resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
-  name: 'func-${namePrefix}-${suffix}'
+  name: resolvedFunctionAppName
   location: location
   kind: 'functionapp,linux'
   identity: { type: 'SystemAssigned' }
@@ -286,7 +321,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
       }
       runtime: {
         name: 'node'
-        version: '20'
+        version: '24'
       }
     }
     siteConfig: {
@@ -301,9 +336,12 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
         { name: 'DEPLOYMENT_STORAGE_CONNECTION_STRING', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'COSMOS_ENDPOINT', value: cosmos.properties.documentEndpoint }
-        { name: 'COSMOS_DATABASE', value: 'watai' }
+        { name: 'COSMOS_DATABASE', value: cosmosDatabaseName }
         { name: 'STORAGE_ACCOUNT', value: storage.name }
-        { name: 'MEDIA_CONTAINER', value: 'media' }
+        { name: 'MEDIA_CONTAINER', value: mediaContainerName }
+        { name: 'RUN_QUEUE', value: runQueueName }
+        { name: 'IMAGE_QUEUE', value: imageQueueName }
+        { name: 'MEMORY_QUEUE', value: memoryQueueName }
         { name: 'KEY_VAULT_URI', value: keyVault.properties.vaultUri }
         { name: 'CRED_KEK_NAME', value: 'watai-cred-kek' }
         { name: 'ADMIN_EMAIL', value: adminEmail }
@@ -314,7 +352,9 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
         { name: 'MEMORY_MODEL', value: memoryModel }
         { name: 'MEMORY_DEEP_MODEL', value: memoryDeepModel }
         { name: 'MEMORY_EMBED_MODEL', value: memoryEmbedModel }
+        { name: 'MEMORY_INDEX_ENABLED', value: string(memoryIndexEnabled) }
         { name: 'MEMORY_PROFILE', value: memoryProfile }
+        { name: 'MEMORY_CONTAINED', value: string(memoryContained) }
       ]
     }
   }
@@ -322,7 +362,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
 
 // ---------------------------------------------------------------- Role assignments (managed identity, least privilege)
 resource blobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployFunctionApp) {
-  name: guid(storage.id, 'func', roleStorageBlobDataContributor)
+  name: guid(storage.id, roleAssignmentIdentity, roleStorageBlobDataContributor)
   scope: storage
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleStorageBlobDataContributor)
@@ -333,7 +373,7 @@ resource blobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (dep
 }
 
 resource kvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployFunctionApp) {
-  name: guid(keyVault.id, 'func', roleKeyVaultSecretsUser)
+  name: guid(keyVault.id, roleAssignmentIdentity, roleKeyVaultSecretsUser)
   scope: keyVault
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
@@ -345,7 +385,7 @@ resource kvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deplo
 
 // Wrap/unwrap the credential KEK (envelope encryption) — Key Vault Crypto User.
 resource kvCryptoRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployFunctionApp) {
-  name: guid(keyVault.id, 'func', roleKeyVaultCryptoUser)
+  name: guid(keyVault.id, roleAssignmentIdentity, roleKeyVaultCryptoUser)
   scope: keyVault
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultCryptoUser)
@@ -357,7 +397,7 @@ resource kvCryptoRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if 
 
 resource cosmosDataRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = if (deployFunctionApp) {
   parent: cosmos
-  name: guid(cosmos.id, 'func', cosmosBuiltInDataContributor)
+  name: guid(cosmos.id, roleAssignmentIdentity, cosmosBuiltInDataContributor)
   properties: {
     roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${cosmosBuiltInDataContributor}'
     #disable-next-line BCP318
@@ -368,9 +408,9 @@ resource cosmosDataRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignment
 
 // ---------------------------------------------------------------- Outputs
 output cosmosEndpoint string = cosmos.properties.documentEndpoint
-output cosmosDatabase string = 'watai'
+output cosmosDatabase string = cosmosDatabaseName
 output storageAccount string = storage.name
-output mediaContainer string = 'media'
+output mediaContainer string = mediaContainerName
 output keyVaultUri string = keyVault.properties.vaultUri
 #disable-next-line BCP318
 output functionAppName string = deployFunctionApp ? functionApp.name : ''

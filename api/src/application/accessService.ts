@@ -7,33 +7,33 @@ import type { InviteStore } from '../ports/inviteStore';
  * allowed and can manage the allowlist; everyone else must be on it. Identity/email
  * always come from the validated token, never the request body.
  *
- * The admin is matched by the token's `oid` (stable object id, present in every token)
- * OR by email. The oid match is the reliable one — the email claim can be absent for
- * federated/external accounts whose directory `mail` attribute is empty.
+ * Admin authority requires a configured immutable token object id.
  */
 export class AccessService {
   private readonly invites: InviteStore;
-  private readonly adminEmail: string;
   private readonly adminOids: Set<string>;
 
-  constructor(invites: InviteStore, adminEmail: string, adminOids: string[] = []) {
+  constructor(invites: InviteStore, _adminEmail: string, adminOids: string[] = []) {
     this.invites = invites;
-    this.adminEmail = adminEmail.trim().toLowerCase();
-    this.adminOids = new Set(adminOids.map((o) => o.trim().toLowerCase()).filter(Boolean));
+    this.adminOids = new Set(adminOids.map((oid) => oid.trim().toLowerCase()).filter(Boolean));
   }
 
   isAdmin(claims: Claims): boolean {
     const oid = typeof claims.oid === 'string' ? claims.oid.trim().toLowerCase() : undefined;
-    if (oid && this.adminOids.has(oid)) return true;
-    const email = emailFromClaims(claims);
-    return !!email && !!this.adminEmail && email === this.adminEmail;
+    return !!oid && this.adminOids.has(oid);
   }
 
   async isInvited(claims: Claims): Promise<boolean> {
     if (this.isAdmin(claims)) return true;
-    const email = emailFromClaims(claims);
+    const issuer = typeof claims.iss === 'string' ? claims.iss.trim() : '';
+    const objectId = typeof claims.oid === 'string' ? claims.oid.trim().toLowerCase() : '';
+    if (!issuer || !objectId) return false;
+    const principal = { issuer, objectId };
+    if (await this.invites.getByPrincipal(principal)) return true;
+    if (claims.email_verified !== true || typeof claims.email !== 'string') return false;
+    const email = emailFromClaims({ email: claims.email });
     if (!email) return false;
-    return (await this.invites.get(email)) !== null;
+    return (await this.invites.redeem(email, principal, new Date().toISOString())) !== null;
   }
 
   /** Authorizer for data routes: the caller must be the admin or an invited user. */

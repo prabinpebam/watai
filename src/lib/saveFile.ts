@@ -18,33 +18,56 @@ function isIOS(): boolean {
   return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
-const preparedFiles = new Map<string, Promise<Blob>>();
+const preparedFiles = new Map<string, { promise: Promise<Blob>; controller: AbortController }>();
+const downloadUrls = new Map<string, ReturnType<typeof setTimeout>>();
+let ownerEpoch = 0;
 
-async function fetchBlob(source: string): Promise<Blob> {
-  const res = await fetch(source);
+function releaseDownloadUrl(url: string): void {
+  const timer = downloadUrls.get(url);
+  if (timer === undefined) return;
+  clearTimeout(timer);
+  downloadUrls.delete(url);
+  URL.revokeObjectURL(url);
+}
+
+export function clearPreparedFiles(): void {
+  ownerEpoch += 1;
+  for (const prepared of preparedFiles.values()) prepared.controller.abort();
+  preparedFiles.clear();
+  for (const url of downloadUrls.keys()) releaseDownloadUrl(url);
+}
+
+async function fetchBlob(source: string, signal?: AbortSignal): Promise<Blob> {
+  const res = await fetch(source, signal ? { signal } : undefined);
   if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
-  return res.blob();
+  const blob = await res.blob();
+  if (signal?.aborted) throw new DOMException('Download was cancelled.', 'AbortError');
+  return blob;
 }
 
 export function prepareFile(source: string): Promise<Blob> | undefined {
   if (!isIOS() || !/^https?:/.test(source)) return undefined;
   const existing = preparedFiles.get(source);
-  if (existing) return existing;
+  if (existing) return existing.promise;
   if (preparedFiles.size >= 8) {
     const oldest = preparedFiles.keys().next().value;
-    if (oldest) preparedFiles.delete(oldest);
+    if (oldest) {
+      preparedFiles.get(oldest)?.controller.abort();
+      preparedFiles.delete(oldest);
+    }
   }
-  const prepared = fetchBlob(source).catch((error) => {
-    preparedFiles.delete(source);
+  const controller = new AbortController();
+  const prepared = fetchBlob(source, controller.signal).catch((error) => {
+    if (preparedFiles.get(source)?.promise === prepared) preparedFiles.delete(source);
     throw error;
   });
-  preparedFiles.set(source, prepared);
+  preparedFiles.set(source, { promise: prepared, controller });
   return prepared;
 }
 
 async function resolveBlob(source: Blob | string): Promise<Blob> {
   if (typeof source !== 'string') return source;
-  return preparedFiles.get(source) ?? fetchBlob(source);
+  return preparedFiles.get(source)?.promise ?? fetchBlob(source);
 }
 
 function anchorDownload(url: string, filename: string): void {
@@ -59,9 +82,8 @@ function anchorDownload(url: string, filename: string): void {
 
 function blobDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
+  downloadUrls.set(url, setTimeout(() => releaseDownloadUrl(url), 10_000));
   anchorDownload(url, filename);
-  // Revoke well after the click so the browser has grabbed the bytes.
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /**
@@ -70,18 +92,21 @@ function blobDownload(blob: Blob, filename: string): void {
  * performs a normal download. Silently returns if the user dismisses the iOS share sheet.
  */
 export async function saveFile(source: Blob | string, filename: string): Promise<void> {
+  const epoch = ownerEpoch;
   let blob: Blob | null = null;
 
   // iOS: prefer the native share sheet. `canShare({ files })` gates for Web Share Level 2 support.
   if (isIOS() && typeof navigator !== 'undefined' && typeof navigator.canShare === 'function') {
     try {
       blob = await resolveBlob(source);
+      if (epoch !== ownerEpoch) return;
       const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
       if (navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file] });
         return;
       }
     } catch (err) {
+      if (epoch !== ownerEpoch) return;
       // User dismissed the sheet → done. Any other error → fall through to a plain download.
       if (err instanceof DOMException && err.name === 'AbortError') return;
     }
@@ -92,6 +117,7 @@ export async function saveFile(source: Blob | string, filename: string): Promise
     if (!blob) {
       if (typeof source === 'string') {
         if (/^(blob:|data:)/.test(source)) {
+          if (epoch !== ownerEpoch) return;
           anchorDownload(source, filename);
           return;
         }
@@ -100,8 +126,11 @@ export async function saveFile(source: Blob | string, filename: string): Promise
         blob = source;
       }
     }
+    if (epoch !== ownerEpoch) return;
     blobDownload(blob, filename);
-  } catch {
+  } catch (error) {
+    if (epoch !== ownerEpoch) return;
+    if (error instanceof DOMException && error.name === 'AbortError') return;
     // Last resort: open the URL so the user can save it manually.
     if (typeof source === 'string') window.open(source, '_blank', 'noopener');
   }

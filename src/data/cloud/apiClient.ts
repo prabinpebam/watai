@@ -25,6 +25,8 @@ import type {
   MemoryModelConfig,
   MemoryProfileView,
   MemoryRecord,
+  MemoryTransferArchive,
+  MemoryArchivePreview,
   MeInfo,
   MessageRecord,
   PatchMemoryBody,
@@ -92,6 +94,42 @@ export interface ApiClientOptions {
   fetchImpl?: typeof fetch;
 }
 
+const ARCHIVE_RESPONSE_MAX_BYTES = 72 * 1024 * 1024;
+
+async function readArchiveResponse(response: Response, signal?: AbortSignal): Promise<string> {
+  const body = response.body;
+  if (!body) throw new CloudError('network', 'Archive response body is unavailable.', response.status);
+  if (signal?.aborted || Number(response.headers.get('content-length')) > ARCHIVE_RESPONSE_MAX_BYTES) {
+    void body.cancel().catch(() => {});
+    signal?.throwIfAborted();
+    throw new CloudError('validation', 'Archive response exceeds the 72 MiB limit.', response.status);
+  }
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let bytes = 0;
+  let complete = false;
+  const cancel = () => { void reader.cancel().catch(() => {}); };
+  signal?.addEventListener('abort', cancel, { once: true });
+  try {
+    while (true) {
+      signal?.throwIfAborted();
+      const { done, value } = await reader.read();
+      signal?.throwIfAborted();
+      if (done) { complete = true; break; }
+      bytes += value.byteLength;
+      if (bytes > ARCHIVE_RESPONSE_MAX_BYTES) throw new CloudError('validation', 'Archive response exceeds the 72 MiB limit.', response.status);
+      if (value.byteLength) parts.push(decoder.decode(value, { stream: true }));
+    }
+    parts.push(decoder.decode());
+    return parts.join('');
+  } finally {
+    signal?.removeEventListener('abort', cancel);
+    if (!complete) cancel();
+    reader.releaseLock();
+  }
+}
+
 export class WataiApiClient implements CloudApi {
   private readonly baseUrl: string;
   private readonly getToken: TokenProvider;
@@ -103,8 +141,10 @@ export class WataiApiClient implements CloudApi {
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
-  private async request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal, archiveResponse = false): Promise<T> {
+    signal?.throwIfAborted();
     const token = await this.getToken();
+    signal?.throwIfAborted();
     if (!token) throw new CloudError('unauthorized', 'Not signed in.', 401);
 
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
@@ -126,7 +166,7 @@ export class WataiApiClient implements CloudApi {
 
     if (res.status === 204) return undefined as T;
 
-    const text = await res.text();
+    const text = archiveResponse ? await readArchiveResponse(res, signal) : await res.text();
     let json: unknown;
     try {
       json = text ? JSON.parse(text) : undefined;
@@ -233,7 +273,7 @@ export class WataiApiClient implements CloudApi {
   }
 
   // --- memory ---
-  listMemory(query: ListMemoryQuery = {}): Promise<ListMemoryResponse> {
+  listMemory(query: ListMemoryQuery = {}, signal?: AbortSignal): Promise<ListMemoryResponse> {
     const qs = new URLSearchParams();
     if (query.status) qs.set('status', query.status);
     if (query.kind) qs.set('kind', query.kind);
@@ -241,11 +281,22 @@ export class WataiApiClient implements CloudApi {
     if (query.cursor) qs.set('cursor', query.cursor);
     if (query.limit) qs.set('limit', String(query.limit));
     const suffix = qs.toString();
-    return this.request('GET', `/memory${suffix ? `?${suffix}` : ''}`);
+    return this.request('GET', `/memory${suffix ? `?${suffix}` : ''}`, undefined, signal);
   }
 
-  getMemoryProfile(): Promise<MemoryProfileView> {
-    return this.request('GET', '/memory/profile');
+  getMemoryProfile(signal?: AbortSignal): Promise<MemoryProfileView> {
+    return this.request('GET', '/memory/profile', undefined, signal);
+  }
+
+  exportMemoryArchive(signal?: AbortSignal): Promise<MemoryTransferArchive> {
+    return this.request('POST', '/memory/export?version=2', undefined, signal, true);
+  }
+
+  previewMemoryArchive(archive: unknown, signal?: AbortSignal): Promise<MemoryArchivePreview> {
+    if (!archive || typeof archive !== 'object' || Array.isArray(archive)) {
+      return Promise.reject(new CloudError('validation', 'Invalid memory archive.', 400));
+    }
+    return this.request('POST', '/memory/import', { ...archive, mode: 'preview' }, signal, true);
   }
 
   createMemory(body: CreateMemoryBody): Promise<MemoryRecord> {
@@ -261,8 +312,8 @@ export class WataiApiClient implements CloudApi {
   }
 
   // --- assets ---
-  requestSas(body: SasRequestBody): Promise<SasResult> {
-    return this.request('POST', '/assets/sas', body);
+  requestSas(body: SasRequestBody, signal?: AbortSignal): Promise<SasResult> {
+    return this.request('POST', '/assets/sas', body, signal);
   }
 
   // --- credential vault (server-side AI keys) ---
@@ -421,8 +472,8 @@ export class WataiApiClient implements CloudApi {
     return this.request('GET', `/library${suffix ? `?${suffix}` : ''}`);
   }
 
-  getLibraryItem(id: string): Promise<LibraryItemDTO> {
-    return this.request('GET', `/library/${encodeURIComponent(id)}`);
+  getLibraryItem(id: string, signal?: AbortSignal): Promise<LibraryItemDTO> {
+    return this.request('GET', `/library/${encodeURIComponent(id)}`, undefined, signal);
   }
 
   getLibraryStorage(): Promise<LibraryStorageSummary> {
@@ -512,12 +563,12 @@ export interface CloudApi {
   releaseThreadLock(threadId: string, deviceId: string): Promise<void>;
   getSettings(): Promise<SettingsSnapshot>;
   patchSettings(patch: AccountSettingsPatch, expectedRevision: number): Promise<SettingsSnapshot>;
-  listMemory(query?: ListMemoryQuery): Promise<ListMemoryResponse>;
-  getMemoryProfile(): Promise<MemoryProfileView>;
+  listMemory(query?: ListMemoryQuery, signal?: AbortSignal): Promise<ListMemoryResponse>;
+  getMemoryProfile(signal?: AbortSignal): Promise<MemoryProfileView>;
   createMemory(body: CreateMemoryBody): Promise<MemoryRecord>;
   patchMemory(id: string, body: PatchMemoryBody): Promise<MemoryRecord>;
   deleteMemory(id: string): Promise<void>;
-  requestSas(body: SasRequestBody): Promise<SasResult>;
+  requestSas(body: SasRequestBody, signal?: AbortSignal): Promise<SasResult>;
   getCredentialStatus(): Promise<CredentialStatus>;
   putCredentials(body: CredentialsInput): Promise<CredentialStatus>;
   deleteCredentials(): Promise<void>;
@@ -548,7 +599,7 @@ export interface CloudApi {
   getImage(id: string): Promise<StudioImage>;
   deleteImage(id: string): Promise<void>;
   listLibrary(query?: LibraryListQuery): Promise<LibraryListResult>;
-  getLibraryItem(id: string): Promise<LibraryItemDTO>;
+  getLibraryItem(id: string, signal?: AbortSignal): Promise<LibraryItemDTO>;
   getLibraryStorage(): Promise<LibraryStorageSummary>;
   getLibraryLineage(id: string, direction: 'references' | 'derived', cursor?: string): Promise<LibraryLineageResult>;
   reserveLibraryUpload(body: { name: string; mime: string; bytes: number; contentHash: string }): Promise<LibraryUploadReservation>;

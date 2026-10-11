@@ -15,8 +15,12 @@ import type {
   WorkerRuntimePlan,
 } from "./worker.js";
 import type { EffectExecution } from "./execution.js";
+import { inspectContinuationTask, matchesContinuationTask, type ContinuationBinding } from "./continuationWatchdog.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const argumentsList = process.argv.slice(2);
+if (argumentsList.length && (argumentsList.length !== 2 || argumentsList[0] !== "--continuation-binding")) throw new Error("Unexpected executor arguments.");
+const continuation = argumentsList.length ? JSON.parse(argumentsList[1]) as ContinuationBinding : null;
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -57,6 +61,7 @@ if (!task.agentRuntime) throw new Error("Implementation TaskSpec has no bound ag
 const agentRuntime = task.agentRuntime;
 
 const databasePath = process.env.WATAI_HARNESS_DB_PATH?.trim() || resolve(root, ".harness-state", "harness.sqlite");
+if (continuation && canonical(inspectContinuationTask(databasePath, task, Date.now())) !== canonical(continuation)) throw new Error("Continuation binding changed before executor startup.");
 const store = new SqliteHarnessStore(databasePath);
 try {
   const taskBudgetLimits = {
@@ -65,12 +70,13 @@ try {
     outputTokens: task.budgets.maxOutputTokens,
     requests: task.budgets.maxRequests,
   };
-  const existingBudget = store.createBudget(task.runId, taskBudgetLimits);
+  const existingBudget = continuation ? store.readBudget(task.runId) : store.createBudget(task.runId, taskBudgetLimits);
   if (canonical(existingBudget.limits) !== canonical(taskBudgetLimits)) {
     throw new Error("Existing budget ledger does not match the locked TaskSpec ceilings.");
   }
   const pending = store.pendingEffects(task.runId).filter((entry) => {
     const intent = entry.intent as EffectExecution["intent"];
+    if (continuation) return entry.status === "pending" && entry.effectId === continuation.effectId && matchesContinuationTask(intent, task);
     return intent.kind === "worker" &&
       intent.inputSha256 === task.taskSpecSha256 &&
       intent.providerId === agentRuntime.providerId &&
@@ -80,6 +86,7 @@ try {
       intent.epoch === task.fencingEpoch &&
       intent.deadline === task.deadline;
   });
+  if (continuation && pending.length !== 1) throw new Error("Continuation effect is no longer pending; recovery is not permitted.");
   if (pending.length === 0) {
     const abandoned = store.listEffects(task.runId, ["claimed"]);
     if (abandoned.length === 1) {

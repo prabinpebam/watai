@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ThreadService } from './threadService';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
 import { AppError } from '../domain/errors';
@@ -58,6 +58,34 @@ describe('ThreadService.create', () => {
     expect(again).toEqual(first);
     expect(again.title).toBe('First');
     expect((await ctx.svc.list('userA')).length).toBe(1);
+  });
+
+  it('returns one stored winner when concurrent creates both observed absence', async () => {
+    let release!: () => void;
+    const bothRead = new Promise<void>(resolve => { release = resolve; });
+    let reads = 0;
+    const absent = async () => { reads += 1; if (reads === 2) release(); await bothRead; return null; };
+    vi.spyOn(ctx.store, 'get').mockImplementationOnce(absent).mockImplementationOnce(absent);
+    const [first, second] = await Promise.all([
+      ctx.svc.create('userA', { id: 'shared-id', title: 'First', temporary: false }),
+      ctx.svc.create('userA', { id: 'shared-id', title: 'Second', temporary: false }),
+    ]);
+    expect(first).toEqual(second);
+    expect(await ctx.store.get('userA', 'shared-id')).toEqual(first);
+  });
+
+  it('does not overwrite a tombstone created after the initial absence observation', async () => {
+    const first = await ctx.svc.create('userA', { id: 'same-id', title: 'First', temporary: false });
+    await ctx.store.put({ ...first, deletedAt: 'deleted' });
+    vi.spyOn(ctx.store, 'get').mockResolvedValueOnce(null);
+    const result = await ctx.svc.create('userA', { id: 'same-id', title: 'Replacement', temporary: false });
+    expect(result).toMatchObject({ title: 'First', deletedAt: 'deleted' });
+  });
+
+  it('fails closed if a concurrent create winner disappeared before readback', async () => {
+    vi.spyOn(ctx.store, 'createIfAbsent').mockResolvedValue(null);
+    await expect(ctx.svc.create('userA', { id: 'gone', title: 'New', temporary: false })).rejects.toMatchObject({ code: 'conflict' });
+    expect(await ctx.store.get('userA', 'gone')).toBeNull();
   });
 });
 
@@ -128,5 +156,51 @@ describe('ThreadService.update / softDelete', () => {
     await ctx.svc.softDelete('userA', t.id);
     expect(await code(() => ctx.svc.get('userA', t.id))).toBe('not_found');
     expect(await ctx.svc.list('userA')).toEqual([]);
+  });
+
+  it('does not restore a thread deleted before a pending edit commits', async () => {
+    const record = await ctx.svc.create('userA', { title: 'Original', temporary: false });
+    const write = ctx.store.putIfMatch.bind(ctx.store);
+    vi.spyOn(ctx.store, 'putIfMatch').mockImplementationOnce(async (next, etag) => {
+      await ctx.svc.softDelete('userA', record.id);
+      return write(next, etag);
+    });
+    await expect(ctx.svc.update('userA', record.id, { title: 'Stale edit' })).rejects.toMatchObject({ code: 'not_found' });
+    expect((await ctx.store.get('userA', record.id))?.deletedAt).not.toBeNull();
+  });
+
+  it('preserves concurrent metadata when a patch retries', async () => {
+    const record = await ctx.svc.create('userA', { title: 'Original', temporary: false });
+    vi.spyOn(ctx.store, 'putIfMatch').mockImplementationOnce(async () => {
+      await ctx.store.put({ ...record, title: 'Renamed elsewhere', vectorStoreId: 'server-owned', files: [] });
+      return null;
+    });
+    expect(await ctx.svc.update('userA', record.id, { pinned: true })).toMatchObject({ pinned: true, title: 'Renamed elsewhere', vectorStoreId: 'server-owned', files: [] });
+  });
+
+  it('preserves a concurrent edit when deletion retries', async () => {
+    const record = await ctx.svc.create('userA', { title: 'Original', temporary: false });
+    vi.spyOn(ctx.store, 'putIfMatch').mockImplementationOnce(async () => {
+      await ctx.store.put({ ...record, title: 'Renamed before deletion' });
+      return null;
+    });
+    await ctx.svc.softDelete('userA', record.id);
+    expect(await ctx.store.get('userA', record.id)).toMatchObject({ title: 'Renamed before deletion', deletedAt: expect.any(String) });
+  });
+
+  it('returns conflict after three unsuccessful patch writes', async () => {
+    const record = await ctx.svc.create('userA', { title: 'Original', temporary: false });
+    const write = vi.spyOn(ctx.store, 'putIfMatch').mockResolvedValue(null);
+    await expect(ctx.svc.update('userA', record.id, { pinned: true })).rejects.toMatchObject({ code: 'conflict' });
+    expect(write).toHaveBeenCalledTimes(3);
+  });
+
+  it('stops retrying a mutation when the record physically disappears', async () => {
+    const record = await ctx.svc.create('userA', { title: 'Original', temporary: false });
+    const snapshot = await ctx.store.getForUpdate('userA', record.id);
+    vi.spyOn(ctx.store, 'getForUpdate').mockResolvedValueOnce(snapshot).mockResolvedValue(null);
+    const write = vi.spyOn(ctx.store, 'putIfMatch').mockResolvedValue(null);
+    await expect(ctx.svc.update('userA', record.id, { title: 'Replacement' })).rejects.toMatchObject({ code: 'not_found' });
+    expect(write).toHaveBeenCalledOnce();
   });
 });

@@ -1,5 +1,27 @@
 # Project Guidelines
 
+## Background-Only Automation Is Mandatory
+
+All automation processes must run without opening, activating or focusing terminal,
+console, browser or other application windows. Never steal Windows foreground focus,
+switch the user's active terminal, or reveal a terminal panel while they are working.
+This applies to builds, tests, scripts, watchdog checks and every child process.
+
+Use non-interactive hidden process creation and captured output. For VS Code tasks,
+require `presentation.reveal: "never"`, `focus: false`, `revealProblems: "never"`
+and `showReuseMessage: false`; verify the execution path also creates no visible
+Windows console. Background means non-visible, not simply an asynchronous tool flag.
+One-shot checks may be awaited without surfacing their terminal or taking focus.
+
+Scheduled tasks must use a verified windowless launcher, never a direct console
+executable in the user's interactive session. Preserve limited privileges, budgets,
+pause/dispatch guards, logs and overlap prevention. Do not use visible terminals,
+UAC, authentication prompts or foreground fallback when hidden execution is blocked.
+Report the blocker in chat and continue only work that can run unobtrusively.
+
+Never close or repurpose the user's existing terminals/windows to enforce this rule.
+An exception requires the user's explicit request for that particular interactive action.
+
 ## Chat Chronology Is A Release-Blocking Invariant
 
 Chat chronology is sacrosanct. Every observable intermediate render must keep a
@@ -22,6 +44,26 @@ and explicitly fail on any transient inversion, disappearance or sequence jump.
 When the user reports a chronology regression, stop other implementation and automated
 continuation first. Fix and validate this incident before resuming other work; do not
 resume a user-requested pause without their direction.
+
+## Complete EDD Preparation Before Evaluation
+
+Heuristic evals are fully predefined deterministic task flows and algorithms for known
+expectations. Semantic eval is mandatory open-ended LLM-agent review of the DOM mutation
+timeline and accompanying evidence to discover unanticipated anomalies. It is a core
+catch-all responsibility, not an optional supplement or a closed detector checklist.
+
+Before any task flow starts its eval loop, its exact task/variants, phase-specific DOM
+capture plan, complete heuristic algorithms and skill-configured semantic harness must
+already be authored, implemented, version-bound and validated. No detail may be left for
+runtime invention. Apply this to every tested flow; generic templates, `passed: true`,
+an existing skill file or a cost permit do not establish readiness. Missing preparation,
+calibration, identity or authority means NOT_READY before browser or provider execution.
+
+Freeze the procedure, not the space of possible semantic findings. Review the original
+timeline and assets, preserve intermediate failures, require complete window coverage and
+cross-phase synthesis, and keep missing evidence distinct from a clean result. An LLM is
+not infallible and cannot waive deterministic safety failures or independently authorize
+release. Follow `documentation/quality-gate/05-evaluation-and-design-system.md`.
 
 ## Cost And Time Discipline
 
@@ -77,7 +119,7 @@ Real deployment is a delivery goal, not a final cleanup step. Promote a mileston
 
 Every production milestone must:
 
-- add a concise entry to the in-app Settings > About release notes describing user-visible benefits and limits;
+- add a concise entry to the in-app Settings > About release notes describing user-visible benefits and limits, then record exact frontend/API deployment timestamps after production smoke;
 - bind the frontend commit and backend artifact/config identity in `documentation/releases/`;
 - preserve an addressable previous frontend commit and backend package before mutation;
 - deploy backend-compatible changes before the frontend that consumes them;

@@ -1,5 +1,5 @@
 import { AppError } from '../domain/errors';
-import { parseCredentialsInput, type ChatDefaults, type ModelDeployments } from '../domain/credentials';
+import { approvedProviderUrl, normalizeBaseUrl, parseCredentialsInput, type ChatDefaults, type ModelDeployments } from '../domain/credentials';
 import { sealSecret, openSecret, keyHint } from '../domain/crypto';
 import { isFoundryHost } from '../ai/http';
 import type { CredentialRecord, CredentialStore } from '../ports/credentialStore';
@@ -57,41 +57,56 @@ export class CredentialService {
 
   async save(userId: string, input: unknown): Promise<CredentialStatus> {
     const parsed = parseCredentialsInput(input);
-    const ts = this.clock.now();
-    const existing = await this.store.get(userId);
-    if (!parsed.key && !existing) {
-      throw new AppError('validation', 'An API key is required.');
+    let observedRecord = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const snapshot = await this.store.getForUpdate(userId);
+      const existing = snapshot?.record;
+      if (observedRecord && !existing) {
+        throw new AppError('conflict', 'Credentials were removed while saving. Reload before saving again.');
+      }
+      observedRecord ||= !!existing;
+      if (snapshot && !snapshot.versionToken) {
+        throw new AppError('conflict', 'Credential version is unavailable. Reload before saving.');
+      }
+      if (!parsed.key && !existing) {
+        throw new AppError('validation', 'An API key is required.');
+      }
+      const endpointChanged = !!existing && normalizeBaseUrl(existing.baseUrl) !== parsed.baseUrl;
+      if (endpointChanged && !parsed.key) {
+        throw new AppError('validation', 'Enter an API key for the new endpoint. The saved key cannot be reused automatically.');
+      }
+      const ts = this.clock.now();
+      const record: CredentialRecord = {
+        id: 'cred',
+        userId,
+        baseUrl: parsed.baseUrl,
+        models: parsed.models,
+        chatDefaults: parsed.chatDefaults ?? existing?.chatDefaults,
+        keyHint: parsed.key ? keyHint(parsed.key) : existing!.keyHint,
+        aoai: parsed.key ? await sealSecret(parsed.key, this.wrapper) : existing!.aoai,
+        tavily:
+          parsed.tavilyKey !== undefined
+            ? parsed.tavilyKey
+              ? await sealSecret(parsed.tavilyKey, this.wrapper)
+              : null
+            : (existing?.tavily ?? null),
+        tavilyHint:
+          parsed.tavilyKey !== undefined
+            ? parsed.tavilyKey
+              ? keyHint(parsed.tavilyKey)
+              : null
+            : (existing?.tavilyHint ?? null),
+        knowledgeBaseVectorStoreId:
+          parsed.knowledgeBaseVectorStoreId !== undefined
+            ? parsed.knowledgeBaseVectorStoreId
+            : (endpointChanged ? null : existing?.knowledgeBaseVectorStoreId ?? null),
+        createdAt: existing?.createdAt ?? ts,
+        updatedAt: ts,
+      };
+      const saved = await this.store.put(record, snapshot);
+      if (saved) return this.toStatus(saved);
     }
-    // Partial update: an omitted key/tavily/KB keeps whatever is already stored, so editing a
-    // model never forces the (write-only) key to be re-entered.
-    const record: CredentialRecord = {
-      id: 'cred',
-      userId,
-      baseUrl: parsed.baseUrl,
-      models: parsed.models,
-      chatDefaults: parsed.chatDefaults ?? existing?.chatDefaults,
-      keyHint: parsed.key ? keyHint(parsed.key) : existing!.keyHint,
-      aoai: parsed.key ? await sealSecret(parsed.key, this.wrapper) : existing!.aoai,
-      tavily:
-        parsed.tavilyKey !== undefined
-          ? parsed.tavilyKey
-            ? await sealSecret(parsed.tavilyKey, this.wrapper)
-            : null
-          : (existing?.tavily ?? null),
-      tavilyHint:
-        parsed.tavilyKey !== undefined
-          ? parsed.tavilyKey
-            ? keyHint(parsed.tavilyKey)
-            : null
-          : (existing?.tavilyHint ?? null),
-      knowledgeBaseVectorStoreId:
-        parsed.knowledgeBaseVectorStoreId !== undefined
-          ? parsed.knowledgeBaseVectorStoreId
-          : (existing?.knowledgeBaseVectorStoreId ?? null),
-      createdAt: existing?.createdAt ?? ts,
-      updatedAt: ts,
-    };
-    return this.toStatus(await this.store.put(record));
+    throw new AppError('conflict', 'Credentials changed while saving. Reload before saving again.');
   }
 
   async getStatus(userId: string): Promise<CredentialStatus> {
@@ -107,6 +122,9 @@ export class CredentialService {
   async getDecrypted(userId: string): Promise<DecryptedCredentials> {
     const rec = await this.store.get(userId);
     if (!rec) throw new AppError('not_found', 'No credentials configured.');
+    if (approvedProviderUrl(rec.baseUrl).search) {
+      throw new AppError('validation', 'The endpoint must not contain query parameters.');
+    }
     return {
       baseUrl: rec.baseUrl,
       models: rec.models,

@@ -4,21 +4,64 @@ import { AppError, toErrorEnvelope } from '../domain/errors';
 import type { ApiRequest, HttpResult } from './types';
 import type { Claims } from '../auth/identity';
 import type { TokenVerifier } from '../ports/tokenVerifier';
+import { reportUnexpectedError } from './respond';
 
 export type ControllerHandler = (req: ApiRequest) => Promise<HttpResult>;
 
 /** Authorization check run after authentication; throws an AppError (e.g. forbidden) to deny. */
 export type Authorizer = (claims: Claims) => Promise<void>;
 
-async function readBody(request: HttpRequest): Promise<unknown> {
-  if (request.headers.get('content-type')?.toLowerCase().includes('multipart/form-data')) {
+export const MAX_HTTP_BODY_BYTES = 72 * 1024 * 1024;
+
+export async function readBody(request: HttpRequest, maximumBytes = MAX_HTTP_BODY_BYTES): Promise<unknown> {
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes <= 0 || maximumBytes > MAX_HTTP_BODY_BYTES) {
+    throw new Error('Invalid HTTP body limit.');
+  }
+  const tooLarge = () => new AppError('validation', `Request body exceeds the ${maximumBytes}-byte limit.`);
+  const declaredLength = request.headers.get('content-length');
+  if (declaredLength !== null) {
+    if (!/^\d+$/.test(declaredLength) || !Number.isSafeInteger(Number(declaredLength))) {
+      throw new AppError('validation', 'Invalid request content length.');
+    }
+    if (Number(declaredLength) > maximumBytes) throw tooLarge();
+  }
+  if (!request.body) return undefined;
+  const reader = request.body.getReader();
+  let totalBytes = 0;
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          reader.releaseLock();
+          controller.close();
+          return;
+        }
+        if (!(value instanceof Uint8Array)) throw new AppError('validation', 'Invalid request body stream.');
+        totalBytes += value.byteLength;
+        if (totalBytes > maximumBytes) throw tooLarge();
+        controller.enqueue(value);
+      } catch (error) {
+        void reader.cancel(error).catch(() => undefined);
+        reader.releaseLock();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      try { await reader.cancel(reason); } finally { reader.releaseLock(); }
+    },
+  });
+  const contentType = request.headers.get('content-type');
+  const response = new Response(body, { headers: contentType ? { 'content-type': contentType } : {} });
+  if (contentType?.toLowerCase().includes('multipart/form-data')) {
     try {
-      return await request.formData();
-    } catch {
+      return await response.formData();
+    } catch (error) {
+      if (error instanceof AppError) throw error;
       throw new AppError('validation', 'Request body must be valid multipart form data.');
     }
   }
-  const text = await request.text();
+  const text = await response.text();
   if (!text) return undefined;
   try {
     return JSON.parse(text);
@@ -57,6 +100,7 @@ export async function runRoute(
     return toResponse(result);
   } catch (err) {
     const env = toErrorEnvelope(err);
+    if (env.status >= 500) reportUnexpectedError(err);
     return { status: env.status, jsonBody: env.body };
   }
 }

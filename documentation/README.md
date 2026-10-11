@@ -39,6 +39,7 @@ exhaustive, buildable plan.
 | [library-proposal-spec.md](library-proposal-spec.md) | **Approved Library product direction**: benchmark, value model, catalog/lifecycle proposal, storage economics, and migration principles. |
 | [library-implementation-spec.md](library-implementation-spec.md) | **Implementation-ready Library contract**: exhaustive needs, scenarios, user capabilities, task flows, IA/UI, data/API/state contracts, migration, slices, and acceptance gates. |
 | [voice-implementation-plan.md](voice-implementation-plan.md) | **Voice execution plan**: phased, PR-sized slices to build dictation + voice mode (ChatGPT-parity UX) on top of the agentic run pipeline, with EDD gates and a risk register. |
+| [quality-gate/](quality-gate/README.md) | **Real-deployed experience gate (design, not implemented)**: user expectations, optimal DOM/paint capture, evidence sufficiency, flow coverage, semantic/DS evaluation, real test identities and guarded release qualification. |
 
 > Read the docs in order on first pass. After that, each doc is self-contained and
 > cross-links the others where concerns overlap. The [ui-design/](ui-design/README.md)

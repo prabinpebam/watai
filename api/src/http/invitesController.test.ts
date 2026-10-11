@@ -42,14 +42,19 @@ describe('meController', () => {
   it('reports admin / invited / neither based on the allowlist', async () => {
     const invites = new InMemoryInviteStore();
     await invites.put({ email: 'friend@example.com', invitedBy: 'admin@example.com', createdAt: 'now' });
-    const ctrl = createMeController(new AccessService(invites, 'admin@example.com'));
+    const ctrl = createMeController(new AccessService(invites, 'admin@example.com', ['admin-oid']));
 
-    expect((await ctrl.get({ claims: { email: 'admin@example.com' } })).body).toEqual({
+    expect((await ctrl.get({ claims: { oid: 'admin-oid', email: 'admin@example.com' } })).body).toEqual({
       email: 'admin@example.com',
       isAdmin: true,
       isInvited: true,
     });
-    expect((await ctrl.get({ claims: { email: 'friend@example.com' } })).body).toEqual({
+    expect((await ctrl.get({ claims: { oid: 'different-oid', email: 'admin@example.com' } })).body).toEqual({
+      email: 'admin@example.com',
+      isAdmin: false,
+      isInvited: false,
+    });
+    expect((await ctrl.get({ claims: { iss: 'https://tenant.ciamlogin.com/tenant/v2.0', oid: 'friend-oid', email: 'friend@example.com', email_verified: true } })).body).toEqual({
       email: 'friend@example.com',
       isAdmin: false,
       isInvited: true,

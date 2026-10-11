@@ -1,7 +1,7 @@
 import { AppError } from '../domain/errors';
 import { validateReplayCursor } from '../domain/syncCursor';
 import type { CreateThreadInput, UpdateThreadInput } from '../domain/thread';
-import type { ListOptions, ThreadRecord, ThreadStore } from '../ports/threadStore';
+import type { ListOptions, ThreadRecord, ThreadStore, ThreadLockStore, ThreadCreateStore } from '../ports/threadStore';
 
 export interface ServiceClock {
   now: () => string;
@@ -14,7 +14,7 @@ export interface ServiceClock {
  */
 export class ThreadService {
   constructor(
-    private readonly store: ThreadStore,
+    private readonly store: ThreadStore & ThreadLockStore & ThreadCreateStore,
     private readonly clock: ServiceClock,
   ) {}
 
@@ -38,9 +38,12 @@ export class ThreadService {
       createdAt: ts,
       updatedAt: ts,
       deletedAt: null,
-      ...(input.vectorStoreId ? { vectorStoreId: input.vectorStoreId } : {}),
     };
-    return this.store.put(record);
+    const created = await this.store.createIfAbsent(record);
+    if (created) return created;
+    const winner = await this.store.get(userId, record.id);
+    if (!winner) throw new AppError('conflict', 'Thread changed during creation. Retry from the current state.');
+    return winner;
   }
 
   async get(userId: string, id: string): Promise<ThreadRecord> {
@@ -69,21 +72,30 @@ export class ThreadService {
   }
 
   async update(userId: string, id: string, patch: UpdateThreadInput): Promise<ThreadRecord> {
-    const current = await this.get(userId, id);
-    const next: ThreadRecord = {
+    return this.mutate(userId, id, current => ({
       ...current,
       ...(patch.title !== undefined ? { title: patch.title } : {}),
       ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
       ...(patch.archived !== undefined ? { archived: patch.archived } : {}),
-      ...(patch.vectorStoreId !== undefined ? { vectorStoreId: patch.vectorStoreId } : {}),
       updatedAt: this.clock.now(),
-    };
-    return this.store.put(next);
+    }));
   }
 
   async softDelete(userId: string, id: string): Promise<void> {
-    const current = await this.get(userId, id);
-    const ts = this.clock.now();
-    await this.store.put({ ...current, deletedAt: ts, updatedAt: ts });
+    await this.mutate(userId, id, current => {
+      const ts = this.clock.now();
+      return { ...current, deletedAt: ts, updatedAt: ts };
+    });
+  }
+
+  private async mutate(userId: string, id: string, change: (current: ThreadRecord) => ThreadRecord): Promise<ThreadRecord> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const current = await this.store.getForUpdate(userId, id);
+      if (!current || current.record.deletedAt) throw new AppError('not_found', 'Thread not found.');
+      if (!current.etag) throw new AppError('conflict', 'Thread version unavailable. Reload before retrying.');
+      const saved = await this.store.putIfMatch(change(current.record), current.etag);
+      if (saved) return saved;
+    }
+    throw new AppError('conflict', 'Thread changed repeatedly. Reload before retrying.');
   }
 }

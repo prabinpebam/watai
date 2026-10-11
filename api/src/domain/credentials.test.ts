@@ -38,6 +38,26 @@ describe('parseCredentialsInput', () => {
     expect(out.models.chat).toBe('gpt-5.4');
   });
 
+  it.each([
+    'http://resource.services.ai.azure.com',
+    'https://resource.services.ai.azure.com:8443',
+    'https://user:password@resource.services.ai.azure.com',
+    'https://resource.services.ai.azure.com.attacker.invalid',
+    'https://127.0.0.1',
+    'https://api.openai.com/v1',
+    'https://resource.services.ai.azure.com/openai/v1?token=value',
+  ])('rejects unapproved credential endpoints: %s', (baseUrl) => {
+    expect(code(() => parseCredentialsInput({ ...ok, baseUrl }))).toBe('validation');
+  });
+
+  it.each([
+    'https://resource.openai.azure.com',
+    'https://resource.cognitiveservices.azure.com',
+    'https://resource.services.ai.azure.com:443/openai/v1',
+  ])('retains supported Azure endpoint families: %s', (baseUrl) => {
+    expect(parseCredentialsInput({ ...ok, baseUrl }).key).toBe('sk-123');
+  });
+
   it('accepts and dedupes chat model options', () => {
     const out = parseCredentialsInput({
       ...ok,
@@ -53,9 +73,16 @@ describe('parseCredentialsInput', () => {
       .toBe('validation');
   });
 
-  it('coerces an empty tavilyKey to undefined', () => {
-    expect(parseCredentialsInput({ ...ok, tavilyKey: '   ' }).tavilyKey).toBeUndefined();
+  it('distinguishes an omitted optional secret from an explicit clear', () => {
+    expect(parseCredentialsInput(ok).tavilyKey).toBeUndefined();
+    expect(parseCredentialsInput({ ...ok, tavilyKey: '   ' }).tavilyKey).toBeNull();
+    expect(parseCredentialsInput({ ...ok, tavilyKey: null }).tavilyKey).toBeNull();
     expect(parseCredentialsInput({ ...ok, tavilyKey: 'tvly-9' }).tavilyKey).toBe('tvly-9');
+  });
+
+  it.each(['', '   ', null])('preserves explicit knowledge-base clears: %j', (value) => {
+    expect(parseCredentialsInput({ ...ok, knowledgeBaseVectorStoreId: value }).knowledgeBaseVectorStoreId).toBeNull();
+    expect(parseCredentialsInput(ok).knowledgeBaseVectorStoreId).toBeUndefined();
   });
 
   it('treats the key as optional at parse (server keeps the stored key on update), requires a chat model', () => {

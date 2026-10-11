@@ -34,6 +34,7 @@ describe('tavilySearch', () => {
     expect(r.results[0].url).toBe('https://e.com');
     expect(calls[0].url).toBe('https://api.tavily.com/search');
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer tav-key');
+    expect(calls[0].init.redirect).toBe('error');
     expect(JSON.parse(calls[0].init.body as string).query).toBe('cats');
   });
 

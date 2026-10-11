@@ -21,7 +21,8 @@ export interface Identity {
  * from the request body — only from the token (prevents IDOR via spoofed ids).
  */
 export function identityFromClaims(claims: Claims): Identity {
-  const userId = (claims.oid ?? claims.sub)?.toString().trim();
+  const claim = claims.oid ?? claims.sub;
+  const userId = typeof claim === 'string' ? claim.trim() : undefined;
   if (!userId) {
     throw new AppError('unauthorized', 'Token is missing a subject claim.');
   }

@@ -91,8 +91,8 @@ export function validateEvaluatorInventory(inventory: EvaluatorInventory): Inven
     if (!valid) block("COMMAND_INVALID", `Evaluator command ${command.id || "<unnamed>"} is invalid.`);
   }
   const browser = inventory.commands.find((command) => command.id === "browser-complete");
-  if (!browser || browser.repetitions !== 3 || browser.expectedTests !== 44) {
-    block("BROWSER_INVENTORY_INVALID", "Browser inventory must run all 44 applicable checks three times.");
+  if (!browser || browser.repetitions !== 3 || browser.expectedTestFiles !== 4 || browser.expectedTests !== 45) {
+    block("BROWSER_INVENTORY_INVALID", "Browser inventory must run all 45 applicable checks from four specs three times.");
   }
   const integration = inventory.commands.find((command) => command.id === "api-isolated-integration");
   if (!integration || !integration.requiresIsolatedStage || integration.expectedTests !== 11) {

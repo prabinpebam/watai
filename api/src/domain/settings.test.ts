@@ -42,6 +42,18 @@ describe('parseSettingsPatch', () => {
 });
 
 describe('DEFAULT_SETTINGS', () => {
+  it.each([false, true].flatMap(master => [false, true].map(nested => ({ master, nested }))))
+    ('requires agreement before enabling memory: %j', ({ master, nested }) => {
+      const settings = { ...DEFAULT_SETTINGS, personalization: { memoryEnabled: master,
+        memory: { ...DEFAULT_SETTINGS.personalization.memory!, enabled: nested } } };
+      const before = structuredClone(settings);
+      const enabled = master && nested;
+      expect(effectiveMemorySettings(settings)).toMatchObject({ enabled, referenceSaved: enabled,
+        referenceHistory: enabled, autoExtract: enabled, learnChats: enabled ? 'automatic' : 'off' });
+      expect(effectiveMemoryPolicy(settings)).toEqual({ readSaved: enabled, learnChats: enabled ? 'automatic' : 'off' });
+      expect(settings).toEqual(before);
+    });
+
   it('is a complete, valid settings object', () => {
     expect(DEFAULT_SETTINGS.appearance.theme).toBe('system');
     expect(DEFAULT_SETTINGS.personalization.memoryEnabled).toBe(true);

@@ -1,7 +1,7 @@
 import { AppError } from '../domain/errors';
 import type { AppendMessageInput } from '../domain/message';
 import type { MessageListOptions, MessageRecord, MessageStore } from '../ports/messageStore';
-import type { ThreadRecord, ThreadStore } from '../ports/threadStore';
+import type { ThreadLockStore, ThreadRecord, ThreadStore } from '../ports/threadStore';
 import type { ServiceClock } from './threadService';
 import { libraryIngestionKey, libraryItemIdFor, libraryKindForMime, type LibraryItemRecord } from '../domain/library';
 import type { LibraryStore } from '../ports/libraryStore';
@@ -19,7 +19,7 @@ export interface MemoryExtractionScheduler {
  */
 export class MessageService {
   constructor(
-    private readonly threadStore: ThreadStore,
+    private readonly threadStore: ThreadStore & ThreadLockStore,
     private readonly messageStore: MessageStore,
     private readonly clock: ServiceClock,
     private readonly memoryExtraction?: MemoryExtractionScheduler,
@@ -28,7 +28,7 @@ export class MessageService {
 
   private async requireOwnThread(userId: string, threadId: string): Promise<ThreadRecord> {
     const thread = await this.threadStore.get(userId, threadId);
-    if (!thread || thread.deletedAt) {
+    if (!thread || thread.userId !== userId || thread.id !== threadId || thread.deletedAt) {
       throw new AppError('not_found', 'Thread not found.');
     }
     return thread;
@@ -65,7 +65,7 @@ export class MessageService {
           }
           if (!this.libraryStore) throw new AppError('conflict', 'Library reuse is unavailable.');
           const item = await this.libraryStore.get(userId, attachment.libraryItemId);
-          if (!item) throw new AppError('not_found', 'Library item not found.');
+          if (!item || item.userId !== userId || item.id !== attachment.libraryItemId) throw new AppError('not_found', 'Library item not found.');
           if (item.state !== 'active' || !item.blobPath) throw new AppError('conflict', 'Library item is not available for reuse.');
           const kind = item.kind === 'image' ? 'image' as const : item.kind === 'audio' ? 'audio' as const : 'file' as const;
           return {
@@ -135,21 +135,43 @@ export class MessageService {
         });
       }
       for (const item of candidates) {
-        if (!(await this.libraryStore.get(userId, item.id))) await this.libraryStore.put(item);
+        const existing = await this.libraryStore.get(userId, item.id);
+        const published = existing ?? await this.libraryStore.createIfAbsent(item);
+        if (!published || published.userId !== userId || published.id !== item.id || published.state !== 'active') {
+          throw new AppError('conflict', 'Library item is not available for reuse.');
+        }
       }
     }
-    await this.messageStore.append(record);
-    if (this.memoryExtraction) void this.memoryExtraction.enqueueAfterMessage(record, thread).catch(() => {});
-    await this.threadStore.put({
-      ...thread,
-      messageCount: thread.messageCount + 1,
-      lastMessagePreview: (
-        input.content.trim() ||
-        (input.images?.length ? 'Image' : input.attachments?.length ? 'Attachment' : '')
-      ).slice(0, 140),
-      updatedAt: ts,
-    });
-    return record;
+    await this.requireOwnThread(userId, threadId);
+    const created = await this.messageStore.createIfAbsent(record);
+    if (!created) {
+      const winner = await this.messageStore.get(userId, threadId, id);
+      if (!winner || winner.userId !== userId || winner.threadId !== threadId || winner.id !== id) {
+        throw new AppError('conflict', 'Message changed during creation. Reload before retrying.');
+      }
+      return winner;
+    }
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const current = await this.threadStore.getForUpdate(userId, threadId);
+      if (!current || current.record.userId !== userId || current.record.id !== threadId || current.record.deletedAt) {
+        throw new AppError('not_found', 'Thread not found.');
+      }
+      if (typeof current.etag !== 'string' || !current.etag.trim()) throw new AppError('conflict', 'Thread version unavailable. Reload before retrying.');
+      const saved = await this.threadStore.putIfMatch({
+        ...current.record,
+        messageCount: current.record.messageCount + 1,
+        lastMessagePreview: (
+          input.content.trim() ||
+          (input.images?.length ? 'Image' : input.attachments?.length ? 'Attachment' : '')
+        ).slice(0, 140),
+        updatedAt: Date.parse(current.record.updatedAt) > Date.parse(ts) ? current.record.updatedAt : ts,
+      }, current.etag);
+      if (saved) {
+        if (this.memoryExtraction) void this.memoryExtraction.enqueueAfterMessage(record, saved).catch(() => {});
+        return record;
+      }
+    }
+    throw new AppError('conflict', 'Thread changed repeatedly. Reload before retrying.');
   }
 
   async list(userId: string, threadId: string, opts?: MessageListOptions): Promise<MessageRecord[]> {

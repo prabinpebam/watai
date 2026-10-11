@@ -68,4 +68,12 @@ describe('memoryController', () => {
     expect(res.status).toBe(200);
     expect((res.body as any).profile.user.family.pets[0]).toMatchObject({ name: 'Chopper', species: 'dog' });
   });
+
+  it('never reports a memory rebuild as queued when no durable job exists', async () => {
+    const response = await ctrl.rebuild({ claims: { sub: 'userA' }, body: { mode: 'commit' } });
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      error: { code: 'conflict', message: expect.stringContaining('rebuild is unavailable') },
+    });
+  });
 });

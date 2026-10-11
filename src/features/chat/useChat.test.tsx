@@ -97,6 +97,42 @@ beforeEach(() => {
 });
 
 describe('useChat refresh loading', () => {
+  it.each(['prepare', 'snapshot-cleanup'])('keeps the replacement reply in every state when cancelled ownership changes during %s', async phase => {
+    const prepared = deferred<Partial<SubmitRunBody>>();
+    const cleaned = deferred<undefined>();
+    const running = realStartServerRun('t1', { text: 'Old prompt', clientMessageId: 'old-prompt' }, () => prepared.promise);
+    useRuns.getState().runs.t1.controller.abort();
+    const replacement = { threadId: 't1', message: message({ id: 'replacement-reply', status: 'streaming' }), controller: new AbortController() };
+    const observed: Array<string | undefined> = [];
+    let observing = false;
+    const unsubscribe = useRuns.subscribe(state => { if (observing) observed.push(state.runs.t1?.message.id); });
+    try {
+      if (phase === 'snapshot-cleanup') {
+        mocks.kv.delete.mockReturnValueOnce(cleaned.promise);
+        prepared.resolve({});
+        await waitFor(() => expect(mocks.kv.delete).toHaveBeenCalledOnce());
+      }
+      observing = true;
+      useRuns.setState({ runs: { t1: replacement }, handoffs: {} });
+      useUi.getState().setStream({ status: 'streaming', threadId: 't1', messageId: replacement.message.id });
+      prepared.resolve({});
+      cleaned.resolve(undefined);
+      await running;
+      expect(observed.length).toBeGreaterThan(0);
+      expect(observed.every(id => id === replacement.message.id)).toBe(true);
+      expect(useRuns.getState().runs.t1).toBe(replacement);
+      expect(useUi.getState().stream).toMatchObject({ status: 'streaming', messageId: replacement.message.id });
+      expect(mocks.runOnServer).not.toHaveBeenCalled();
+      if (phase === 'prepare') expect(mocks.kv.delete).not.toHaveBeenCalled();
+    } finally {
+      prepared.resolve({});
+      cleaned.resolve(undefined);
+      await running;
+      unsubscribe();
+      mocks.kv.delete.mockReset().mockResolvedValue(undefined);
+    }
+  });
+
   it.each(['before-save', 'during-save'])('does not restore an old handoff or clear a replacement run after ownership changes %s', async phase => {
     const finished = deferred<ServerRunResult>();
     const saved = deferred<undefined>();

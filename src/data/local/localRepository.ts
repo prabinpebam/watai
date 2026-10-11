@@ -7,7 +7,11 @@ import { fileToBase64 } from '../../lib/files';
 
 const SETTINGS_KEY = 'settings';
 const MEMORY_KEY = 'memory';
-const blobUrlCache = new Map<string, string>();
+interface BlobUrlEntry {
+  url?: string;
+  pending?: Promise<string>;
+}
+const blobUrlCache = new Map<string, BlobUrlEntry>();
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -70,12 +74,18 @@ export class LocalRepository implements TransactionalSyncLocalStore {
 
   async mutateOutbox<T extends LocalOutboxRecord>(mutate: (records: T[]) => T[]): Promise<T[]> {
     const transaction = (await db(this.ownerId)).transaction('outbox', 'readwrite');
-    const current = await transaction.store.getAll() as T[];
-    const next = mutate(current);
-    await transaction.store.clear();
-    await Promise.all(next.map((record) => transaction.store.put(record)));
-    await transaction.done;
-    return next;
+    try {
+      const current = await transaction.store.getAll() as T[];
+      const next = mutate(current);
+      await transaction.store.clear();
+      for (const record of next) await transaction.store.put(record);
+      await transaction.done;
+      return next;
+    } catch (error) {
+      try { transaction.abort(); } catch {}
+      await transaction.done.catch(() => {});
+      throw error;
+    }
   }
 
   async createThreadWithOutbox<T extends LocalOutboxRecord>(init: Partial<Thread>, operation: T): Promise<Thread> {
@@ -85,63 +95,98 @@ export class LocalRepository implements TransactionalSyncLocalStore {
       messageCount: 0, ...init,
     };
     const transaction = (await db(this.ownerId)).transaction(['threads', 'outbox'], 'readwrite');
-    await transaction.objectStore('threads').put(thread);
-    await transaction.objectStore('outbox').put(operation);
-    await transaction.done;
-    return thread;
+    try {
+      await transaction.objectStore('threads').put(thread);
+      await transaction.objectStore('outbox').put({ ...operation, attempted: false });
+      await transaction.done;
+      return thread;
+    } catch (error) {
+      try { transaction.abort(); } catch {}
+      await transaction.done.catch(() => {});
+      throw error;
+    }
   }
 
   async updateThreadWithOutbox<T extends LocalOutboxRecord>(id: Id, patch: Partial<Thread>, operation: T): Promise<Thread> {
     const transaction = (await db(this.ownerId)).transaction(['threads', 'outbox'], 'readwrite');
-    const threads = transaction.objectStore('threads');
-    const existing = await threads.get(id) as Thread | undefined;
-    if (!existing) throw new Error('thread not found');
-    const merged = { ...existing, ...patch, updatedAt: patch.updatedAt ?? nowIso() };
-    await threads.put(merged);
-    await transaction.objectStore('outbox').put(operation);
-    await transaction.done;
-    return merged;
+    try {
+      const threads = transaction.objectStore('threads');
+      const existing = await threads.get(id) as Thread | undefined;
+      if (!existing) throw new Error('thread not found');
+      const merged = { ...existing, ...patch, updatedAt: patch.updatedAt ?? nowIso() };
+      await threads.put(merged);
+      await transaction.objectStore('outbox').put(operation);
+      await transaction.done;
+      return merged;
+    } catch (error) {
+      try { transaction.abort(); } catch {}
+      await transaction.done.catch(() => {});
+      throw error;
+    }
   }
 
   async appendMessageWithOutbox<T extends LocalOutboxRecord>(message: Message, operation: T): Promise<Message> {
     const transaction = (await db(this.ownerId)).transaction(['threads', 'messages', 'outbox'], 'readwrite');
-    await transaction.objectStore('messages').put(message);
-    const threads = transaction.objectStore('threads');
-    const thread = await threads.get(message.threadId) as Thread | undefined;
-    if (thread) {
+    try {
+      const existing = await transaction.objectStore('messages').get(message.id) as Message | undefined;
+      const threads = transaction.objectStore('threads');
+      const thread = await threads.get(message.threadId) as Thread | undefined;
+      if (!thread || thread.deletedAt) throw new Error('thread not found');
+      if (existing && existing.threadId !== message.threadId) throw new Error('message belongs to another thread');
+      await transaction.objectStore('messages').put(message);
       await threads.put({
         ...thread,
-        messageCount: thread.messageCount + 1,
+        messageCount: thread.messageCount + (existing ? 0 : 1),
         lastMessagePreview: message.content.slice(0, 120),
         updatedAt: nowIso(),
       });
+      await transaction.objectStore('outbox').put(operation);
+      await transaction.done;
+      return message;
+    } catch (error) {
+      try { transaction.abort(); } catch {}
+      await transaction.done.catch(() => {});
+      throw error;
     }
-    await transaction.objectStore('outbox').put(operation);
-    await transaction.done;
-    return message;
   }
 
   async deleteThreadWithOutbox<T extends LocalOutboxRecord>(id: Id, deleteOperation: T): Promise<void> {
     const transaction = (await db(this.ownerId)).transaction(['threads', 'messages', 'outbox'], 'readwrite');
-    const outbox = transaction.objectStore('outbox');
-    const operations = await outbox.getAll() as Array<LocalOutboxRecord & { id?: string; threadId?: string }>;
-    const unsynced = operations.some((operation) => operation.kind === 'thread.create' && operation.id === id);
-    for (const operation of operations) {
-      if (operation.id === id || operation.threadId === id) await outbox.delete(operation.operationId);
+    try {
+      const outbox = transaction.objectStore('outbox');
+      const operations = await outbox.getAll() as Array<LocalOutboxRecord & { id?: string; threadId?: string }>;
+      const creations = operations.filter((operation) => operation.kind === 'thread.create' && operation.id === id);
+      const unsynced = creations.length > 0 && creations.every((operation) => operation.attempted === false);
+      for (const operation of operations) {
+        const belongsToThread = operation.kind === 'message.append'
+          ? operation.threadId === id
+          : ['thread.create', 'thread.update', 'thread.delete'].includes(operation.kind) && operation.id === id;
+        if (belongsToThread) await outbox.delete(operation.operationId);
+      }
+      if (!unsynced) await outbox.put(deleteOperation);
+      const messages = transaction.objectStore('messages');
+      const messageKeys = await messages.index('byThread').getAllKeys(id);
+      await Promise.all(messageKeys.map((key) => messages.delete(key)));
+      await transaction.objectStore('threads').delete(id);
+      await transaction.done;
+    } catch (error) {
+      try { transaction.abort(); } catch {}
+      await transaction.done.catch(() => {});
+      throw error;
     }
-    if (!unsynced) await outbox.put(deleteOperation);
-    const messages = transaction.objectStore('messages');
-    const messageKeys = await messages.index('byThread').getAllKeys(id);
-    await Promise.all(messageKeys.map((key) => messages.delete(key)));
-    await transaction.objectStore('threads').delete(id);
-    await transaction.done;
   }
 
   async saveSettingsWithOutbox<T extends LocalOutboxRecord>(settings: Settings, operation: T): Promise<void> {
     const transaction = (await db(this.ownerId)).transaction(['kv', 'outbox'], 'readwrite');
-    await transaction.objectStore('kv').put(settings, SETTINGS_KEY);
-    await transaction.objectStore('outbox').put(operation);
-    await transaction.done;
+    try {
+      await transaction.objectStore('kv').put(settings, SETTINGS_KEY);
+      await transaction.objectStore('outbox').put(operation);
+      await transaction.done;
+    } catch (error) {
+      try { transaction.abort(); } catch {}
+      await transaction.done.catch(() => {});
+      throw error;
+    }
   }
 
   async listThreads(opts?: { includeArchived?: boolean }): Promise<Thread[]> {
@@ -241,16 +286,37 @@ export class LocalRepository implements TransactionalSyncLocalStore {
 
   async putBlob(key: string, blob: Blob): Promise<void> {
     await (await db(this.ownerId)).put('blobs', blob, key);
+    const cacheKey = `${this.ownerId}\u0000${key}`;
+    const previous = blobUrlCache.get(cacheKey);
+    if (previous?.url) URL.revokeObjectURL(previous.url);
+    blobUrlCache.delete(cacheKey);
   }
 
   async getBlobUrl(key: string): Promise<string> {
     const cacheKey = `${this.ownerId}\u0000${key}`;
-    if (blobUrlCache.has(cacheKey)) return blobUrlCache.get(cacheKey)!;
-    const blob = (await (await db(this.ownerId)).get('blobs', key)) as Blob | undefined;
-    if (!blob) return '';
-    const url = URL.createObjectURL(blob);
-    blobUrlCache.set(cacheKey, url);
-    return url;
+    const cached = blobUrlCache.get(cacheKey);
+    if (cached?.url) return cached.url;
+    if (cached?.pending) return cached.pending;
+    const entry: BlobUrlEntry = {};
+    blobUrlCache.set(cacheKey, entry);
+    entry.pending = (async () => {
+      try {
+        const blob = (await (await db(this.ownerId)).get('blobs', key)) as Blob | undefined;
+        if (blobUrlCache.get(cacheKey) !== entry) return blobUrlCache.get(cacheKey)?.url ?? '';
+        if (!blob) {
+          blobUrlCache.delete(cacheKey);
+          return '';
+        }
+        entry.url = URL.createObjectURL(blob);
+        return entry.url;
+      } catch (error) {
+        if (blobUrlCache.get(cacheKey) === entry) blobUrlCache.delete(cacheKey);
+        throw error;
+      } finally {
+        delete entry.pending;
+      }
+    })();
+    return entry.pending;
   }
 
   async getBlob(key: string): Promise<Blob | null> {
@@ -448,9 +514,9 @@ export class LocalRepository implements TransactionalSyncLocalStore {
     await Promise.all(['threads', 'messages', 'blobs', 'kv', 'outbox'].map((store) => transaction.objectStore(store).clear()));
     await transaction.done;
     const prefix = `${this.ownerId}\u0000`;
-    for (const [cacheKey, url] of blobUrlCache) {
+    for (const [cacheKey, entry] of blobUrlCache) {
       if (!cacheKey.startsWith(prefix)) continue;
-      URL.revokeObjectURL(url);
+      if (entry.url) URL.revokeObjectURL(entry.url);
       blobUrlCache.delete(cacheKey);
     }
   }
