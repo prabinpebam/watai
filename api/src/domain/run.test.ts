@@ -1,6 +1,36 @@
 import { describe, it, expect } from 'vitest';
-import { isTerminal, isActive, canTransition, parseRunInput } from './run';
+import { isTerminal, isActive, canTransition, parseRunInput, mergeAgentUsage, observeAgentUsage, type AgentUsageSnapshot } from './run';
 import { AppError } from './errors';
+
+describe('bounded agent usage evidence', () => {
+  const tokens = { inputTokens: 10, outputTokens: 4, totalTokens: 14 };
+
+  it('deduplicates identical response IDs and makes conflicting reports sticky unknown', () => {
+    const observed = observeAgentUsage('response', 'model', tokens);
+    const initial = mergeAgentUsage(undefined, observed);
+    expect(mergeAgentUsage(initial, observed)).toEqual(initial);
+    const conflict = mergeAgentUsage(initial, observeAgentUsage('response', 'model', { inputTokens: 11, outputTokens: 4, totalTokens: 15 }));
+    expect(conflict.observations).toEqual([{ responseId: 'response', model: 'model', status: 'unknown', tokens: null }]);
+    expect(mergeAgentUsage(conflict, observed)).toEqual(conflict);
+  });
+
+  it('keeps missing IDs or counts unknown rather than manufacturing a receipt', () => {
+    expect(observeAgentUsage(undefined, 'model', tokens)).toEqual({ responseId: null, model: 'model', status: 'unknown', tokens: null });
+    expect(observeAgentUsage('response', 'model', undefined)).toMatchObject({ status: 'unknown', tokens: null });
+  });
+
+  it('bounds evidence and marks truncation instead of silently reporting completeness', () => {
+    let snapshot: AgentUsageSnapshot | undefined;
+    for (let index = 0; index < 33; index += 1) snapshot = mergeAgentUsage(snapshot, observeAgentUsage(`response-${index}`, 'model', tokens));
+    expect(snapshot).toMatchObject({ scope: 'agent-responses-only', truncated: true });
+    expect(snapshot!.observations).toHaveLength(32);
+  });
+
+  it('excludes non-identifier metadata and extra provider fields', () => {
+    const observation = observeAgentUsage('https://private/token', 'private user content', { ...tokens, prompt: 'private prompt' });
+    expect(observation).toEqual({ responseId: null, model: null, status: 'unknown', tokens: null });
+  });
+});
 
 function code(fn: () => unknown): string | undefined {
   try {
@@ -36,6 +66,21 @@ describe('run state machine', () => {
 });
 
 describe('parseRunInput', () => {
+  it('accepts one canonical immutable chronological pair', () => {
+    const messageOrder = { user: '2026-09-11T12:00:00.000Z', assistant: '2026-09-11T12:00:00.001Z' };
+    expect(parseRunInput({ text: 'x', messageOrder })).toMatchObject({ messageOrder });
+  });
+
+  it.each([
+    { user: 'not-a-time', assistant: '2026-09-11T12:00:00.001Z' },
+    { user: '2026-09-11T12:00:00.000Z', assistant: '2026-09-11T12:00:00.000Z' },
+    { user: '2026-09-11T12:00:00.002Z', assistant: '2026-09-11T12:00:00.001Z' },
+    { user: '2026-09-11T12:00:00Z', assistant: '2026-09-11T12:00:00.001Z' },
+    { user: '2026-09-11T12:00:00.000+00:00', assistant: '2026-09-11T12:00:00.001Z' },
+  ])('rejects ambiguous or inverted logical order: %j', messageOrder => {
+    expect(() => parseRunInput({ text: 'x', messageOrder })).toThrow();
+  });
+
   const att = { id: 'a', kind: 'image', blobPath: 'u/t/a.png', mime: 'image/png', bytes: 1 };
 
   it('accepts a text prompt', () => {

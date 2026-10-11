@@ -29,6 +29,14 @@ describe('CosmosThreadStore (integration)', () => {
     store = new CosmosThreadStore();
   });
 
+  it('has the composite index required for deterministic thread sync order', async () => {
+    const { resource } = await getCosmosDatabase().container('threads').read();
+    expect(resource?.indexingPolicy?.compositeIndexes).toContainEqual([
+      { path: '/updatedAt', order: 'descending' },
+      { path: '/id', order: 'ascending' },
+    ]);
+  });
+
   afterAll(async () => {
     const c = getCosmosDatabase().container('threads');
     for (const { userId, id } of created) {

@@ -2,6 +2,9 @@
 // passes the resolved `baseUrl` + `key` (decrypted from the credential vault) on each request, so
 // there is no dependency on browser storage. `v1Url`/`parseSse`/`isFoundryHost` are pure.
 
+import { approvedProviderUrl } from '../domain/credentials';
+import { AppError } from '../domain/errors';
+
 export type AiPath =
   | '/chat/completions'
   | '/responses'
@@ -17,11 +20,12 @@ export interface AiRequest {
   baseUrl: string;
   key: string;
   path?: AiPath;
-  /** Absolute URL override (bypasses baseUrl + path). */
+  /** Absolute URL within the same approved Azure resource. */
   url?: string;
   method?: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
   stream?: boolean;
+  bodyTimeout?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
   headers?: Record<string, string>;
@@ -94,11 +98,24 @@ function withTimeout(
   };
 }
 
+export function validatedAiUrl(baseUrl: string, path?: string, override?: string): string {
+  const base = approvedProviderUrl(baseUrl);
+  if (!override && !path) throw new AppError('validation', 'An API request path is required.');
+  const url = override ?? v1Url(baseUrl, path!);
+  const target = approvedProviderUrl(url);
+  const baseResource = base.hostname.replace('.cognitiveservices.azure.com', '.services.ai.azure.com');
+  const targetResource = target.hostname.replace('.cognitiveservices.azure.com', '.services.ai.azure.com');
+  if (base.search || baseResource !== targetResource) {
+    throw new AppError('validation', 'The request destination must match the saved Azure resource.');
+  }
+  return url;
+}
+
 /** Shared fetch: Bearer auth on the v1 host + path (or an absolute `url` override). */
 export async function aiFetch(req: AiRequest): Promise<Response> {
   const fetchImpl = req.fetchImpl ?? fetch;
-  const url = req.url ?? v1Url(req.baseUrl, req.path!);
-  const { signal, cleanup } = withTimeout(req.signal, req.timeoutMs ?? 120_000);
+  const url = validatedAiUrl(req.baseUrl, req.path, req.url);
+  req.signal?.throwIfAborted();
 
   const headers: Record<string, string> = { Authorization: `Bearer ${req.key}`, ...req.headers };
   let payload: string | FormData | undefined;
@@ -112,14 +129,16 @@ export async function aiFetch(req: AiRequest): Promise<Response> {
   }
   if (req.stream) headers['Accept'] = 'text/event-stream';
 
+  const { signal, cleanup } = withTimeout(req.signal, req.timeoutMs ?? 120_000);
   let response: Response;
   try {
-    response = await fetchImpl(url, { method: req.method ?? 'POST', headers, body: payload, signal });
+    signal.throwIfAborted();
+    response = await fetchImpl(url, { method: req.method ?? 'POST', headers, body: payload, signal, redirect: 'error' });
   } catch (error) {
     cleanup();
     throw error;
   }
-  if (!req.stream || !response.body) {
+  if ((!req.stream && !req.bodyTimeout) || !response.body) {
     cleanup();
     return response;
   }
@@ -131,6 +150,7 @@ export async function aiFetch(req: AiRequest): Promise<Response> {
     finished = true;
     if (onAbort) signal.removeEventListener('abort', onAbort);
     cleanup();
+    reader.releaseLock();
   };
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -145,18 +165,22 @@ export async function aiFetch(req: AiRequest): Promise<Response> {
     async pull(controller) {
       try {
         const { done, value } = await reader.read();
+        if (finished) return;
         if (done) {
           finish();
           controller.close();
         } else controller.enqueue(value);
       } catch (error) {
-        finish();
-        controller.error(error);
+        if (!finished) {
+          finish();
+          controller.error(error);
+        }
       }
     },
     async cancel(reason) {
+      const canceled = reader.cancel(reason);
       finish();
-      await reader.cancel(reason).catch(() => undefined);
+      await canceled.catch(() => undefined);
     },
   });
   return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
@@ -172,47 +196,46 @@ export async function* parseSse(
   if (!reader) return;
   const decoder = new TextDecoder();
   let buffer = '';
-  while (true) {
-    if (signal?.aborted) {
-      await reader.cancel();
-      return;
+  try {
+    while (true) {
+      if (signal?.aborted) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: (() => void) | undefined;
+      const read = reader.read();
+      const guards: Array<Promise<never>> = [];
+      if (options.idleTimeoutMs) {
+        guards.push(new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new DOMException('The response stream was idle too long.', 'TimeoutError')), options.idleTimeoutMs);
+        }));
+      }
+      if (signal) {
+        guards.push(new Promise((_, reject) => {
+          onAbort = () => reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+          signal.addEventListener('abort', onAbort, { once: true });
+        }));
+      }
+      let chunk: Awaited<ReturnType<typeof reader.read>>;
+      try {
+        chunk = await Promise.race([read, ...guards]);
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (onAbort) signal?.removeEventListener('abort', onAbort);
+      }
+      const { done, value } = chunk;
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') return;
+        if (data) yield data;
+      }
     }
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let onAbort: (() => void) | undefined;
-    const read = reader.read();
-    const guards: Array<Promise<never>> = [];
-    if (options.idleTimeoutMs) {
-      guards.push(new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new DOMException('The response stream was idle too long.', 'TimeoutError')), options.idleTimeoutMs);
-      }));
-    }
-    if (signal) {
-      guards.push(new Promise((_, reject) => {
-        onAbort = () => reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
-        signal.addEventListener('abort', onAbort, { once: true });
-      }));
-    }
-    let chunk: Awaited<ReturnType<typeof reader.read>>;
-    try {
-      chunk = await Promise.race([read, ...guards]);
-    } catch (error) {
-      await reader.cancel(error).catch(() => undefined);
-      throw error;
-    } finally {
-      if (timer) clearTimeout(timer);
-      if (onAbort) signal?.removeEventListener('abort', onAbort);
-    }
-    const { done, value } = chunk;
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-    for (const raw of lines) {
-      const line = raw.trim();
-      if (!line.startsWith('data:')) continue;
-      const data = line.slice(5).trim();
-      if (data === '[DONE]') return;
-      if (data) yield data;
-    }
+  } finally {
+    void reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }

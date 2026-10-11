@@ -3,6 +3,7 @@
 // `ai/responses.ts`; the only change is that `baseUrl` + `key` are passed in (vault-resolved).
 import { aiFetch, parseSse } from './http';
 import { normalizeHttpError } from './errors';
+import { validReportedTokens } from '../domain/run';
 
 /** A tool the model may use: a client-side `function`, or a service-side built-in. */
 export interface ResponsesTool {
@@ -235,18 +236,15 @@ export function normalizeResponsesEvent(raw: unknown): ResponsesEvent | null {
       return b64 ? { type: 'image', b64, partial: true } : null;
     }
     case 'response.completed': {
-      const usage = ev.response?.usage;
+      const rawUsage = ev.response?.usage;
+      const usage = validReportedTokens(rawUsage ? {
+        inputTokens: rawUsage.input_tokens, outputTokens: rawUsage.output_tokens, totalTokens: rawUsage.total_tokens,
+      } : null);
       return {
         type: 'completed',
         ...(ev.response?.id ? { responseId: ev.response.id } : {}),
         ...(ev.response?.model ? { resolvedModelVersion: ev.response.model } : {}),
-        ...(usage ? {
-          usage: {
-            inputTokens: usage.input_tokens ?? 0,
-            outputTokens: usage.output_tokens ?? 0,
-            totalTokens: usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
-          },
-        } : {}),
+        ...(usage ? { usage } : {}),
       };
     }
     case 'response.error':

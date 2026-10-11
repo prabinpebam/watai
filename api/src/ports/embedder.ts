@@ -12,5 +12,5 @@ export interface EmbedCredentials {
  */
 export interface Embedder {
   readonly model: string;
-  embed(creds: EmbedCredentials, text: string): Promise<number[]>;
+  embed(creds: EmbedCredentials, text: string, options?: { signal?: AbortSignal }): Promise<number[]>;
 }

@@ -77,6 +77,17 @@ describe('RunService.submit', () => {
     expect(msgs.find((m) => m.role === 'user')?.content).toBe('hello there');
   });
 
+  it('preserves the optimistic message order independently of server time and binds retries to it', async () => {
+    const messageOrder = { user: '2026-09-11T12:00:00.000Z', assistant: '2026-09-11T12:00:00.001Z' };
+    const input = { text: 'Chronology must stay stable', clientMessageId: 'chronology-user', messageOrder };
+    const run = await ctx.svc.submit('userA', 't1', input);
+    expect(run).toMatchObject({ messageOrder, createdAt: '2026-06-01T00:00:00Z' });
+    expect(ctx.started[0]).toMatchObject({ messageOrder });
+    expect(await ctx.messageStore.get('userA', 't1', input.clientMessageId)).toMatchObject({ orderAt: messageOrder.user });
+    expect((await ctx.svc.submit('userA', 't1', input)).id).toBe(run.id);
+    await expect(ctx.svc.submit('userA', 't1', { ...input, messageOrder: { ...messageOrder, assistant: '2026-09-11T12:00:00.002Z' } })).rejects.toMatchObject({ code: 'conflict' });
+  });
+
   it('uses the client message id (idempotent user message)', async () => {
     await ctx.svc.submit('userA', 't1', { text: 'hi', clientMessageId: 'cm1' });
     const msgs = await ctx.messageStore.list('userA', 't1');
@@ -106,12 +117,38 @@ describe('RunService.submit', () => {
   });
 
   it('quarantines a legacy message id that has no run receipt', async () => {
-    await ctx.messages.append('userA', 't1', { id: 'cm-legacy', role: 'user', content: 'old request' });
+    await ctx.messageStore.append({
+      id: 'cm-legacy', threadId: 't1', userId: 'userA', role: 'user', content: 'old request',
+      status: 'complete', createdAt: '2026-05-31T23:00:00Z', orderAt: '2026-05-31T23:00:00Z', deletedAt: null,
+    });
     await expect(ctx.svc.submit('userA', 't1', {
       text: 'old request', clientMessageId: 'cm-legacy',
     })).rejects.toMatchObject({ code: 'conflict' });
     expect(ctx.started).toHaveLength(0);
     expect(await ctx.runStore.listActive('userA', 't1')).toEqual([]);
+  });
+
+  it('adopts a just-synced unanswered prompt once instead of rejecting it as legacy', async () => {
+    const messageOrder = { user: '2026-06-01T00:00:00.000Z', assistant: '2026-06-01T00:00:00.001Z' };
+    await ctx.messages.append('userA', 't1', { id: 'cm-synced', role: 'user', content: 'describe this image', orderAt: messageOrder.user });
+    const input = { text: 'describe this image', clientMessageId: 'cm-synced', messageOrder };
+    const run = await ctx.svc.submit('userA', 't1', input);
+    expect(run.status).toBe('queued');
+    expect(ctx.started).toHaveLength(1);
+    expect((await ctx.svc.submit('userA', 't1', input)).id).toBe(run.id);
+    expect(ctx.started).toHaveLength(1);
+    const messages = await ctx.messageStore.list('userA', 't1');
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({ id: 'cm-synced', orderAt: messageOrder.user });
+  });
+
+  it.each(['answered', 'edited'] as const)('keeps quarantining a receipt-less prompt that was %s', async (state) => {
+    await ctx.messages.append('userA', 't1', { id: 'cm-synced', role: 'user', content: 'describe this image' });
+    if (state === 'answered') await ctx.messages.append('userA', 't1', { id: 'reply', role: 'assistant', content: 'done' });
+    await expect(ctx.svc.submit('userA', 't1', {
+      text: state === 'edited' ? 'something else' : 'describe this image', clientMessageId: 'cm-synced',
+    })).rejects.toMatchObject({ code: 'conflict' });
+    expect(ctx.started).toHaveLength(0);
   });
 
   it('rejects a second concurrent run on the same thread (409)', async () => {

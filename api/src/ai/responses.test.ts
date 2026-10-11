@@ -55,6 +55,24 @@ describe('normalizeResponsesEvent — code interpreter container id', () => {
     });
   });
 
+  it.each([
+    {}, { input_tokens: 10 }, { output_tokens: 4 },
+    { input_tokens: -1, output_tokens: 4 }, { input_tokens: '10', output_tokens: 4 },
+    { input_tokens: 1.5, output_tokens: 4 }, { input_tokens: NaN, output_tokens: 4 },
+    { input_tokens: 10, output_tokens: 4, total_tokens: 5 },
+    { input_tokens: Number.MAX_SAFE_INTEGER, output_tokens: 1 },
+  ])('does not invent token usage from an incomplete or invalid report: %j', usage => {
+    const event = normalizeResponsesEvent({ type: 'response.completed', response: { id: 'response', usage } });
+    expect(event).not.toHaveProperty('usage');
+  });
+
+  it('preserves real zeros and derives a missing total only from both valid counts', () => {
+    expect(normalizeResponsesEvent({ type: 'response.completed', response: { usage: { input_tokens: 0, output_tokens: 0 } } }))
+      .toMatchObject({ usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } });
+    expect(normalizeResponsesEvent({ type: 'response.completed', response: { usage: { input_tokens: 10, output_tokens: 4 } } }))
+      .toMatchObject({ usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 } });
+  });
+
   it('normalizes failed and incomplete response terminals', () => {
     expect(normalizeResponsesEvent({
       type: 'response.failed',

@@ -17,11 +17,14 @@ export interface ImageGenParams {
   size?: string;
   quality?: 'low' | 'medium' | 'high';
   outputFormat?: 'png' | 'jpeg' | 'webp';
+  background?: 'auto' | 'transparent' | 'opaque';
+  outputCompression?: number;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
 }
 
 export interface ImageEditParams extends ImageGenParams {
+  mask?: Uint8Array;
   /** Primary source image (backward-compatible path used by Image Studio). */
   image: Uint8Array;
   /** MIME type of `image` (default image/png). */
@@ -50,6 +53,7 @@ function extForType(ct: string): string {
 
 // POST <baseUrl>/images/generations { model, prompt, size, n, output_format } -> { data: [{ b64_json }] }
 export async function generateImage(p: ImageGenParams): Promise<ImageResult[]> {
+  console.info('[image] request', { operation: 'generate', model: p.model, background: p.background ?? 'auto', outputFormat: p.outputFormat ?? 'png' });
   const body: Record<string, unknown> = {
     model: p.model,
     prompt: p.prompt,
@@ -57,6 +61,8 @@ export async function generateImage(p: ImageGenParams): Promise<ImageResult[]> {
     n: 1,
     output_format: p.outputFormat ?? 'png',
     ...(p.quality ? { quality: p.quality } : {}),
+    ...(p.background ? { background: p.background } : {}),
+    ...(p.outputCompression !== undefined ? { output_compression: p.outputCompression } : {}),
   };
   const res = await aiFetch({
     baseUrl: p.baseUrl,
@@ -73,6 +79,7 @@ export async function generateImage(p: ImageGenParams): Promise<ImageResult[]> {
 
 // POST <baseUrl>/images/edits (multipart: model, prompt, image, size, n) -> { data: [{ b64_json }] }
 export async function editImage(p: ImageEditParams): Promise<ImageResult[]> {
+  console.info('[image] request', { operation: 'edit', model: p.model, background: p.background ?? 'auto', outputFormat: p.outputFormat ?? 'png' });
   const images = p.images?.length
     ? p.images
     : [{ bytes: p.image, contentType: p.imageContentType }];
@@ -82,6 +89,10 @@ export async function editImage(p: ImageEditParams): Promise<ImageResult[]> {
   form.append('size', p.size ?? '1024x1024');
   form.append('n', '1');
   if (p.quality) form.append('quality', p.quality);
+  if (p.outputFormat) form.append('output_format', p.outputFormat);
+  if (p.background) form.append('background', p.background);
+  if (p.outputCompression !== undefined) form.append('output_compression', String(p.outputCompression));
+  if (p.mask) form.append('mask', new Blob([p.mask], { type: 'image/png' }), 'mask.png');
   images.forEach((image, index) => {
     const ct = image.contentType ?? 'image/png';
     // The Image API uses `image` for one reference and `image[]` for multiple references.

@@ -1,17 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { AppError } from '../domain/errors';
+import { isOwnerBlobPath } from '../domain/asset';
 import { assertLibraryTransition, libraryItemId, libraryStorageBytes, libraryUploadType, type LibraryItemRecord, type LibraryLineageQuery, type LibraryListQuery, type LibraryUploadCompleteInput, type LibraryUploadInput } from '../domain/library';
 import type { LibraryStore } from '../ports/libraryStore';
 import type { SasMinter } from '../ports/sasMinter';
 import { toLibraryItemDto, type LibraryItemDTO, type LibraryStorageSummaryDTO } from './libraryDto';
 
 const STORAGE_CACHE_MS = 5 * 60_000;
+const STORAGE_CACHE_MAX_ENTRIES = 256;
 const CAPACITY_RATE_PER_GB_MONTH = 0.0184;
 const UPLOAD_TTL_SECONDS = 15 * 60;
 
 interface CachedSummary {
   expiresAt: number;
-  value: LibraryStorageSummaryDTO;
+  value?: LibraryStorageSummaryDTO;
 }
 
 export class LibraryService {
@@ -43,11 +45,24 @@ export class LibraryService {
 
   async storage(userId: string): Promise<LibraryStorageSummaryDTO> {
     const cached = this.storageCache.get(userId);
-    if (cached && cached.expiresAt > this.nowMs()) return cached.value;
-    const { records, reconciledAt } = await this.store.aggregate(userId);
-    const value = storageSummary(records, reconciledAt);
-    this.storageCache.set(userId, { value, expiresAt: this.nowMs() + STORAGE_CACHE_MS });
-    return value;
+    if (cached?.value && cached.expiresAt > this.nowMs()) return cached.value;
+    const pending: CachedSummary = { expiresAt: 0 };
+    this.storageCache.delete(userId);
+    while (this.storageCache.size >= STORAGE_CACHE_MAX_ENTRIES) {
+      this.storageCache.delete(this.storageCache.keys().next().value!);
+    }
+    this.storageCache.set(userId, pending);
+    try {
+      const { records, reconciledAt } = await this.store.aggregate(userId);
+      const value = storageSummary(records, reconciledAt);
+      if (this.storageCache.get(userId) === pending) {
+        this.storageCache.set(userId, { value, expiresAt: this.nowMs() + STORAGE_CACHE_MS });
+      }
+      return value;
+    } catch (error) {
+      if (this.storageCache.get(userId) === pending) this.storageCache.delete(userId);
+      throw error;
+    }
   }
 
   async lineage(userId: string, id: string, query: LibraryLineageQuery): Promise<{ items: LibraryItemDTO[]; cursor?: string }> {
@@ -96,7 +111,8 @@ export class LibraryService {
       source: { surface: 'library', createdAt: now },
       ...(type.kind === 'image' ? { image: { provenanceComplete: true } } : {}),
     };
-    const saved = await this.store.put(item);
+    const saved = await this.store.createIfAbsent(item);
+    if (!saved) throw new AppError('conflict', 'Library upload identifier already exists. Retry the upload.');
     const grant = await this.minter.mint({ blobPath, op: 'write', contentType: input.mime, ttlSeconds: UPLOAD_TTL_SECONDS });
     return {
       item: await toLibraryItemDto(this.minter, saved),
@@ -113,13 +129,27 @@ export class LibraryService {
   }
 
   async completeUpload(userId: string, id: string, input: LibraryUploadCompleteInput): Promise<LibraryItemDTO> {
-    const item = await this.store.get(userId, id);
-    if (!item) throw new AppError('not_found', 'Library item not found.');
-    if (item.state === 'active') return toLibraryItemDto(this.minter, item);
+    const version = await this.store.getForUpdate(userId, id);
+    if (!version) throw new AppError('not_found', 'Library item not found.');
+    const item = version.record;
+    if (item.state === 'active') {
+      if (item.bytes !== input.bytes || item.contentHash !== input.contentHash) throw new AppError('validation', 'Library upload completion does not match its reservation.');
+      return toLibraryItemDto(this.minter, item);
+    }
     if (item.state !== 'pending' || !item.blobPath) throw new AppError('conflict', 'Library upload cannot be completed in its current state.');
+    if (!isOwnerBlobPath(userId, item.blobPath, item.source.threadId)) throw new AppError('conflict', 'Library upload cannot be completed in its current state.');
     if (item.bytes !== input.bytes || item.contentHash !== input.contentHash) throw new AppError('validation', 'Library upload completion does not match its reservation.');
     const { url } = await this.minter.mint({ blobPath: item.blobPath, op: 'read', contentType: item.mime, ttlSeconds: 120 });
-    const response = await this.fetchImpl(url, { method: 'HEAD' });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, { method: 'HEAD', redirect: 'error', signal: controller.signal });
+    } catch {
+      throw new AppError('conflict', 'Uploaded file verification could not be completed. Retry completion.');
+    } finally {
+      clearTimeout(timeout);
+    }
     const observedBytes = Number(response.headers.get('content-length'));
     const observedMime = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
     const observedHash = response.headers.get('x-ms-meta-contenthash');
@@ -127,7 +157,7 @@ export class LibraryService {
       throw new AppError('conflict', 'Uploaded file properties do not match the Library reservation.');
     }
     assertLibraryTransition(item.state, 'active');
-    const active = await this.store.put({ ...item, state: 'active', updatedAt: new Date(this.nowMs()).toISOString() });
+    const active = await this.store.put({ ...item, state: 'active', updatedAt: new Date(this.nowMs()).toISOString() }, version.etag);
     this.storageCache.delete(userId);
     return toLibraryItemDto(this.minter, active);
   }

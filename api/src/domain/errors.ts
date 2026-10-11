@@ -39,12 +39,12 @@ export interface ErrorEnvelope {
 }
 
 /**
- * Map any thrown value to a safe HTTP error envelope. Known AppErrors pass through
- * their code/message/details; everything else collapses to a generic 500 so internal
+ * Map any thrown value to a safe HTTP error envelope. Known client AppErrors pass through
+ * their code/message/details; internal and unknown errors collapse to a generic 500 so internal
  * detail (stack traces, connection strings) never leaks to the client.
  */
 export function toErrorEnvelope(err: unknown): ErrorEnvelope {
-  if (err instanceof AppError) {
+  if (err instanceof AppError && err.code !== 'internal') {
     return {
       status: httpStatusFor(err.code),
       body: {

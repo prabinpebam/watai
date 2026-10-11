@@ -1,4 +1,5 @@
 import { strToU8 } from 'fflate';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { zipSkill } from './skillPackager';
 import { SKILLS_SETUP_SCRIPT } from '../skills';
 import type { AoaiCreds, AoaiFiles } from '../ai/files';
@@ -12,7 +13,7 @@ export interface ProvisionResult {
 }
 
 export interface SkillProvisioner {
-  ensure(creds: AoaiCreds, skills: SkillPackage[]): Promise<ProvisionResult>;
+  ensure(creds: AoaiCreds, skills: SkillPackage[], userId: string): Promise<ProvisionResult>;
 }
 
 const SETUP_FILENAME = SKILLS_SETUP_SCRIPT.filename;
@@ -21,74 +22,75 @@ function skillZipName(s: SkillPackage): string {
 }
 
 /**
- * Provisions skills onto a user's own Azure endpoint (Files API) and reuses them across all
- * threads — "global, not thread-scoped". A skill's zip + the bootstrap script are uploaded once
- * per endpoint (matched by filename) and the file_ids are mounted into the code-interpreter
- * container. The per-endpoint file index is memoized for this worker instance to avoid re-listing.
+ * Reuses only successful uploads from the same owner, credentials and package content.
+ * Endpoint-wide filenames are not evidence of ownership or content identity.
  */
 export function createSkillProvisioner(files: AoaiFiles): SkillProvisioner {
-  // endpoint baseUrl -> (filename -> fileId)
-  const index = new Map<string, Map<string, string>>();
-  const inflight = new Map<string, Promise<Map<string, string>>>();
-
-  async function fileIndex(creds: AoaiCreds): Promise<Map<string, string>> {
-    const key = creds.baseUrl;
-    const cached = index.get(key);
-    if (cached) return cached;
-    let p = inflight.get(key);
-    if (!p) {
-      p = (async () => {
-        const list = await files.listFiles(creds, { limit: 10000 }).catch(() => []);
-        const map = new Map<string, string>();
-        for (const f of list) if (f.filename) map.set(f.filename, f.id);
-        index.set(key, map);
-        return map;
-      })();
-      inflight.set(key, p);
-      void p.finally(() => inflight.delete(key));
-    }
-    return p;
-  }
+  const salt = randomBytes(32);
+  const cache = new Map<string, { id: string; expiresAt: number }>();
+  const inflight = new Map<string, Promise<string | null>>();
+  const maxEntries = 256;
+  const ttlMs = 10 * 60_000;
 
   async function ensureFile(
     creds: AoaiCreds,
-    map: Map<string, string>,
+    scope: string,
     filename: string,
-    bytes: Uint8Array,
+    content: string,
+    bytes: () => Uint8Array,
     mime: string,
   ): Promise<string | null> {
-    const existing = map.get(filename);
-    if (existing) return existing;
+    const key = createHash('sha256').update(JSON.stringify([scope, filename, content])).digest('hex');
+    const existing = cache.get(key);
+    if (existing && existing.expiresAt > Date.now()) return existing.id;
+    cache.delete(key);
+    let pending = inflight.get(key);
+    if (!pending) {
+      if (inflight.size >= maxEntries) return null;
+      pending = (async () => {
+        try {
+          const { id } = await files.uploadFile(creds, { bytes: bytes(), filename, mime });
+          if (!id) return null;
+          while (cache.size >= maxEntries) cache.delete(cache.keys().next().value!);
+          cache.set(key, { id, expiresAt: Date.now() + ttlMs });
+          return id;
+        } catch {
+          return null;
+        }
+      })();
+      inflight.set(key, pending);
+    }
     try {
-      const { id } = await files.uploadFile(creds, { bytes, filename, mime });
-      map.set(filename, id);
-      return id;
-    } catch {
-      return null; // a failed upload just drops that skill from this run
+      return await pending;
+    } finally {
+      if (inflight.get(key) === pending) inflight.delete(key);
     }
   }
 
   return {
-    async ensure(creds, skills) {
+    async ensure(creds, skills, userId) {
+      if (typeof userId !== 'string' || !userId.trim()) throw new Error('Skill provisioning requires an owner.');
       if (!skills.length) return { fileIds: [], skills: [] };
-      const map = await fileIndex(creds);
+      const scope = createHmac('sha256', salt).update(JSON.stringify([userId, creds.baseUrl, creds.key])).digest('hex');
       const fileIds: string[] = [];
       const mounted: MountedSkill[] = [];
 
       const setupId = await ensureFile(
         creds,
-        map,
+        scope,
         SETUP_FILENAME,
-        strToU8(SKILLS_SETUP_SCRIPT.content),
+        SKILLS_SETUP_SCRIPT.content,
+        () => strToU8(SKILLS_SETUP_SCRIPT.content),
         'text/x-python',
       );
-      if (setupId) fileIds.push(setupId);
+      if (!setupId) return { fileIds: [], skills: [] };
+      fileIds.push(setupId);
 
-      for (const s of skills) {
-        const id = await ensureFile(creds, map, skillZipName(s), zipSkill(s), 'application/zip');
+      for (const skill of skills) {
+        const id = await ensureFile(creds, scope, skillZipName(skill), JSON.stringify(skill), () => zipSkill(skill), 'application/zip');
         if (id) {
           fileIds.push(id);
-          mounted.push({ name: s.name, description: s.description, path: `/mnt/data/skills/${s.name}/` });
+          mounted.push({ name: skill.name, description: skill.description, path: `/mnt/data/skills/${skill.name}/` });
         }
       }
       return { fileIds, skills: mounted };

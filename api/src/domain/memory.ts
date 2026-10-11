@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import { containsSecretLikeValue } from './secrets';
 import { memoryRouteTargetSchema } from './memoryRouting';
 import { parseOrThrow } from './validate';
@@ -62,6 +63,12 @@ const memorySourceRefSchema = z
 
 export type MemorySourceRef = z.infer<typeof memorySourceRefSchema>;
 
+export function memorySourceKeys(refs: MemorySourceRef[]): string[] {
+  return [...new Set(refs
+    .filter(ref => ref.threadId?.trim() || ref.messageId?.trim() || ref.runId?.trim())
+    .map(ref => `${ref.type}:${ref.threadId ?? ''}:${ref.messageId ?? ''}:${ref.runId ?? ''}`))];
+}
+
 export function parseMemorySourceRef(input: unknown): MemorySourceRef {
   return parseOrThrow(memorySourceRefSchema, input, 'Invalid memory source reference.');
 }
@@ -102,6 +109,12 @@ const memoryRecordSchema = z
     visibility: z.enum(MEMORY_VISIBILITY),
     validAt: iso.optional(),
     invalidAt: iso.optional(),
+    validityHistory: z.array(z.object({
+      validAt: z.string().datetime({ offset: true }).optional(),
+      invalidAt: z.string().datetime({ offset: true }),
+      revision: z.number().int().positive(),
+    }).strict().refine(interval => interval.validAt === undefined || Date.parse(interval.validAt) <= Date.parse(interval.invalidAt),
+      'Memory validity interval is reversed.')).max(16).optional(),
     createdAt: iso,
     updatedAt: iso,
     lastUsedAt: iso.optional(),
@@ -110,11 +123,30 @@ const memoryRecordSchema = z
     supersededBy: id.optional(),
     embedding: z.array(z.number()).max(4096).optional(),
     embeddingModel: z.string().trim().min(1).max(100).optional(),
+    embeddingTextHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     deletedAt: iso.optional(),
   })
   .strict();
 
 export type MemoryRecord = z.infer<typeof memoryRecordSchema>;
+
+export function memoryEmbeddingTextHash(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+export function usableMemoryVector(vector: number[]): boolean {
+  if (!vector.length || !vector.every(Number.isFinite)) return false;
+  const squaredNorm = vector.reduce((total, value) => total + value * value, 0);
+  return squaredNorm > 0 && Number.isFinite(squaredNorm);
+}
+
+export function hasCurrentMemoryEmbedding(memory: MemoryRecord, userId: string, model: string, dimensions: number): boolean {
+  const vector = memory.embedding;
+  if (memory.userId !== userId || !model.trim() || memory.embeddingModel !== model ||
+      memory.embeddingTextHash !== memoryEmbeddingTextHash(memory.text) ||
+        !vector?.length || vector.length !== dimensions) return false;
+      return usableMemoryVector(vector);
+}
 
 // Manual memories exclude project / work context too — we do not store project work context at all
 // (it must not cross-bleed across intentionally-isolated threads). thread_summary + entity are
@@ -148,7 +180,10 @@ const patchMemorySchema = z
     pinned: z.boolean().optional(),
     salience: score.optional(),
   })
-  .strict();
+  .strict()
+  .refine((patch) => patch.text !== undefined || patch.kind !== undefined || patch.status !== undefined ||
+    patch.visibility !== undefined || patch.pinned !== undefined || patch.salience !== undefined,
+  'At least one memory change is required.');
 
 export type PatchMemoryInput = z.infer<typeof patchMemorySchema>;
 
@@ -181,15 +216,13 @@ const memoryImportItemSchema = z
   })
   .strict();
 
-const memoryImportSchema = z
+const memoryImportV1Schema = z
   .object({
     version: z.literal(1),
     memories: z.array(memoryImportItemSchema).max(500),
     mode: z.enum(['preview', 'commit']),
   })
   .strict();
-
-export type MemoryImportInput = z.infer<typeof memoryImportSchema>;
 
 const memoryRebuildSchema = z
   .object({
@@ -214,6 +247,41 @@ const memorySummaryRecordSchema = z
   .strict();
 
 export type MemorySummaryRecord = z.infer<typeof memorySummaryRecordSchema>;
+
+const archiveTimestamp = z.string().datetime({ offset: true });
+const memoryTransferRecordSchema = memoryRecordSchema.extend({
+  status: z.literal('active'),
+  createdAt: archiveTimestamp,
+  updatedAt: archiveTimestamp,
+  validAt: archiveTimestamp.optional(),
+  invalidAt: archiveTimestamp.optional(),
+  lastUsedAt: archiveTimestamp.optional(),
+  deletedAt: archiveTimestamp.optional(),
+  sourceRefs: z.array(memorySourceRefSchema.and(z.object({ createdAt: archiveTimestamp }))).min(1).max(12),
+}).refine(record => record.validAt === undefined || record.invalidAt === undefined || Date.parse(record.validAt) <= Date.parse(record.invalidAt),
+  'Memory archive validity interval is reversed.');
+
+const memoryTransferArchiveSchema = z.object({
+  version: z.literal(2),
+  scope: z.literal('active-records'),
+  exportedAt: archiveTimestamp,
+  memories: z.array(memoryTransferRecordSchema).max(1000),
+  summary: memorySummaryRecordSchema.extend({ updatedAt: archiveTimestamp }).nullable(),
+}).strict();
+
+const memoryImportSchema = z.discriminatedUnion('version', [
+  memoryImportV1Schema,
+  memoryTransferArchiveSchema.extend({ mode: z.literal('preview') }).strict(),
+]);
+
+export type MemoryTransferArchive = z.infer<typeof memoryTransferArchiveSchema>;
+export type MemoryImportInput = z.infer<typeof memoryImportSchema>;
+
+export function parseMemoryTransferArchive(input: unknown): MemoryTransferArchive {
+  return parseOrThrow(memoryTransferArchiveSchema, input, 'Invalid memory archive.');
+}
+
+export const MAX_MEMORY_CONTEXT_RECORDS = 16;
 
 const memoryContextBlockSchema = z
   .object({
@@ -243,7 +311,7 @@ const memoryContextBlockSchema = z
           })
           .strict(),
       )
-      .max(16),
+      .max(MAX_MEMORY_CONTEXT_RECORDS),
     threadSummaries: z
       .array(
         z
@@ -270,6 +338,7 @@ const memoryContextBlockSchema = z
     tokenEstimate: z.number().int().nonnegative(),
     latencyBudgetMs: z.number().int().positive(),
     retrievalMode: z.enum(['empty', 'vector', 'profile']),
+    degradedReason: z.enum(['timeout', 'cancelled', 'unavailable']).optional(),
     profile: z.string().trim().max(4000).optional(),
   })
   .strict();
@@ -278,6 +347,19 @@ export type MemoryContextBlock = z.infer<typeof memoryContextBlockSchema>;
 
 export function parseMemoryRecord(input: unknown): MemoryRecord {
   return parseOrThrow(memoryRecordSchema, input, 'Invalid memory record.');
+}
+
+export function prepareMemorySupersession(record: MemoryRecord, predecessors: MemoryRecord[]): MemoryRecord[] | null {
+  const ids = predecessors.map(previous => previous.id);
+  if (predecessors.length > 16 || new Set(ids).size !== ids.length ||
+      (record.supersedes?.length ?? 0) !== ids.length ||
+      ids.some(id => !record.supersedes?.includes(id)) ||
+      predecessors.some(previous => previous.id === record.id || previous.userId !== record.userId ||
+        previous.status !== 'active' || previous.sensitive || previous.confirmation === 'approved')) return null;
+  return predecessors.map(previous => ({
+    ...previous, status: 'invalidated', supersededBy: record.id, invalidAt: record.updatedAt,
+    updatedAt: record.updatedAt, revision: (previous.revision ?? 1) + 1,
+  }));
 }
 
 export function parseMemoryListQuery(input: unknown): ListMemoryQuery {
@@ -319,7 +401,14 @@ export function parseMemoryContextBlock(input: unknown): MemoryContextBlock {
 export function isRetrievableMemory(memory: Pick<MemoryRecord, 'status' | 'validAt' | 'invalidAt'>, nowIso: string): boolean {
   if (memory.status !== 'active') return false;
   const now = Date.parse(nowIso);
-  if (memory.validAt && Date.parse(memory.validAt) > now) return false;
-  if (memory.invalidAt && Date.parse(memory.invalidAt) <= now) return false;
+  if (!Number.isFinite(now)) return false;
+  if (memory.validAt !== undefined) {
+    const validAt = Date.parse(memory.validAt);
+    if (!Number.isFinite(validAt) || validAt > now) return false;
+  }
+  if (memory.invalidAt !== undefined) {
+    const invalidAt = Date.parse(memory.invalidAt);
+    if (!Number.isFinite(invalidAt) || invalidAt <= now) return false;
+  }
   return true;
 }

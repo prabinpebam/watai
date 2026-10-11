@@ -1,6 +1,7 @@
 import type { Container, OperationInput, SqlParameter } from '@azure/cosmos';
 import type {
   ImageGenRecord,
+  ImageExecutionIdentity,
   ImageDispatchRecord,
   ImageListOptions,
   ImageListResult,
@@ -49,17 +50,20 @@ export class CosmosImageStore implements ImageStore {
     const operations = [record, dispatch]
       .map((resourceBody) => ({ operationType: 'Create' as const, resourceBody })) as unknown as OperationInput[];
     const { result } = await this.container.items.batch(operations, record.userId);
-    if (!result || !result.every((operation) => operation.statusCode >= 200 && operation.statusCode < 300)) {
+    if (result?.length !== operations.length || !result.every((operation) => operation.statusCode >= 200 && operation.statusCode < 300)) {
       throw new Error(`Image admission batch failed (${result?.map((operation) => operation.statusCode).join(',') ?? 'no-result'}).`);
     }
     return record;
   }
 
-  async transition(userId: string, id: string, expected: ImageStatus[], patch: Partial<ImageGenRecord>): Promise<ImageGenRecord | null> {
+  async transition(userId: string, id: string, expected: ImageStatus[], patch: Partial<ImageGenRecord>, identity?: ImageExecutionIdentity): Promise<ImageGenRecord | null> {
     const item = this.container.item(id, userId);
     try {
       const { resource } = await item.read<ImageDocument>();
-      if (!resource || resource.userId !== userId || !expected.includes(resource.status)) return resource ?? null;
+      if (!resource || resource.userId !== userId || resource.id !== id) return null;
+      if (!expected.includes(resource.status)) return identity ? null : resource;
+      if (identity && (resource.releaseId !== identity.releaseId || resource.executionToken !== identity.executionToken || resource.dispatchAttempt !== identity.dispatchAttempt)) return null;
+      if (identity?.expectedUpdatedAt !== undefined && resource.updatedAt !== identity.expectedUpdatedAt) return null;
       if (!resource._etag) throw new Error('Image transition requires a Cosmos ETag.');
       const updated = { ...resource, ...patch, id: resource.id, userId: resource.userId };
       try {
@@ -67,6 +71,7 @@ export class CosmosImageStore implements ImageStore {
         return (replaced ?? updated) as ImageGenRecord;
       } catch (error) {
         if ((error as { code?: number }).code !== 412) throw error;
+        if (identity) return null;
         return this.get(userId, id);
       }
     } catch (error) {

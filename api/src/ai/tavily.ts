@@ -69,6 +69,7 @@ async function tavilyFetch(path: string, init: RequestInit, deps: TavilyDeps): P
   try {
     return await fetchImpl(`${TAVILY_BASE}${path}`, {
       ...init,
+      redirect: 'error',
       signal: ctrl.signal,
       headers: { Authorization: `Bearer ${deps.key}`, 'Content-Type': 'application/json', ...init.headers },
     });

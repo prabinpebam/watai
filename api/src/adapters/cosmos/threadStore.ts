@@ -13,7 +13,7 @@ export class CosmosThreadStore implements ThreadStore, ThreadLockStore {
   async get(userId: string, id: string): Promise<ThreadRecord | null> {
     try {
       const { resource } = await this.container.item(id, userId).read<ThreadRecord>();
-      return resource ?? null;
+      return resource?.userId === userId && resource.id === id ? resource : null;
     } catch (err) {
       if ((err as { code?: number }).code === 404) return null;
       throw err;
@@ -33,6 +33,7 @@ export class CosmosThreadStore implements ThreadStore, ThreadLockStore {
     const { resources } = await this.container.items
       .query<ThreadRecord>({ query, parameters }, { partitionKey: userId })
       .fetchAll();
+    if (resources.some(resource => resource.userId !== userId)) throw new Error('Thread owner binding failed.');
     return resources;
   }
 
@@ -41,13 +42,24 @@ export class CosmosThreadStore implements ThreadStore, ThreadLockStore {
     return record;
   }
 
+  async createIfAbsent(record: ThreadRecord): Promise<ThreadRecord | null> {
+    try {
+      await this.container.items.create(record);
+      return record;
+    } catch (error) {
+      if ((error as { code?: number }).code === 409) return null;
+      throw error;
+    }
+  }
+
   async getForUpdate(
     userId: string,
     id: string,
   ): Promise<{ record: ThreadRecord; etag: string } | null> {
     try {
       const { resource } = await this.container.item(id, userId).read<ThreadRecord & { _etag: string }>();
-      if (!resource) return null;
+      if (!resource || resource.userId !== userId || resource.id !== id) return null;
+      if (typeof resource._etag !== 'string' || !resource._etag.trim()) throw new Error('Conditional thread writes require a version token.');
       return { record: resource, etag: resource._etag };
     } catch (err) {
       if ((err as { code?: number }).code === 404) return null;
@@ -58,11 +70,12 @@ export class CosmosThreadStore implements ThreadStore, ThreadLockStore {
   /** Conditional write: succeeds only if the stored `_etag` still matches; a 412 (someone
    *  else wrote first) returns null so the caller can re-read and retry. */
   async putIfMatch(record: ThreadRecord, etag: string): Promise<ThreadRecord | null> {
+    if (typeof etag !== 'string' || !etag.trim()) throw new Error('Conditional thread writes require a version token.');
     try {
-      await this.container.items.upsert(record, { accessCondition: { type: 'IfMatch', condition: etag } });
+      await this.container.item(record.id, record.userId).replace(record, { accessCondition: { type: 'IfMatch', condition: etag } });
       return record;
     } catch (err) {
-      if ((err as { code?: number }).code === 412) return null;
+      if ([404, 412].includes((err as { code?: number }).code ?? 0)) return null;
       throw err;
     }
   }

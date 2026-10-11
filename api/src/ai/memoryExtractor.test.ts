@@ -91,6 +91,28 @@ describe('extractMemories model selection', () => {
 });
 
 describe('normalizeMemoryExtractionJson', () => {
+  it.each([undefined, 'unknown', 'sensitive', 'normal'])('does not invent or relax the sensitivity classification: %s', sensitivity => {
+    const result = resilientParseExtraction(normalizeMemoryExtractionJson({ operations: [{
+      op: 'add', kind: 'fact', text: 'Explicit source statement.', confidence: 0.9,
+      salience: 0.8, sourceMessageIds: ['u1'], ...(sensitivity === undefined ? {} : { sensitivity }),
+    }] }));
+    expect(result.operations[0]).toMatchObject({ op: 'add' });
+    if (sensitivity === undefined) expect(result.operations[0]).not.toHaveProperty('sensitivity');
+    else expect(result.operations[0]).toHaveProperty('sensitivity', sensitivity);
+  });
+
+  it.each(['confidence', 'salience'])('does not invent missing %s to make an add acceptable', missing => {
+    const incomplete: Record<string, unknown> = { op: 'add', kind: 'fact', text: 'Incomplete proposal', confidence: 0.95, salience: 0.9, sourceMessageIds: ['u1'] };
+    delete incomplete[missing];
+    const normalized = normalizeMemoryExtractionJson({ operations: [
+      incomplete,
+      { op: 'add', kind: 'preference', text: 'Explicitly scored proposal', confidence: 0.9, salience: 0.8, sourceMessageIds: ['u1'] },
+    ] });
+    const result = resilientParseExtraction(normalized);
+    expect(result.operations).toHaveLength(1);
+    expect(result.operations[0]).toMatchObject({ text: 'Explicitly scored proposal', confidence: 0.9, salience: 0.8 });
+  });
+
   it('normalizes common LLM output variants into strict extraction operations', () => {
     const normalized = normalizeMemoryExtractionJson({
       memories: [
@@ -112,7 +134,7 @@ describe('normalizeMemoryExtractionJson', () => {
     });
   });
 
-  it('falls back to the latest user source id and default add scores when omitted', () => {
+  it('does not invent a source ID when the model omitted its evidence', () => {
     const normalized = normalizeMemoryExtractionJson(
       {
         operations: [
@@ -126,13 +148,17 @@ describe('normalizeMemoryExtractionJson', () => {
       ['u1'],
     );
 
-    expect(parseMemoryExtractionOutput(normalized).operations[0]).toMatchObject({
-      op: 'add',
-      kind: 'fact',
-      confidence: 0.75,
-      salience: 0.6,
-      sourceMessageIds: ['u1'],
-    });
+    expect(() => parseMemoryExtractionOutput(normalized)).toThrow();
+    expect(resilientParseExtraction(normalized).operations[0].op).toBe('ignore');
+  });
+
+  it('drops an unreferenced operation without losing its explicitly sourced sibling', () => {
+    const result = resilientParseExtraction(normalizeMemoryExtractionJson({ operations: [
+      { op: 'add', kind: 'fact', text: 'Unreferenced statement', confidence: 0.9, salience: 0.9 },
+      { op: 'add', kind: 'preference', text: 'Explicit user preference', confidence: 0.9, salience: 0.9, sourceMessageIds: ['u1'] },
+    ] }, ['u1']));
+    expect(result.operations).toHaveLength(1);
+    expect(result.operations[0]).toMatchObject({ text: 'Explicit user preference', sourceMessageIds: ['u1'] });
   });
 
   it('normalizes common operation and kind aliases from top-level arrays', () => {
@@ -157,7 +183,7 @@ describe('normalizeMemoryExtractionJson', () => {
   it('lifts fields nested under a memory wrapper (type/source aliases) into a flat add', () => {
     const normalized = normalizeMemoryExtractionJson({
       operations: [
-        { op: 'add', memory: { type: 'fact', text: "User's favorite color is teal.", source: 'm1' } },
+        { op: 'add', memory: { type: 'fact', text: "User's favorite color is teal.", source: 'm1', confidence: 0.75, salience: 0.6 } },
       ],
     });
 

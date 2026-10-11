@@ -14,20 +14,37 @@ export class MemoryDispatchService {
     const pending = await this.jobs.listPendingDispatch(limit);
     const summary: RunDispatchSummary = { inspected: pending.length, sent: 0, discarded: 0, failed: 0 };
     for (const dispatch of pending) await this.reconcileOne(dispatch, summary);
+    const now = this.clock.now();
+    const staleBefore = new Date(Date.parse(now) - 30 * 60_000).toISOString();
+    for (const job of await this.jobs.listStaleRunning(staleBefore, Math.min(limit, 50))) {
+      summary.inspected += 1;
+      try {
+        await this.jobs.putIfCurrent({
+          ...job, status: 'failed', lastErrorCode: 'provider_outcome_unknown',
+          lastErrorMessage: 'Memory processing stopped without a confirmed outcome. Existing memory changes may remain; provider work was not retried.',
+          terminalReason: 'worker_outcome_unconfirmed', updatedAt: now, completedAt: now,
+        }, job);
+      } catch {
+        summary.failed += 1;
+      }
+    }
     return summary;
   }
 
   private async reconcileOne(dispatch: MemoryJobDispatchRecord, summary: RunDispatchSummary): Promise<void> {
-    const job = await this.jobs.get(dispatch.userId, dispatch.jobId);
-    if (
-      !job || job.status !== 'queued' || job.releaseId !== dispatch.releaseId ||
-      job.executionToken !== dispatch.executionToken || job.dispatchAttempt !== dispatch.attempt
-    ) {
-      await this.jobs.markDispatchSent(dispatch, this.clock.now());
-      summary.discarded += 1;
-      return;
-    }
     try {
+      const job = await this.jobs.get(dispatch.userId, dispatch.jobId);
+      if (job && (job.userId !== dispatch.userId || job.id !== dispatch.jobId)) {
+        throw new Error('Memory dispatch job binding failed.');
+      }
+      if (
+        !job || job.status !== 'queued' || job.releaseId !== dispatch.releaseId ||
+        job.executionToken !== dispatch.executionToken || job.dispatchAttempt !== dispatch.attempt
+      ) {
+        await this.jobs.markDispatchSent(dispatch, this.clock.now());
+        summary.discarded += 1;
+        return;
+      }
       await this.queue.enqueue(job);
       await this.jobs.markDispatchSent(dispatch, this.clock.now());
       summary.sent += 1;

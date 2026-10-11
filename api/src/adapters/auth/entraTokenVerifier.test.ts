@@ -8,6 +8,8 @@ import {
   type KeyLike,
 } from 'jose';
 import { EntraTokenVerifier } from './entraTokenVerifier';
+import { AccessService } from '../../application/accessService';
+import { InMemoryInviteStore } from '../memory/inviteStore';
 
 const ISSUER = 'https://watai.ciamlogin.com/tenant-id/v2.0';
 const AUDIENCE = 'api://watai';
@@ -43,6 +45,14 @@ describe('EntraTokenVerifier', () => {
   it('accepts a valid token and returns its claims', async () => {
     const claims = await verifier.verify(await sign());
     expect(claims.oid).toBe('user-123');
+  });
+
+  it('does not derive admin privilege from a signed mutable-email alias', async () => {
+    const access = new AccessService(new InMemoryInviteStore(), 'admin@example.com', ['admin-oid']);
+    const alias = await verifier.verify(await sign({ claims: { email: 'admin@example.com' } }));
+    await expect(access.requireAdmin(alias)).rejects.toMatchObject({ code: 'forbidden' });
+    const admin = await verifier.verify(await sign({ claims: { oid: 'admin-oid', email: 'changed@example.com' } }));
+    await expect(access.requireAdmin(admin)).resolves.toBeUndefined();
   });
 
   it('rejects an expired token', async () => {

@@ -1,6 +1,6 @@
 import type { Container, OperationInput } from '@azure/cosmos';
 import type { MemoryExtractionJobRecord } from '../../domain/memoryExtraction';
-import type { MemoryJobDispatchRecord, MemoryJobStore } from '../../ports/memoryJobStore';
+import { isCurrentMemoryJob, type MemoryJobDispatchRecord, type MemoryJobStore } from '../../ports/memoryJobStore';
 import { getCosmosDatabase } from './cosmosClient';
 
 /** Cosmos-backed MemoryJobStore. Container `memoryJobs`, partition key /userId. */
@@ -54,7 +54,7 @@ export class CosmosMemoryJobStore implements MemoryJobStore {
       .map((resourceBody) => ({ operationType: 'Create' as const, resourceBody })) as unknown as OperationInput[];
     try {
       const { result } = await this.container.items.batch(operations, record.userId);
-      if (result?.every((operation) => operation.statusCode >= 200 && operation.statusCode < 300)) {
+      if (result?.length === operations.length && result.every((operation) => operation.statusCode >= 200 && operation.statusCode < 300)) {
         return { outcome: 'accepted', job: record };
       }
       if (!result?.some((operation) => operation.statusCode === 409)) {
@@ -99,14 +99,22 @@ export class CosmosMemoryJobStore implements MemoryJobStore {
     return resources.map(({ id: _id, recordType: _type, ...record }) => record);
   }
 
+  async listStaleRunning(before: string, limit = 50): Promise<MemoryExtractionJobRecord[]> {
+    const { resources } = await this.container.items.query<MemoryExtractionJobRecord>({
+      query: "SELECT * FROM c WHERE c.status = 'running' AND c.updatedAt < @before OFFSET 0 LIMIT @limit",
+      parameters: [{ name: '@before', value: before }, { name: '@limit', value: limit }],
+    }).fetchAll();
+    return resources;
+  }
+
   async markDispatchSent(record: MemoryJobDispatchRecord, sentAt: string): Promise<void> {
     const item = this.container.item(`memory-dispatch-${record.jobId}`, record.userId);
     try {
       const { resource } = await item.read<MemoryJobDispatchRecord & { id: string; recordType: string; _etag?: string }>();
-      if (!resource || resource.state !== 'pending' || resource.executionToken !== record.executionToken || resource.attempt !== record.attempt) return;
-      await item.replace({ ...resource, state: 'sent', updatedAt: sentAt }, resource._etag
-        ? { accessCondition: { type: 'IfMatch', condition: resource._etag } }
-        : undefined);
+      if (!resource || !resource._etag || resource.userId !== record.userId || resource.jobId !== record.jobId ||
+          resource.state !== 'pending' || resource.releaseId !== record.releaseId ||
+          resource.executionToken !== record.executionToken || resource.attempt !== record.attempt) return;
+      await item.replace({ ...resource, state: 'sent', updatedAt: sentAt }, { accessCondition: { type: 'IfMatch', condition: resource._etag } });
     } catch (error) {
       if (![404, 409, 412].includes((error as { code?: number }).code ?? 0)) throw error;
     }
@@ -115,5 +123,19 @@ export class CosmosMemoryJobStore implements MemoryJobStore {
   async put(record: MemoryExtractionJobRecord): Promise<MemoryExtractionJobRecord> {
     await this.container.items.upsert(record);
     return record;
+  }
+
+  async putIfCurrent(record: MemoryExtractionJobRecord, expected: MemoryExtractionJobRecord): Promise<MemoryExtractionJobRecord | null> {
+    if (record.id !== expected.id || record.userId !== expected.userId) return null;
+    const item = this.container.item(record.id, record.userId);
+    try {
+      const { resource } = await item.read<MemoryExtractionJobRecord & { _etag?: string }>();
+      if (!isCurrentMemoryJob(resource, expected) || !resource?._etag) return null;
+      await item.replace(record, { accessCondition: { type: 'IfMatch', condition: resource._etag } });
+      return record;
+    } catch (error) {
+      if ([404, 409, 412].includes((error as { code?: number }).code ?? 0)) return null;
+      throw error;
+    }
   }
 }

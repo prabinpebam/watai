@@ -35,6 +35,7 @@ const addOperationSchema = z
     target: memoryRouteTargetSchema.optional(),
     confidence: score,
     salience: score,
+    sensitivity: z.enum(['normal', 'sensitive', 'unknown']).optional(),
     validAt: z.string().trim().min(1).max(40).optional(),
     sourceMessageIds: z.array(id).min(1).max(12),
     supersedes: z.array(id).max(16).optional(),
@@ -52,6 +53,7 @@ const mergeOperationSchema = z
     target: memoryRouteTargetSchema.optional(),
     confidence: score.optional(),
     salience: score.optional(),
+    sensitivity: z.enum(['normal', 'sensitive', 'unknown']).optional(),
     sourceMessageIds: z.array(id).min(1).max(12),
     reason,
   })

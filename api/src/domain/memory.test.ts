@@ -50,6 +50,15 @@ const record = {
 };
 
 describe('parseMemoryRecord', () => {
+  it('accepts legacy records and bounded timestamp-only validity history', () => {
+    expect(parseMemoryRecord(record).validityHistory).toBeUndefined();
+    const interval = { validAt: '2025-01-01T00:00:00Z', invalidAt: '2026-01-01T00:00:00Z', revision: 1 };
+    expect(parseMemoryRecord({ ...record, revision: 2, validityHistory: [interval] }).validityHistory).toEqual([interval]);
+    expect(code(() => parseMemoryRecord({ ...record, validityHistory: [{ ...interval, text: 'Unbounded historical content' }] }))).toBe('validation');
+    expect(code(() => parseMemoryRecord({ ...record, validityHistory: [{ ...interval, validAt: '2027-01-01T00:00:00Z' }] }))).toBe('validation');
+    expect(code(() => parseMemoryRecord({ ...record, validityHistory: Array.from({ length: 17 }, () => interval) }))).toBe('validation');
+  });
+
   it('accepts a source-linked active memory and trims bounded text fields', () => {
     expect(
       parseMemoryRecord({
@@ -191,6 +200,13 @@ describe('summary and context schemas', () => {
 });
 
 describe('isRetrievableMemory', () => {
+  it.each(['not-a-date', ''])('rejects unparseable time evidence: %j', value => {
+    const now = '2026-06-28T00:00:00.000Z';
+    expect(isRetrievableMemory({ ...record, validAt: value }, now)).toBe(false);
+    expect(isRetrievableMemory({ ...record, invalidAt: value }, now)).toBe(false);
+    expect(isRetrievableMemory(record, value)).toBe(false);
+  });
+
   it('excludes suppressed, deleted, invalidated, future, and expired memories', () => {
     const now = '2026-06-28T00:00:00.000Z';
     expect(isRetrievableMemory(record, now)).toBe(true);

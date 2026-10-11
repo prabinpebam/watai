@@ -1,5 +1,6 @@
 import type {
   ImageGenRecord,
+  ImageExecutionIdentity,
   ImageDispatchRecord,
   ImageListOptions,
   ImageListResult,
@@ -26,8 +27,8 @@ export class InMemoryImageStore implements ImageStore {
   }
 
   async putQueued(record: ImageGenRecord): Promise<ImageGenRecord> {
-    await this.put(record);
     if (!record.releaseId || !record.executionToken || !record.dispatchAttempt) throw new Error('Image is missing dispatch fencing metadata.');
+    await this.put(record);
     this.dispatches.set(this.key(record.userId, record.id), {
       imageId: record.id, userId: record.userId, releaseId: record.releaseId,
       executionToken: record.executionToken, attempt: record.dispatchAttempt, state: 'pending',
@@ -36,10 +37,13 @@ export class InMemoryImageStore implements ImageStore {
     return record;
   }
 
-  async transition(userId: string, id: string, expected: ImageStatus[], patch: Partial<ImageGenRecord>): Promise<ImageGenRecord | null> {
+  async transition(userId: string, id: string, expected: ImageStatus[], patch: Partial<ImageGenRecord>, identity?: ImageExecutionIdentity): Promise<ImageGenRecord | null> {
     const key = this.key(userId, id);
     const current = this.byKey.get(key);
-    if (!current || !expected.includes(current.status)) return current ?? null;
+    if (!current || current.userId !== userId) return null;
+    if (!expected.includes(current.status)) return identity ? null : current;
+    if (identity && (current.releaseId !== identity.releaseId || current.executionToken !== identity.executionToken || current.dispatchAttempt !== identity.dispatchAttempt)) return null;
+    if (identity?.expectedUpdatedAt !== undefined && current.updatedAt !== identity.expectedUpdatedAt) return null;
     const updated = { ...current, ...patch, id: current.id, userId: current.userId };
     this.byKey.set(key, updated);
     return updated;

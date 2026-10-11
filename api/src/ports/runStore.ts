@@ -1,4 +1,4 @@
-import type { RunStatus, RunError } from '../domain/run';
+import type { RunStatus, RunError, AgentUsageSnapshot } from '../domain/run';
 import type { MessageAttachment } from '../domain/message';
 
 /** Server-side run record (Cosmos `runs`, partition key /threadId). One row per generation. */
@@ -8,6 +8,7 @@ export interface RunRecord {
   userId: string;
   /** The assistant message this run is producing (stable id; the worker upserts it). */
   assistantMessageId: string;
+  messageOrder?: { user: string; assistant: string };
   status: RunStatus;
   /** Durable orchestration instance id (set once the worker starts). */
   instanceId?: string | null;
@@ -28,6 +29,7 @@ export interface RunRecord {
   releaseId?: string;
   executionToken?: string;
   dispatchAttempt?: number;
+  agentUsage?: AgentUsageSnapshot;
 }
 
 export interface RunDispatchRecord {
@@ -40,6 +42,24 @@ export interface RunDispatchRecord {
   state: 'pending' | 'sent';
   createdAt: string;
   updatedAt: string;
+}
+
+export function samePendingRunDispatch(current: RunDispatchRecord | null | undefined, expected: RunDispatchRecord): boolean {
+  return !!current && current.state === 'pending' && expected.state === 'pending' &&
+    current.userId === expected.userId && current.threadId === expected.threadId && current.runId === expected.runId &&
+    current.releaseId === expected.releaseId && current.executionToken === expected.executionToken && current.attempt === expected.attempt;
+}
+
+export type RunExecutionIdentity = Pick<RunRecord, 'id' | 'userId' | 'threadId' | 'assistantMessageId' | 'createdAt' | 'releaseId' | 'executionToken' | 'dispatchAttempt' | 'startedAt'> & {
+  expectedHeartbeatAt?: string;
+};
+
+export function sameRunExecution(current: RunRecord | null | undefined, expected: RunExecutionIdentity): boolean {
+  return !!current && current.id === expected.id && current.userId === expected.userId && current.threadId === expected.threadId &&
+    current.assistantMessageId === expected.assistantMessageId && current.createdAt === expected.createdAt &&
+    current.releaseId === expected.releaseId && current.executionToken === expected.executionToken &&
+    current.dispatchAttempt === expected.dispatchAttempt && current.startedAt === expected.startedAt &&
+    (expected.expectedHeartbeatAt === undefined || current.heartbeatAt === expected.expectedHeartbeatAt);
 }
 
 export interface RunAdmissionRequest {
@@ -64,13 +84,14 @@ export type RunTransitionResult =
 export interface RunStore {
   get(userId: string, threadId: string, runId: string): Promise<RunRecord | null>;
   admit(request: RunAdmissionRequest): Promise<RunAdmissionResult>;
-  acknowledgeStart(userId: string, threadId: string, runId: string, instanceId: string): Promise<RunRecord | null>;
+  acknowledgeStart(userId: string, threadId: string, runId: string, instanceId: string, expectedExecution?: RunExecutionIdentity): Promise<RunRecord | null>;
   transition(
     userId: string,
     threadId: string,
     runId: string,
     expectedStatuses: RunStatus[],
     patch: Partial<Omit<RunRecord, 'id' | 'userId' | 'threadId'>>,
+    expectedExecution?: RunExecutionIdentity,
   ): Promise<RunTransitionResult>;
   listPendingDispatch(limit?: number): Promise<RunDispatchRecord[]>;
   listStaleActive(before: string, limit?: number): Promise<RunRecord[]>;

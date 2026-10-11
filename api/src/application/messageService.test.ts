@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ThreadService } from './threadService';
 import { MessageService } from './messageService';
 import { InMemoryThreadStore } from '../adapters/memory/threadStore';
@@ -51,6 +51,167 @@ async function code(fn: () => Promise<unknown>): Promise<string | undefined> {
 describe('MessageService.append', () => {
   let ctx: ReturnType<typeof makeCtx>;
   beforeEach(() => (ctx = makeCtx()));
+
+  it.each(['missing', 'owner', 'thread', 'id'] as const)('does not acknowledge an unconfirmed creation winner or enqueue followups: %s', async change => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const winner = { id: change === 'id' ? 'other' : 'same', userId: change === 'owner' ? 'userB' : 'userA',
+      threadId: change === 'thread' ? 'other-thread' : thread.id, role: 'user' as const, content: 'Existing',
+      status: 'complete' as const, createdAt: '2026-01-01T00:00:00Z', deletedAt: null };
+    vi.spyOn(ctx.messageStore, 'get').mockResolvedValueOnce(null).mockResolvedValue(change === 'missing' ? null : winner);
+    const create = vi.spyOn(ctx.messageStore, 'createIfAbsent').mockResolvedValue(null);
+    const upsert = vi.spyOn(ctx.messageStore, 'append');
+    const scheduled = vi.fn(async () => {});
+    const service = new MessageService(ctx.threadStore, ctx.messageStore,
+      { newId: () => 'same', now: () => '2026-01-01T00:00:01Z' }, { enqueueAfterMessage: scheduled });
+    await expect(service.append('userA', thread.id, { role: 'user', content: 'New' })).rejects.toMatchObject({ code: 'conflict' });
+    expect(create).toHaveBeenCalledOnce();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(scheduled).not.toHaveBeenCalled();
+    expect((await ctx.threads.get('userA', thread.id)).messageCount).toBe(0);
+  });
+
+  it('does not recreate a retained message tombstone through create-only storage', async () => {
+    const record = { id: 'retained', userId: 'userA', threadId: 'thread', role: 'user' as const,
+      content: '', status: 'complete' as const, createdAt: '2026-01-01T00:00:00Z', deletedAt: '2026-01-02T00:00:00Z' };
+    await ctx.messageStore.append(record);
+    expect(await ctx.messageStore.createIfAbsent({ ...record, content: 'Recreated', deletedAt: null })).toBeNull();
+    expect(await ctx.messageStore.get('userA', 'thread', 'retained')).toEqual(record);
+  });
+
+  it('accepts concurrent same-ID submissions once without replacing the winning chronology', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    let observedMissing = 0;
+    let release!: () => void;
+    const bothMissing = new Promise<void>(resolve => { release = resolve; });
+    const get = ctx.messageStore.get.bind(ctx.messageStore);
+    vi.spyOn(ctx.messageStore, 'get').mockImplementation(async (...args) => {
+      if (observedMissing < 2) {
+        observedMissing += 1;
+        if (observedMissing === 2) release();
+        await bothMissing;
+        return null;
+      }
+      return get(...args);
+    });
+    const scheduled = vi.fn(async () => {});
+    let tick = 0;
+    const service = new MessageService(ctx.threadStore, ctx.messageStore,
+      { newId: () => 'm', now: () => `2026-01-01T00:00:0${++tick}Z` }, { enqueueAfterMessage: scheduled });
+    const results = await Promise.all([
+      service.append('userA', thread.id, { id: 'same', role: 'user', content: 'First', orderAt: '2020-01-01T00:00:00Z' }),
+      service.append('userA', thread.id, { id: 'same', role: 'user', content: 'Second', orderAt: '2021-01-01T00:00:00Z' }),
+    ]);
+    expect(results[0]).toEqual(results[1]);
+    expect(await get('userA', thread.id, 'same')).toEqual(results[0]);
+    expect((await ctx.threads.get('userA', thread.id)).messageCount).toBe(1);
+    expect(scheduled).toHaveBeenCalledOnce();
+  });
+
+  it('stops message persistence when Library preparation observes a deleted thread', async () => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const itemId = libraryItemIdFor('userA', 'chat_attachment', 'att-new');
+    const libraryStore = { get: async () => null, createIfAbsent: async (item: ReturnType<typeof libraryFixture>) => {
+      await ctx.threads.softDelete('userA', thread.id);
+      return item;
+    } } as unknown as LibraryStore;
+    const scheduled = vi.fn(async () => {});
+    const service = new MessageService(ctx.threadStore, ctx.messageStore,
+      { newId: () => 'm', now: () => '2026-01-01T00:00:01Z' }, { enqueueAfterMessage: scheduled }, libraryStore);
+    await expect(service.append('userA', thread.id, { role: 'user', content: 'See attached',
+      attachments: [{ id: 'att-new', kind: 'image', blobPath: `userA/library/${itemId}.png`, mime: 'image/png', bytes: 25 }] }))
+      .rejects.toMatchObject({ code: 'not_found' });
+    expect(await ctx.messageStore.get('userA', thread.id, 'm')).toBeNull();
+    expect(scheduled).not.toHaveBeenCalled();
+    expect((await ctx.threadStore.get('userA', thread.id))?.deletedAt).toBeTruthy();
+  });
+
+  it.each(['missing', 'no-etag', 'blank-etag', 'foreign'] as const)('rejects unusable final thread versions without writes or learning: %s', async state => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const version = state === 'missing' ? null : { record: { ...thread, userId: state === 'foreign' ? 'userB' : 'userA' },
+      etag: state === 'no-etag' ? undefined : state === 'blank-etag' ? ' ' : 'version' };
+    vi.spyOn(ctx.threadStore, 'getForUpdate').mockResolvedValue(version as never);
+    const conditional = vi.spyOn(ctx.threadStore, 'putIfMatch');
+    const scheduled = vi.fn(async () => {});
+    const service = new MessageService(ctx.threadStore, ctx.messageStore,
+      { newId: () => 'm', now: () => '2026-01-01T00:00:01Z' }, { enqueueAfterMessage: scheduled });
+    await expect(service.append('userA', thread.id, { role: 'user', content: 'Hello' }))
+      .rejects.toMatchObject({ code: state === 'missing' || state === 'foreign' ? 'not_found' : 'conflict' });
+    expect(conditional).not.toHaveBeenCalled();
+    expect(scheduled).not.toHaveBeenCalled();
+    expect(await ctx.threadStore.get('userA', thread.id)).toEqual(thread);
+  });
+
+  it.each(['updated', 'deleted', 'conflict', 'retry'] as const)('fences thread metadata after message persistence: %s', async state => {
+    const thread = await ctx.threads.create('userA', { title: 'Original', temporary: false });
+    const putThread = ctx.threadStore.put.bind(ctx.threadStore);
+    const append = ctx.messageStore.createIfAbsent.bind(ctx.messageStore);
+    const changed = { ...thread, title: 'Newer title', pinned: true, messageCount: 4,
+      files: [{ fileId: 'new-file', name: 'new.pdf', bytes: 1, status: 'ready' as const, createdAt: '2026-01-01T00:00:05Z' }],
+      updatedAt: '2026-01-01T00:00:05Z', deletedAt: state === 'deleted' ? '2026-01-01T00:00:05Z' : null };
+    vi.spyOn(ctx.messageStore, 'createIfAbsent').mockImplementation(async record => {
+      await putThread(changed);
+      return append(record);
+    });
+    const unconditional = vi.spyOn(ctx.threadStore, 'put');
+    const conditional = vi.spyOn(ctx.threadStore, 'putIfMatch');
+    if (state === 'conflict') conditional.mockResolvedValue(null);
+    if (state === 'retry') conditional.mockImplementationOnce(async () => {
+      await putThread({ ...changed, title: 'Latest title', messageCount: 5 });
+      return null;
+    });
+    const scheduled = vi.fn(async () => {});
+    const service = new MessageService(ctx.threadStore, ctx.messageStore,
+      { newId: () => 'm', now: () => '2026-01-01T00:00:01Z' }, { enqueueAfterMessage: scheduled });
+    const work = service.append('userA', thread.id, { role: 'user', content: 'Hello', orderAt: '2020-01-01T00:00:00Z' });
+    if (state === 'deleted' || state === 'conflict') {
+      await expect(work).rejects.toMatchObject({ code: state === 'deleted' ? 'not_found' : 'conflict' });
+      expect(await ctx.threadStore.get('userA', thread.id)).toEqual(changed);
+      expect(scheduled).not.toHaveBeenCalled();
+      expect(conditional).toHaveBeenCalledTimes(state === 'deleted' ? 0 : 3);
+    } else {
+      expect(await work).toMatchObject({ orderAt: '2020-01-01T00:00:00Z', createdAt: '2026-01-01T00:00:01Z' });
+      expect(await ctx.threadStore.get('userA', thread.id)).toMatchObject({
+        title: state === 'retry' ? 'Latest title' : changed.title, pinned: true, files: changed.files,
+        messageCount: state === 'retry' ? 6 : 5, updatedAt: changed.updatedAt, lastMessagePreview: 'Hello',
+      });
+      expect(scheduled).toHaveBeenCalledOnce();
+    }
+    expect(unconditional).not.toHaveBeenCalled();
+    expect(await ctx.messageStore.get('userA', thread.id, 'm')).not.toBeNull();
+  });
+
+  it.each(['new', 'active', 'purged', 'race', 'foreign', 'wrong-id'] as const)('preserves Library publication identity and tombstones during append: %s', async state => {
+    const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
+    const itemId = libraryItemIdFor('userA', 'chat_attachment', 'att-new');
+    const retained = libraryFixture({ id: state === 'wrong-id' ? 'other' : itemId,
+      userId: state === 'foreign' ? 'userB' : 'userA', kind: 'image', origin: 'chat_upload',
+      state: state === 'purged' || state === 'race' ? 'purged' : 'active',
+      blobPath: `userA/library/${itemId}.png` });
+    let current = state === 'new' ? null : retained;
+    const put = vi.fn(async (item: typeof retained) => { current = item; return item; });
+    const createIfAbsent = vi.fn(async (item: typeof retained) => {
+      if (current) return null;
+      current = item;
+      return item;
+    });
+    const libraryStore = { get: async () => state === 'race' ? null : current, put, createIfAbsent } as unknown as LibraryStore;
+    const scheduled = vi.fn(async () => {});
+    const service = new MessageService(ctx.threadStore, ctx.messageStore,
+      { newId: () => 'm', now: () => '2026-01-01T00:00:01Z' }, { enqueueAfterMessage: scheduled }, libraryStore);
+    const work = service.append('userA', thread.id, { role: 'user', content: 'See attached', orderAt: '2020-01-01T00:00:00Z',
+      attachments: [{ id: 'att-new', kind: 'image', blobPath: `userA/library/${itemId}.png`, mime: 'image/png', bytes: 25 }] });
+    if (state === 'new' || state === 'active') {
+      expect(await work).toMatchObject({ orderAt: '2020-01-01T00:00:00Z', createdAt: '2026-01-01T00:00:01Z' });
+      expect(current).toMatchObject({ id: itemId, userId: 'userA', state: 'active' });
+    } else {
+      await expect(work).rejects.toMatchObject({ code: 'conflict' });
+      expect(current).toEqual(retained);
+      expect(await ctx.messageStore.get('userA', thread.id, 'm')).toBeNull();
+      expect((await ctx.threads.get('userA', thread.id)).messageCount).toBe(0);
+      expect(scheduled).not.toHaveBeenCalled();
+    }
+    expect(put).not.toHaveBeenCalled();
+  });
 
   it('appends and bumps the thread (count, preview, updatedAt)', async () => {
     const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
@@ -151,7 +312,7 @@ describe('MessageService.append', () => {
 
   it('resolves an active Library attachment server-side without copying its blob', async () => {
     const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
-    const item = libraryFixture({ id: 'lib-1', kind: 'pdf', origin: 'library_upload', state: 'active', blobPath: 'userA/library/lib-1.pdf', name: 'Source.pdf', mime: 'application/pdf', bytes: 44 });
+    const item = libraryFixture({ id: 'lib-1', userId: 'userA', kind: 'pdf', origin: 'library_upload', state: 'active', blobPath: 'userA/library/lib-1.pdf', name: 'Source.pdf', mime: 'application/pdf', bytes: 44 });
     const libraryStore = { get: async (userId: string, id: string) => userId === 'userA' && id === item.id ? item : null } as unknown as LibraryStore;
     const service = new MessageService(ctx.threadStore, ctx.messageStore, { newId: () => 'm', now: () => '2026-01-01T00:00:00Z' }, undefined, libraryStore);
     const message = await service.append('userA', thread.id, {
@@ -164,7 +325,7 @@ describe('MessageService.append', () => {
 
   it('rejects reuse of a trashed Library item', async () => {
     const thread = await ctx.threads.create('userA', { title: 'A', temporary: false });
-    const item = libraryFixture({ id: 'lib-trash', kind: 'pdf', origin: 'library_upload', state: 'trashed' });
+    const item = libraryFixture({ id: 'lib-trash', userId: 'userA', kind: 'pdf', origin: 'library_upload', state: 'trashed' });
     const libraryStore = { get: async () => item } as unknown as LibraryStore;
     const service = new MessageService(ctx.threadStore, ctx.messageStore, { newId: () => 'm', now: () => '2026-01-01T00:00:00Z' }, undefined, libraryStore);
     await expect(service.append('userA', thread.id, {
@@ -179,7 +340,11 @@ describe('MessageService.append', () => {
     const records = new Map<string, ReturnType<typeof libraryFixture>>();
     const libraryStore = {
       get: async (_userId: string, id: string) => records.get(id) ?? null,
-      put: async (item: ReturnType<typeof libraryFixture>) => { records.set(item.id, item); return item; },
+      createIfAbsent: async (item: ReturnType<typeof libraryFixture>) => {
+        if (records.has(item.id)) return null;
+        records.set(item.id, item);
+        return item;
+      },
     } as unknown as LibraryStore;
     const service = new MessageService(ctx.threadStore, ctx.messageStore, { newId: () => 'm', now: () => '2026-01-01T00:00:00Z' }, undefined, libraryStore);
     await service.append('userA', thread.id, {

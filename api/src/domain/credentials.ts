@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseOrThrow } from './validate';
+import { AppError } from './errors';
 
 const deployment = z.string().min(1).max(100);
 
@@ -24,15 +25,31 @@ const credentialsInputSchema = z
     chatDefaults: chatDefaultsSchema.optional(),
     /** Optional on update: when omitted, the server keeps the already-stored key. */
     key: z.string().max(400).optional(),
-    tavilyKey: z.string().max(400).optional(),
+    tavilyKey: z.string().max(400).nullable().optional(),
     /** Optional account-wide knowledge base store, searched as a fallback alongside thread files. */
-    knowledgeBaseVectorStoreId: z.string().max(100).optional(),
+    knowledgeBaseVectorStoreId: z.string().max(100).nullable().optional(),
   })
   .strict();
 
 export type ModelDeployments = z.infer<typeof modelsSchema>;
 export type ChatDefaults = z.infer<typeof chatDefaultsSchema>;
 export type CredentialsInput = z.infer<typeof credentialsInputSchema>;
+
+export function approvedProviderUrl(input: string): URL {
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    throw new AppError('validation', 'An approved HTTPS Azure AI endpoint is required.');
+  }
+  if (
+    url.protocol !== 'https:' || url.port || url.username || url.password || url.hash ||
+    !/^[a-z0-9][a-z0-9-]*\.(?:services\.ai|cognitiveservices|openai)\.azure\.com$/.test(url.hostname)
+  ) {
+    throw new AppError('validation', 'An approved HTTPS Azure AI endpoint is required.');
+  }
+  return url;
+}
 
 /**
  * Accept either a bare Azure AI Foundry resource name (e.g. "my-resource") or a full base
@@ -60,13 +77,17 @@ export function normalizeBaseUrl(input: string): string {
  *  service to encrypt immediately; they are never logged here. */
 export function parseCredentialsInput(input: unknown): CredentialsInput {
   const parsed = parseOrThrow(credentialsInputSchema, input, 'Invalid credentials.');
+  const baseUrl = normalizeBaseUrl(parsed.baseUrl);
+  if (approvedProviderUrl(baseUrl).search) {
+    throw new AppError('validation', 'The endpoint must not contain query parameters.');
+  }
   const chatOptions = [...new Set([parsed.models.chat, ...(parsed.models.chatOptions ?? [])].map((m) => m.trim()).filter(Boolean))];
   return {
     ...parsed,
-    baseUrl: normalizeBaseUrl(parsed.baseUrl),
+    baseUrl,
     models: { ...parsed.models, chatOptions },
     key: parsed.key?.trim() || undefined,
-    tavilyKey: parsed.tavilyKey?.trim() || undefined,
-    knowledgeBaseVectorStoreId: parsed.knowledgeBaseVectorStoreId?.trim() || undefined,
+    tavilyKey: parsed.tavilyKey === undefined ? undefined : parsed.tavilyKey?.trim() || null,
+    knowledgeBaseVectorStoreId: parsed.knowledgeBaseVectorStoreId === undefined ? undefined : parsed.knowledgeBaseVectorStoreId?.trim() || null,
   };
 }

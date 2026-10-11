@@ -20,7 +20,7 @@ export class ImageDispatchService {
         status: 'error',
         error: { code: 'provider_outcome_unknown', message: 'Image generation stopped without a durable provider outcome and was not retried.' },
         updatedAt: this.clock.now(),
-      });
+      }, { ...image, expectedUpdatedAt: image.updatedAt });
     }
     return summary;
   }

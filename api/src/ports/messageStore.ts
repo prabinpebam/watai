@@ -26,6 +26,7 @@ export interface MessageRecord {
   /** Images surfaced by web search (inline + one-tap "Use" to attach). */
   webImages?: MessageWebImage[];
   memoryRefs?: MessageMemoryRef[];
+  memoryDegradedReason?: 'timeout' | 'cancelled' | 'unavailable';
   /** Files the agent generated this message (code interpreter outputs). */
   artifacts?: MessageArtifact[];
   status: MessageStatus;
@@ -44,6 +45,7 @@ export interface MessageListOptions {
 export interface MessageStore {
   get(userId: string, threadId: string, id: string): Promise<MessageRecord | null>;
   list(userId: string, threadId: string, opts?: MessageListOptions): Promise<MessageRecord[]>;
+  createIfAbsent(record: MessageRecord): Promise<MessageRecord | null>;
   append(record: MessageRecord): Promise<MessageRecord>;
   delete(userId: string, threadId: string, id: string): Promise<void>;
   /** Hard-delete every message in a thread. Used when the thread itself is permanently deleted, so

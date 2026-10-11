@@ -54,9 +54,34 @@ function isText(path: string): boolean {
  */
 export function unzipToPackage(zipBytes: Uint8Array): UnzipResult {
   let raw: Record<string, Uint8Array>;
+  let rejection: SkillIssue | undefined;
+  let declaredBytes = 0;
+  let entryCount = 0;
+  const reject = (rule: string, message: string): never => {
+    rejection = { rule, message };
+    throw new Error('Archive admission rejected.');
+  };
   try {
-    raw = unzipSync(zipBytes);
+    raw = unzipSync(zipBytes, {
+      filter: (file) => {
+        const name = file.name.replaceAll('\\', '/');
+        if (name.split('/').includes('..') || name.startsWith('/') || /^[A-Za-z]:/.test(name)) {
+          reject('path', 'The archive contains an unsafe path.');
+        }
+        entryCount += 1;
+        if (entryCount > MAX_SKILL_FILES) reject('count', `Too many archive entries (maximum ${MAX_SKILL_FILES}).`);
+        if (!Number.isSafeInteger(file.originalSize) || file.originalSize < 0 ||
+            !Number.isSafeInteger(file.size) || file.size < 0 ||
+            (file.compression === 0 && file.size !== file.originalSize)) {
+          reject('size', 'The archive contains invalid entry sizes.');
+        }
+        declaredBytes += file.originalSize;
+        if (declaredBytes > MAX_SKILL_UNPACKED_BYTES) reject('size', 'The archive exceeds the 50 MB unpacked limit.');
+        return true;
+      },
+    });
   } catch {
+    if (rejection) return { issues: [rejection] };
     return { issues: [{ rule: 'skill-md', message: 'That file is not a valid .zip archive.' }] };
   }
 

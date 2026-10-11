@@ -25,7 +25,7 @@ export class RunDispatchService {
       if (run.status === 'cancel_requested') {
         await this.runs.transition(run.userId, run.threadId, run.id, ['cancel_requested'], {
           status: 'canceled', endedAt: this.clock.now(),
-        });
+        }, run);
         continue;
       }
       if (run.status !== 'running') continue;
@@ -33,27 +33,27 @@ export class RunDispatchService {
         status: 'error',
         error: { code: 'provider_outcome_unknown', message: 'Generation stopped without a durable provider outcome and was not retried.' },
         endedAt: this.clock.now(),
-      });
+      }, { ...run, expectedHeartbeatAt: run.heartbeatAt });
     }
     return summary;
   }
 
   private async reconcileOne(dispatch: RunDispatchRecord, summary: RunDispatchSummary): Promise<void> {
-    const run = await this.runs.get(dispatch.userId, dispatch.threadId, dispatch.runId);
-    if (
-      !run || run.status !== 'queued' ||
-      run.releaseId !== dispatch.releaseId ||
-      run.executionToken !== dispatch.executionToken ||
-      run.dispatchAttempt !== dispatch.attempt
-    ) {
-      await this.runs.markDispatchSent(dispatch, this.clock.now());
-      summary.discarded += 1;
-      return;
-    }
     try {
+      const run = await this.runs.get(dispatch.userId, dispatch.threadId, dispatch.runId);
+      if (
+        !run || run.status !== 'queued' ||
+        run.releaseId !== dispatch.releaseId ||
+        run.executionToken !== dispatch.executionToken ||
+        run.dispatchAttempt !== dispatch.attempt
+      ) {
+        await this.runs.markDispatchSent(dispatch, this.clock.now());
+        summary.discarded += 1;
+        return;
+      }
       const { instanceId } = await this.starter.start(run);
       await this.runs.markDispatchSent(dispatch, this.clock.now());
-      await this.runs.acknowledgeStart(run.userId, run.threadId, run.id, instanceId);
+      await this.runs.acknowledgeStart(run.userId, run.threadId, run.id, instanceId, run);
       summary.sent += 1;
     } catch {
       summary.failed += 1;

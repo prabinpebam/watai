@@ -13,8 +13,10 @@ export interface LibraryStorageAggregate {
 
 export interface LibraryStore {
   get(userId: string, id: string): Promise<LibraryItemRecord | null>;
+  getForUpdate(userId: string, id: string): Promise<{ record: LibraryItemRecord; etag: string } | null>;
   getByIngestionKey(userId: string, ingestionKey: string): Promise<LibraryItemRecord | null>;
   put(record: LibraryItemRecord, etag?: string): Promise<LibraryItemRecord>;
+  createIfAbsent(record: LibraryItemRecord): Promise<LibraryItemRecord | null>;
   list(userId: string, query: LibraryListQuery): Promise<LibraryListResult>;
   aggregate(userId: string): Promise<LibraryStorageAggregate>;
   getMany(userId: string, ids: string[]): Promise<LibraryItemRecord[]>;

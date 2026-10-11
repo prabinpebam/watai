@@ -166,6 +166,30 @@ describe('ImageService.list / get', () => {
 });
 
 describe('ImageService.remove', () => {
+  it.each([false, true])('removes the serving record before best-effort blob cleanup (record removal fails=%s)', async fail => {
+    const store = new InMemoryImageStore();
+    await store.put({
+      id: 'x', userId: 'userA', batchId: 'b', status: 'ready', prompt: 'p', size: '1024x1024',
+      outputFormat: 'png', model: 'gpt-image-1', blobPath: 'userA/images/x.png', createdAt: '2026', updatedAt: '2026',
+    });
+    if (fail) vi.spyOn(store, 'delete').mockRejectedValueOnce(new Error('Record removal unavailable'));
+    let visibleDuringCleanup: ImageGenRecord | null | undefined;
+    const mint = vi.fn(async () => {
+      visibleDuringCleanup = await store.get('userA', 'x');
+      return { url: 'https://blob.invalid/delete', expiresAt: '2026' };
+    });
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 202 }));
+    const svc = new ImageService(store, creds('gpt-image-1'), starter(), { mint }, makeClock(), fetchImpl);
+    if (fail) {
+      await expect(svc.remove('userA', 'x')).rejects.toThrow('Record removal unavailable');
+      expect(mint).not.toHaveBeenCalled();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } else {
+      await svc.remove('userA', 'x');
+      expect(visibleDuringCleanup).toBeNull();
+    }
+  });
+
   it('deletes the blob (delete SAS) and the record', async () => {
     const store = new InMemoryImageStore();
     await store.put({

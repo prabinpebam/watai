@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { streamChat, v1Url, type ChatStreamEvent } from './chat';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { completeChat, streamChat, v1Url, type ChatStreamEvent } from './chat';
 
 function sseResponse(
   chunks: string[],
@@ -27,6 +27,7 @@ async function collect(gen: AsyncGenerator<ChatStreamEvent>): Promise<ChatStream
 
 const sse = (obj: unknown) => `data: ${JSON.stringify(obj)}\n\n`;
 const base = 'https://r.services.ai.azure.com/openai/v1';
+afterEach(() => vi.useRealTimers());
 
 describe('v1Url', () => {
   it('keeps a vault-normalized base and appends the path', () => {
@@ -40,6 +41,35 @@ describe('v1Url', () => {
 });
 
 describe('streamChat', () => {
+  it('settles a stalled post-header body at its total deadline without a done event', async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn(async () => new Response(new ReadableStream({ start() {} })));
+    const result = collect(streamChat({ baseUrl: base, key: 'test', model: 'model', messages: [], timeoutMs: 50, fetchImpl }));
+    await vi.advanceTimersByTimeAsync(51);
+    expect(await result).toEqual([{ type: 'error', error: { code: 'stream_error', message: expect.any(String) } }]);
+  });
+
+  it('settles a blocked body read when the caller cancels', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const fetchImpl = vi.fn(async () => new Response(new ReadableStream({ start() {} })));
+    const result = collect(streamChat({ baseUrl: base, key: 'test', model: 'model', messages: [], signal: controller.signal, fetchImpl }));
+    await vi.advanceTimersByTimeAsync(1);
+    controller.abort();
+    expect((await result).map(event => event.type)).toEqual(['error']);
+  });
+
+  it('handles split CRLF framing while preserving text and final usage', async () => {
+    const fetchImpl = vi.fn(async () => sseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: 'Hello' } }] })}\r`,
+      `\n\r\ndata: ${JSON.stringify({ usage: { prompt_tokens: 2, completion_tokens: 1 } })}\r\n\r\n`,
+      'data: [DONE]\r\n\r\n',
+    ]));
+    expect(await collect(streamChat({ baseUrl: base, key: 'test', model: 'model', messages: [], fetchImpl }))).toEqual([
+      { type: 'delta', textDelta: 'Hello' }, { type: 'done', usage: { promptTokens: 2, completionTokens: 1 } },
+    ]);
+  });
+
   it('yields text deltas then a done event with usage', async () => {
     const fetchImpl = vi.fn(async () =>
       sseResponse([
@@ -77,6 +107,7 @@ describe('streamChat', () => {
     );
     expect(captured!.url).toBe(`${base}/chat/completions`);
     expect((captured!.init.headers as Record<string, string>).Authorization).toBe('Bearer secret');
+    expect(captured!.init.redirect).toBe('error');
     const body = JSON.parse(captured!.init.body as string);
     expect(body).toMatchObject({ model: 'gpt-5.4', stream: true, max_completion_tokens: 100 });
     expect(body.messages).toEqual([{ role: 'user', content: 'hi' }]);
@@ -98,5 +129,19 @@ describe('streamChat', () => {
     }) as unknown as typeof fetch;
     const events = await collect(streamChat({ baseUrl: base, key: 'k', model: 'm', messages: [], fetchImpl }));
     expect(events[0].error?.code).toBe('network');
+  });
+
+  it.each(['http://r.services.ai.azure.com', 'https://r.services.ai.azure.com.attacker.invalid'])('rejects unsafe destinations in streaming and utility chat: %s', async (baseUrl) => {
+    const fetchImpl = vi.fn(async () => sseResponse(['data: [DONE]\n\n']));
+    const events = await collect(streamChat({baseUrl,key:'test-key',model:'model',messages:[],fetchImpl}));
+    expect(events[0].type).toBe('error');
+    expect(await completeChat({baseUrl,key:'test-key',model:'model',messages:[],fetchImpl})).toBe('');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('forbids redirects for non-streaming utility chat', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({choices:[{message:{content:'title'}}]})));
+    expect(await completeChat({baseUrl:base,key:'test-key',model:'model',messages:[],fetchImpl})).toBe('title');
+    expect(fetchImpl).toHaveBeenCalledWith(`${base}/chat/completions`,expect.objectContaining({redirect:'error'}));
   });
 });

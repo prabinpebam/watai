@@ -36,6 +36,18 @@ describe('threadsController', () => {
     expect((res.body as any).error.code).toBe('validation');
   });
 
+  it('rejects provider-store assignment on create and patch without persisting ordinary fields', async () => {
+    const claims = { sub: 'userA' };
+    const rejected = await ctrl.create({ claims, body: { title: 'Forged', vectorStoreId: 'vs-unowned' } });
+    expect(rejected.status).toBe(400);
+    expect((await ctrl.list({ claims })).body).toMatchObject({ threads: [] });
+    const created = await ctrl.create({ claims, body: { title: 'Original' } });
+    const id = (created.body as { id: string }).id;
+    const patched = await ctrl.patch({ claims, params: { id }, body: { title: 'Changed', vectorStoreId: 'vs-unowned' } });
+    expect(patched.status).toBe(400);
+    expect((await ctrl.get({ claims, params: { id } })).body).toMatchObject({ title: 'Original' });
+  });
+
   it('maps cross-user access → 404 envelope (IDOR fails closed)', async () => {
     const created = await ctrl.create({ claims: { sub: 'userA' }, body: { title: 'secret' } });
     const id = (created.body as any).id;

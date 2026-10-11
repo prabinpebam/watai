@@ -59,7 +59,9 @@ export function createMemoryController(memory: MemoryService) {
     export: (req: ApiRequest): Promise<HttpResult> =>
       respond(200, async () => {
         const { userId } = identityFromClaims(req.claims);
-        return memory.export(userId);
+        const version = req.query?.version;
+        if (version !== undefined && version !== '1' && version !== '2') throw new AppError('validation', 'Unsupported memory export version.');
+        return memory.export(userId, version === '2' ? 2 : 1);
       }),
 
     import: (req: ApiRequest): Promise<HttpResult> =>

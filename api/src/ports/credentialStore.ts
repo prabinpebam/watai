@@ -26,8 +26,14 @@ export interface CredentialRecord {
   updatedAt: string;
 }
 
+export interface StoredCredential {
+  record: CredentialRecord;
+  versionToken: string;
+}
+
 export interface CredentialStore {
   get(userId: string): Promise<CredentialRecord | null>;
-  put(record: CredentialRecord): Promise<CredentialRecord>;
+  getForUpdate(userId: string): Promise<StoredCredential | null>;
+  put(record: CredentialRecord, expected: StoredCredential | null): Promise<CredentialRecord | null>;
   delete(userId: string): Promise<void>;
 }

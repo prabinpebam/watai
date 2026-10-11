@@ -1,4 +1,5 @@
 import type { Container, SqlParameter } from '@azure/cosmos';
+import { isDeepStrictEqual } from 'node:util';
 import { AppError } from '../../domain/errors';
 import { parseLibraryItem, type LibraryItemRecord, type LibraryListQuery } from '../../domain/library';
 import type { LibraryListResult, LibraryStorageAggregate, LibraryStore } from '../../ports/libraryStore';
@@ -17,6 +18,20 @@ function stripSystemFields(resource: Record<string, unknown>): Record<string, un
 
 function parseRecord(resource: unknown): LibraryItemRecord {
   return parseLibraryItem(stripSystemFields(resource as Record<string, unknown>));
+}
+
+function parseOwnedRecords(resources: unknown[], userId: string, expectedIds?: Set<string>): LibraryItemRecord[] {
+  const records = resources.map(parseRecord);
+  if (records.some(record => record.userId !== userId)) throw new Error('Library owner binding failed.');
+  const unique = new Map<string, LibraryItemRecord>();
+  for (const record of records) {
+    const previous = unique.get(record.id);
+    if ((expectedIds && !expectedIds.has(record.id)) || (previous && !isDeepStrictEqual(previous, record))) {
+      throw new Error('Library result binding failed.');
+    }
+    if (!previous) unique.set(record.id, record);
+  }
+  return [...unique.values()];
 }
 
 function sortValue(record: LibraryItemRecord, sort: LibraryListQuery['sort']): string | number {
@@ -95,7 +110,7 @@ export class CosmosLibraryStore implements LibraryStore {
   async get(userId: string, id: string): Promise<LibraryItemRecord | null> {
     try {
       const { resource } = await this.container.item(id, userId).read();
-      return resource ? parseRecord(resource) : null;
+      return resource?.id === id && resource.userId === userId ? parseRecord(resource) : null;
     } catch (error) {
       if ((error as { code?: number }).code === 404) return null;
       throw error;
@@ -113,33 +128,86 @@ export class CosmosLibraryStore implements LibraryStore {
       },
       { partitionKey: userId },
     ).fetchAll();
-    return resources[0] ? parseRecord(resources[0]) : null;
+    const record = resources[0];
+    return record?.userId === userId && record.ingestionKey === ingestionKey ? parseRecord(record) : null;
+  }
+
+  async getForUpdate(userId: string, id: string): Promise<{ record: LibraryItemRecord; etag: string } | null> {
+    try {
+      const { resource } = await this.container.item(id, userId).read();
+      if (!resource || resource.id !== id || resource.userId !== userId) return null;
+      if (typeof resource._etag !== 'string' || !resource._etag.trim()) throw new Error('Library update requires a Cosmos ETag.');
+      return { record: parseRecord(resource), etag: resource._etag };
+    } catch (error) {
+      if ((error as { code?: number }).code === 404) return null;
+      throw error;
+    }
   }
 
   async put(record: LibraryItemRecord, etag?: string): Promise<LibraryItemRecord> {
     const validated = parseLibraryItem(record);
-    const response = etag
-      ? await this.container.item(validated.id, validated.userId).replace(validated, {
-          accessCondition: { type: 'IfMatch', condition: etag },
-        })
-      : await this.container.items.upsert(validated);
-    return response.resource ? parseRecord(response.resource) : validated;
+    if (etag !== undefined && !etag.trim()) throw new Error('Library update requires a Cosmos ETag.');
+    try {
+      const response = etag
+        ? await this.container.item(validated.id, validated.userId).replace(validated, {
+            accessCondition: { type: 'IfMatch', condition: etag },
+          })
+        : await this.container.items.upsert(validated);
+      return response.resource ? parseRecord(response.resource) : validated;
+    } catch (error) {
+      if (etag && [404, 409, 412].includes((error as { code?: number }).code ?? 0)) {
+        throw new AppError('conflict', 'Library item changed. Reload before saving.');
+      }
+      throw error;
+    }
+  }
+
+  async createIfAbsent(record: LibraryItemRecord): Promise<LibraryItemRecord | null> {
+    const validated = parseLibraryItem(record);
+    try {
+      const response = await this.container.items.create(validated);
+      return response.resource ? parseRecord(response.resource) : validated;
+    } catch (error) {
+      if ((error as { code?: number }).code === 409) return null;
+      throw error;
+    }
   }
 
   async list(userId: string, query: LibraryListQuery): Promise<LibraryListResult> {
+    const cursor = decodeCursor(query.cursor, query.sort);
     const parameters: SqlParameter[] = [
       { name: '@userId', value: userId },
       { name: '@state', value: query.state },
     ];
+    const predicates = ['c.userId = @userId', 'c.state = @state'];
+    const addFilter = (predicate: string, name: string, value: SqlParameter['value']) => {
+      predicates.push(predicate);
+      parameters.push({ name, value });
+    };
+    if (query.kinds) addFilter('ARRAY_CONTAINS(@kinds, c.kind)', '@kinds', query.kinds);
+    if (query.origins) addFilter('ARRAY_CONTAINS(@origins, c.origin)', '@origins', query.origins);
+    if (query.originGroup === 'uploaded') {
+      addFilter('ARRAY_CONTAINS(@groupOrigins, c.origin)', '@groupOrigins', ['chat_upload', 'library_upload', 'thread_document']);
+    } else if (query.originGroup === 'generated') {
+      addFilter('ARRAY_CONTAINS(@groupOrigins, c.origin)', '@groupOrigins', ['chat_generated_image', 'studio_generated_image', 'code_artifact']);
+    }
+    if (query.threadId) addFilter('c.source.threadId = @threadId', '@threadId', query.threadId);
+    if (query.starred !== undefined) {
+      addFilter(query.starred ? 'c.userMetadata.starred = @starred' :
+        '(NOT IS_DEFINED(c.userMetadata.starred) OR IS_NULL(c.userMetadata.starred) OR c.userMetadata.starred = @starred)', '@starred', query.starred);
+    }
+    if (query.minBytes !== undefined) addFilter('c.bytes >= @minBytes', '@minBytes', query.minBytes);
+    if (query.maxBytes !== undefined) addFilter('c.bytes <= @maxBytes', '@maxBytes', query.maxBytes);
+    if (query.createdAfter) addFilter('c.createdAt > @createdAfter', '@createdAfter', query.createdAfter);
+    if (query.createdBefore) addFilter('c.createdAt < @createdBefore', '@createdBefore', query.createdBefore);
     const { resources } = await this.container.items.query(
       {
-        query: 'SELECT * FROM c WHERE c.userId = @userId AND c.state = @state',
+        query: `SELECT * FROM c WHERE ${predicates.join(' AND ')}`,
         parameters,
       },
       { partitionKey: userId },
     ).fetchAll();
-    const cursor = decodeCursor(query.cursor, query.sort);
-    const all = resources.map(parseRecord).filter((record) => matches(record, query)).sort((a, b) => compare(a, b, query.sort));
+    const all = parseOwnedRecords(resources, userId).filter((record) => matches(record, query)).sort((a, b) => compare(a, b, query.sort));
     const remaining = cursor ? all.filter((record) => afterCursor(record, cursor, query.sort)) : all;
     const items = remaining.slice(0, query.limit);
     return {
@@ -160,7 +228,7 @@ export class CosmosLibraryStore implements LibraryStore {
       },
       { partitionKey: userId },
     ).fetchAll();
-    return { records: resources.map(parseRecord) };
+    return { records: parseOwnedRecords(resources, userId) };
   }
 
   async getMany(userId: string, ids: string[]): Promise<LibraryItemRecord[]> {
@@ -175,7 +243,7 @@ export class CosmosLibraryStore implements LibraryStore {
       },
       { partitionKey: userId },
     ).fetchAll();
-    return resources.map(parseRecord);
+    return parseOwnedRecords(resources, userId, new Set(ids));
   }
 
   async findDerived(userId: string, itemId: string, cursor: string | undefined, limit: number): Promise<LibraryListResult> {
@@ -194,7 +262,7 @@ export class CosmosLibraryStore implements LibraryStore {
     );
     const page = await iterator.fetchNext();
     return {
-      items: page.resources.map(parseRecord),
+      items: parseOwnedRecords(page.resources, userId),
       ...(page.continuationToken ? { cursor: page.continuationToken } : {}),
     };
   }

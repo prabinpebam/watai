@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { listContainerFiles, getContainerFile, mimeForFilename } from './containerFiles';
+import { MAX_CONTAINER_FILE_BYTES, listContainerFiles, getContainerFile, mimeForFilename } from './containerFiles';
 
 const creds = { baseUrl: 'https://r.services.ai.azure.com/openai/v1', key: 'k' };
 
@@ -55,14 +55,76 @@ describe('listContainerFiles', () => {
 });
 
 describe('getContainerFile', () => {
+  it('retains the configured deadline through a stalled artifact body', async () => {
+    vi.useFakeTimers();
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ start(value) { controller = value; }, cancel });
+    try {
+      let failure: unknown;
+      const request = getContainerFile(creds, 'container', 'file', vi.fn(async () => new Response(body)))
+        .catch(error => { failure = error; });
+      await vi.advanceTimersByTimeAsync(120001);
+      const observed = failure;
+      if (!observed) controller.error(new Error('Fixture cleanup'));
+      await request;
+      expect(observed).toMatchObject({ name: 'AbortError' });
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(body.locked).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity, MAX_CONTAINER_FILE_BYTES + 1])('rejects an invalid byte limit before requesting data: %s', async maxBytes => {
+    const fetchImpl = vi.fn();
+    await expect(getContainerFile(creds, 'container', 'file', fetchImpl, maxBytes)).rejects.toThrow('Invalid artifact byte limit.');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('cancels overflow and releases the reader even when cancellation rejects', async () => {
+    const cancel = vi.fn(async () => { throw new Error('Cancellation transport error'); });
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array([1, 2, 3, 4, 5])); }, cancel });
+    await expect(getContainerFile(creds, 'container', 'file', vi.fn(async () => new Response(body)), 4))
+      .rejects.toThrow('Artifact exceeds the byte limit.');
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(body.locked).toBe(false);
+  });
+
+  it('releases the reader after a body failure without masking it', async () => {
+    const body = new ReadableStream<Uint8Array>({ pull(controller) { controller.error(new Error('Body read failed')); } });
+    await expect(getContainerFile(creds, 'container', 'file', vi.fn(async () => new Response(body)), 4))
+      .rejects.toThrow('Body read failed');
+    expect(body.locked).toBe(false);
+  });
+
+  it('accepts an empty response without a body', async () => {
+    const result = await getContainerFile(creds, 'container', 'file', vi.fn(async () => new Response(null)), 4);
+    expect(result).toEqual(new Uint8Array());
+  });
+
+  it.each(['large-header', 'no-header', 'understated', 'exact', 'empty'] as const)('bounds artifact bytes before full-body allocation: %s', async state => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      if (state !== 'empty') {
+        controller.enqueue(new Uint8Array([1, 2]));
+        controller.enqueue(new Uint8Array(state === 'exact' ? [3, 4] : [3, 4, 5]));
+      }
+      controller.close();
+    }, cancel });
+    const response = new Response(body, { headers: state === 'large-header' ? { 'Content-Length': '999999999' } :
+      state === 'understated' ? { 'Content-Length': '1' } : {} });
+    const fullBuffer = vi.spyOn(response, 'arrayBuffer');
+    const fetchImpl = vi.fn(async () => response);
+    const result = getContainerFile(creds, 'container', 'file', fetchImpl, 4);
+    if (state === 'exact' || state === 'empty') expect((await result).length).toBe(state === 'empty' ? 0 : 4);
+    else await expect(result).rejects.toThrow('Artifact exceeds the byte limit.');
+    expect(fullBuffer).not.toHaveBeenCalled();
+    expect(body.locked).toBe(false);
+    if (state === 'large-header') expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it('returns the raw bytes', async () => {
     const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
-    const fetchImpl = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      arrayBuffer: async () => bytes.buffer,
-      headers: new Headers(),
-    })) as unknown as typeof fetch;
+    const fetchImpl = vi.fn(async () => new Response(bytes)) as unknown as typeof fetch;
 
     const out = await getContainerFile(creds, 'cntr_abc', 'cfile_1', fetchImpl);
     expect(Array.from(out)).toEqual([0x25, 0x50, 0x44, 0x46]);

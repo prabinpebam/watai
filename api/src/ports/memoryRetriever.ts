@@ -7,6 +7,7 @@ export interface ScoredMemory {
 }
 
 export interface MemoryRetrieveOptions {
+  embeddingModel: string;
   /** ISO timestamp used to exclude temporally-invalid memories. */
   now: string;
   /** Maximum number of scored memories to return. */
