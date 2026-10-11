@@ -7,7 +7,7 @@ export async function health(_req: HttpRequest, _ctx: InvocationContext): Promis
     jsonBody: {
       ok: true,
       service: 'watai-api',
-      release: 'run-admission-2026-09-29-r1',
+      release: 'hardening-2026-10-11-r1',
       time: new Date().toISOString(),
     },
   };
