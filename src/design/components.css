@@ -2848,8 +2848,8 @@ button.source-chip:hover {
   min-height: 200px;
 }
 
-/* Image-generation placeholder: a subtle animated gradient sized to the target aspect
-   ratio, swapped for the real image when it arrives. */
+/* Image-generation placeholder: the animated Perlin stipple field (see design/noise), sized to the
+   target aspect ratio and swapped for the real image when it arrives. */
 .image-card--generating {
   max-width: 420px;
 }
@@ -2882,6 +2882,20 @@ button.source-chip:hover {
   );
   transform: translateX(-100%);
   animation: image-gen-sweep 2.4s ease-in-out infinite;
+}
+.image-placeholder--noise {
+  background: var(--color-noise-bg);
+  animation: none;
+}
+.image-placeholder--noise::after {
+  content: none;
+}
+.noise-stipple {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .image-placeholder__label {
   position: relative;

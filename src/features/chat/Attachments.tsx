@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { repo } from '../../data';
 import { Icon } from '../../design/icons';
 import { Button, IconButton } from '../../design/ui';
+import { NoiseStipple } from '../../design/noise/NoiseStipple';
 import { ImagePrompt, Lightbox, type GalleryImage } from './Lightbox';
 import { formatBytes } from '../../lib/format';
 import { prepareFile, saveFile } from '../../lib/saveFile';
@@ -529,13 +530,17 @@ function ImageCardFrame({
   );
 }
 
-/** Animated gradient placeholder shown while an image generates; matches the target aspect ratio. */
+/** Animated noise placeholder shown while an image generates; matches the target aspect ratio. */
 function ImagePlaceholder({ size }: { size: string }) {
   return (
     <ImageCardFrame
       size={size}
       className="image-card--generating"
-      media={<span className="image-placeholder" role="img" aria-label="Generating image" />}
+      media={
+        <span className="image-placeholder image-placeholder--noise" role="img" aria-label="Generating image">
+          <NoiseStipple />
+        </span>
+      }
       bar={<span className="image-card__prompt">Generating image…</span>}
     />
   );

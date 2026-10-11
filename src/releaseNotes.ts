@@ -12,6 +12,17 @@ export function formatDeploymentTimestamp(value: string): string {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '0.2.6',
+    deployedAt: '2026-10-11T12:00:00Z',
+    apiDeployedAt: '2026-10-11T06:24:48Z',
+    title: 'A calmer animation while images generate',
+    changes: [
+      'Images being generated now show a slowly drifting stipple of soft grey dots',
+      'Matches light and dark themes; pauses off-screen and stays still with reduced motion',
+      'Used in chat and in Create image; the server is unchanged from 0.2.5',
+    ],
+  },
+  {
     version: '0.2.5',
     deployedAt: '2026-10-11T06:31:53Z',
     apiDeployedAt: '2026-10-11T06:24:48Z',

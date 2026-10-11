@@ -65,6 +65,9 @@
   --color-text-on-media-muted: #aaaaaa;
   --color-on-media-hover: rgba(255, 255, 255, 0.12);
   --color-media-bg: #000000;
+  /* Image-generation noise placeholder: soft grey stipple on a soft light field. */
+  --color-noise-bg: var(--gray-50);
+  --color-noise-dot: var(--gray-400);
   /* Canvas behind rendered SVG / HTML code previews (browser-like white, theme-independent). */
   --color-preview-bg: #ffffff;
   /* Text highlight (search match / <mark>) — theme-independent. */
@@ -217,6 +220,8 @@
   --color-code-bg: #161619;
   --color-skeleton: #242428;
   --color-skeleton-shine: #2f2f34;
+  --color-noise-bg: var(--gray-900);
+  --color-noise-dot: var(--gray-400);
 
   --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --elevation-2: 0 4px 14px rgba(0, 0, 0, 0.5);

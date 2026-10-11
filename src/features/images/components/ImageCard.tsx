@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../design/icons';
+import { NoiseStipple } from '../../../design/noise/NoiseStipple';
 import { cloudApi } from '../../../data';
 import type { StudioImage as ImageRecord } from '../../../data/cloud/types';
 import { useImageStudio } from '../imageStudioStore';
@@ -90,7 +91,8 @@ export function ImageCard({ img }: { img: ImageRecord }) {
   // queued | generating | (ready but broken/awaiting url)
   const generating = img.status === 'generating';
   return (
-    <div className={`studio-card studio-card--pending${generating ? ' studio-card--shimmer' : ''}`} style={style}>
+    <div className={`studio-card studio-card--pending${generating ? ' studio-card--noise' : ''}`} style={style}>
+      {generating && <NoiseStipple />}
       <span className="studio-card__status">
         {generating ? <Icon name="sparkle" size={18} /> : <Icon name="image" size={18} />}
         {generating ? 'Generating…' : 'Queued'}

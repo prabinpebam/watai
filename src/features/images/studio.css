@@ -302,15 +302,17 @@
   background: var(--color-surface-2);
   color: var(--color-text-secondary);
 }
-.studio-card--shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--color-skeleton) 25%,
-    var(--color-skeleton-shine) 37%,
-    var(--color-skeleton) 63%
-  );
-  background-size: 400% 100%;
-  animation: shimmer 1.4s ease infinite;
+.studio-card--noise {
+  background: var(--color-noise-bg);
+  color: var(--color-text-secondary);
+}
+.studio-card--noise .studio-card__status,
+.studio-card--noise .studio-card__pending-prompt {
+  position: relative;
+  z-index: 1;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-noise-bg) 80%, transparent);
 }
 .studio-card__status {
   display: inline-flex;
