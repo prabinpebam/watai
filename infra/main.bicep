@@ -243,6 +243,18 @@ resource mediaContainer 'Microsoft.Storage/storageAccounts/blobServices/containe
   properties: { publicAccess: 'None' }
 }
 
+// Queue triggers poll their queues from startup; declaring them avoids scale-controller
+// errors for a queue that the code would otherwise create only on the first job.
+resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
+  parent: storage
+  name: 'default'
+}
+
+resource workQueues 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = [for queueName in [runQueueName, imageQueueName, memoryQueueName]: {
+  parent: queueService
+  name: queueName
+}]
+
 // Flex Consumption stores its deployment package here.
 resource deploymentsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService

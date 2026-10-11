@@ -40,6 +40,6 @@
   },
   "remaining": [
     "Exercise rollback to Node 20 before claiming H05-A complete; deliberately not exercised in production because Node 20 is end-of-life. A stage exercise is the safer path.",
-    "Observe the first production chat-run completion on Node 24 (recorded in the v0.2.5 release record)."
+    "Observed: a production chat run completed on Node 24 (seen in telemetry by 2026-10-11T07:21Z; recorded in the v0.2.5 release record)."
   ]
 }
