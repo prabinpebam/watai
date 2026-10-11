@@ -39,7 +39,7 @@ param imageQueueName string = 'image-jobs'
 @description('Storage Queue used for memory jobs.')
 param memoryQueueName string = 'memory-jobs'
 
-@description('Email of the admin who can manage invites and is always allowed access.')
+@description('Administrative contact email. Privileged access requires a configured immutable admin OID.')
 param adminEmail string = 'prabinpebam@gmail.com'
 
 @description('Comma-separated token object-ids (oid) that are always treated as admin. Robust against missing email claims on federated/external accounts.')
@@ -62,6 +62,9 @@ param memoryDeepModel string = 'gpt-5.4'
 
 @description('Embedding deployment name for semantic memory retrieval. Empty disables vector retrieval (memory contributes only the always-on profile) and skips write-time embeddings. Set to a deployed embedding model (e.g. text-embedding-3-small) to enable.')
 param memoryEmbedModel string = ''
+
+@description('Enables bounded independent saved-memory indexing. Keep disabled until permission and storage qualification passes.')
+param memoryIndexEnabled bool = false
 
 @description('When "true", injects an always-on identity profile (durable facts, instructions, avoidances) into every run. Sensitive memories are always excluded.')
 param memoryProfile string = 'true'
@@ -167,7 +170,15 @@ resource containers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containe
       resource: {
         id: c.name
         partitionKey: { paths: [ c.pk ], kind: 'Hash' }
-        indexingPolicy: { indexingMode: 'consistent', automatic: true }
+        indexingPolicy: {
+          indexingMode: 'consistent'
+          automatic: true
+          compositeIndexes: c.name == 'threads'
+            ? [[{ path: '/updatedAt', order: 'descending' }, { path: '/id', order: 'ascending' }]]
+            : c.name == 'messages'
+              ? [[{ path: '/createdAt', order: 'ascending' }, { path: '/id', order: 'ascending' }]]
+              : []
+        }
       }
     }
   }
@@ -341,6 +352,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = if (deployFunctionApp) {
         { name: 'MEMORY_MODEL', value: memoryModel }
         { name: 'MEMORY_DEEP_MODEL', value: memoryDeepModel }
         { name: 'MEMORY_EMBED_MODEL', value: memoryEmbedModel }
+        { name: 'MEMORY_INDEX_ENABLED', value: string(memoryIndexEnabled) }
         { name: 'MEMORY_PROFILE', value: memoryProfile }
         { name: 'MEMORY_CONTAINED', value: string(memoryContained) }
       ]

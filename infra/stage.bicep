@@ -3,13 +3,13 @@ targetScope = 'resourceGroup'
 @description('Azure region for stage-owned resources.')
 param location string = resourceGroup().location
 
-@description('Stage-owned Cosmos account name.')
+@description('Existing stage-owned Cosmos account name; account provisioning is separate from runtime migration.')
 param cosmosAccountName string
 
-@description('Stage-owned Storage account name.')
+@description('Existing stage-owned Storage account name.')
 param storageAccountName string
 
-@description('Stage-owned Key Vault name.')
+@description('Existing stage-owned Key Vault name containing the credential wrapping key.')
 param keyVaultName string
 
 @description('Isolated stage Function App name.')
@@ -17,7 +17,7 @@ param functionAppName string
 
 param planName string = 'plan-watai-stage'
 param appInsightsName string = 'appi-watai-stage'
-param cosmosDatabaseName string = 'watai-harness-stage'
+param cosmosDatabaseName string = 'watai-release-stage-v2'
 param deploymentContainerName string = 'harness-deployments-stage'
 param mediaContainerName string = 'harness-media-stage'
 param runQueueName string = 'harness-run-jobs'
@@ -38,7 +38,7 @@ var stageContainers = [
   { name: 'credentials', pk: '/userId' }
   { name: 'threads', pk: '/userId' }
   { name: 'messages', pk: '/threadId' }
-  { name: 'runs', pk: '/userId' }
+  { name: 'runs', pk: '/threadId' }
   { name: 'assets', pk: '/userId' }
   { name: 'images', pk: '/userId' }
   { name: 'memory', pk: '/userId' }
@@ -52,78 +52,22 @@ var roleKeyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
 var roleKeyVaultCryptoUser = '12338af0-0e69-4776-bea7-57ae8d297424'
 var cosmosBuiltInDataContributor = '00000000-0000-0000-0000-000000000002'
 
-resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
+resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing = {
   name: cosmosAccountName
-  location: location
-  kind: 'GlobalDocumentDB'
-  tags: tags
-  properties: {
-    databaseAccountOfferType: 'Standard'
-    consistencyPolicy: { defaultConsistencyLevel: 'Session' }
-    locations: [
-      { locationName: location, failoverPriority: 0, isZoneRedundant: false }
-    ]
-    capabilities: [ { name: 'EnableServerless' } ]
-    disableLocalAuth: true
-    minimalTlsVersion: 'Tls12'
-  }
 }
-resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: storageAccountName
-  location: location
-  sku: { name: 'Standard_LRS' }
-  kind: 'StorageV2'
-  tags: tags
-  properties: {
-    allowBlobPublicAccess: false
-    minimumTlsVersion: 'TLS1_2'
-    supportsHttpsTrafficOnly: true
-    allowSharedKeyAccess: true
-  }
 }
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' existing = {
   parent: storage
   name: 'default'
-  properties: {
-    cors: {
-      corsRules: [
-        {
-          allowedOrigins: allowedOrigins
-          allowedMethods: [ 'GET', 'PUT', 'HEAD', 'OPTIONS', 'POST' ]
-          allowedHeaders: [ '*' ]
-          exposedHeaders: [ '*' ]
-          maxAgeInSeconds: 3600
-        }
-      ]
-    }
-  }
 }
-resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
+resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' existing = {
   parent: storage
   name: 'default'
-  properties: {}
 }
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: keyVaultName
-  location: location
-  tags: tags
-  properties: {
-    sku: { family: 'A', name: 'standard' }
-    tenantId: subscription().tenantId
-    enableRbacAuthorization: true
-    enableSoftDelete: true
-    softDeleteRetentionInDays: 7
-  }
-}
-
-resource credKek 'Microsoft.KeyVault/vaults/keys@2023-07-01' = {
-  parent: keyVault
-  name: 'watai-cred-kek'
-  properties: {
-    kty: 'RSA'
-    keySize: 3072
-    keyOps: [ 'wrapKey', 'unwrapKey' ]
-  }
 }
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
@@ -143,7 +87,15 @@ resource containers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containe
     resource: {
       id: container.name
       partitionKey: { paths: [ container.pk ], kind: 'Hash' }
-      indexingPolicy: { indexingMode: 'consistent', automatic: true }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        compositeIndexes: container.name == 'threads'
+          ? [[{ path: '/updatedAt', order: 'descending' }, { path: '/id', order: 'ascending' }]]
+          : container.name == 'messages'
+            ? [[{ path: '/createdAt', order: 'ascending' }, { path: '/id', order: 'ascending' }]]
+            : []
+      }
     }
   }
 }]
@@ -161,16 +113,14 @@ resource libraryContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/co
   }
 }
 
-resource mediaContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+resource mediaContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' existing = {
   parent: blobService
   name: mediaContainerName
-  properties: { publicAccess: 'None' }
 }
 
-resource deploymentContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+resource deploymentContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' existing = {
   parent: blobService
   name: deploymentContainerName
-  properties: { publicAccess: 'None' }
 }
 
 resource stageQueues 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = [for queueName in [runQueueName, imageQueueName, memoryQueueName]: {
@@ -267,8 +217,8 @@ resource cosmosDataRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignment
 output functionAppName string = functionAppName
 output functionAppHostname string = '${functionAppName}.azurewebsites.net'
 output cosmosDatabase string = cosmosDatabaseName
-output mediaContainer string = mediaContainerName
-output deploymentContainer string = deploymentContainerName
+output mediaContainer string = mediaContainer.name
+output deploymentContainer string = deploymentContainer.name
 output cosmosAccount string = cosmos.name
 output storageAccount string = storage.name
 output keyVault string = keyVault.name
