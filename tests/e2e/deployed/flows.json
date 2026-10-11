@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "target": "https://prabinpebam.github.io/watai/",
+  "flows": [
+    {
+      "id": "AUTH-01",
+      "version": 2,
+      "mode": "public",
+      "phases": ["navigate", "ready", "inspect"],
+      "requiredPhases": ["navigate", "ready", "inspect"],
+      "readySelector": ".onboard__title",
+      "expectedHeading": "Welcome to Watai",
+      "actionSelector": ".onboard__actions button",
+      "expectedAction": "Sign in",
+      "deadlineMs": 45000,
+      "reconciliationMs": 1000,
+      "maxRequests": 80,
+      "maxNetworkBytes": 15728640,
+      "maxEvents": 12000,
+      "maxEvidenceBytes": 8388608,
+      "origins": ["https://prabinpebam.github.io", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
+      "regions": [
+        { "id": "welcome", "selector": ".onboard", "level": "detailed" },
+        { "id": "startup", "selector": ".center-screen", "level": "context" },
+        { "id": "alerts", "selector": "[role=alert], [role=dialog]", "level": "detailed" }
+      ],
+      "claims": ["public-heading", "sign-in-operable", "no-page-error", "no-blank-or-clipped-primary"],
+      "requiredOutcomes": ["heading", "signInOperable", "keyboardFocus"],
+      "unqualified": ["authenticated-workflows", "independent-design-review", "full-recorder-calibration", "all-browser-matrix"]
+    },
+    {
+      "id": "CHAT-01",
+      "version": 1,
+      "mode": "authenticated",
+      "phases": ["navigate", "ready", "compose", "submit", "response", "complete", "reload"],
+      "requiredPhases": ["navigate", "ready", "compose", "submit", "response", "complete", "reload"],
+      "readySelector": "textarea[aria-label=Message]",
+      "actionSelector": "button[aria-label=Send]",
+      "stopSelector": "button[aria-label='Stop generating']",
+      "answerSelector": ".msg-group--assistant .md",
+      "prompt": "Calculate 17 + 29. Reply with only the decimal integer, without formatting or explanation.",
+      "expectedAnswer": "46",
+      "deadlineMs": 90000,
+      "reconciliationMs": 1500,
+      "maxRequests": 120,
+      "maxNetworkBytes": 20971520,
+      "maxEvents": 24000,
+      "maxEvidenceBytes": 16777216,
+      "origins": ["https://prabinpebam.github.io", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://func-watai-cbroocyg3omrk.azurewebsites.net", "https://wataiexternal.ciamlogin.com", "https://sigr-watai-cbroocyg3omrk.service.signalr.net"],
+      "regions": [
+        { "id": "conversation", "selector": ".chat__column", "level": "context" },
+        { "id": "message", "selector": "[data-message-id]", "level": "detailed" },
+        { "id": "composer", "selector": ".composer", "level": "detailed" },
+        { "id": "alerts", "selector": "[role=alert], [role=dialog]", "level": "detailed" }
+      ],
+      "claims": ["prompt-preserved", "prompt-before-reply", "answer-is-46", "reply-persists-after-reload", "no-page-error"],
+      "requiredOutcomes": ["answer", "restored", "prompt", "oneSubmission"],
+      "unqualified": ["other-chat-flows", "server-message-identity-handoff", "immutable-account-identity-not-exposed-by-me", "two-account-isolation", "provider-budget-enforcement", "independent-design-review", "full-recorder-calibration", "all-browser-matrix"]
+    }
+  ]
+}

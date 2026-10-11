@@ -44,6 +44,15 @@ if ($actualHash -ne $ExpectedBaselineSha256.ToLowerInvariant()) {
     throw "Baseline SHA-256 mismatch. Expected $ExpectedBaselineSha256, got $actualHash."
 }
 
+$baselineArchive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $BaselinePackage))
+try {
+    if (@($baselineArchive.Entries | Where-Object { $_.FullName -match '(^|/)(\.env($|\.)|local\.settings\.json$)' }).Count) {
+        throw 'Baseline contains local environment files. Use a separately verified sanitized package; do not restore embedded credentials.'
+    }
+} finally {
+    $baselineArchive.Dispose()
+}
+
 if ($Mode -eq 'Rollback') {
     Restore-Baseline
     exit 0

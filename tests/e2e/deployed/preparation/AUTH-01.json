@@ -1,0 +1,528 @@
+{
+  "schemaVersion": 1,
+  "flowId": "AUTH-01",
+  "flowVersion": 2,
+  "flowDigest": "87530dee8956cf20970c090ac5bd8f10b25f57a64a12ac8e7b0543919171074c",
+  "variantId": "AUTH-01.public-desktop",
+  "designVersion": 3,
+  "bindingStatus": "BOUND_DRAFT_NOT_READY",
+  "scope": "Signed-out public desktop startup in the five-flow pilot only. Other AUTH-01 family variants are deferred, not pilot prerequisites. This child does not authorize sign-in.",
+  "deferredVariants": [
+    "Signed-in startup, startup failure, responsive/theme and other recovery variants outside the selected desktop child"
+  ],
+  "expectation": "As a new visitor I immediately understand which app I opened and encounter a coherent, readable, trustworthy welcome experience with an obviously usable Sign in action, without unexpected account content or confusing state.",
+  "userGoals": [
+    "Recognize Watai and reach an honestly usable sign-in entry point without signing in"
+  ],
+  "preconditions": [
+    "Exact target https://prabinpebam.github.io/watai/; actual deployed resources and no mocked responses",
+    "Fresh owned headless Chromium context, no storage state or cookies, no extensions or authenticated identity",
+    "Viewport 1280x850, device scale factor 1, locale en-US, default application appearance recorded without assuming a theme",
+    "Approved serving artifact and design reference identities, independently validated recorder and semantic runtime, and a fresh bounded execution decision"
+  ],
+  "safety": [
+    "No Sign in click, identity redirect, provider call, form entry or server mutation",
+    "GET and HEAD only to exact declared origins; 80 requests, 15 MiB decoded network, 45-second total deadline",
+    "No foreground window, OS pointer action, forced click, fallback selector or runtime-invented capture policy",
+    "Unexpected protected content or authentication form stops before screenshot; retain only privacy-approved evidence"
+  ],
+  "cleanup": [
+    "Drain observers and close only the owned context/browser on every exit",
+    "Retain the immutable failure evidence; no retry, user-session modification or data deletion"
+  ],
+  "entryStep": "navigate-public",
+  "steps": [
+    {
+      "id": "navigate-public",
+      "phase": "navigate",
+      "maxVisits": 1,
+      "deadlineMs": 20000,
+      "trigger": "Before the sole page.goto, after init-script registration and request guards are active",
+      "action": "Navigate once to the exact public target and await DOMContentLoaded within the remaining 20-second step deadline",
+      "expected": "A real signed-out startup reaches the welcome shell or an honestly recorded failure; no authentication or protected data appears",
+      "failureModes": [
+        "Navigation or document-start observation missing",
+        "Page crash or forbidden redirect/request",
+        "Authenticated content in the fresh public context",
+        "Unexpected form or inaccessible frame"
+      ],
+      "next": [
+        "inspect-welcome",
+        "stop"
+      ],
+      "capture": {
+        "start": "Document-start init script before any application script or action wait",
+        "end": "Recorded transition to ready, or explicit stop with a drained failure record",
+        "channels": [
+          "document lifecycle",
+          "ordered mutations",
+          "rAF health and snapshots",
+          "safe request/resource identity",
+          "focus and font state"
+        ],
+        "fields": [
+          "documentId",
+          "sequence",
+          "receiver eventId",
+          "observedAtMs/timeOrigin",
+          "old/new values or explicit missing history",
+          "node lifetime and sibling anchors",
+          "region coverage",
+          "viewport and scroll",
+          "request method/origin/status/bytes"
+        ],
+        "maxBytes": 8388608,
+        "overflow": "Emit an evidence gap, stop actions, drain within the total deadline; never truncate into a pass",
+        "unexpectedSurface": "Fixed structural sentinel detects undeclared overlay/frame/form; retain safe context then stop insufficient, without increasing resolution",
+        "regions": [
+          {
+            "id": "welcome",
+            "selector": ".onboard",
+            "level": "detailed",
+            "fields": [
+              "safe text and role",
+              "node identity and order",
+              "actual style and ancestor clip geometry",
+              "logo decode and paint"
+            ],
+            "reason": "Primary task surface including wrong content and unexpected controls"
+          },
+          {
+            "id": "startup",
+            "selector": ".center-screen",
+            "level": "context",
+            "fields": [
+              "boundary identity",
+              "ancestor opacity/overflow/transform",
+              "bounds and structural activity"
+            ],
+            "reason": "Loading or ancestor state can hide the welcome surface"
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text",
+              "role/state",
+              "bounds and occlusion",
+              "node lifetime"
+            ],
+            "reason": "Unexpected error or overlay is relevant even outside known heuristic outcomes"
+          }
+        ]
+      }
+    },
+    {
+      "id": "inspect-welcome",
+      "phase": "ready",
+      "maxVisits": 1,
+      "deadlineMs": 15000,
+      "trigger": "One visible .onboard__title observed; ambiguity or missing visibility reaches stop rather than first-match selection",
+      "action": "Observe the real heading, logo, subtitle and sole .onboard__actions button without activation; record ready screenshot after privacy eligibility is established",
+      "expected": "Exactly Welcome to Watai and one accessible Sign in button are visible, readable and operable with actual assets",
+      "failureModes": [
+        "Wrong or duplicate heading/action",
+        "Blank logo or fallback glyph overlap",
+        "Hidden, covered, clipped or offscreen action",
+        "Required style/paint evidence absent"
+      ],
+      "next": [
+        "keyboard-inspect",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before checking ready predicates, retaining capture through all waits and failed predicates",
+        "end": "Transition to inspect or explicit failure stop",
+        "channels": [
+          "ordered mutations",
+          "rAF snapshots",
+          "geometry/ancestor clipping and center hit test",
+          "screenshot pixels",
+          "font/image decode",
+          "accessible roles/names"
+        ],
+        "fields": [
+          "regionId and complete/omitted coverage",
+          "heading exact text",
+          "button accessibleName/disabled/inert",
+          "bounds/clipBounds/hitTargetId",
+          "ancestorVisible",
+          "focusId",
+          "logo pixels",
+          "font family/load",
+          "screenshotId and digest"
+        ],
+        "maxBytes": 8388608,
+        "overflow": "Stop insufficient on any text/node/event/byte overflow, frame gap over 250 ms or observer work over 50 ms",
+        "unexpectedSurface": "Fixed sentinel only; an effect not representable by the declared roots is a capture-design gap and stops the case",
+        "regions": [
+          {
+            "id": "welcome",
+            "selector": ".onboard",
+            "level": "detailed",
+            "fields": [
+              "heading/subtitle/logo/action identities",
+              "safe actual content",
+              "paint and clipping dependencies",
+              "accessible state"
+            ],
+            "reason": "User must perceive and operate the actual entry point"
+          },
+          {
+            "id": "startup",
+            "selector": ".center-screen",
+            "level": "context",
+            "fields": [
+              "boundary identity",
+              "ancestor style/geometry",
+              "structural activity"
+            ],
+            "reason": "An apparently correct descendant can still be hidden by its context"
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe content",
+              "visibility and occlusion",
+              "focus and node identity"
+            ],
+            "reason": "Errors and overlays must not be curated out of semantic evidence"
+          }
+        ]
+      }
+    },
+    {
+      "id": "keyboard-inspect",
+      "phase": "inspect",
+      "maxVisits": 1,
+      "deadlineMs": 10000,
+      "trigger": "Before the first real Tab action, with the same declared capture resolution active",
+      "action": "Press Tab at most eight times, each bounded by min(3 seconds, remaining step time), stopping when the exact Sign in button owns focus; never click it. Observe 1000 monotonic ms of subsequent frames, take focused screenshot, then drain and close",
+      "expected": "The intended button is keyboard reachable and visibly focused with the real box-shadow ring; no content/focus regression occurs before cleanup",
+      "failureModes": [
+        "Eighth Tab fails to reach the button",
+        "Focus reaches a hidden proxy",
+        "Focus ring absent in paint",
+        "Focus stolen or primary content disappears",
+        "Insufficient time remains for the complete observation/drain"
+      ],
+      "next": [
+        "end",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before each keydown and throughout Playwright action waits",
+        "end": "After the full 1000-ms observation, required screenshot and final drain; otherwise evidence-insufficient stop",
+        "channels": [
+          "real keyboard action log",
+          "focusin and rAF focus",
+          "ordered mutations and geometry",
+          "focused screenshot and ring pixels",
+          "capture health/finalization"
+        ],
+        "fields": [
+          "Tab action count/timestamps",
+          "focusId",
+          "button identity",
+          "focusPaint.visibleRingPixels",
+          "focusPaint.screenshotId",
+          "actual box-shadow styles",
+          "ancestor clip and hit target",
+          "frame sequence and final drain"
+        ],
+        "maxBytes": 8388608,
+        "overflow": "Stop and preserve incomplete evidence; no sleep, extra keypress, click or later screenshot can repair an omitted interval",
+        "unexpectedSurface": "Undeclared overlay or focus owner is retained as an anomaly; omitted detail means insufficient, never automatic fallback",
+        "regions": [
+          {
+            "id": "welcome",
+            "selector": ".onboard",
+            "level": "detailed",
+            "fields": [
+              "heading/action identity and content",
+              "bounds/hit/clip",
+              "focus and ring paint",
+              "font/logo state"
+            ],
+            "reason": "Prove the entry point remains coherent and keyboard usable"
+          },
+          {
+            "id": "startup",
+            "selector": ".center-screen",
+            "level": "context",
+            "fields": [
+              "boundary identity",
+              "ancestor effects",
+              "structural activity"
+            ],
+            "reason": "Preserve dependencies that may steal focus or hide the action"
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe content",
+              "occlusion",
+              "focus",
+              "lifetime"
+            ],
+            "reason": "Unexpected intermediate errors remain reviewable after final correction"
+          }
+        ]
+      }
+    }
+  ],
+  "heuristics": [
+    {
+      "id": "AUTH-H01",
+      "outcome": "heading",
+      "steps": [
+        "inspect-welcome",
+        "keyboard-inspect"
+      ],
+      "inputs": [
+        "every complete welcome snapshot",
+        "exact heading text/identity/visibility/bounds"
+      ],
+      "algorithm": "Require exactly one welcome h1 at every ready/inspect snapshot; compare text exactly to Welcome to Watai and require positive visible geometry; retain all transient violations",
+      "pass": "Every observed required heading state satisfies the rule",
+      "fail": "Wrong/duplicate/absent/hidden heading in a complete observed region",
+      "insufficient": "Missing region coverage, text, visibility, geometry or temporal interval",
+      "negativeCases": [
+        "Wrong text with true driver outcome",
+        "Heading removed then restored",
+        "Duplicate heading",
+        "Zero-size or hidden heading"
+      ],
+      "implementation": "tests/e2e/deployed/auth-heuristics.mjs#evaluateAuthHeuristics"
+    },
+    {
+      "id": "AUTH-H02",
+      "outcome": "signInOperable",
+      "steps": [
+        "inspect-welcome",
+        "keyboard-inspect"
+      ],
+      "inputs": [
+        "button accessibleName and disabled/inert",
+        "bounds/viewport",
+        "ancestor visibility and clip intersection",
+        "center hit target and descendant parent IDs"
+      ],
+      "algorithm": "At every ready/inspect snapshot require one Sign in button, visible/enabled/ancestor-visible, positive bounds fully in viewport, center within clipBounds, and hitTargetId equal to button or a retained descendant",
+      "pass": "All observed required action states satisfy each condition",
+      "fail": "Covered, clipped, offscreen, hidden, wrong-name or disabled action, even if later correct",
+      "insufficient": "Missing computed accessible name, ancestor/clip/hit evidence or scope coverage",
+      "negativeCases": [
+        "Overlay captures hit test",
+        "Ancestor hides button",
+        "Offscreen bottom edge",
+        "Clip excludes center"
+      ],
+      "implementation": "tests/e2e/deployed/auth-heuristics.mjs#evaluateAuthHeuristics"
+    },
+    {
+      "id": "AUTH-H03",
+      "outcome": "keyboardFocus",
+      "steps": [
+        "keyboard-inspect"
+      ],
+      "inputs": [
+        "real Tab action sequence",
+        "focused node ID",
+        "focused screenshot and ring pixel region"
+      ],
+      "algorithm": "Require real Tab actions in inspect, at most eight; exact button must acquire and retain focus; observed visibleRingPixels must be positive and reference the actual focus screenshot; the approved ring threshold/reference still requires independent binding",
+      "pass": "Reachability and actual ring paint are observed for the full final interval",
+      "fail": "Eighth Tab cannot reach button, focus lost afterward, invisible ring or undeclared action",
+      "insufficient": "Missing action/focus/paint/screenshot/calibrated ring reference",
+      "negativeCases": [
+        "Script-only focus",
+        "Invisible focus ring",
+        "Focus moves to overlay",
+        "No ring pixels in screenshot"
+      ],
+      "implementation": "tests/e2e/deployed/auth-heuristics.mjs#evaluateAuthHeuristics"
+    },
+    {
+      "id": "AUTH-H04",
+      "steps": [
+        "navigate-public",
+        "inspect-welcome",
+        "keyboard-inspect"
+      ],
+      "inputs": [
+        "actual served asset hashes",
+        "approved deployment/DS reference",
+        "logo pixels and font decode"
+      ],
+      "algorithm": "Compare every required served asset and resolved font/paint reference with independently approved identities; require nonblank decoded brand paint and no fallback glyph overlap; exact reference values are a remaining preparation blocker",
+      "pass": "All actual resources and paint agree with the approved reference",
+      "fail": "Wrong/missing resource, blank brand or unreadable fallback even with HTTP success",
+      "insufficient": "Approved reference or required bitmap/font/asset observation absent",
+      "negativeCases": [
+        "Blank logo",
+        "Font blocked",
+        "Wrong deployed stylesheet"
+      ],
+      "implementation": "NOT_IMPLEMENTED:AUTH-H04"
+    },
+    {
+      "id": "AUTH-H05",
+      "steps": [
+        "navigate-public",
+        "inspect-welcome",
+        "keyboard-inspect"
+      ],
+      "inputs": [
+        "initial signed-out state",
+        "every request method/origin/decoded bytes",
+        "protected-surface sentinel",
+        "page errors"
+      ],
+      "algorithm": "Require fresh signed-out context throughout, no protected/form surface, GET/HEAD only to fixed origins, cumulative requests <=80 and decoded bytes <=15728640; any page error is product failure. Independent identity/request scope qualification remains required",
+      "pass": "Every request and observed state satisfies fixed public safety rules",
+      "fail": "Protected content, unauthorized method/origin, page crash or over-budget traffic",
+      "insufficient": "Missing initial-state proof, request stream or sentinel coverage",
+      "negativeCases": [
+        "Authenticated remnant",
+        "Undeclared POST",
+        "Crash after visible heading"
+      ],
+      "implementation": "PARTIAL:tests/e2e/deployed/run.mjs; tests/e2e/deployed/auth-heuristics.mjs"
+    },
+    {
+      "id": "AUTH-H06",
+      "steps": [
+        "navigate-public",
+        "inspect-welcome",
+        "keyboard-inspect"
+      ],
+      "inputs": [
+        "receiver and document sequences",
+        "phase order",
+        "frame and mutation history",
+        "required screenshots",
+        "capture-stopped drain"
+      ],
+      "algorithm": "Require navigate->ready->inspect once, receiver IDs from1 without gaps and per-document sequences contiguous; capture every action wait; require frames/snapshots/required assets and successful drain; visible frame interval>250ms, overflow or lost history is insufficient. Do not erase reliable product failures",
+      "pass": "All required calibrated channels and intervals are present",
+      "fail": "Keep separately observed product failures regardless of later capture failure",
+      "insufficient": "Any missing phase, snapshot, frame, asset, sequence, drain or capability",
+      "negativeCases": [
+        "Dropped event",
+        "Missing focus image",
+        "Partial mutation history",
+        "Gap after transient wrong heading"
+      ],
+      "implementation": "PARTIAL:tests/e2e/deployed/auth-heuristics.mjs; tests/e2e/deployed/evidence.mjs"
+    }
+  ],
+  "semantic": {
+    "required": true,
+    "openEnded": true,
+    "expectation": "As a new visitor I immediately understand which app I opened and encounter a coherent, readable, trustworthy welcome experience with an obviously usable Sign in action, without unexpected account content or confusing state.",
+    "skillPath": ".github/skills/edd-semantic-review/SKILL.md",
+    "skillSha256": "46862abe75e7fbb915236ba5c4e76dc9dbed9116cf3285510e11c34214cd4b91",
+    "agentPath": "tests/e2e/deployed/semantic-agent.json",
+    "agentSha256": "8c6b1fe13be2194aa4ec3a895e52ee93419ad5739a9fd2b492484d772453c84b",
+    "reviewProtocol": "complete-timeline-then-cross-phase-synthesis-v1",
+    "evidenceLayers": [
+      "timeline",
+      "visual",
+      "interaction",
+      "network",
+      "assets"
+    ],
+    "contextExhaustion": "Deny admission when the declared capture envelope cannot fit the calibrated protocol; never invent compression or omit windows at runtime",
+    "findingContract": "Review all original windows and required images, then whole-experience synthesis. Novel categories require no heuristic ID; cite original event:<id>/asset:<id>, observation, expectation, impact, severity and uncertainty. Missing context is insufficient, not no anomalies"
+  },
+  "artifacts": [
+    {
+      "path": "tests/e2e/deployed/pilot-chat-driver.mjs",
+      "sha256": "c0c1a17e038d073b1ba92f5cfb184344d58a64c116fc7afa3f5112e5d2684cb2"
+    },
+    {
+      "path": "tests/e2e/deployed/pilot-chat-plans.mjs",
+      "sha256": "2f4063dd8b83f663ba12f122cb4f610baa089c8ad93c6ab6e559f95d00d98ad3"
+    },
+    {
+      "path": "tests/e2e/deployed/pilot-chat-heuristics.mjs",
+      "sha256": "cab291ace4de7c27bc574398eed71f21252691209df62650d71dd6c0ad4ff1b5"
+    },
+    {
+      "path": "tests/e2e/deployed/five-flow-pilot.json",
+      "sha256": "366d97cb128c80c8f74dd2eed79289b5fbcb8b6eb9af48d0e165926c8560d3d4"
+    },
+    {
+      "path": "tests/e2e/deployed/chat-http.mjs",
+      "sha256": "d73be83504e5a73a135c2a323487fc56cd0d7db0cf22a346c38d41bec44fb8b1"
+    },
+    {
+      "path": "tests/e2e/deployed/capture.mjs",
+      "sha256": "0aa95fb1dfa16410f66affaed571267654f7edbff6df8f65ce7661d320478513"
+    },
+    {
+      "path": "tests/e2e/deployed/capture-entry.mjs",
+      "sha256": "fb1018f81b409a915e4c7051f3cc86bf7a5518938cbf7258db56b5dff38abbee"
+    },
+    {
+      "path": "tests/e2e/deployed/capture-bootstrap.mjs",
+      "sha256": "747861d1dbeff0b96752cf92063925359f5ee7515b1fae38738b78e49e297330"
+    },
+    {
+      "path": "tests/e2e/deployed/core.mjs",
+      "sha256": "b7f86d61d5dc1ff490b7f14f7782e1c880eae8bfe7d787cdf9a9ac882d5d2156"
+    },
+    {
+      "path": "tests/e2e/deployed/semantic.mjs",
+      "sha256": "47a8b4f2a79e4774943ad6544780f70c26e27ec384be2b936d2d58b7a31ab850"
+    },
+    {
+      "path": "tests/e2e/deployed/run.mjs",
+      "sha256": "81c233f150c00424af3fcf6c359fd02155089f49ec78450bcf3be016c5b025ac"
+    },
+    {
+      "path": "tests/e2e/deployed/preparation.mjs",
+      "sha256": "3aeccbd58ee9379c6683559632c6fe5531e9bfc80b37e0a0098f18c17814ae6b"
+    },
+    {
+      "path": "tests/e2e/deployed/evidence.mjs",
+      "sha256": "a42fb0db90a4cd6077313463fe5fd1cf13642d664a2530a8e9ca9a6b2846462c"
+    },
+    {
+      "path": "tests/e2e/deployed/auth-heuristics.mjs",
+      "sha256": "2b3bd260b769b99c81932be439a5c8986ce76e4c8b9fe5c05a54f7c68be7aea6"
+    },
+    {
+      "path": "tests/e2e/deployed/chat-heuristics.mjs",
+      "sha256": "4a20f016c62e01fefa25ec2ae4eb2fa131d7cc1c0c58427f560d3be8a4f7354f"
+    },
+    {
+      "path": "src/features/onboarding/Onboarding.tsx",
+      "sha256": "66130c2b42f1c6d053c4c5313fba39e6c59496a64457939527a53fb7acecafd3"
+    },
+    {
+      "path": "src/design/global.css",
+      "sha256": "a2ed4eb92aa9bbf06672dddd80d3d7213afe7064a296ea6f838540e5f914d00a"
+    },
+    {
+      "path": "documentation/quality-gate/flows/AUTH-01-CHAT-01.md",
+      "sha256": "c00fcca2609d131517684b15df36569fdc04e971d1ee0ce46ce871359def0988"
+    }
+  ],
+  "attestations": [],
+  "unresolved": [
+    "Declared regions, accessible names, ancestor clip/hit observations and fixed-fixture focus pixels passed local headless calibration; full actual-product screenshot/pixel and independent calibration approval remain incomplete",
+    "Full mutation history, intermediate paint fidelity, resource impact and privacy calibration are incomplete",
+    "AUTH-H04 and parts of AUTH-H03/H05/H06 lack approved DS/asset references and complete executable checks",
+    "Driver now enforces bound phase budgets and Tab deadlines and links privacy-gated screenshots to recorder checkpoints; broader privacy qualification and complete observation/finalization coverage remain incomplete",
+    "Capture envelope exceeds proposed semantic profile capacity; a lossless compatible protocol must be designed and calibrated",
+    "Isolated window sessions and pre-dispatch token/credit/currency reservations are implemented offline; model/runtime, tool/vision, isolated environment and held-out effectiveness are not validated",
+    "Create-only flushed review/failure journals are implemented; independent design/calibration/privacy attestations, private-directory verification, credential/reservation authority and live integration are not configured"
+  ]
+}

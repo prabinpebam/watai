@@ -1,0 +1,626 @@
+{
+  "schemaVersion": 1,
+  "flowId": "CHAT-02",
+  "flowVersion": 1,
+  "flowDigest": "f7e2449d4c09376ebd42186b28ee994e3d1db32784a5f6c83db8d61156c40329",
+  "variantId": "CHAT-02.same-thread-follow-up-desktop",
+  "designVersion": 2,
+  "scope": "One fixed desktop pilot child; unrelated families and other variants are deferred.",
+  "expectation": "I can give the app a fact in this conversation, ask about it in my next message, and receive the correct answer without losing or reordering either turn.",
+  "userGoals": [
+    "I can give the app a fact in this conversation, ask about it in my next message, and receive the correct answer without losing or reordering either turn."
+  ],
+  "preconditions": [
+    "Genuine invited non-admin test session, verified owner/consent and approved provider budget.",
+    "Exact deployed app in the verified existing Edge page; fresh empty test-owned thread; preserve and record actual viewport, scale and locale without emulation or focus.",
+    "Complete task/capture/heuristic and calibrated skill-bound semantic preparation must pass before any evaluated action."
+  ],
+  "cleanup": [
+    "Drain capture, remove only runner-owned page bindings/scripts/routes/listeners and detach its CDP session; leave browser/context/page open. Driver exit disconnects transport. Retain attempts and conversation identities; no deletion or replay."
+  ],
+  "safety": [
+    "At most2 submitted runs, exactly the fixed prompts, no automatic retries.",
+    "Keep90second overall and authored step deadlines;120request/20MiB network and24,000event/16MiB evidence ceilings; no implicit model-review spend.",
+    "Only whitelisted real app/API fields; never capture credentials, storage, headers or arbitrary run secrets."
+  ],
+  "entryStep": "CHAT-02.ready",
+  "steps": [
+    {
+      "id": "CHAT-02.ready",
+      "phase": "ready",
+      "deadlineMs": 15000,
+      "maxVisits": 1,
+      "action": "In the verified existing Edge page, navigate through about:blank to https://prabinpebam.github.io/watai/#/new within this phase deadline. Open a new empty test-owned conversation and verify the exact account and composer.",
+      "expected": "No existing messages; one visible usable composer; actual account receipt matches the test identity.",
+      "trigger": "Before navigation or any input; all preflight prerequisites must already pass.",
+      "failureModes": [
+        "Wrong identity, content or chronological order is a product failure.",
+        "Absent required branch, receipt, paint or temporal evidence is insufficient.",
+        "No retry, forced action or altered expectation within the attempt."
+      ],
+      "next": [
+        "CHAT-02.seed",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before ready action and throughout every driver wait, including unexpected states.",
+        "end": "Only after its observed outcome or explicit stop; drain pending observations before transition.",
+        "channels": [
+          "ordered mutation and rAF timeline",
+          "safe real request and run-state receipts",
+          "actual content and formatting",
+          "focus/scroll/hit and linked screenshots"
+        ],
+        "fields": [
+          "document/receiver sequence and monotonic time",
+          "DOM lifetime and immutable message/run/thread IDs",
+          "actual body text and structure",
+          "region coverage, visibility, bounds, clip/hit",
+          "run status and original request phase",
+          "scroll anchor identity and viewport offset"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient on any missing interval, 250ms visible-frame gap, 400-node/4096-character field or flow byte/event limit; never reduce detail dynamically.",
+        "unexpectedSurface": "Fixed sentinel retains unexpected overlays, errors and unrelated message changes; unsupported identity or geometry stops clean interpretation. No runtime resolution changes.",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll container and pinned prompt offset",
+              "ancestor visibility/clipping",
+              "boundary identity and activity"
+            ],
+            "reason": "Preserve context and user-pinned reading position."
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "all prompt/reply IDs and their unchanged order",
+              "safe .bubble-user/.md content and structure",
+              "visibility, bounds and mutation history"
+            ],
+            "reason": "Each existing and new turn must remain attributable through every intermediate state."
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "actual draft and control names",
+              "Send/Stop enabled state and hit geometry",
+              "focus"
+            ],
+            "reason": "Submission and cancellation controls must reflect actual execution."
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text and roles",
+              "visibility and occlusion",
+              "focus and lifetime"
+            ],
+            "reason": "Unexpected failures must remain available to open-ended semantic review."
+          }
+        ]
+      }
+    },
+    {
+      "id": "CHAT-02.seed",
+      "phase": "seed",
+      "deadlineMs": 35000,
+      "maxVisits": 1,
+      "action": "Fill the first fixed prompt and click Send once. Observe its real accepted IDs and terminal complete receipt.",
+      "expected": "The first prompt persists before its associated reply; terminal body is exactly ACK.",
+      "trigger": "After ready has its actual required evidence; no skipped or invented transition.",
+      "failureModes": [
+        "Wrong identity, content or chronological order is a product failure.",
+        "Absent required branch, receipt, paint or temporal evidence is insufficient.",
+        "No retry, forced action or altered expectation within the attempt."
+      ],
+      "next": [
+        "CHAT-02.follow-up",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before seed action and throughout every driver wait, including unexpected states.",
+        "end": "Only after its observed outcome or explicit stop; drain pending observations before transition.",
+        "channels": [
+          "ordered mutation and rAF timeline",
+          "safe real request and run-state receipts",
+          "actual content and formatting",
+          "focus/scroll/hit and linked screenshots"
+        ],
+        "fields": [
+          "document/receiver sequence and monotonic time",
+          "DOM lifetime and immutable message/run/thread IDs",
+          "actual body text and structure",
+          "region coverage, visibility, bounds, clip/hit",
+          "run status and original request phase",
+          "scroll anchor identity and viewport offset"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient on any missing interval, 250ms visible-frame gap, 400-node/4096-character field or flow byte/event limit; never reduce detail dynamically.",
+        "unexpectedSurface": "Fixed sentinel retains unexpected overlays, errors and unrelated message changes; unsupported identity or geometry stops clean interpretation. No runtime resolution changes.",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll container and pinned prompt offset",
+              "ancestor visibility/clipping",
+              "boundary identity and activity"
+            ],
+            "reason": "Preserve context and user-pinned reading position."
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "all prompt/reply IDs and their unchanged order",
+              "safe .bubble-user/.md content and structure",
+              "visibility, bounds and mutation history"
+            ],
+            "reason": "Each existing and new turn must remain attributable through every intermediate state."
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "actual draft and control names",
+              "Send/Stop enabled state and hit geometry",
+              "focus"
+            ],
+            "reason": "Submission and cancellation controls must reflect actual execution."
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text and roles",
+              "visibility and occlusion",
+              "focus and lifetime"
+            ],
+            "reason": "Unexpected failures must remain available to open-ended semantic review."
+          }
+        ]
+      }
+    },
+    {
+      "id": "CHAT-02.follow-up",
+      "phase": "follow-up",
+      "deadlineMs": 35000,
+      "maxVisits": 1,
+      "action": "In the same thread, fill the second fixed prompt and click Send once after seed completion.",
+      "expected": "The request carries the same threadId and a new clientMessageId; both earlier messages remain in original order.",
+      "trigger": "After seed has its actual required evidence; no skipped or invented transition.",
+      "failureModes": [
+        "Wrong identity, content or chronological order is a product failure.",
+        "Absent required branch, receipt, paint or temporal evidence is insufficient.",
+        "No retry, forced action or altered expectation within the attempt."
+      ],
+      "next": [
+        "CHAT-02.complete",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before follow-up action and throughout every driver wait, including unexpected states.",
+        "end": "Only after its observed outcome or explicit stop; drain pending observations before transition.",
+        "channels": [
+          "ordered mutation and rAF timeline",
+          "safe real request and run-state receipts",
+          "actual content and formatting",
+          "focus/scroll/hit and linked screenshots"
+        ],
+        "fields": [
+          "document/receiver sequence and monotonic time",
+          "DOM lifetime and immutable message/run/thread IDs",
+          "actual body text and structure",
+          "region coverage, visibility, bounds, clip/hit",
+          "run status and original request phase",
+          "scroll anchor identity and viewport offset"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient on any missing interval, 250ms visible-frame gap, 400-node/4096-character field or flow byte/event limit; never reduce detail dynamically.",
+        "unexpectedSurface": "Fixed sentinel retains unexpected overlays, errors and unrelated message changes; unsupported identity or geometry stops clean interpretation. No runtime resolution changes.",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll container and pinned prompt offset",
+              "ancestor visibility/clipping",
+              "boundary identity and activity"
+            ],
+            "reason": "Preserve context and user-pinned reading position."
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "all prompt/reply IDs and their unchanged order",
+              "safe .bubble-user/.md content and structure",
+              "visibility, bounds and mutation history"
+            ],
+            "reason": "Each existing and new turn must remain attributable through every intermediate state."
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "actual draft and control names",
+              "Send/Stop enabled state and hit geometry",
+              "focus"
+            ],
+            "reason": "Submission and cancellation controls must reflect actual execution."
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text and roles",
+              "visibility and occlusion",
+              "focus and lifetime"
+            ],
+            "reason": "Unexpected failures must remain available to open-ended semantic review."
+          }
+        ]
+      }
+    },
+    {
+      "id": "CHAT-02.complete",
+      "phase": "complete",
+      "deadlineMs": 5000,
+      "maxVisits": 1,
+      "action": "Inspect the second actual terminal reply, then observe 1500ms of reconciliation without another action.",
+      "expected": "The second reply is exactly MAPLE-27 and is associated with the second prompt; all four message identities stay present and ordered.",
+      "trigger": "After follow-up has its actual required evidence; no skipped or invented transition.",
+      "failureModes": [
+        "Wrong identity, content or chronological order is a product failure.",
+        "Absent required branch, receipt, paint or temporal evidence is insufficient.",
+        "No retry, forced action or altered expectation within the attempt."
+      ],
+      "next": [
+        "end",
+        "stop"
+      ],
+      "capture": {
+        "start": "Before complete action and throughout every driver wait, including unexpected states.",
+        "end": "Only after its observed outcome or explicit stop; drain pending observations before transition.",
+        "channels": [
+          "ordered mutation and rAF timeline",
+          "safe real request and run-state receipts",
+          "actual content and formatting",
+          "focus/scroll/hit and linked screenshots"
+        ],
+        "fields": [
+          "document/receiver sequence and monotonic time",
+          "DOM lifetime and immutable message/run/thread IDs",
+          "actual body text and structure",
+          "region coverage, visibility, bounds, clip/hit",
+          "run status and original request phase",
+          "scroll anchor identity and viewport offset"
+        ],
+        "maxBytes": 16777216,
+        "overflow": "Stop insufficient on any missing interval, 250ms visible-frame gap, 400-node/4096-character field or flow byte/event limit; never reduce detail dynamically.",
+        "unexpectedSurface": "Fixed sentinel retains unexpected overlays, errors and unrelated message changes; unsupported identity or geometry stops clean interpretation. No runtime resolution changes.",
+        "regions": [
+          {
+            "id": "conversation",
+            "selector": ".chat__column",
+            "level": "context",
+            "fields": [
+              "scroll container and pinned prompt offset",
+              "ancestor visibility/clipping",
+              "boundary identity and activity"
+            ],
+            "reason": "Preserve context and user-pinned reading position."
+          },
+          {
+            "id": "message",
+            "selector": "[data-message-id]",
+            "level": "detailed",
+            "fields": [
+              "all prompt/reply IDs and their unchanged order",
+              "safe .bubble-user/.md content and structure",
+              "visibility, bounds and mutation history"
+            ],
+            "reason": "Each existing and new turn must remain attributable through every intermediate state."
+          },
+          {
+            "id": "composer",
+            "selector": ".composer",
+            "level": "detailed",
+            "fields": [
+              "actual draft and control names",
+              "Send/Stop enabled state and hit geometry",
+              "focus"
+            ],
+            "reason": "Submission and cancellation controls must reflect actual execution."
+          },
+          {
+            "id": "alerts",
+            "selector": "[role=alert], [role=dialog]",
+            "level": "detailed",
+            "fields": [
+              "safe text and roles",
+              "visibility and occlusion",
+              "focus and lifetime"
+            ],
+            "reason": "Unexpected failures must remain available to open-ended semantic review."
+          }
+        ]
+      }
+    }
+  ],
+  "heuristics": [
+    {
+      "id": "CHAT-02.context-answer",
+      "outcome": "context-answer",
+      "steps": [
+        "CHAT-02.ready",
+        "CHAT-02.seed",
+        "CHAT-02.follow-up",
+        "CHAT-02.complete"
+      ],
+      "algorithm": "Require two distinct submissions and accepted run/message pairs in one thread; compare actual terminal bodies exactly with ACK and MAPLE-27, not model plausibility or driver booleans.",
+      "inputs": [
+        "original phase/action/mutation/frame observations",
+        "whitelisted submitted and accepted IDs",
+        "real run status and message bodies",
+        "scroll-anchor observation where applicable"
+      ],
+      "pass": "All required branch observations satisfy the exact algorithm in every retained state.",
+      "fail": "A supported mismatch, transient disappearance, chronology inversion, stale write or incorrect answer remains failure even after correction.",
+      "insufficient": "Missing required intermediate updates, association, cancellation, scroll/paint or calibrated capture is not a pass.",
+      "negativeCases": [
+        "Correct final state after an intermediate failure",
+        "Wrong answer with driver success booleans",
+        "Required asynchronous branch never observed"
+      ],
+      "implementation": "tests/e2e/deployed/pilot-chat-heuristics.mjs#evaluatePilotChat"
+    },
+    {
+      "id": "CHAT-02.two-turn-order",
+      "outcome": "two-turn-order",
+      "steps": [
+        "CHAT-02.ready",
+        "CHAT-02.seed",
+        "CHAT-02.follow-up",
+        "CHAT-02.complete"
+      ],
+      "algorithm": "At every same-document snapshot retain all previously visible message IDs and order each prompt before its accepted reply; preserve the first turn ahead of the second prompt.",
+      "inputs": [
+        "original phase/action/mutation/frame observations",
+        "whitelisted submitted and accepted IDs",
+        "real run status and message bodies",
+        "scroll-anchor observation where applicable"
+      ],
+      "pass": "All required branch observations satisfy the exact algorithm in every retained state.",
+      "fail": "A supported mismatch, transient disappearance, chronology inversion, stale write or incorrect answer remains failure even after correction.",
+      "insufficient": "Missing required intermediate updates, association, cancellation, scroll/paint or calibrated capture is not a pass.",
+      "negativeCases": [
+        "Correct final state after an intermediate failure",
+        "Wrong answer with driver success booleans",
+        "Required asynchronous branch never observed"
+      ],
+      "implementation": "tests/e2e/deployed/pilot-chat-heuristics.mjs#evaluatePilotChat"
+    },
+    {
+      "id": "CHAT-02.context-isolation",
+      "outcome": "context-isolation",
+      "steps": [
+        "CHAT-02.ready",
+        "CHAT-02.seed",
+        "CHAT-02.follow-up",
+        "CHAT-02.complete"
+      ],
+      "algorithm": "Reject changed threadId, duplicate client/run IDs, wrong prompt text or terminal answer. Missing immutable association is insufficient, not guessed.",
+      "inputs": [
+        "original phase/action/mutation/frame observations",
+        "whitelisted submitted and accepted IDs",
+        "real run status and message bodies",
+        "scroll-anchor observation where applicable"
+      ],
+      "pass": "All required branch observations satisfy the exact algorithm in every retained state.",
+      "fail": "A supported mismatch, transient disappearance, chronology inversion, stale write or incorrect answer remains failure even after correction.",
+      "insufficient": "Missing required intermediate updates, association, cancellation, scroll/paint or calibrated capture is not a pass.",
+      "negativeCases": [
+        "Correct final state after an intermediate failure",
+        "Wrong answer with driver success booleans",
+        "Required asynchronous branch never observed"
+      ],
+      "implementation": "tests/e2e/deployed/pilot-chat-heuristics.mjs#evaluatePilotChat"
+    }
+  ],
+  "semantic": {
+    "required": true,
+    "openEnded": true,
+    "expectation": "I can give the app a fact in this conversation, ask about it in my next message, and receive the correct answer without losing or reordering either turn.",
+    "skillPath": ".github/skills/edd-semantic-review/SKILL.md",
+    "skillSha256": "46862abe75e7fbb915236ba5c4e76dc9dbed9116cf3285510e11c34214cd4b91",
+    "agentPath": "tests/e2e/deployed/semantic-agent.json",
+    "agentSha256": "8c6b1fe13be2194aa4ec3a895e52ee93419ad5739a9fd2b492484d772453c84b",
+    "reviewProtocol": "complete-timeline-then-cross-phase-synthesis-v1",
+    "evidenceLayers": [
+      "timeline",
+      "visual",
+      "run identity/status",
+      "interaction and artifacts"
+    ],
+    "contextExhaustion": "Deny admission if the complete planned capture cannot fit the calibrated review protocol; no on-the-fly summaries or omitted windows.",
+    "findingContract": "Review every original window and required image with the preloaded skill, then synthesize cross-phase experience. Novel anomaly categories need no known detector ID; preserve uncertainty and cite original evidence. Heuristic success never skips review."
+  },
+  "artifacts": [
+    {
+      "path": "tests/e2e/deployed/capture.mjs",
+      "sha256": "0aa95fb1dfa16410f66affaed571267654f7edbff6df8f65ce7661d320478513"
+    },
+    {
+      "path": "tests/e2e/deployed/capture-entry.mjs",
+      "sha256": "fb1018f81b409a915e4c7051f3cc86bf7a5518938cbf7258db56b5dff38abbee"
+    },
+    {
+      "path": "tests/e2e/deployed/capture-bootstrap.mjs",
+      "sha256": "747861d1dbeff0b96752cf92063925359f5ee7515b1fae38738b78e49e297330"
+    },
+    {
+      "path": "tests/e2e/deployed/core.mjs",
+      "sha256": "b7f86d61d5dc1ff490b7f14f7782e1c880eae8bfe7d787cdf9a9ac882d5d2156"
+    },
+    {
+      "path": "tests/e2e/deployed/semantic.mjs",
+      "sha256": "47a8b4f2a79e4774943ad6544780f70c26e27ec384be2b936d2d58b7a31ab850"
+    },
+    {
+      "path": "tests/e2e/deployed/run.mjs",
+      "sha256": "81c233f150c00424af3fcf6c359fd02155089f49ec78450bcf3be016c5b025ac"
+    },
+    {
+      "path": "tests/e2e/deployed/preparation.mjs",
+      "sha256": "3aeccbd58ee9379c6683559632c6fe5531e9bfc80b37e0a0098f18c17814ae6b"
+    },
+    {
+      "path": "tests/e2e/deployed/evidence.mjs",
+      "sha256": "a42fb0db90a4cd6077313463fe5fd1cf13642d664a2530a8e9ca9a6b2846462c"
+    },
+    {
+      "path": "tests/e2e/deployed/auth-heuristics.mjs",
+      "sha256": "2b3bd260b769b99c81932be439a5c8986ce76e4c8b9fe5c05a54f7c68be7aea6"
+    },
+    {
+      "path": "tests/e2e/deployed/chat-heuristics.mjs",
+      "sha256": "4a20f016c62e01fefa25ec2ae4eb2fa131d7cc1c0c58427f560d3be8a4f7354f"
+    },
+    {
+      "path": "tests/e2e/deployed/chat-http.mjs",
+      "sha256": "d73be83504e5a73a135c2a323487fc56cd0d7db0cf22a346c38d41bec44fb8b1"
+    },
+    {
+      "path": "tests/e2e/deployed/pilot-chat-plans.mjs",
+      "sha256": "2f4063dd8b83f663ba12f122cb4f610baa089c8ad93c6ab6e559f95d00d98ad3"
+    },
+    {
+      "path": "tests/e2e/deployed/pilot-chat-heuristics.mjs",
+      "sha256": "cab291ace4de7c27bc574398eed71f21252691209df62650d71dd6c0ad4ff1b5"
+    },
+    {
+      "path": "tests/e2e/deployed/pilot-chat-driver.mjs",
+      "sha256": "c0c1a17e038d073b1ba92f5cfb184344d58a64c116fc7afa3f5112e5d2684cb2"
+    },
+    {
+      "path": "tests/e2e/deployed/five-flow-pilot.json",
+      "sha256": "366d97cb128c80c8f74dd2eed79289b5fbcb8b6eb9af48d0e165926c8560d3d4"
+    }
+  ],
+  "attestations": [],
+  "unresolved": [
+    "Existing Edge login is verified; borrowed-page lifecycle still requires calibration. Actual model/reservation billing authority and independent calibration approval remain unavailable.",
+    "The exact drivers passed source-bound local Chromium interaction and screenshot calibration; actual serving-contract and authenticated product qualification remain required.",
+    "Full intermediate render/paint, identity handoff, scrollbar/anchor and DS evidence are not qualified.",
+    "The current capture envelope exceeds the semantic profile capacity; actual LLM effectiveness and private evidence publication are unvalidated."
+  ],
+  "flowDefinition": {
+    "id": "CHAT-02",
+    "version": 1,
+    "mode": "authenticated",
+    "phases": [
+      "ready",
+      "seed",
+      "follow-up",
+      "complete"
+    ],
+    "requiredPhases": [
+      "ready",
+      "seed",
+      "follow-up",
+      "complete"
+    ],
+    "readySelector": "textarea[aria-label=Message]",
+    "actionSelector": "button[aria-label=Send]",
+    "stopSelector": "button[aria-label='Stop generating']",
+    "answerSelector": ".msg-group--assistant .md",
+    "prompt": "For this conversation, the project code is MAPLE-27. Reply only ACK.",
+    "expectedAnswer": "MAPLE-27",
+    "deadlineMs": 90000,
+    "reconciliationMs": 1500,
+    "maxRequests": 120,
+    "maxNetworkBytes": 20971520,
+    "maxEvents": 24000,
+    "maxEvidenceBytes": 16777216,
+    "origins": [
+      "https://prabinpebam.github.io",
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com",
+      "https://func-watai-cbroocyg3omrk.azurewebsites.net",
+      "https://wataiexternal.ciamlogin.com",
+      "https://sigr-watai-cbroocyg3omrk.service.signalr.net"
+    ],
+    "regions": [
+      {
+        "id": "conversation",
+        "selector": ".chat__column",
+        "level": "context"
+      },
+      {
+        "id": "message",
+        "selector": "[data-message-id]",
+        "level": "detailed"
+      },
+      {
+        "id": "composer",
+        "selector": ".composer",
+        "level": "detailed"
+      },
+      {
+        "id": "alerts",
+        "selector": "[role=alert], [role=dialog]",
+        "level": "detailed"
+      }
+    ],
+    "claims": [
+      "context-answer",
+      "two-turn-order",
+      "context-isolation"
+    ],
+    "requiredOutcomes": [
+      "context-answer",
+      "two-turn-order",
+      "context-isolation"
+    ],
+    "unqualified": [
+      "other-chat-flows",
+      "server-message-identity-handoff",
+      "immutable-account-identity-not-exposed-by-me",
+      "two-account-isolation",
+      "provider-budget-enforcement",
+      "independent-design-review",
+      "full-recorder-calibration",
+      "all-browser-matrix"
+    ],
+    "driver": "PILOT_DRIVER_LOCAL_CALIBRATED",
+    "prompts": [
+      "For this conversation, the project code is MAPLE-27. Reply only ACK.",
+      "What is the project code I gave you? Reply only with the code."
+    ],
+    "answers": [
+      "ACK",
+      "MAPLE-27"
+    ],
+    "maxRunSubmissions": 2
+  },
+  "bindingStatus": "BOUND_DRAFT_NOT_READY"
+}

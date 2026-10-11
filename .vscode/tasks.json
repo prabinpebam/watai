@@ -1,0 +1,1348 @@
+{
+	"version": "2.0.0",
+	"presentation": {
+		"reveal": "never",
+		"revealProblems": "never",
+		"focus": false,
+		"echo": false,
+		"showReuseMessage": false,
+		"panel": "dedicated"
+	},
+	"options": {
+		"cwd": "${workspaceFolder}",
+		"shell": {
+			"executable": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+			"args": [
+				"-NoLogo",
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command"
+			]
+		}
+	},
+	"tasks": [
+		{
+			"label": "Automation: Quiet Watchdog Tests",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WatchdogTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Verify Windowless Watchdog",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WatchdogSetup",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MemoryTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet API Typecheck",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check ApiTypes",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Watchdog Tests",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WatchdogTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Harness Build",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check HarnessBuild",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MemoryTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MemoryTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MemoryTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MemoryTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet API Typecheck",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check ApiTypes",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Chat Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check ChatTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Chat Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check ChatTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Chronology Canary",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check Chronology",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Frontend Typecheck",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check RootTypes",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Work Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/dod-privacy-archive-request.json' -WorkDecision '.harness-state/dod-privacy-archive-decision.json' -WorkCommand 'local-monotonic-exclusion-archive'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MemoryTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MemoryTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MemoryTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet API Typecheck",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check ApiTypes",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet API Regression Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/api-shared-regression-request.json' -WorkDecision '.harness-state/api-shared-regression-decision.json' -WorkCommand 'quiet-api-shared-contract-regression'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet API Regression",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check ApiTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Worker Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkerTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Fence Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/run-execution-fence-request.json' -WorkDecision '.harness-state/run-execution-fence-decision.json' -WorkCommand 'local-run-execution-fencing'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Integrity Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/run-integrity-continuation-request.json' -WorkDecision '.harness-state/run-integrity-continuation-decision.json' -WorkCommand 'quiet-local-run-integrity-continuation'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Artifact Read Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/artifact-bounded-read-request.json' -WorkDecision '.harness-state/artifact-bounded-read-decision.json' -WorkCommand 'quiet-bounded-artifact-read'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Binary Deadline Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/binary-body-deadline-request.json' -WorkDecision '.harness-state/binary-body-deadline-decision.json' -WorkCommand 'quiet-binary-body-deadline'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Artifact Publication Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/artifact-create-only-request.json' -WorkDecision '.harness-state/artifact-create-only-decision.json' -WorkCommand 'quiet-create-only-artifact-publication'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Publication Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/image-publication-request.json' -WorkDecision '.harness-state/image-publication-decision.json' -WorkCommand 'quiet-image-create-only-publication'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check ImageTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Chat Image Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/chat-image-publication-request.json' -WorkDecision '.harness-state/chat-image-publication-decision.json' -WorkCommand 'quiet-chat-image-publication'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Library Isolation Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/library-isolation-continuation-request.json' -WorkDecision '.harness-state/library-isolation-continuation-decision.json' -WorkCommand 'quiet-library-owner-isolation'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Library Completion Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/library-completion-cas-request.json' -WorkDecision '.harness-state/library-completion-cas-decision.json' -WorkCommand 'quiet-library-upload-completion-cas'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Library Validation",
+			"type": "shell",
+			"command": "& '${workspaceFolder}/scripts/run-quiet-check.ps1' -Check LibraryTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Library Filter Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/library-filter-pushdown-request.json' -WorkDecision '.harness-state/library-filter-pushdown-decision.json' -WorkCommand 'quiet-library-filter-pushdown'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Library Cache Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/library-cache-ownership-request.json' -WorkDecision '.harness-state/library-cache-ownership-decision.json' -WorkCommand 'quiet-library-cache-ownership'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Message Publication Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/message-library-publication-request.json' -WorkDecision '.harness-state/message-library-publication-decision.json' -WorkCommand 'quiet-message-library-publication'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Message Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MessageTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Chronology Readiness Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/chronology-readiness-request.json' -WorkDecision '.harness-state/chronology-readiness-decision.json' -WorkCommand 'quiet-chronology-readiness-canary'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Message Thread Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/message-thread-cas-request.json' -WorkDecision '.harness-state/message-thread-cas-decision.json' -WorkCommand 'quiet-message-thread-cas'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Library Cache Bound Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/library-cache-bound-request.json' -WorkDecision '.harness-state/library-cache-bound-decision.json' -WorkCommand 'quiet-library-cache-bound'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Outbox Deletion Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/outbox-create-deletion-request.json' -WorkDecision '.harness-state/outbox-create-deletion-decision.json' -WorkCommand 'quiet-outbox-create-deletion'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Sync Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check SyncTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Outbox Identity Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/outbox-coalescing-identity-request.json' -WorkDecision '.harness-state/outbox-coalescing-identity-decision.json' -WorkCommand 'quiet-outbox-coalescing-identity'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Settings Handoff Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/settings-privacy-handoff-request.json' -WorkDecision '.harness-state/settings-privacy-handoff-decision.json' -WorkCommand 'quiet-settings-privacy-handoff'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Blob Read Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/blob-url-read-ownership-request.json' -WorkDecision '.harness-state/blob-url-read-ownership-decision.json' -WorkCommand 'quiet-blob-url-read-ownership'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Hydration Intent Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/settings-hydration-intent-request.json' -WorkDecision '.harness-state/settings-hydration-intent-decision.json' -WorkCommand 'quiet-settings-hydration-intent'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Message Read Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/message-read-binding-request.json' -WorkDecision '.harness-state/message-read-binding-decision.json' -WorkCommand 'quiet-message-read-binding'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Message Delete Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/message-deletion-binding-request.json' -WorkDecision '.harness-state/message-deletion-binding-decision.json' -WorkCommand 'quiet-message-deletion-binding'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Message Create Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/message-create-only-request.json' -WorkDecision '.harness-state/message-create-only-decision.json' -WorkCommand 'quiet-message-create-only'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Persistence Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/local-persistence-canary-request.json' -WorkDecision '.harness-state/local-persistence-canary-decision.json' -WorkCommand 'quiet-local-persistence-canary'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Local Persistence Canary",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check LocalPersistence",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Outbox Rollback Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/local-outbox-rollback-request.json' -WorkDecision '.harness-state/local-outbox-rollback-decision.json' -WorkCommand 'quiet-local-outbox-rollback'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Manager Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-manager-load-request.json' -WorkDecision '.harness-state/memory-manager-load-decision.json' -WorkCommand 'quiet-memory-manager-load'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Settings Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check SettingsTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Index Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/independent-memory-index-request.json' -WorkDecision '.harness-state/independent-memory-index-decision.json' -WorkCommand 'quiet-independent-memory-index'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Index Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MemoryIndexTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet API Build",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check ApiBuild",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Owner Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-manager-owner-request.json' -WorkDecision '.harness-state/memory-manager-owner-decision.json' -WorkCommand 'quiet-memory-manager-owner'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Settings Owner Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/settings-owner-lifecycle-request.json' -WorkDecision '.harness-state/settings-owner-lifecycle-decision.json' -WorkCommand 'quiet-settings-owner-lifecycle'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Off Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-off-authority-request.json' -WorkDecision '.harness-state/memory-off-authority-decision.json' -WorkCommand 'quiet-memory-off-authority'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Recall Cancellation Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-recall-cancellation-request.json' -WorkDecision '.harness-state/memory-recall-cancellation-decision.json' -WorkCommand 'quiet-memory-recall-cancellation'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Pinned Recall Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-pinned-window-request.json' -WorkDecision '.harness-state/memory-pinned-window-decision.json' -WorkCommand 'quiet-memory-pinned-window'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Correction Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-correction-authority-request.json' -WorkDecision '.harness-state/memory-correction-authority-decision.json' -WorkCommand 'quiet-memory-correction-authority'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Nested Settings Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/nested-memory-settings-request.json' -WorkDecision '.harness-state/nested-memory-settings-decision.json' -WorkCommand 'quiet-nested-memory-settings'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Preference Feedback Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-preference-feedback-request.json' -WorkDecision '.harness-state/memory-preference-feedback-decision.json' -WorkCommand 'quiet-memory-preference-feedback'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Restore Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-restore-interval-request.json' -WorkDecision '.harness-state/memory-restore-interval-decision.json' -WorkCommand 'quiet-memory-restore-interval'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet ID Exclusion Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-id-exclusion-request.json' -WorkDecision '.harness-state/memory-id-exclusion-decision.json' -WorkCommand 'quiet-memory-id-exclusion'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Index Recency Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-index-recency-request.json' -WorkDecision '.harness-state/memory-index-recency-decision.json' -WorkCommand 'quiet-memory-index-recency'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Asset Coalescing Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/asset-resolution-coalescing-request.json' -WorkDecision '.harness-state/asset-resolution-coalescing-decision.json' -WorkCommand 'quiet-asset-resolution-coalescing'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Asset Lifetime Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/asset-resolution-lifetime-request.json' -WorkDecision '.harness-state/asset-resolution-lifetime-decision.json' -WorkCommand 'quiet-asset-resolution-lifetime'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Asset Byte Bound Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/asset-response-byte-bound-request.json' -WorkDecision '.harness-state/asset-response-byte-bound-decision.json' -WorkCommand 'quiet-asset-response-byte-bound'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Source Identity Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-source-identity-request.json' -WorkDecision '.harness-state/memory-source-identity-decision.json' -WorkCommand 'quiet-memory-source-identity'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Inventory Coherence Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-inventory-coherence-request.json' -WorkDecision '.harness-state/memory-inventory-coherence-decision.json' -WorkCommand 'quiet-memory-inventory-coherence'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Persisted Memory Permission Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/persisted-memory-permission-request.json' -WorkDecision '.harness-state/persisted-memory-permission-decision.json' -WorkCommand 'quiet-persisted-memory-permission'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Dispatch Isolation Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-dispatch-isolation-request.json' -WorkDecision '.harness-state/memory-dispatch-isolation-decision.json' -WorkCommand 'quiet-memory-dispatch-isolation'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Index Due Order Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-index-due-order-request.json' -WorkDecision '.harness-state/memory-index-due-order-decision.json' -WorkCommand 'quiet-memory-index-due-order'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Index Lifetime Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-index-lifetime-request.json' -WorkDecision '.harness-state/memory-index-lifetime-decision.json' -WorkCommand 'quiet-memory-index-lifetime'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Inventory Exclusion Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-inventory-exclusion-request.json' -WorkDecision '.harness-state/memory-inventory-exclusion-decision.json' -WorkCommand 'quiet-memory-inventory-exclusion'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Initial Memory Consent Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/initial-memory-consent-request.json' -WorkDecision '.harness-state/initial-memory-consent-decision.json' -WorkCommand 'quiet-initial-memory-consent'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Initial Consent Followup Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/initial-memory-consent-request.json' -WorkDecision '.harness-state/initial-memory-consent-followup-decision.json' -WorkCommand 'quiet-initial-memory-consent-followup'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Qualified Memory Age Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/qualified-memory-age-request.json' -WorkDecision '.harness-state/qualified-memory-age-decision.json' -WorkCommand 'quiet-qualified-memory-age'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Age Subject Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-age-subject-request.json' -WorkDecision '.harness-state/memory-age-subject-decision.json' -WorkCommand 'quiet-memory-age-subject'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet API Shared Regression Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/api-shared-regression-request.json' -WorkDecision '.harness-state/api-shared-regression-decision.json' -WorkCommand 'quiet-api-shared-regression'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet API Source Gate 20260911T2028 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/api-source-gate-20260911T2028-request.json' -WorkDecision '.harness-state/api-source-gate-20260911T2028-decision.json' -WorkCommand 'quiet-api-source-gate-20260911T2028'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Transfer Preview 20260911T2034 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-transfer-preview-20260911T2034-request.json' -WorkDecision '.harness-state/memory-transfer-preview-20260911T2034-decision.json' -WorkCommand 'quiet-memory-transfer-preview-20260911T2034'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Edit Draft 20260911T2052 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-edit-draft-20260911T2052-request.json' -WorkDecision '.harness-state/memory-edit-draft-20260911T2052-decision.json' -WorkCommand 'quiet-memory-edit-draft-20260911T2052'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Index Page 20260911T2059 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-index-page-20260911T2059-request.json' -WorkDecision '.harness-state/memory-index-page-20260911T2059-decision.json' -WorkCommand 'quiet-memory-index-page-20260911T2059'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Edit Pending 20260911T2102 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-edit-pending-20260911T2102-request.json' -WorkDecision '.harness-state/memory-edit-pending-20260911T2102-decision.json' -WorkCommand 'quiet-memory-edit-pending-20260911T2102'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory View Isolation 20260911T2108 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-view-isolation-20260911T2108-request.json' -WorkDecision '.harness-state/memory-view-isolation-20260911T2108-decision.json' -WorkCommand 'quiet-memory-view-isolation-20260911T2108'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Bootstrap Lifetime 20260911T2120 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/bootstrap-lifetime-20260911T2120-request.json' -WorkDecision '.harness-state/bootstrap-lifetime-20260911T2120-decision.json' -WorkCommand 'quiet-bootstrap-lifetime-20260911T2120'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Bootstrap Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check BootstrapTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Read Lifetime 20260911T2126 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-read-lifetime-20260911T2126-request.json' -WorkDecision '.harness-state/memory-read-lifetime-20260911T2126-decision.json' -WorkCommand 'quiet-memory-read-lifetime-20260911T2126'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Relationship 20260911T2142 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-relationship-20260911T2142-request.json' -WorkDecision '.harness-state/memory-relationship-20260911T2142-decision.json' -WorkCommand 'quiet-memory-relationship-20260911T2142'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Archive UI 20260911T2155 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-archive-ui-20260911T2155-request.json' -WorkDecision '.harness-state/memory-archive-ui-20260911T2155-decision.json' -WorkCommand 'quiet-memory-archive-ui-20260911T2155'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Archive Browser 20260911T2201 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-archive-browser-20260911T2201-request.json' -WorkDecision '.harness-state/memory-archive-browser-20260911T2201-decision.json' -WorkCommand 'quiet-memory-archive-browser-20260911T2201'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Archive Canary",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check MemoryArchiveCanary",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Archive Response Limit 20260911T2210 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/archive-response-limit-20260911T2210-request.json' -WorkDecision '.harness-state/archive-response-limit-20260911T2210-decision.json' -WorkCommand 'quiet-archive-response-limit-20260911T2210'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Tokenizer Preflight 20260911T2214 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/tokenizer-preflight-20260911T2214-request.json' -WorkDecision '.harness-state/tokenizer-preflight-20260911T2214-decision.json' -WorkCommand 'quiet-tokenizer-preflight-20260911T2214'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Tokenizer Metadata",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check TokenizerInfo",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Tokenizer Install 20260911T2218 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/tokenizer-install-20260911T2218-request.json' -WorkDecision '.harness-state/tokenizer-install-20260911T2218-decision.json' -WorkCommand 'quiet-tokenizer-install-20260911T2218'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Pinned Tokenizer Install",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check TokenizerInstall",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Tokenizer Provenance Recovery Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/tokenizer-provenance-recovery-20260911T2224-request.json' -WorkDecision '.harness-state/tokenizer-provenance-recovery-20260911T2224-decision.json' -WorkCommand 'quiet-tokenizer-provenance-recovery'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Tokenizer Verification",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check TokenizerVerify",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Memory Token Budget 20260911T2224 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-token-budget-20260911T2224-request.json' -WorkDecision '.harness-state/memory-token-budget-20260911T2224-decision.json' -WorkCommand 'quiet-memory-token-budget-20260911T2224'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Recall Deadline 20260911T2232 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-recall-deadline-20260911T2232-request.json' -WorkDecision '.harness-state/memory-recall-deadline-20260911T2232-decision.json' -WorkCommand 'quiet-memory-recall-deadline-20260911T2232'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Recall Disclosure 20260911T2238 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/memory-recall-disclosure-20260911T2238-request.json' -WorkDecision '.harness-state/memory-recall-disclosure-20260911T2238-decision.json' -WorkCommand 'quiet-memory-recall-disclosure-20260911T2238'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Quality Gate Spec Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/quality-gate-spec-20260912-request.json' -WorkDecision '.harness-state/quality-gate-spec-20260912-decision.json' -WorkCommand 'quality-gate-documentation-only'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Quality Gate Documentation Check",
+			"type": "shell",
+			"command": "& { $ErrorActionPreference = 'Stop'; $root = Join-Path (Get-Location) 'documentation/quality-gate'; $files = @(Get-ChildItem -LiteralPath $root -Filter '*.md' -File); if ($files.Count -ne 9) { throw 'Expected nine specification and review files.' }; $links = 0; foreach ($file in $files) { $text = [System.IO.File]::ReadAllText($file.FullName); if ($text -notmatch '2026-09-12' -or $text -notmatch '(?i)Status:' -or $text -notmatch 'Version:') { throw ('Missing specification metadata: ' + $file.Name) }; $headings = @([regex]::Matches($text, '(?m)^## .+$') | ForEach-Object { $_.Value.Trim() }); if (@($headings | Sort-Object -Unique).Count -ne $headings.Count) { throw ('Duplicate section heading: ' + $file.Name) }; foreach ($match in [regex]::Matches($text, '\\[[^\\]]+\\]\\(([^)]+)\\)')) { $target = $match.Groups[1].Value; if ($target -match '^(https?:|#)') { continue }; $path = ($target -split '#')[0]; if (-not (Test-Path -LiteralPath ([System.IO.Path]::GetFullPath([System.IO.Path]::Combine($file.DirectoryName, [Uri]::UnescapeDataString($path)))))) { throw ('Broken local link in ' + $file.Name + ': ' + $target) }; $links++ } }; $catalog = [System.IO.File]::ReadAllText((Join-Path $root '04-task-flow-coverage.md')); $ids = @([regex]::Matches($catalog, '(?m)^\\| ((?:AUTH|CHAT|HIST|TOOL|IMG|LIB|MEM|SET|VOICE|ADMIN|PLATFORM)-\\d{2}) \\|') | ForEach-Object { $_.Groups[1].Value }); if ($ids.Count -ne 60 -or @($ids | Sort-Object -Unique).Count -ne 60) { throw 'Flow catalog count or uniqueness failed.' }; $detectors = [System.IO.File]::ReadAllText((Join-Path $root '05-evaluation-and-design-system.md')); foreach ($match in [regex]::Matches($catalog, 'DET-[A-Z]+-\\d{2}')) { if (-not $detectors.Contains($match.Value)) { throw ('Undefined detector: ' + $match.Value) } }; $main = [System.IO.File]::ReadAllText((Join-Path (Get-Location) 'documentation/README.md')); if (-not $main.Contains('(quality-gate/README.md)')) { throw 'Main documentation link missing.' }; [ordered]@{ status='PASSED'; specificationFiles=$files.Count; checkedLocalLinks=$links; uniqueSeedFlows=$ids.Count; liveCoverageClaimed=$false; runtimeImplemented=$false } | ConvertTo-Json }",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Eval Loop Review Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/eval-loop-review-20260912-request.json' -WorkDecision '.harness-state/eval-loop-review-20260912-decision.json' -WorkCommand 'eval-loop-review-documentation-only'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Deployed Eval Setup Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/deployed-eval-setup-20260912-request.json' -WorkDecision '.harness-state/deployed-eval-setup-20260912-decision.json' -WorkCommand 'deployed-eval-local-setup'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Deployed Eval Tests",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Deployed Eval Calibration",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalCalibration",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Deployed Eval Preflight",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalPreflight",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Deployed Public Read Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/deployed-eval/public-request.json' -WorkDecision '.harness-state/deployed-eval/public-decision.json' -WorkCommand 'deployed-eval-public-AUTH-01'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Deployed Public Eval",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalPublic",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Deployed Public v2 Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/deployed-eval/public-v2-request.json' -WorkDecision '.harness-state/deployed-eval/public-decision.json' -WorkCommand 'deployed-eval-public-AUTH-01'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Deployed Eval Report",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalReport",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Deployed Eval Replay",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalReplay",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Edge Session Availability",
+			"type": "shell",
+			"command": "& { $ErrorActionPreference = 'Stop'; $browsers = @(Get-CimInstance Win32_Process -Filter 'Name = ''msedge.exe''' -OperationTimeoutSec 10 | Where-Object { $_.CommandLine -and $_.CommandLine -notmatch '--type=' }); $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.OwningProcess -in $browsers.ProcessId -and $_.LocalAddress -in @('127.0.0.1','::1') }); $observations = @($browsers | ForEach-Object { $browserProcess = $_; $port = [regex]::Match($browserProcess.CommandLine, '--remote-debugging-port(?:=|\\s+)(\\d+)'); [ordered]@{ processId = $browserProcess.ProcessId; remoteDebuggingPort = $(if ($port.Success) { [int]$port.Groups[1].Value } else { $null }); remoteDebuggingPipe = [bool]($browserProcess.CommandLine -match '--remote-debugging-pipe'); headless = [bool]($browserProcess.CommandLine -match '--headless'); explicitProfileDirectory = [bool]($browserProcess.CommandLine -match '--profile-directory'); loopbackListenerPorts = @($listeners | Where-Object { $_.OwningProcess -eq $browserProcess.ProcessId } | Select-Object -ExpandProperty LocalPort) } }); [ordered]@{ inspectedAt = [DateTime]::UtcNow.ToString('o'); edgeBrowserProcesses = $browsers.Count; processes = $observations; rawCommandLinesCaptured = $false; profileDataRead = $false; browserStateChanged = $false } | ConvertTo-Json -Depth 5 }",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Edge Clone Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/deployed-eval/edge-closed-retry-request.json' -WorkDecision '.harness-state/deployed-eval/edge-session-clone-decision.json' -WorkCommand 'authorized-edge-session-clone-local'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Edge Clone Plan",
+			"type": "shell",
+			"command": "& './scripts/clone-edge-eval-profile.ps1' -Action Plan -ProfileDirectory 'Default'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Edge Profile Clone",
+			"type": "shell",
+			"command": "& './scripts/clone-edge-eval-profile.ps1' -Action Clone -ProfileDirectory 'Default'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Mandatory EDD Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/deployed-eval/mandatory-edd-request.json' -WorkDecision '.harness-state/deployed-eval/mandatory-edd-decision.json' -WorkCommand 'mandatory-edd-local-preparation'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Evidence Admission Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/deployed-eval/evidence-admission-request.json' -WorkDecision '.harness-state/deployed-eval/evidence-admission-decision.json' -WorkCommand 'edd-evidence-admission-local'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Flow Preparation Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/deployed-eval/pilot-visibility-calibration-request.json' -WorkDecision '.harness-state/deployed-eval/pilot-driver-calibration-decision.json' -WorkCommand 'edd-pilot-driver-calibration-local'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Bind Auth Preparation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalBindAuth",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Readiness Program Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/deployed-eval/recorder-calibration-request.json' -WorkDecision '.harness-state/deployed-eval/recorder-calibration-decision.json' -WorkCommand 'edd-recorder-calibration-local'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Semantic Journal Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/deployed-eval/semantic-calibration-prep-request.json' -WorkDecision '.harness-state/deployed-eval/semantic-calibration-prep-decision.json' -WorkCommand 'edd-semantic-calibration-prep-local'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Bind Chat Preparation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalBindChat",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Recorder Calibration Static",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalCalibrationStatic",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Five Flow Pilot Prepare",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalPilotPrepare",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Pilot Driver Calibration Static",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalPilotCalibrationStatic",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Pilot Driver Calibration",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalPilotCalibration",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Manual: Sign In to Pilot Edge",
+			"type": "shell",
+			"command": "& './scripts/open-automation-edge.ps1' -Action Launch",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: EDD Work Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/deployed-eval/semantic-roundtrip-request.json' -WorkDecision '.harness-state/deployed-eval/semantic-roundtrip-decision.json' -WorkCommand 'semantic-synthetic-roundtrip'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Manual: Restart Pilot Edge for Automation",
+			"type": "shell",
+			"command": "& './scripts/open-pilot-edge.ps1' -CloseAll",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Verify Original Edge Connection",
+			"type": "shell",
+			"command": "& { $ErrorActionPreference = 'Stop'; $browser = Get-Process -Id 57452 -ErrorAction Stop; if ($browser.ProcessName -ne 'msedge') { throw 'Unexpected browser process identity.' }; $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalPort -eq 9222 }); $unsafe = @($listeners | Where-Object { $_.OwningProcess -ne $browser.Id -or $_.LocalAddress -notin @('127.0.0.1','::1') }); if ($unsafe.Count) { if (@($unsafe | Where-Object { $_.OwningProcess -eq $browser.Id }).Count) { Stop-Process -Id $browser.Id -Force }; throw 'Debug listener is not exclusively the authorized Edge process on loopback.' }; $policies = @(); foreach ($scope in @('HKCU','HKLM')) { $path = $scope + ':\\SOFTWARE\\Policies\\Microsoft\\Edge'; $value = Get-ItemProperty -LiteralPath $path -Name RemoteDebuggingAllowed -ErrorAction SilentlyContinue; if ($null -ne $value) { $policies += [ordered]@{ scope=$scope; remoteDebuggingAllowed=$value.RemoteDebuggingAllowed } } }; $endpointAvailable = $false; $failure = $null; try { $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:9222/json/version' -TimeoutSec 3 -MaximumRedirection 0; $version = $response.Content | ConvertFrom-Json; $endpointAvailable = [bool]($version.webSocketDebuggerUrl -match '^ws://(127\\.0\\.0\\.1|localhost|\\[::1\\]):9222/devtools/browser/'); } catch { $failure = $_.Exception.GetType().Name }; [ordered]@{ status=$(if($endpointAvailable -and $listeners.Count){'ENDPOINT_AVAILABLE'}else{'DEBUG_ENDPOINT_UNAVAILABLE'}); processId=$browser.Id; edgeVersion=$browser.MainModule.FileVersionInfo.ProductVersion; listenerCount=$listeners.Count; endpointAvailable=$endpointAvailable; connectionFailure=$failure; configuredPolicies=$policies; profile='Profile 5'; cloning=$false; automatedPageInteraction=$false } | ConvertTo-Json -Depth 4 }",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Verify Fresh Edge Connection",
+			"type": "shell",
+			"command": "& './scripts/open-automation-edge.ps1' -Action Verify",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Verify Pilot Sign In",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalVerifyLogin",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Review Capacity",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalReviewCapacity",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Semantic Auth Check",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalSdkAuth",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Semantic Canary Preparation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalSemanticCanary",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Deployed Eval Syntax",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check DeployedEvalSyntax",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Contract Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check ImageTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Chat Validation",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkerTests",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Local Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/image-alpha-local-request-20260913.json' -WorkDecision '.harness-state/image-alpha-local-decision-20260913.json' -WorkCommand 'image-alpha-local-release-preflight-20260913'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Preflight",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-preflight-20260913.ps1'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Program Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/image-alpha-program-request-20260913.json' -WorkDecision '.harness-state/image-alpha-program-decision-20260913.json' -WorkCommand 'image-alpha-isolated-release-20260913'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Isolation",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Mode prepare",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Baseline",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Mode baseline",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Candidate Validation",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Mode validate",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Frontend",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Mode frontend",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Package",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-package.ps1'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Commit",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Mode commit",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Rollout Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/image-alpha-rollout-request-20260913.json' -WorkDecision '.harness-state/image-alpha-rollout-decision-20260913.json' -WorkCommand 'image-alpha-production-rollout-20260913'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Backend Deploy",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Rollout -Mode backend",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Frontend Publish",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Rollout -Mode push",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Production Smoke",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Rollout -Mode smoke",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Metadata Publish",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Rollout -Mode metadata",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Image Alpha Release Notes",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Mode notes",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Incident Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/image-alpha-incident-request.json' -WorkDecision '.harness-state/image-alpha-incident-decision.json' -WorkCommand 'image-alpha-incident-read-20260913'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Incident Read",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Incident -Mode read",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Runtime Read",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Incident -Mode runtime",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Deployment Read",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Incident -Mode deployment",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Runtime Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/image-alpha-runtime-request.json' -WorkDecision '.harness-state/image-alpha-runtime-decision.json' -WorkCommand 'image-alpha-runtime-state-20260913'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Runtime State",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Incident -Mode state",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Chat Probe Static",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -ChatProbe -Mode mock",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Chat Probe Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/image-alpha-chat-request.json' -WorkDecision '.harness-state/image-alpha-chat-decision.json' -WorkCommand 'image-alpha-chat-diagnostic-20260913'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Chat Probe Live",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -ChatProbe -Mode live",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Activation Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/image-alpha-activation-request.json' -WorkDecision '.harness-state/image-alpha-activation-decision.json' -WorkCommand 'image-alpha-activation-repair-20260913'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Activation Prepare",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Activation -Mode prepare",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Flex Contract",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Activation -Mode cli",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha OneDeploy Activation",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Activation -Mode deploy",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Active Worker Verify",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Activation -Mode verify",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Receipt Decision",
+			"type": "shell",
+			"command": "& './scripts/run-quiet-check.ps1' -Check WorkDecision -WorkRequest '.harness-state/image-alpha-finish-request.json' -WorkDecision '.harness-state/image-alpha-finish-decision.json' -WorkCommand 'image-alpha-activation-receipt-20260913'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Receipt Build",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Finish -Mode build",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Receipt Publish",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Finish -Mode push",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Receipt Public Smoke",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Finish -Mode public",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Alpha Receipt Asset Check",
+			"type": "shell",
+			"command": "& './.harness-state/image-alpha-run.ps1' -Finish -Mode assets",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Conflict Read",
+			"type": "shell",
+			"command": "& (Get-Command node -CommandType Application).Source '.harness-state/run-conflict-read.mjs'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Conflict Read Direct",
+			"type": "shell",
+			"command": "& 'C:\\Program Files\\nodejs\\node.exe' '.harness-state/run-conflict-read.mjs'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Admission Tests",
+			"type": "shell",
+			"command": "Set-Location api; & 'C:\\Program Files\\nodejs\\node.exe' node_modules/vitest/vitest.mjs run src/application/runService.test.ts src/http/runsController.test.ts src/application/messageService.test.ts src/application/runWorker.test.ts --reporter=dot",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Admission Decision",
+			"type": "shell",
+			"command": "$env:WATAI_WORK_DECISION_PATH = (Resolve-Path '.harness-state').Path + '\\run-admission-decision.json'; $env:WATAI_EXPENSIVE_COMMAND = 'run-admission-hotfix-20260929'; & 'C:\\Program Files\\nodejs\\node.exe' scripts/cost-gate.mjs approve .harness-state/run-admission-request.json",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Admission Prepare",
+			"type": "shell",
+			"command": "& 'C:\\Program Files\\nodejs\\node.exe' .harness-state/run-admission-hotfix.mjs prepare",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Admission Deploy",
+			"type": "shell",
+			"command": "& 'C:\\Program Files\\nodejs\\node.exe' .harness-state/run-admission-hotfix.mjs deploy",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Admission Verify",
+			"type": "shell",
+			"command": "& 'C:\\Program Files\\nodejs\\node.exe' .harness-state/run-admission-hotfix.mjs verify",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Admission Push",
+			"type": "shell",
+			"command": "& 'C:\\Program Files\\nodejs\\node.exe' .harness-state/run-admission-hotfix.mjs push",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Automation: Quiet Run Admission Status",
+			"type": "shell",
+			"command": "& 'C:\\Program Files\\nodejs\\node.exe' .harness-state/run-admission-status.mjs",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

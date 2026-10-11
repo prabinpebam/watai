@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "chronology-pilot-2026-09-12",
+  "version": 1,
+  "purpose": "Try the complete EDD procedure on five task flows before expanding coverage.",
+  "target": "https://prabinpebam.github.io/watai/",
+  "scope": "Five desktop child variants only, not full family or release qualification.",
+  "variants": [
+    { "flowId": "AUTH-01", "variantId": "AUTH-01.public-desktop", "task": "Open the signed-out app and reach Sign in", "dependsOn": [] },
+    { "flowId": "CHAT-01", "variantId": "CHAT-01.first-prompt-reload-desktop", "task": "Send a first prompt and verify the reply after reload", "dependsOn": ["AUTH-01"] },
+    { "flowId": "CHAT-02", "variantId": "CHAT-02.same-thread-follow-up-desktop", "task": "Ask a follow-up using the intended thread context", "dependsOn": ["CHAT-01"] },
+    { "flowId": "CHAT-03", "variantId": "CHAT-03.streaming-anchor-desktop", "task": "Read multiple streaming updates while preserving the reading anchor", "dependsOn": ["CHAT-01"] },
+    { "flowId": "CHAT-04", "variantId": "CHAT-04.stop-then-next-prompt-desktop", "task": "Stop a streaming reply and submit a new prompt without stale replacement", "dependsOn": ["CHAT-03"] }
+  ],
+  "execution": {
+    "order": ["AUTH-01", "CHAT-01", "CHAT-02", "CHAT-03", "CHAT-04"],
+    "maxAttemptsPerVariant": 1,
+    "stopOn": ["Any missing preparation or semantic-review prerequisite", "Any critical chronology/privacy/identity failure", "Any unapproved request or budget overrun", "Any required evidence gap"],
+    "cleanup": "Close only owned contexts; retain all attempt evidence and test-owned conversation identities. No automatic resend or deletion.",
+    "liveEnabled": false
+  },
+  "deferred": "All55 unselected catalog flows and unselected child variants; not prerequisites for this pilot and not counted as passed.",
+  "releaseEligible": false
+}
