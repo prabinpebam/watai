@@ -40,6 +40,7 @@ exhaustive, buildable plan.
 | [library-implementation-spec.md](library-implementation-spec.md) | **Implementation-ready Library contract**: exhaustive needs, scenarios, user capabilities, task flows, IA/UI, data/API/state contracts, migration, slices, and acceptance gates. |
 | [voice-implementation-plan.md](voice-implementation-plan.md) | **Voice execution plan**: phased, PR-sized slices to build dictation + voice mode (ChatGPT-parity UX) on top of the agentic run pipeline, with EDD gates and a risk register. |
 | [quality-gate/](quality-gate/README.md) | **Real-deployed experience gate (design, not implemented)**: user expectations, optimal DOM/paint capture, evidence sufficiency, flow coverage, semantic/DS evaluation, real test identities and guarded release qualification. |
+| [ChatGPT web parity investigation and plan](implementation/2026-10-11-chatgpt-web-parity/README.md) | **2026-10-11 planning-only extension**: dated official reference/source evidence, 55-capability gap matrix, Azure-feasible product/architecture specification and dependency-ordered delivery plan. Authenticated reference observation and provider qualification remain explicit gaps. |
 
 > Read the docs in order on first pass. After that, each doc is self-contained and
 > cross-links the others where concerns overlap. The [ui-design/](ui-design/README.md)
